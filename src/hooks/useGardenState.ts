@@ -31,10 +31,22 @@ export function useGardenState() {
   }, [loading, state])
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
+    const progress = () => {
       setState((current) => (current ? progressGarden(current) : current))
-    }, 60_000)
-    return () => window.clearInterval(interval)
+    }
+    const progressWhenVisible = () => {
+      if (document.visibilityState === 'visible') progress()
+    }
+
+    const interval = window.setInterval(progress, 60_000)
+    window.addEventListener('focus', progress)
+    document.addEventListener('visibilitychange', progressWhenVisible)
+
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', progress)
+      document.removeEventListener('visibilitychange', progressWhenVisible)
+    }
   }, [])
 
   const update = useCallback((recipe: (current: AppState) => AppState) => {

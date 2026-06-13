@@ -4,17 +4,8 @@ import { getDailyPromptIndex, toLocalDate } from '../lib/date'
 import { MAX_PLANT_GROWTH } from '../lib/progression'
 import type { AppState } from '../types'
 import { Butterfly } from './Butterfly'
+import { ChrysalisCountdown } from './ChrysalisCountdown'
 import { Icon } from './Icons'
-
-function remainingTime(emergeAt?: string) {
-  if (!emergeAt) return 'Time unknown'
-  const milliseconds = Math.max(0, new Date(emergeAt).getTime() - Date.now())
-  const hours = Math.ceil(milliseconds / 3_600_000)
-  if (hours <= 24) return `${hours} hour${hours === 1 ? '' : 's'} remaining`
-  const days = Math.floor(hours / 24)
-  const leftover = hours % 24
-  return `${days}d ${leftover}h remaining`
-}
 
 export function GardenView({
   state,
@@ -206,7 +197,7 @@ export function GardenView({
                       <span>{definition?.commonName}</span>
                       <small>
                         {creature.stage === 'chrysalis'
-                          ? remainingTime(creature.emergeAt)
+                          ? <ChrysalisCountdown emergeAt={creature.emergeAt} />
                           : `${creature.carePoints} of 2 care moments`}
                       </small>
                     </div>
