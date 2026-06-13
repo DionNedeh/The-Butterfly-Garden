@@ -12,7 +12,10 @@ export function Onboarding({
 
   return (
     <main className="onboarding-shell">
-      <section className="onboarding-card" aria-labelledby="welcome-title">
+      <section
+        className={`onboarding-card ${step === 2 ? 'lesson-card' : ''}`}
+        aria-labelledby="welcome-title"
+      >
         <div className="onboarding-art">
           <Butterfly
             speciesId="monarch"
@@ -32,11 +35,11 @@ export function Onboarding({
               Enter the garden
             </button>
           </>
-        ) : (
+        ) : step === 1 ? (
           <form
             onSubmit={(event) => {
               event.preventDefault()
-              onComplete(name, gardenName)
+              setStep(2)
             }}
           >
             <p className="eyebrow">Make it yours</p>
@@ -58,17 +61,71 @@ export function Onboarding({
                 required
               />
             </label>
+            <button className="primary-button" type="submit">
+              Meet your garden guide
+            </button>
+          </form>
+        ) : (
+          <div className="garden-lesson">
+            <p className="eyebrow">Marigold’s garden guide</p>
+            <h1 id="welcome-title">Here is how your sanctuary grows</h1>
+            <p className="marigold-speech">
+              Welcome, {name.trim() || 'Gardener'}! I will help you tend{' '}
+              {gardenName}. Three gentle things work together here:
+            </p>
+            <div className="lesson-grid">
+              <article>
+                <span className="chrysalis small" aria-hidden="true" />
+                <div>
+                  <h2>Chrysalises</h2>
+                  <p>
+                    A butterfly’s “cocoon” is properly called a chrysalis.
+                    Caterpillars form one after receiving care, then transform
+                    safely inside. Missed days never harm them.
+                  </p>
+                </div>
+              </article>
+              <article>
+                <Butterfly
+                  speciesId="monarch"
+                  label="A newly emerged monarch"
+                  className="lesson-butterfly"
+                />
+                <div>
+                  <h2>Emerging butterflies</h2>
+                  <p>
+                    After about three real days, the butterfly emerges. You will
+                    welcome it by name, add its field note, and may choose it as
+                    the companion flying through your garden.
+                  </p>
+                </div>
+              </article>
+              <article>
+                <span className="lesson-seed" aria-hidden="true">●</span>
+                <div>
+                  <h2>Seeds and host plants</h2>
+                  <p>
+                    Care activities earn Sunlight. Sunlight grows your plants,
+                    while seeds let you add new ones. Mature host plants welcome
+                    the caterpillars that become each butterfly species.
+                  </p>
+                </div>
+              </article>
+            </div>
             <div className="chrysalis-note">
               <span className="chrysalis small" aria-hidden="true" />
               <p>
-                A monarch chrysalis is waiting. Sol will emerge in about three
-                days, even if you take a break.
+                Sol’s monarch chrysalis is already waiting. They will emerge in
+                about three days, even if you take a break.
               </p>
             </div>
-            <button className="primary-button" type="submit">
+            <button
+              className="primary-button"
+              onClick={() => onComplete(name, gardenName)}
+            >
               Plant my first seeds
             </button>
-          </form>
+          </div>
         )}
       </section>
     </main>

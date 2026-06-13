@@ -72,8 +72,8 @@ export function JournalView({
                   </div>
                 )}
                 <div>
-                  <strong>{creature ? definition.commonName : 'Undiscovered'}</strong>
-                  <em>{creature ? definition.scientificName : 'Keep growing host plants'}</em>
+                  <strong>{definition.commonName}</strong>
+                  <em>{creature ? definition.scientificName : 'Not yet welcomed'}</em>
                   {creature && <p>{definition.fact}</p>}
                 </div>
               </article>

@@ -33,6 +33,18 @@ export function GardenView({
   const active = emerged.find(
     (creature) => creature.id === state.profile?.activeCompanionId,
   )
+  const gardenButterflies = [
+    {
+      id: 'marigold-guide',
+      speciesId: 'monarch',
+      label: 'Marigold, your monarch garden guide',
+    },
+    ...emerged.map((creature) => ({
+      id: creature.id,
+      speciesId: creature.speciesId,
+      label: `${creature.name}, ${species.find((item) => item.id === creature.speciesId)?.commonName ?? 'butterfly'}`,
+    })),
+  ]
   const observationChoices = observations.filter(
     (item) => item.speciesId === 'all' || item.speciesId === active?.speciesId,
   )
@@ -52,15 +64,27 @@ export function GardenView({
           </p>
         </div>
 
-        <Butterfly
-          speciesId={active?.speciesId ?? 'monarch'}
-          label={
-            active
-              ? `${active.name}, your active ${species.find((item) => item.id === active.speciesId)?.commonName}`
-              : 'Marigold, your monarch garden guide'
-          }
-          className="garden-butterfly"
-        />
+        <div className="garden-flight-space" aria-label="Butterflies flying in the garden">
+          {gardenButterflies.map((butterfly, index) => (
+            <div
+              className={`flying-butterfly flight-${index % 4}`}
+              style={
+                {
+                  '--flight-delay': `${index * -4.3}s`,
+                  '--flight-duration': `${18 + (index % 3) * 3}s`,
+                  '--flight-size': `${0.82 + (index % 4) * 0.08}`,
+                } as CSSProperties
+              }
+              key={butterfly.id}
+            >
+              <Butterfly
+                speciesId={butterfly.speciesId}
+                label={butterfly.label}
+                pettable
+              />
+            </div>
+          ))}
+        </div>
 
         <div className="garden-plants" aria-label="Plants in your garden">
           {state.plants.slice(0, 8).map((plant, index) => {
@@ -117,6 +141,10 @@ export function GardenView({
               Close
             </button>
           </div>
+          <p className="section-explainer">
+            Spend one seed to add a plant. Host plants invite a particular
+            caterpillar; nectar plants help the whole sanctuary feel welcoming.
+          </p>
           <div className="catalog-grid">
             {plants.map((plant) => (
               <button
@@ -149,6 +177,10 @@ export function GardenView({
             </div>
             <span className="count-badge">{developing.length}</span>
           </div>
+          <p className="section-explainer">
+            Caterpillars become chrysalises after care. A chrysalis never loses
+            progress and opens after about three real days.
+          </p>
           {developing.length === 0 ? (
             <p className="empty-copy">
               Mature a host plant to welcome a new caterpillar.

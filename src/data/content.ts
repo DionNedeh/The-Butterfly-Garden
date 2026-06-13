@@ -54,6 +54,14 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#f3db4e', '#dd8b3c'],
     fact: 'Cloudless sulphurs migrate and often fly high above the ground.',
   },
+  {
+    id: 'blue-morpho',
+    commonName: 'Blue Morpho',
+    scientificName: 'Morpho peleides',
+    hostPlantIds: ['rainforest-legume'],
+    wingColors: ['#168bd2', '#203b5c'],
+    fact: 'Microscopic scales reflect blue light, creating the morpho’s brilliant shimmer.',
+  },
 ]
 
 export const plants: PlantDefinition[] = [
@@ -63,6 +71,7 @@ export const plants: PlantDefinition[] = [
   ['nettle', 'Stinging Nettle', 'Urtica dioica', 'host', ['red-admiral'], '#73934a', 'A protected corner for red admiral caterpillars.'],
   ['thistle', 'Native Thistle', 'Cirsium spp.', 'host', ['painted-lady'], '#9e74a8', 'Soft purple blooms and painted lady shelter.'],
   ['partridge-pea', 'Partridge Pea', 'Chamaecrista fasciculata', 'host', ['cloudless-sulphur'], '#e1b73e', 'Sunny native flowers for cloudless sulphurs.'],
+  ['rainforest-legume', 'Rainforest Legume', 'Machaerium spp.', 'host', ['blue-morpho'], '#3c89a8', 'A tropical host plant for the shimmering blue morpho.'],
   ['aster', 'Aster', 'Symphyotrichum spp.', 'nectar', [], '#7c70a8', 'Late-season nectar in lavender stars.'],
   ['coneflower', 'Purple Coneflower', 'Echinacea purpurea', 'nectar', [], '#b35f84', 'A broad landing place rich with nectar.'],
   ['zinnia', 'Zinnia', 'Zinnia elegans', 'nectar', [], '#cf654f', 'Cheerful blooms for many visiting butterflies.'],
@@ -148,6 +157,11 @@ const observationTexts: Array<[string, string]> = [
   ['cloudless-sulphur', 'The partridge pea glows beneath a sulphur butterfly.'],
   ['cloudless-sulphur', 'This visitor prefers the high, open air.'],
   ['cloudless-sulphur', 'Pale wings settle among the zinnias.'],
+  ['blue-morpho', 'Blue light shimmers across the morpho’s wing scales.'],
+  ['blue-morpho', 'The morpho folds its wings and becomes quietly brown.'],
+  ['blue-morpho', 'A flash of rainforest blue passes between the flowers.'],
+  ['blue-morpho', 'The morpho rests near fallen fruit at the garden edge.'],
+  ['blue-morpho', 'Brilliant color can come from the way light is reflected.'],
   ['all', 'The garden does not ask the day to be anything else.'],
   ['all', 'Something is always growing, even when it is hard to see.'],
   ['all', 'A quiet garden can hold many kinds of weather.'],

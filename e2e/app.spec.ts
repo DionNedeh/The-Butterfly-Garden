@@ -7,6 +7,7 @@ test.beforeEach(async ({ page }) => {
 
 async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
+  await page.getByRole('button', { name: /meet your garden guide/i }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
 }
 
@@ -17,10 +18,28 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
   await page.getByRole('button', { name: /enter the garden/i }).click()
   await page.getByLabel('Your name').fill('River')
   await page.getByLabel('Garden name').fill('Willowlight Garden')
+  await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await expect(
+    page.getByRole('heading', { name: /how your sanctuary grows/i }),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chrysalises' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Emerging butterflies' }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Seeds and host plants' }),
+  ).toBeVisible()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
 
   await expect(
     page.getByRole('heading', { name: 'Willowlight Garden' }),
+  ).toBeVisible()
+  const marigold = page.getByRole('button', {
+    name: /pet marigold, your monarch garden guide/i,
+  })
+  await marigold.click()
+  await expect(
+    page.getByText(/marigold, your monarch garden guide enjoyed that gentle hello/i),
   ).toBeVisible()
   await page
     .locator('nav:visible')
@@ -44,6 +63,7 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
     .locator('nav:visible')
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
+  await expect(page.getByText('Blue Morpho')).toBeVisible()
   await expect(page.getByText('A little more spacious.')).toBeVisible()
   await expect(
     page.getByText('I noticed sunlight on the kitchen table.'),
@@ -58,6 +78,8 @@ test('supports plant selection and permanent local reset confirmation', async ({
     .locator('nav:visible')
     .getByRole('button', { name: 'Settings', exact: true })
     .click()
+  await page.getByLabel('Your name').fill('Pumpkin')
+  await expect(page.getByText('Made for you with ❤️- S')).toBeVisible()
   await page.getByRole('button', { name: /begin deletion/i }).click()
   await expect(page.getByText(/are you certain/i)).toBeVisible()
   await page.getByRole('button', { name: /keep my garden/i }).click()
@@ -103,6 +125,7 @@ test('has no serious accessibility violations and relaunches offline', async ({
   context,
 }) => {
   await enterGarden(page)
+  await page.waitForTimeout(450)
   const results = await new AxeBuilder({ page }).analyze()
   const seriousViolations = results.violations.filter(
     (violation) =>

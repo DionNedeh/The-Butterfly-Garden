@@ -11,7 +11,7 @@ North American butterfly sanctuary.
 - Sunlight rewards capped at five per day
 - Host and nectar plants with visible growth
 - Caterpillar, chrysalis, and timed emergence stages
-- Six real butterfly species and selectable companions
+- Seven real butterfly species, including a blue morpho, and selectable companions
 - IndexedDB persistence with no account, analytics, or cloud transfer
 - Installable offline PWA and GitHub Pages deployment
 - Reduced-motion and responsive mobile support

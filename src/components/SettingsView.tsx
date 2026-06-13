@@ -44,6 +44,9 @@ export function SettingsView({
             Your name
             <input value={name} onChange={(event) => setName(event.target.value)} />
           </label>
+          {name.trim().toLowerCase() === 'pumpkin' && (
+            <p className="pumpkin-message">Made for you with ❤️- S</p>
+          )}
           <label>
             Garden name
             <input

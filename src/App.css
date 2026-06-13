@@ -246,6 +246,12 @@
   color: var(--muted);
 }
 
+.section-explainer {
+  margin: -0.5rem 0 1.1rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 /* Onboarding */
 .onboarding-shell {
   display: grid;
@@ -267,6 +273,10 @@
   box-shadow: 0 28px 80px rgba(29, 52, 43, 0.3);
   text-align: center;
   backdrop-filter: blur(18px);
+}
+
+.onboarding-card.lesson-card {
+  width: min(760px, 100%);
 }
 
 .onboarding-card h1 {
@@ -310,59 +320,221 @@
   font-size: 0.9rem;
 }
 
+.garden-lesson {
+  display: grid;
+  gap: 1rem;
+  text-align: left;
+}
+
+.garden-lesson > h1,
+.garden-lesson > .eyebrow,
+.garden-lesson > .marigold-speech {
+  text-align: center;
+}
+
+.marigold-speech {
+  margin-inline: auto;
+  max-width: 620px;
+  color: var(--forest-dark);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.08rem;
+}
+
+.lesson-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.lesson-grid article {
+  display: grid;
+  grid-template-rows: 64px auto;
+  justify-items: center;
+  border: 1px solid #d8dfd4;
+  border-radius: 18px;
+  background: #f5f7f1;
+  padding: 1rem;
+  text-align: center;
+}
+
+.lesson-grid article > div {
+  display: grid;
+}
+
+.lesson-grid h2 {
+  margin: 0.3rem 0 0.5rem;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.05rem;
+}
+
+.lesson-grid p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.lesson-butterfly {
+  transform: scale(0.85);
+}
+
+.lesson-seed {
+  display: grid;
+  width: 38px;
+  height: 50px;
+  place-items: center;
+  rotate: 22deg;
+  border-radius: 68% 32% 63% 37%;
+  background: linear-gradient(145deg, #d9aa58, #9a6b29);
+  color: #f8e5b8;
+  box-shadow: inset 4px 3px 8px #fff4;
+}
+
 /* Butterfly and life stages */
 .butterfly {
   position: relative;
-  display: inline-flex;
-  width: 74px;
-  height: 56px;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
+  width: 78px;
+  height: 58px;
+  border-radius: 50%;
+  color: var(--wing-secondary);
+  transform-origin: center;
 }
 
-.wing {
-  width: 32px;
-  height: 45px;
-  border: 3px solid var(--wing-secondary);
-  background:
-    radial-gradient(circle at 45% 36%, #fff4 0 9%, transparent 10%),
-    linear-gradient(140deg, var(--wing-primary), var(--wing-secondary));
-  box-shadow: inset 0 0 0 2px #fff3;
+.butterfly.pettable {
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
-.wing-left {
-  transform: rotate(-13deg);
-  transform-origin: right center;
-  border-radius: 75% 30% 60% 45%;
-  animation: flap-left 2.2s ease-in-out infinite;
-}
-
-.wing-right {
-  transform: rotate(13deg);
-  transform-origin: left center;
-  border-radius: 30% 75% 45% 60%;
-  animation: flap-right 2.2s ease-in-out infinite;
+.butterfly.pettable:focus-visible {
+  outline: 3px solid #ffe4a2;
+  outline-offset: 5px;
 }
 
 .butterfly-body {
-  z-index: 2;
-  width: 5px;
-  height: 38px;
+  position: absolute;
+  z-index: 4;
+  top: 31px;
+  left: 18px;
+  width: 43px;
+  height: 7px;
+  border-radius: 80% 25% 25% 80%;
+  background: var(--wing-secondary);
+  box-shadow: 2px 1px 2px #0004;
+}
+
+.butterfly-body::after {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--wing-secondary);
+  content: '';
 }
 
-@keyframes flap-left {
-  50% { transform: rotate(-30deg) scaleX(0.55); }
+.profile-wing {
+  position: absolute;
+  left: 27px;
+  transform-origin: 12% 88%;
+  border: 3px solid var(--wing-secondary);
+  background:
+    radial-gradient(circle at 66% 32%, #fff6 0 5%, transparent 6%),
+    linear-gradient(145deg, color-mix(in srgb, var(--wing-primary), white 16%), var(--wing-primary) 55%, var(--wing-secondary));
+  box-shadow: inset 0 0 0 2px #fff2, 0 3px 4px #1e3c3030;
 }
 
-@keyframes flap-right {
-  50% { transform: rotate(30deg) scaleX(0.55); }
+.profile-wing-front {
+  z-index: 3;
+  top: 5px;
+  width: 39px;
+  height: 36px;
+  border-radius: 72% 45% 68% 35%;
+  rotate: -7deg;
+  animation: profile-flap-front 420ms ease-in-out infinite;
+}
+
+.profile-wing-back {
+  z-index: 2;
+  top: 16px;
+  left: 24px;
+  width: 33px;
+  height: 28px;
+  border-radius: 60% 38% 72% 42%;
+  filter: brightness(0.82);
+  rotate: 16deg;
+  animation: profile-flap-back 420ms ease-in-out infinite;
+}
+
+.antenna {
+  position: absolute;
+  z-index: 5;
+  top: 25px;
+  left: 59px;
+  width: 20px;
+  height: 12px;
+  border-top: 1.5px solid var(--wing-secondary);
+  border-radius: 50%;
+  transform-origin: left center;
+}
+
+.antenna-one {
+  rotate: -20deg;
+}
+
+.antenna-two {
+  top: 31px;
+  rotate: 17deg;
+}
+
+@keyframes profile-flap-front {
+  0%, 100% { transform: skewX(-4deg) scaleY(1); }
+  50% { transform: skewX(13deg) scaleY(0.38); }
+}
+
+@keyframes profile-flap-back {
+  0%, 100% { transform: skewX(4deg) scaleY(1); }
+  50% { transform: skewX(17deg) scaleY(0.48); }
 }
 
 .marigold {
   transform: scale(1.35);
   filter: drop-shadow(0 8px 8px rgba(49, 92, 75, 0.2));
+}
+
+.heart-burst {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  pointer-events: none;
+}
+
+.heart-burst span {
+  position: absolute;
+  top: 17px;
+  left: 34px;
+  color: #d85067;
+  font-size: 11px;
+  opacity: 0;
+  text-shadow: 0 1px 2px #fff;
+  animation: heart-rise 900ms ease-out forwards;
+}
+
+.heart-burst span:nth-child(2) {
+  animation-delay: 80ms;
+  translate: -12px 4px;
+}
+
+.heart-burst span:nth-child(3) {
+  animation-delay: 150ms;
+  translate: 13px 2px;
+}
+
+@keyframes heart-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.5); }
+  22% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-30px) scale(1.1) rotate(8deg); }
 }
 
 .chrysalis {
@@ -436,18 +608,77 @@
   line-height: 1.55;
 }
 
-.garden-butterfly {
+.garden-flight-space {
   position: absolute;
-  z-index: 4;
-  top: 20%;
-  right: 16%;
-  transform: scale(1.25);
-  filter: drop-shadow(0 9px 8px rgba(20, 45, 36, 0.3));
-  animation: float 6s ease-in-out infinite;
+  z-index: 5;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
-@keyframes float {
-  50% { transform: scale(1.25) translate(18px, -16px) rotate(3deg); }
+.flying-butterfly {
+  position: absolute;
+  top: 18%;
+  left: 76%;
+  pointer-events: auto;
+  transform: scale(var(--flight-size));
+  filter: drop-shadow(0 7px 6px rgba(20, 45, 36, 0.25));
+  animation: garden-flight var(--flight-duration) ease-in-out var(--flight-delay) infinite;
+}
+
+.flight-1 {
+  animation-name: garden-flight-two;
+}
+
+.flight-2 {
+  animation-name: garden-flight-three;
+}
+
+.flight-3 {
+  animation-name: garden-flight-four;
+}
+
+@keyframes garden-flight {
+  0% { top: 19%; left: 78%; transform: scale(var(--flight-size)) scaleX(1) rotate(-3deg); }
+  18% { top: 31%; left: 53%; transform: scale(var(--flight-size)) scaleX(1) rotate(4deg); }
+  31% { top: 54%; left: 22%; transform: scale(var(--flight-size)) scaleX(1) rotate(-5deg); }
+  38%, 45% { top: 72%; left: 18%; transform: scale(var(--flight-size)) scaleX(1) rotate(1deg); }
+  49% { top: 65%; left: 23%; transform: scale(var(--flight-size)) scaleX(-1) rotate(-3deg); }
+  67% { top: 34%; left: 61%; transform: scale(var(--flight-size)) scaleX(-1) rotate(4deg); }
+  81%, 88% { top: 70%; left: 78%; transform: scale(var(--flight-size)) scaleX(-1); }
+  92% { top: 57%; left: 73%; transform: scale(var(--flight-size)) scaleX(1) rotate(-4deg); }
+  100% { top: 19%; left: 78%; transform: scale(var(--flight-size)) scaleX(1) rotate(-3deg); }
+}
+
+@keyframes garden-flight-two {
+  0% { top: 55%; left: 14%; transform: scale(var(--flight-size)) scaleX(-1); }
+  19% { top: 27%; left: 39%; transform: scale(var(--flight-size)) scaleX(-1) rotate(5deg); }
+  34%, 41% { top: 68%; left: 56%; transform: scale(var(--flight-size)) scaleX(-1); }
+  47% { top: 59%; left: 53%; transform: scale(var(--flight-size)) scaleX(1); }
+  69% { top: 24%; left: 22%; transform: scale(var(--flight-size)) scaleX(1) rotate(-4deg); }
+  84%, 91% { top: 71%; left: 12%; transform: scale(var(--flight-size)) scaleX(1); }
+  100% { top: 55%; left: 14%; transform: scale(var(--flight-size)) scaleX(-1); }
+}
+
+@keyframes garden-flight-three {
+  0% { top: 32%; left: 84%; transform: scale(var(--flight-size)) scaleX(1); }
+  24% { top: 52%; left: 61%; transform: scale(var(--flight-size)) scaleX(1) rotate(-5deg); }
+  37%, 45% { top: 75%; left: 44%; transform: scale(var(--flight-size)) scaleX(1); }
+  50% { top: 66%; left: 47%; transform: scale(var(--flight-size)) scaleX(-1); }
+  76% { top: 20%; left: 79%; transform: scale(var(--flight-size)) scaleX(-1); }
+  88%, 93% { top: 66%; left: 86%; transform: scale(var(--flight-size)) scaleX(-1); }
+  100% { top: 32%; left: 84%; transform: scale(var(--flight-size)) scaleX(1); }
+}
+
+@keyframes garden-flight-four {
+  0% { top: 25%; left: 9%; transform: scale(var(--flight-size)) scaleX(-1); }
+  23% { top: 47%; left: 34%; transform: scale(var(--flight-size)) scaleX(-1); }
+  39%, 47% { top: 73%; left: 67%; transform: scale(var(--flight-size)) scaleX(-1); }
+  53% { top: 62%; left: 64%; transform: scale(var(--flight-size)) scaleX(1); }
+  78% { top: 34%; left: 24%; transform: scale(var(--flight-size)) scaleX(1); }
+  88%, 94% { top: 69%; left: 9%; transform: scale(var(--flight-size)) scaleX(1); }
+  100% { top: 25%; left: 9%; transform: scale(var(--flight-size)) scaleX(-1); }
 }
 
 .garden-plants {
@@ -1016,6 +1247,17 @@
   border-color: #ddb4ab;
 }
 
+.pumpkin-message {
+  margin: -0.25rem 0 0;
+  border-left: 3px solid #df8a6c;
+  border-radius: 0 10px 10px 0;
+  background: #fff1eb;
+  padding: 0.65rem 0.8rem;
+  color: #743c35;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+}
+
 .delete-confirmation {
   display: grid;
   gap: 0.8rem;
@@ -1080,6 +1322,11 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
+  }
+
+  .heart-burst span {
+    opacity: 1;
+    transform: translateY(-14px);
   }
 }
 
@@ -1194,9 +1441,23 @@
     background: linear-gradient(rgba(31, 68, 52, 0.68), transparent);
   }
 
-  .garden-butterfly {
-    top: 44%;
-    right: 18%;
+  .lesson-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lesson-grid article {
+    grid-template-columns: 62px 1fr;
+    grid-template-rows: auto;
+    align-items: center;
+    text-align: left;
+  }
+
+  .lesson-grid h2 {
+    text-align: left;
+  }
+
+  .flying-butterfly {
+    --flight-size: 0.72 !important;
   }
 
   .garden-plants {
