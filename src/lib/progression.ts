@@ -81,13 +81,19 @@ function discoverCaterpillar(
   now: Date,
 ): CreatureInstance | undefined {
   const definition = plantCatalog.find((plant) => plant.id === maturePlant.plantId)
-  const speciesId = definition?.speciesIds[0]
+  const speciesId =
+    definition?.speciesIds.find(
+      (candidateId) =>
+        !state.creatures.some((creature) => creature.speciesId === candidateId),
+    ) ??
+    definition?.speciesIds.find(
+      (candidateId) =>
+        !state.creatures.some(
+          (creature) =>
+            creature.speciesId === candidateId && creature.stage !== 'emerged',
+        ),
+    )
   if (!speciesId) return undefined
-  const alreadyPresent = state.creatures.some(
-    (creature) =>
-      creature.speciesId === speciesId && creature.stage !== 'emerged',
-  )
-  if (alreadyPresent) return undefined
   const count = state.creatures.length
   return {
     id: crypto.randomUUID(),

@@ -754,7 +754,7 @@
   width: min(720px, calc(100% - 2rem));
   align-items: center;
   gap: 1.5rem;
-  margin: -34px auto 1.4rem;
+  margin: 1.25rem auto 1.4rem;
   border: 1px solid rgba(49, 92, 75, 0.12);
   border-radius: 20px;
   background: #fffdf7;
@@ -1472,7 +1472,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.7rem;
-    margin-top: -25px;
+    margin-top: 1rem;
   }
 
   .garden-stats button {

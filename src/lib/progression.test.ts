@@ -51,6 +51,38 @@ describe('garden progression', () => {
     })
   })
 
+  it('welcomes undiscovered species before repeating from a shared host', () => {
+    const state: AppState = {
+      ...createEmptyState(),
+      plants: [
+        {
+          id: 'plant-1',
+          plantId: 'passionflower',
+          growth: 2,
+          plantedAt: '2026-06-13T10:00:00.000Z',
+        },
+      ],
+      creatures: [
+        {
+          id: 'creature-1',
+          speciesId: 'gulf-fritillary',
+          name: 'Poppy',
+          stage: 'emerged',
+          carePoints: 2,
+          discoveredAt: '2026-06-01T10:00:00.000Z',
+          emergedAt: '2026-06-04T10:00:00.000Z',
+        },
+      ],
+    }
+
+    const next = awardSunlight(state, 'goal:shared-host', new Date(2026, 5, 13, 10))
+
+    expect(next.creatures.at(-1)).toMatchObject({
+      speciesId: 'zebra-longwing',
+      stage: 'caterpillar',
+    })
+  })
+
   it('turns a cared-for caterpillar into a 72-hour chrysalis', () => {
     const now = new Date('2026-06-13T14:00:00.000Z')
     const state: AppState = {

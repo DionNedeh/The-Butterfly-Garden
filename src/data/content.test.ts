@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { observations, plants, species } from './content'
 
 describe('butterfly collection content', () => {
-  it('offers at least seven butterflies including a blue morpho', () => {
-    expect(species.length).toBeGreaterThanOrEqual(7)
+  it('offers at least eighteen butterflies including blue morpho and glasswing', () => {
+    expect(species.length).toBeGreaterThanOrEqual(18)
     expect(species).toContainEqual(
       expect.objectContaining({
         id: 'blue-morpho',
@@ -11,17 +11,29 @@ describe('butterfly collection content', () => {
         scientificName: 'Morpho peleides',
       }),
     )
+    expect(species).toContainEqual(
+      expect.objectContaining({
+        id: 'glasswing',
+        commonName: 'Glasswing',
+        scientificName: 'Greta oto',
+      }),
+    )
   })
 
-  it('gives the blue morpho a host plant and authored observations', () => {
-    expect(
-      plants.some(
-        (plant) =>
-          plant.kind === 'host' && plant.speciesIds.includes('blue-morpho'),
-      ),
-    ).toBe(true)
-    expect(
-      observations.filter((item) => item.speciesId === 'blue-morpho').length,
-    ).toBeGreaterThanOrEqual(5)
+  it('gives every butterfly a matching host plant and authored observations', () => {
+    species.forEach((butterfly) => {
+      butterfly.hostPlantIds.forEach((plantId) => {
+        expect(plants).toContainEqual(
+          expect.objectContaining({
+            id: plantId,
+            kind: 'host',
+            speciesIds: expect.arrayContaining([butterfly.id]),
+          }),
+        )
+      })
+      expect(
+        observations.filter((item) => item.speciesId === butterfly.id).length,
+      ).toBeGreaterThanOrEqual(3)
+    })
   })
 })
