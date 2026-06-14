@@ -144,7 +144,7 @@ export const species: SpeciesDefinition[] = [
   },
   {
     id: 'question-mark',
-    commonName: 'Question Mark',
+    commonName: 'Question Mark Butterfly',
     scientificName: 'Polygonia interrogationis',
     hostPlantIds: ['elm'],
     wingColors: ['#dd7136', '#49332a'],

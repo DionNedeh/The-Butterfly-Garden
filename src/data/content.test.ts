@@ -18,6 +18,13 @@ describe('butterfly collection content', () => {
         scientificName: 'Greta oto',
       }),
     )
+    expect(species).toContainEqual(
+      expect.objectContaining({
+        id: 'question-mark',
+        commonName: 'Question Mark Butterfly',
+        scientificName: 'Polygonia interrogationis',
+      }),
+    )
   })
 
   it('gives every butterfly a matching host plant and authored observations', () => {

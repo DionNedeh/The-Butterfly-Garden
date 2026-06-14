@@ -1104,6 +1104,7 @@
 }
 
 .unknown-butterfly {
+  position: relative;
   display: grid;
   width: 68px;
   height: 52px;
@@ -1111,8 +1112,35 @@
   place-items: center;
   border-radius: 50%;
   background: #dfe1db;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 1.5rem;
+}
+
+.unknown-wing {
+  position: absolute;
+  top: 10px;
+  width: 25px;
+  height: 31px;
+  background: #a9afa8;
+}
+
+.unknown-wing-left {
+  right: 32px;
+  border-radius: 75% 35% 55% 45%;
+  rotate: -15deg;
+}
+
+.unknown-wing-right {
+  left: 32px;
+  border-radius: 35% 75% 45% 55%;
+  rotate: 15deg;
+}
+
+.unknown-body {
+  position: absolute;
+  z-index: 1;
+  width: 5px;
+  height: 31px;
+  border-radius: 999px;
+  background: #737a74;
 }
 
 .timeline-heading {

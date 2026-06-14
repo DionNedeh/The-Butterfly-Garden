@@ -68,7 +68,9 @@ export function JournalView({
                   />
                 ) : (
                   <div className="unknown-butterfly" aria-label="Not yet discovered">
-                    ?
+                    <span className="unknown-wing unknown-wing-left" />
+                    <span className="unknown-wing unknown-wing-right" />
+                    <span className="unknown-body" />
                   </div>
                 )}
                 <div>
