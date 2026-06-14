@@ -10,6 +10,10 @@ import { toLocalDate } from './date'
 export const DAILY_SUNLIGHT_CAP = 5
 export const CHRYSALIS_DURATION_MS = 72 * 60 * 60 * 1000
 export const MAX_PLANT_GROWTH = 3
+export const STARTER_SEEDS = 2
+export const DAILY_SEED_REWARD = 1
+export const EMERGENCE_SEED_REWARD = 2
+export const PLANT_SEED_COST = 1
 const CATERPILLAR_CARE_TO_CHRYSALIS = 2
 
 export function createEmptyState(): AppState {
@@ -71,7 +75,7 @@ export function createInitialState(
         emergeAt: new Date(now.getTime() + CHRYSALIS_DURATION_MS).toISOString(),
       },
     ],
-    seeds: 2,
+    seeds: STARTER_SEEDS,
   }
 }
 
@@ -132,7 +136,7 @@ export function progressGarden(state: AppState, now = new Date()): AppState {
   return {
     ...state,
     creatures,
-    seeds: state.seeds + newlyEmerged * 2,
+    seeds: state.seeds + newlyEmerged * EMERGENCE_SEED_REWARD,
     profile:
       state.profile && !state.profile.activeCompanionId
         ? {
@@ -154,6 +158,7 @@ export function awardSunlight(
   const localDate = toLocalDate(now)
   if (state.sunlight.some((award) => award.source === source)) return state
   if (sunlightForDate(state, localDate) >= DAILY_SUNLIGHT_CAP) return state
+  const firstSunlightToday = sunlightForDate(state, localDate) === 0
 
   const award: SunlightAward = {
     id: crypto.randomUUID(),
@@ -202,6 +207,8 @@ export function awardSunlight(
     plants,
     creatures,
     sunlight: [...state.sunlight, award],
+    seeds:
+      state.seeds + (firstSunlightToday ? DAILY_SEED_REWARD : 0),
   }
 }
 
@@ -210,12 +217,15 @@ export function plantSeed(
   plantId: string,
   now = new Date(),
 ): AppState {
-  if (state.seeds < 1 || !plantCatalog.some((plant) => plant.id === plantId)) {
+  if (
+    state.seeds < PLANT_SEED_COST ||
+    !plantCatalog.some((plant) => plant.id === plantId)
+  ) {
     return state
   }
   return {
     ...state,
-    seeds: state.seeds - 1,
+    seeds: state.seeds - PLANT_SEED_COST,
     plants: [
       ...state.plants,
       {

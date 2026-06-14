@@ -4,8 +4,14 @@ import {
   awardSunlight,
   CHRYSALIS_DURATION_MS,
   createEmptyState,
+  createInitialState,
   DAILY_SUNLIGHT_CAP,
+  DAILY_SEED_REWARD,
+  EMERGENCE_SEED_REWARD,
+  PLANT_SEED_COST,
+  plantSeed,
   progressGarden,
+  STARTER_SEEDS,
 } from './progression'
 
 beforeEach(() => {
@@ -29,6 +35,31 @@ describe('garden progression', () => {
     const once = awardSunlight(createEmptyState(), 'mood:2026-06-13', now)
     const twice = awardSunlight(once, 'mood:2026-06-13', now)
     expect(twice.sunlight).toHaveLength(1)
+  })
+
+  it('awards one seed with the first Sunlight of each local day', () => {
+    const firstDay = new Date(2026, 5, 13, 10)
+    const nextDay = new Date(2026, 5, 14, 10)
+    const first = awardSunlight(createEmptyState(), 'mood:2026-06-13', firstDay)
+    const second = awardSunlight(first, 'goal:one:2026-06-13', firstDay)
+    const tomorrow = awardSunlight(second, 'mood:2026-06-14', nextDay)
+
+    expect(first.seeds).toBe(DAILY_SEED_REWARD)
+    expect(second.seeds).toBe(DAILY_SEED_REWARD)
+    expect(tomorrow.seeds).toBe(DAILY_SEED_REWARD * 2)
+  })
+
+  it('starts with two seeds and spends one per planted plant', () => {
+    const initial = createInitialState(
+      'Gardener',
+      'Seed Garden',
+      new Date('2026-06-13T10:00:00.000Z'),
+    )
+    const planted = plantSeed(initial, 'aster')
+
+    expect(initial.seeds).toBe(STARTER_SEEDS)
+    expect(planted.seeds).toBe(STARTER_SEEDS - PLANT_SEED_COST)
+    expect(planted.plants).toHaveLength(initial.plants.length + 1)
   })
 
   it('matures a host plant and attracts its caterpillar', () => {
@@ -133,7 +164,7 @@ describe('garden progression', () => {
       new Date('2026-06-02T00:00:00.000Z'),
     )
     expect(clockMovedBack.creatures[0].stage).toBe('emerged')
-    expect(clockMovedBack.seeds).toBe(2)
+    expect(clockMovedBack.seeds).toBe(EMERGENCE_SEED_REWARD)
     expect(clockMovedBack.profile?.activeCompanionId).toBe('creature-1')
   })
 })

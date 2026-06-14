@@ -83,6 +83,11 @@ test('supports plant selection and permanent local reset confirmation', async ({
     .locator('nav:visible')
     .getByRole('button', { name: 'Settings', exact: true })
     .click()
+  await expect(
+    page.getByRole('heading', { name: 'How everything works' }),
+  ).toBeVisible()
+  await expect(page.getByText('Seeds and planting')).toBeVisible()
+  await expect(page.getByText(/first Sunlight you earn each local day/i)).toBeVisible()
   await page.getByLabel('Your name').fill('Pumpkin')
   await expect(page.getByText('Made for you with ❤️- S')).toBeVisible()
   await page.getByRole('button', { name: /begin deletion/i }).click()

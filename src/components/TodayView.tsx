@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react'
 import { reflectionPrompts, suggestedGoals } from '../data/content'
 import { getDailyPromptIndex, isGoalDue, toLocalDate } from '../lib/date'
-import { DAILY_SUNLIGHT_CAP, sunlightForDate } from '../lib/progression'
+import {
+  DAILY_SEED_REWARD,
+  DAILY_SUNLIGHT_CAP,
+  sunlightForDate,
+} from '../lib/progression'
 import type { AppState, Goal, GoalSchedule, MoodEntry } from '../types'
 import { Icon } from './Icons'
 
@@ -72,6 +76,12 @@ export function TodayView({
           </div>
         </div>
       </header>
+      <p className="daily-seed-note">
+        <Icon name="seed" size={18} />
+        {sunlight > 0
+          ? `Today’s ${DAILY_SEED_REWARD} bonus seed is safely in your tray.`
+          : `Your first Sunlight today also adds ${DAILY_SEED_REWARD} seed to your tray.`}
+      </p>
 
       <section className="card" aria-labelledby="mood-title">
         <p className="eyebrow">No right answer</p>

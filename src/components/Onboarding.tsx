@@ -105,9 +105,10 @@ export function Onboarding({
                 <div>
                   <h2>Seeds and host plants</h2>
                   <p>
-                    Care activities earn Sunlight. Sunlight grows your plants,
-                    while seeds let you add new ones. Mature host plants welcome
-                    the caterpillars that become each butterfly species.
+                    Care activities earn Sunlight, and your first Sunlight each
+                    day brings one seed. You begin with two seeds, and every
+                    emerging butterfly brings two more. Each seed adds one new
+                    plant; mature host plants welcome matching caterpillars.
                   </p>
                 </div>
               </article>

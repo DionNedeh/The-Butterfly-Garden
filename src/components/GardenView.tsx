@@ -1,7 +1,12 @@
 import { useState, type CSSProperties } from 'react'
 import { observations, plants, species } from '../data/content'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
-import { MAX_PLANT_GROWTH } from '../lib/progression'
+import {
+  DAILY_SEED_REWARD,
+  EMERGENCE_SEED_REWARD,
+  MAX_PLANT_GROWTH,
+  PLANT_SEED_COST,
+} from '../lib/progression'
 import type { AppState } from '../types'
 import { Butterfly } from './Butterfly'
 import { ChrysalisCountdown } from './ChrysalisCountdown'
@@ -120,6 +125,11 @@ export function GardenView({
           Plant a seed
         </button>
       </section>
+      <p className="seed-economy-note">
+        Earn {DAILY_SEED_REWARD} seed with your first Sunlight each day and{' '}
+        {EMERGENCE_SEED_REWARD} when a butterfly emerges. Each new plant costs{' '}
+        {PLANT_SEED_COST} seed.
+      </p>
 
       {showSeedTray && (
         <section className="card seed-tray" aria-labelledby="seed-tray-title">
@@ -133,8 +143,9 @@ export function GardenView({
             </button>
           </div>
           <p className="section-explainer">
-            Spend one seed to add a plant. Host plants invite a particular
-            caterpillar; nectar plants help the whole sanctuary feel welcoming.
+            Spend {PLANT_SEED_COST} seed to add a plant. Host plants can welcome
+            the listed caterpillars after growing; nectar plants add flowers for
+            the butterflies already visiting.
           </p>
           <div className="catalog-grid">
             {plants.map((plant) => (
@@ -152,7 +163,18 @@ export function GardenView({
                   aria-hidden="true"
                 />
                 <strong>{plant.name}</strong>
-                <small>{plant.kind === 'host' ? 'Host plant' : 'Nectar plant'}</small>
+                <small>
+                  {plant.kind === 'host'
+                    ? `Host for ${plant.speciesIds
+                        .map(
+                          (speciesId) =>
+                            species.find((item) => item.id === speciesId)
+                              ?.commonName,
+                        )
+                        .filter(Boolean)
+                        .join(' and ')}`
+                    : 'Nectar plant for visiting butterflies'}
+                </small>
               </button>
             ))}
           </div>
