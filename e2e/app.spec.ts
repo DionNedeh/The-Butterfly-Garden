@@ -64,6 +64,11 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
   await expect(page.getByText('Blue Morpho')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Sunlight streak' }),
+  ).toBeVisible()
+  await expect(page.getByLabel('1 day streak')).toBeVisible()
+  await expect(page.getByText('Today is counted')).toBeVisible()
   await expect(page.getByText('A little more spacious.')).toBeVisible()
   await expect(
     page.getByText('I noticed sunlight on the kitchen table.'),

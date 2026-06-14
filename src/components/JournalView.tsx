@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { reflectionPrompts, species } from '../data/content'
-import { formatJournalDate } from '../lib/date'
+import { formatJournalDate, toLocalDate } from '../lib/date'
+import { calculateSunlightStreak } from '../lib/streak'
 import type { AppState, MoodEntry, ReflectionEntry } from '../types'
 import { Butterfly } from './Butterfly'
+import { Icon } from './Icons'
 
 const moodNames = ['Stormy', 'Rainy', 'Overcast', 'Bright', 'Radiant']
 
@@ -21,6 +23,21 @@ export function JournalView({
 }) {
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
   const [editingMood, setEditingMood] = useState<MoodEntry>()
+  const [today, setToday] = useState(toLocalDate)
+  useEffect(() => {
+    const refreshDate = () => setToday(toLocalDate())
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshDate()
+    }
+    const interval = window.setInterval(refreshDate, 60_000)
+    window.addEventListener('focus', refreshDate)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshDate)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [])
   const dates = useMemo(
     () =>
       Array.from(
@@ -32,6 +49,10 @@ export function JournalView({
     [state.moods, state.reflections],
   )
   const emerged = state.creatures.filter((creature) => creature.stage === 'emerged')
+  const streak = useMemo(
+    () => calculateSunlightStreak(state.sunlight, today),
+    [state.sunlight, today],
+  )
 
   return (
     <div className="view journal-view">
@@ -81,6 +102,31 @@ export function JournalView({
               </article>
             )
           })}
+        </div>
+      </section>
+
+      <section className="card streak-card" aria-labelledby="streak-title">
+        <div className="streak-icon">
+          <Icon name="sun" size={30} />
+        </div>
+        <div className="streak-copy">
+          <p className="eyebrow">Daily care</p>
+          <h2 id="streak-title">Sunlight streak</h2>
+          <p>
+            One Sunlight keeps your streak growing. Miss a full local calendar
+            day and it begins again.
+          </p>
+        </div>
+        <div className="streak-count" aria-label={`${streak.days} day streak`}>
+          <strong>{streak.days}</strong>
+          <span>{streak.days === 1 ? 'day' : 'days'}</span>
+          <small>
+            {streak.completedToday
+              ? 'Today is counted'
+              : streak.days > 0
+                ? 'Earn Sunlight today'
+                : 'Begin with one Sunlight'}
+          </small>
         </div>
       </section>
 
