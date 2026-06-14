@@ -24,7 +24,7 @@ const guideSections = [
   },
   {
     title: 'Host plants, nectar plants, and growth',
-    body: 'Sunlight automatically goes where care is needed: first to a caterpillar already in the garden, otherwise to the next plant that can grow. Plants have three growth stages. A mature host plant can welcome one of its matching caterpillars. Shared host plants prefer a species you have not discovered yet. Nectar plants enrich the sanctuary for adult butterflies but do not attract caterpillars.',
+    body: 'A newly planted seed begins in a waiting state, then needs three eligible Sunlight to finish its three visible growth stages: the first Sunlight produces a small sprout, the second creates a fuller growing plant with buds, and the third makes it mature and blooming. Growth is based on care, not a fixed hour timer. At one Sunlight per day, a new plant takes about three days to mature; with three available Sunlight it can mature in one day. Sunlight automatically goes first to a caterpillar that needs care, then to the earliest plant that can still grow, so other garden life may make a particular plant take longer. Missed days simply pause growth without wilting or losing progress. A mature host plant can welcome one of its matching caterpillars, while nectar plants enrich the sanctuary for adult butterflies but do not attract caterpillars. Shared host plants prefer a species you have not discovered yet.',
   },
   {
     title: 'Caterpillars, chrysalises, and emergence',

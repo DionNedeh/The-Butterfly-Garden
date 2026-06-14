@@ -163,6 +163,26 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   )
 })
 
+test('guide explains the three plant growth stages and their timing', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page
+    .getByText('Host plants, nectar plants, and growth')
+    .click()
+
+  await expect(
+    page.getByText(/first Sunlight produces a small sprout/i),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/one Sunlight per day, a new plant takes about three days/i),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/Missed days simply pause growth/i),
+  ).toBeVisible()
+})
+
 test('persists emergence and selects the new butterfly as companion', async ({ page }) => {
   await enterGarden(page)
   await page.evaluate(
