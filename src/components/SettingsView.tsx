@@ -6,7 +6,12 @@ import {
   PLANT_SEED_COST,
   STARTER_SEEDS,
 } from '../lib/progression'
-import type { AppState } from '../types'
+import {
+  daysUntilBackdrop,
+  gardenBackdrops,
+  unlockedBackdropIds,
+} from '../lib/appearance'
+import type { AppState, GardenBackdropId } from '../types'
 
 const guideSections = [
   {
@@ -42,6 +47,10 @@ const guideSections = [
     body: 'After the first successful load, the app shell is available offline. Changes remain in this browser and save locally. Supported browsers may offer an Install app button for a standalone home-screen experience. When a new version is ready, the app asks before refreshing to apply it.',
   },
   {
+    title: 'Backdrops and night mode',
+    body: 'Sunlit Meadow is available from the beginning. Woodland Brook unlocks after 30 elapsed days and Secret Conservatory after 60. Once unlocked, a backdrop stays available in Settings. The moon button at the far right of the top bar switches the whole app into a starry night theme; use the sun button to return to daylight.',
+  },
+  {
     title: 'Privacy, motion, and starting over',
     body: 'There are no accounts, analytics, cloud sync, social features, or analysis of your writing. Reduce garden motion pauses decorative animation. Delete all local data permanently removes this garden from the current browser. Clearing site storage or uninstalling without preserving data can do the same.',
   },
@@ -50,6 +59,7 @@ const guideSections = [
 export function SettingsView({
   state,
   onUpdateProfile,
+  onSelectBackdrop,
   onDeleteAll,
 }: {
   state: AppState
@@ -58,6 +68,7 @@ export function SettingsView({
     gardenName: string,
     reducedMotion: boolean,
   ) => void
+  onSelectBackdrop: (backdropId: GardenBackdropId) => void
   onDeleteAll: () => Promise<void>
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
@@ -66,6 +77,8 @@ export function SettingsView({
     state.profile?.reducedMotion ?? false,
   )
   const [deleteStep, setDeleteStep] = useState(false)
+  const profile = state.profile
+  const unlockedBackdrops = profile ? unlockedBackdropIds(profile) : []
 
   return (
     <div className="view settings-view">
@@ -114,6 +127,47 @@ export function SettingsView({
           </label>
           <button className="primary-button" type="submit">Save settings</button>
         </form>
+      </section>
+
+      <section className="card backdrop-card" aria-labelledby="backdrop-title">
+        <p className="eyebrow">Garden scenery</p>
+        <h2 id="backdrop-title">Choose your backdrop</h2>
+        <p className="section-explainer">
+          Your original meadow is always available. New scenery unlocks after
+          30 and 60 elapsed days, then remains yours to revisit.
+        </p>
+        <div className="backdrop-grid">
+          {gardenBackdrops.map((backdrop) => {
+            const unlocked = unlockedBackdrops.includes(backdrop.id)
+            const selected =
+              (profile?.selectedBackdropId ?? 'sunlit-meadow') === backdrop.id
+            const remaining = profile
+              ? daysUntilBackdrop(profile, backdrop.id)
+              : backdrop.unlockDays
+            return (
+              <button
+                className={`backdrop-choice backdrop-preview-${backdrop.id} ${selected ? 'selected' : ''}`}
+                key={backdrop.id}
+                disabled={!unlocked}
+                onClick={() => onSelectBackdrop(backdrop.id)}
+                aria-pressed={selected}
+              >
+                <span className="backdrop-preview" aria-hidden="true" />
+                <span className="backdrop-choice-copy">
+                  <strong>{backdrop.name}</strong>
+                  <small>{backdrop.description}</small>
+                  <em>
+                    {selected
+                      ? 'Selected'
+                      : unlocked
+                        ? 'Unlocked - select backdrop'
+                        : `Locked - ${remaining} day${remaining === 1 ? '' : 's'} remaining`}
+                  </em>
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </section>
 
       <section className="card guide-card" aria-labelledby="guide-title">

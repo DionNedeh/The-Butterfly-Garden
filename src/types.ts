@@ -2,6 +2,11 @@ export type AppView = 'garden' | 'today' | 'journal' | 'settings'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'caterpillar' | 'chrysalis' | 'emerged'
+export type AppearanceTheme = 'sunlight' | 'night'
+export type GardenBackdropId =
+  | 'sunlit-meadow'
+  | 'woodland-brook'
+  | 'secret-conservatory'
 
 export interface Profile {
   id: 'profile'
@@ -10,6 +15,9 @@ export interface Profile {
   createdAt: string
   activeCompanionId?: string
   reducedMotion: boolean
+  theme?: AppearanceTheme
+  selectedBackdropId?: GardenBackdropId
+  unlockedBackdropIds?: GardenBackdropId[]
 }
 
 export interface Goal {

@@ -1,6 +1,9 @@
 .app-shell {
   min-height: 100vh;
   min-height: 100svh;
+  background: var(--cream);
+  color: var(--ink);
+  transition: background-color 240ms ease, color 240ms ease;
 }
 
 .app-header {
@@ -94,6 +97,24 @@
   padding: 0.55rem 0.75rem;
   color: #684711;
   font-weight: 800;
+}
+
+.theme-toggle {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #b8c6ba;
+  border-radius: 50%;
+  background: #f7f4e9;
+  color: #3d5148;
+  box-shadow: 0 4px 14px rgba(38, 65, 53, 0.12);
+}
+
+.theme-toggle:hover {
+  background: #fff7d7;
+  color: #704313;
 }
 
 .install-button {
@@ -571,10 +592,36 @@
   min-height: 520px;
   overflow: hidden;
   border-radius: 30px;
-  background:
-    linear-gradient(90deg, rgba(28, 58, 46, 0.72), rgba(28, 58, 46, 0.06) 64%),
-    url('./assets/garden-background.jpg') center / cover;
+  background-position: center;
+  background-size: cover;
   box-shadow: 0 24px 65px rgba(36, 58, 50, 0.2);
+}
+
+.garden-hero.backdrop-sunlit-meadow {
+  background-image:
+    linear-gradient(90deg, rgba(28, 58, 46, 0.72), rgba(28, 58, 46, 0.06) 64%),
+    url('./assets/garden-background.jpg');
+}
+
+.garden-hero.backdrop-woodland-brook {
+  background-image:
+    linear-gradient(90deg, rgba(20, 54, 45, 0.75), rgba(20, 54, 45, 0.04) 66%),
+    url('./assets/garden-woodland-brook.jpg');
+}
+
+.garden-hero.backdrop-secret-conservatory {
+  background-image:
+    linear-gradient(90deg, rgba(63, 43, 51, 0.72), rgba(63, 43, 51, 0.04) 65%),
+    url('./assets/garden-secret-conservatory.jpg');
+}
+
+.garden-hero::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  transition: background 260ms ease;
 }
 
 .garden-hero::after {
@@ -1353,6 +1400,82 @@
   background: linear-gradient(145deg, #fffaf0, #f7f3e6);
 }
 
+.backdrop-card {
+  border-color: #b9cbb9;
+  background: linear-gradient(145deg, #f7faf3, #eef4ea);
+}
+
+.backdrop-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.backdrop-choice {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  min-height: 112px;
+  overflow: hidden;
+  border: 1px solid #cbd5c8;
+  border-radius: 18px;
+  background: #fffdf8;
+  padding: 0;
+  text-align: left;
+}
+
+.backdrop-choice.selected {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 2px var(--forest);
+}
+
+.backdrop-choice:disabled {
+  opacity: 1;
+}
+
+.backdrop-choice:disabled .backdrop-preview {
+  filter: grayscale(0.85) brightness(0.62);
+}
+
+.backdrop-preview {
+  min-height: 112px;
+  background-position: center;
+  background-size: cover;
+}
+
+.backdrop-preview-sunlit-meadow .backdrop-preview {
+  background-image: url('./assets/garden-background.jpg');
+}
+
+.backdrop-preview-woodland-brook .backdrop-preview {
+  background-image: url('./assets/garden-woodland-brook.jpg');
+}
+
+.backdrop-preview-secret-conservatory .backdrop-preview {
+  background-image: url('./assets/garden-secret-conservatory.jpg');
+}
+
+.backdrop-choice-copy {
+  display: grid;
+  align-content: center;
+  gap: 0.28rem;
+  padding: 0.9rem 1rem;
+}
+
+.backdrop-choice-copy small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.backdrop-choice-copy em {
+  color: var(--forest);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.backdrop-choice:disabled .backdrop-choice-copy em {
+  color: #77574c;
+}
+
 .guide-seed-balance {
   flex: 0 0 auto;
   border-radius: 999px;
@@ -1424,6 +1547,146 @@
   background: #fae8e3;
   padding: 1rem;
   color: #742f2b;
+}
+
+/* Starry night theme */
+.theme-night {
+  --forest: #8cc9ab;
+  --forest-dark: #d9f2e5;
+  --cream: #07131f;
+  --paper: #102332;
+  --ink: #e8f2ed;
+  --muted: #b7c9c1;
+  --line: #334a58;
+  --danger: #f0948c;
+  --shadow: 0 16px 48px rgba(0, 4, 12, 0.34);
+  background-color: #07131f;
+  background-image:
+    radial-gradient(circle at 8% 14%, #fff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 26% 38%, #dce9ff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 52% 12%, #fff7d1 0 1px, transparent 1.6px),
+    radial-gradient(circle at 76% 31%, #fff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 92% 9%, #dce9ff 0 1px, transparent 1.5px),
+    linear-gradient(160deg, #07131f, #10283a 58%, #13263a);
+  background-size: 190px 170px, 230px 210px, 260px 190px, 210px 240px, 280px 220px, auto;
+}
+
+.theme-night .app-header,
+.theme-night .bottom-nav {
+  border-color: rgba(176, 207, 194, 0.2);
+  background: rgba(10, 27, 40, 0.94);
+}
+
+.theme-night .app-header nav {
+  background: #142c3b;
+}
+
+.theme-night .app-header nav button.active,
+.theme-night .bottom-nav button.active {
+  background: #254756;
+  color: #f1fbf6;
+}
+
+.theme-night .theme-toggle {
+  border-color: #536d7b;
+  background: #132c3d;
+  color: #f6d477;
+}
+
+.theme-night .eyebrow {
+  color: #e4bf68;
+}
+
+.theme-night .header-sunlight,
+.theme-night .sunlight-meter {
+  background: #3c3528;
+  color: #f6d477;
+}
+
+.theme-night .card,
+.theme-night .garden-stats,
+.theme-night .update-toast {
+  border-color: rgba(167, 202, 188, 0.2);
+  background: rgba(15, 36, 50, 0.95);
+}
+
+.theme-night .garden-hero::before {
+  background:
+    radial-gradient(circle at 12% 16%, #fff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 36% 8%, #dce8ff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 62% 23%, #fff8d0 0 1px, transparent 1.6px),
+    radial-gradient(circle at 84% 10%, #fff 0 1px, transparent 1.5px),
+    linear-gradient(rgba(4, 14, 30, 0.48), rgba(5, 18, 33, 0.68));
+  background-size: 150px 140px, 210px 180px, 240px 170px, 190px 210px, auto;
+}
+
+.theme-night .garden-hero::after {
+  background: linear-gradient(transparent, rgba(3, 13, 26, 0.72));
+}
+
+.theme-night .garden-heading {
+  text-shadow: 0 2px 18px #0008;
+}
+
+.theme-night .secondary-button,
+.theme-night .plant-choice,
+.theme-night .companion-card,
+.theme-night .mood-button,
+.theme-night .goal-row,
+.theme-night .goal-check,
+.theme-night .species-card,
+.theme-night .creature-row,
+.theme-night .toggle-row,
+.theme-night .guide-list details,
+.theme-night .backdrop-choice {
+  border-color: #385463;
+  background: #152f3e;
+  color: var(--ink);
+}
+
+.theme-night .backdrop-choice:disabled .backdrop-choice-copy em {
+  color: #d6ad88;
+}
+
+.theme-night .companion-card.selected,
+.theme-night .mood-button.selected {
+  background: #254b4b;
+}
+
+.theme-night input,
+.theme-night select,
+.theme-night textarea {
+  border-color: #496575;
+  background: #0c2231;
+  color: var(--ink);
+}
+
+.theme-night .reflection-card,
+.theme-night .streak-card,
+.theme-night .guide-card,
+.theme-night .backdrop-card,
+.theme-night .privacy-card {
+  background: rgba(17, 41, 55, 0.96);
+}
+
+.theme-night .guide-list details[open] summary,
+.theme-night .guide-list summary:hover {
+  background: #203e4c;
+}
+
+.theme-night .count-badge,
+.theme-night .streak-count,
+.theme-night .guide-seed-balance {
+  background: #3d392a;
+  color: #f6d477;
+}
+
+.theme-night .timeline::before {
+  background: #46606c;
+}
+
+.theme-night .timeline-entry::before {
+  border-color: #07131f;
 }
 
 .update-toast {
@@ -1652,6 +1915,10 @@
   .guide-card .section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .backdrop-choice {
+    grid-template-columns: 112px 1fr;
   }
 
   .catalog-grid,

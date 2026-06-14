@@ -6,6 +6,7 @@ import type {
   SunlightAward,
 } from '../types'
 import { toLocalDate } from './date'
+import { progressAppearance } from './appearance'
 
 export const DAILY_SUNLIGHT_CAP = 5
 export const CHRYSALIS_DURATION_MS = 72 * 60 * 60 * 1000
@@ -48,6 +49,9 @@ export function createInitialState(
       gardenName: gardenName.trim() || 'My Butterfly Garden',
       createdAt: nowIso,
       reducedMotion: false,
+      theme: 'sunlight',
+      selectedBackdropId: 'sunlit-meadow',
+      unlockedBackdropIds: ['sunlit-meadow'],
     },
     plants: [
       {
@@ -111,8 +115,9 @@ function discoverCaterpillar(
 }
 
 export function progressGarden(state: AppState, now = new Date()): AppState {
-  let changed = false
-  const creatures = state.creatures.map((creature) => {
+  const appearanceState = progressAppearance(state, now)
+  let changed = appearanceState !== state
+  const creatures = appearanceState.creatures.map((creature) => {
     if (
       creature.stage === 'chrysalis' &&
       creature.emergeAt &&
@@ -131,21 +136,21 @@ export function progressGarden(state: AppState, now = new Date()): AppState {
   const newlyEmerged = creatures.filter(
     (creature, index) =>
       creature.stage === 'emerged' &&
-      state.creatures[index]?.stage !== 'emerged',
+      appearanceState.creatures[index]?.stage !== 'emerged',
   ).length
   return {
-    ...state,
+    ...appearanceState,
     creatures,
-    seeds: state.seeds + newlyEmerged * EMERGENCE_SEED_REWARD,
+    seeds: appearanceState.seeds + newlyEmerged * EMERGENCE_SEED_REWARD,
     profile:
-      state.profile && !state.profile.activeCompanionId
+      appearanceState.profile && !appearanceState.profile.activeCompanionId
         ? {
-            ...state.profile,
+            ...appearanceState.profile,
             activeCompanionId: creatures.find(
               (creature) => creature.stage === 'emerged',
             )?.id,
           }
-        : state.profile,
+        : appearanceState.profile,
   }
 }
 

@@ -71,7 +71,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${profile.reducedMotion ? 'reduce-motion' : ''}`}
+      className={`app-shell theme-${profile.theme ?? 'sunlight'} ${profile.reducedMotion ? 'reduce-motion' : ''}`}
     >
       <header className="app-header">
         <button className="brand" onClick={() => setView('garden')}>
@@ -111,6 +111,22 @@ function App() {
               Install app
             </button>
           )}
+          <button
+            className="theme-toggle"
+            onClick={garden.toggleTheme}
+            aria-label={
+              profile.theme === 'night'
+                ? 'Switch to sunlight mode'
+                : 'Switch to night mode'
+            }
+            title={
+              profile.theme === 'night'
+                ? 'Switch to sunlight mode'
+                : 'Switch to night mode'
+            }
+          >
+            <Icon name={profile.theme === 'night' ? 'sun' : 'moon'} />
+          </button>
         </div>
       </header>
 
@@ -153,6 +169,7 @@ function App() {
           <SettingsView
             state={state}
             onUpdateProfile={garden.updateProfile}
+            onSelectBackdrop={garden.selectBackdrop}
             onDeleteAll={garden.deleteAll}
           />
         )}

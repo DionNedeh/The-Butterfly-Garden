@@ -96,6 +96,73 @@ test('supports plant selection and permanent local reset confirmation', async ({
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
 })
 
+test('toggles starry night mode and unlocks selectable monthly backdrops', async ({
+  page,
+}) => {
+  await enterGarden(page)
+
+  const nightToggle = page.getByRole('button', {
+    name: 'Switch to night mode',
+  })
+  await nightToggle.click()
+  await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
+  await expect(
+    page.getByRole('button', { name: 'Switch to sunlight mode' }),
+  ).toBeVisible()
+  const nightResults = await new AxeBuilder({ page }).analyze()
+  expect(
+    nightResults.violations.filter(
+      (violation) =>
+        violation.impact === 'serious' || violation.impact === 'critical',
+    ),
+  ).toEqual([])
+
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const openRequest = indexedDB.open('butterfly-garden', 1)
+        openRequest.onerror = () => reject(openRequest.error)
+        openRequest.onsuccess = () => {
+          const db = openRequest.result
+          const transaction = db.transaction('state', 'readwrite')
+          const store = transaction.objectStore('state')
+          const getRequest = store.get('current')
+          getRequest.onsuccess = () => {
+            const state = getRequest.result
+            state.profile.createdAt = new Date(
+              Date.now() - 61 * 24 * 60 * 60 * 1000,
+            ).toISOString()
+            delete state.profile.selectedBackdropId
+            delete state.profile.unlockedBackdropIds
+            store.put(state, 'current')
+          }
+          transaction.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          transaction.onerror = () => reject(transaction.error)
+        }
+      }),
+  )
+  await page.reload()
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Settings', exact: true })
+    .click()
+
+  const conservatory = page.getByRole('button', {
+    name: /Secret Conservatory.*Unlocked - select backdrop/i,
+  })
+  await conservatory.click()
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Garden', exact: true })
+    .click()
+  await expect(page.locator('.garden-hero')).toHaveClass(
+    /backdrop-secret-conservatory/,
+  )
+})
+
 test('persists emergence and selects the new butterfly as companion', async ({ page }) => {
   await enterGarden(page)
   await page.evaluate(

@@ -51,7 +51,10 @@ export function GardenView({
 
   return (
     <div className="view garden-view">
-      <section className="garden-hero" aria-labelledby="garden-title">
+      <section
+        className={`garden-hero backdrop-${state.profile?.selectedBackdropId ?? 'sunlit-meadow'}`}
+        aria-labelledby="garden-title"
+      >
         <div className="garden-heading">
           <p className="eyebrow">Your living sanctuary</p>
           <h1 id="garden-title">{state.profile?.gardenName}</h1>

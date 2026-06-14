@@ -9,6 +9,7 @@ import {
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
   AppState,
+  GardenBackdropId,
   Goal,
   GoalSchedule,
   MoodEntry,
@@ -200,6 +201,28 @@ export function useGardenState() {
         ...current,
         profile: current.profile
           ? { ...current.profile, activeCompanionId: creatureId }
+          : undefined,
+      }))
+    },
+    selectBackdrop(backdropId: GardenBackdropId) {
+      update((current) => {
+        const progressed = progressGarden(current)
+        const profile = progressed.profile
+        if (!profile?.unlockedBackdropIds?.includes(backdropId)) return progressed
+        return {
+          ...progressed,
+          profile: { ...profile, selectedBackdropId: backdropId },
+        }
+      })
+    },
+    toggleTheme() {
+      update((current) => ({
+        ...current,
+        profile: current.profile
+          ? {
+              ...current.profile,
+              theme: current.profile.theme === 'night' ? 'sunlight' : 'night',
+            }
           : undefined,
       }))
     },
