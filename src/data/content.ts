@@ -142,14 +142,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#f2f0df', '#55524c'],
     fact: 'The cabbage white is a familiar garden butterfly whose caterpillars eat mustard-family plants.',
   },
-  {
-    id: 'question-mark',
-    commonName: 'Question Mark Butterfly',
-    scientificName: 'Polygonia interrogationis',
-    hostPlantIds: ['elm'],
-    wingColors: ['#dd7136', '#49332a'],
-    fact: 'A small silver mark beneath the hindwing gives the question mark butterfly its name.',
-  },
 ]
 
 export const plants: PlantDefinition[] = [
@@ -167,7 +159,6 @@ export const plants: PlantDefinition[] = [
   ['spicebush', 'Spicebush', 'Lindera benzoin', 'host', ['spicebush-swallowtail'], '#b6a741', 'A fragrant native shrub and spicebush swallowtail nursery.'],
   ['citrus', 'Citrus Tree', 'Citrus spp.', 'host', ['giant-swallowtail'], '#e0a642', 'Glossy leaves where giant swallowtail caterpillars can grow.'],
   ['brassica', 'Garden Brassica', 'Brassica spp.', 'host', ['cabbage-white'], '#75a36b', 'Mustard-family leaves favored by cabbage white caterpillars.'],
-  ['elm', 'Elm', 'Ulmus spp.', 'host', ['question-mark'], '#668b59', 'A leafy host tree for the punctuation-marked question mark.'],
   ['aster', 'Aster', 'Symphyotrichum spp.', 'nectar', [], '#7c70a8', 'Late-season nectar in lavender stars.'],
   ['coneflower', 'Purple Coneflower', 'Echinacea purpurea', 'nectar', [], '#b35f84', 'A broad landing place rich with nectar.'],
   ['zinnia', 'Zinnia', 'Zinnia elegans', 'nectar', [], '#cf654f', 'Cheerful blooms for many visiting butterflies.'],
@@ -288,9 +279,6 @@ const observationTexts: Array<[string, string]> = [
   ['cabbage-white', 'A cabbage white bobs lightly over the garden beds.'],
   ['cabbage-white', 'Creamy wings flicker beside the brassica leaves.'],
   ['cabbage-white', 'A familiar white butterfly makes the ordinary feel bright.'],
-  ['question-mark', 'A question mark closes its wings and resembles a dry leaf.'],
-  ['question-mark', 'Jagged orange wings pause on the elm’s rough bark.'],
-  ['question-mark', 'A tiny silver curve hides beneath the hindwing.'],
   ['all', 'The garden does not ask the day to be anything else.'],
   ['all', 'Something is always growing, even when it is hard to see.'],
   ['all', 'A quiet garden can hold many kinds of weather.'],

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { observations, plants, species } from './content'
 
 describe('butterfly collection content', () => {
-  it('offers at least eighteen butterflies including blue morpho and glasswing', () => {
-    expect(species.length).toBeGreaterThanOrEqual(18)
+  it('offers seventeen butterflies including blue morpho and glasswing', () => {
+    expect(species).toHaveLength(17)
     expect(species).toContainEqual(
       expect.objectContaining({
         id: 'blue-morpho',
@@ -18,12 +18,8 @@ describe('butterfly collection content', () => {
         scientificName: 'Greta oto',
       }),
     )
-    expect(species).toContainEqual(
-      expect.objectContaining({
-        id: 'question-mark',
-        commonName: 'Question Mark Butterfly',
-        scientificName: 'Polygonia interrogationis',
-      }),
+    expect(species.some((butterfly) => butterfly.id === 'question-mark')).toBe(
+      false,
     )
   })
 
