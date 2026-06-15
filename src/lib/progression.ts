@@ -7,8 +7,11 @@ import type {
 } from '../types'
 import { toLocalDate } from './date'
 import { progressAppearance } from './appearance'
+import { DEFAULT_FLIGHT_PATTERN_ID } from './flightPatterns'
+import { PLANT_CAPACITY } from './plantManagement'
 
 export const DAILY_SUNLIGHT_CAP = 5
+export const NECTAR_PER_SUNLIGHT = 3
 export const CHRYSALIS_DURATION_MS = 72 * 60 * 60 * 1000
 export const MAX_PLANT_GROWTH = 3
 export const STARTER_SEEDS = 2
@@ -19,7 +22,7 @@ const CATERPILLAR_CARE_TO_CHRYSALIS = 2
 
 export function createEmptyState(): AppState {
   return {
-    version: 1,
+    version: 2,
     goals: [],
     completions: [],
     moods: [],
@@ -28,6 +31,9 @@ export function createEmptyState(): AppState {
     creatures: [],
     sunlight: [],
     seeds: 0,
+    nectar: 0,
+    ownedFlightPatternIds: [DEFAULT_FLIGHT_PATTERN_ID],
+    selectedFlightPatternId: DEFAULT_FLIGHT_PATTERN_ID,
   }
 }
 
@@ -212,6 +218,7 @@ export function awardSunlight(
     plants,
     creatures,
     sunlight: [...state.sunlight, award],
+    nectar: state.nectar + NECTAR_PER_SUNLIGHT,
     seeds:
       state.seeds + (firstSunlightToday ? DAILY_SEED_REWARD : 0),
   }
@@ -224,6 +231,7 @@ export function plantSeed(
 ): AppState {
   if (
     state.seeds < PLANT_SEED_COST ||
+    state.plants.length >= PLANT_CAPACITY ||
     !plantCatalog.some((plant) => plant.id === plantId)
   ) {
     return state

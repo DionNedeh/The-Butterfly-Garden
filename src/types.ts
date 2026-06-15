@@ -1,8 +1,21 @@
-export type AppView = 'garden' | 'today' | 'journal' | 'settings'
+export type AppView =
+  | 'garden'
+  | 'today'
+  | 'journal'
+  | 'shop'
+  | 'flight-patterns'
+  | 'settings'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'caterpillar' | 'chrysalis' | 'emerged'
 export type AppearanceTheme = 'sunlight' | 'night'
+export type FlightPatternId =
+  | 'gentle-drift'
+  | 'petal-hop'
+  | 'figure-eight'
+  | 'sunbeam-swoop'
+  | 'spiral-rise'
+  | 'garden-waltz'
 export type GardenBackdropId =
   | 'sunlit-meadow'
   | 'woodland-brook'
@@ -82,7 +95,7 @@ export interface SunlightAward {
 }
 
 export interface AppState {
-  version: 1
+  version: 2
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -92,6 +105,9 @@ export interface AppState {
   creatures: CreatureInstance[]
   sunlight: SunlightAward[]
   seeds: number
+  nectar: number
+  ownedFlightPatternIds: FlightPatternId[]
+  selectedFlightPatternId: FlightPatternId
 }
 
 export interface SpeciesDefinition {
@@ -122,4 +138,12 @@ export interface Observation {
   id: string
   speciesId: string | 'all'
   text: string
+}
+
+export interface FlightPatternDefinition {
+  id: FlightPatternId
+  name: string
+  description: string
+  cost: number
+  animationClass: string
 }

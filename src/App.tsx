@@ -5,6 +5,8 @@ import { Icon } from './components/Icons'
 import { JournalView } from './components/JournalView'
 import { Onboarding } from './components/Onboarding'
 import { SettingsView } from './components/SettingsView'
+import { ShopView } from './components/ShopView'
+import { FlightPatternsView } from './components/FlightPatternsView'
 import { TodayView } from './components/TodayView'
 import { UpdatePrompt } from './components/UpdatePrompt'
 import { useGardenState } from './hooks/useGardenState'
@@ -20,11 +22,13 @@ interface InstallPromptEvent extends Event {
 const navigation: Array<{
   id: AppView
   label: string
-  icon: 'garden' | 'today' | 'journal' | 'settings'
+  icon: 'garden' | 'today' | 'journal' | 'shop' | 'flight' | 'settings'
 }> = [
   { id: 'garden', label: 'Garden', icon: 'garden' },
   { id: 'today', label: 'Today', icon: 'today' },
   { id: 'journal', label: 'Journal', icon: 'journal' },
+  { id: 'shop', label: 'Shop', icon: 'shop' },
+  { id: 'flight-patterns', label: 'Flight Patterns', icon: 'flight' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ]
 
@@ -99,6 +103,11 @@ function App() {
             <Icon name="sun" size={19} />
             {sunlight} / 5
           </span>
+          <span className="nectar-wallet" title="Nectar balance">
+            <Icon name="nectar" size={19} />
+            <strong>{state.nectar}</strong>
+            <span>Nectar</span>
+          </span>
           {installPrompt && (
             <button
               className="install-button"
@@ -142,7 +151,20 @@ function App() {
           <GardenView
             state={state}
             onPlant={garden.plant}
+            onRemovePlant={garden.removePlant}
             onSelectCompanion={garden.selectCompanion}
+          />
+        )}
+        {view === 'shop' && (
+          <ShopView
+            state={state}
+            onPurchase={garden.purchaseFlightPattern}
+          />
+        )}
+        {view === 'flight-patterns' && (
+          <FlightPatternsView
+            state={state}
+            onSelect={garden.selectFlightPattern}
           />
         )}
         {view === 'today' && (

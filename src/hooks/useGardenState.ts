@@ -6,9 +6,15 @@ import {
   plantSeed,
   progressGarden,
 } from '../lib/progression'
+import {
+  purchaseFlightPattern,
+  selectFlightPattern,
+} from '../lib/flightPatterns'
+import { removePlant } from '../lib/plantManagement'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
   AppState,
+  FlightPatternId,
   GardenBackdropId,
   Goal,
   GoalSchedule,
@@ -195,6 +201,15 @@ export function useGardenState() {
     },
     plant(plantId: string) {
       update((current) => plantSeed(current, plantId))
+    },
+    removePlant(plantId: string) {
+      update((current) => removePlant(current, plantId))
+    },
+    purchaseFlightPattern(patternId: FlightPatternId) {
+      update((current) => purchaseFlightPattern(current, patternId))
+    },
+    selectFlightPattern(patternId: FlightPatternId) {
+      update((current) => selectFlightPattern(current, patternId))
     },
     selectCompanion(creatureId: string) {
       update((current) => ({

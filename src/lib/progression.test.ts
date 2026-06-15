@@ -12,6 +12,7 @@ import {
   plantSeed,
   progressGarden,
   STARTER_SEEDS,
+  NECTAR_PER_SUNLIGHT,
 } from './progression'
 
 beforeEach(() => {
@@ -35,6 +36,16 @@ describe('garden progression', () => {
     const once = awardSunlight(createEmptyState(), 'mood:2026-06-13', now)
     const twice = awardSunlight(once, 'mood:2026-06-13', now)
     expect(twice.sunlight).toHaveLength(1)
+    expect(twice.nectar).toBe(NECTAR_PER_SUNLIGHT)
+  })
+
+  it('awards three Nectar for each accepted Sunlight up to the daily cap', () => {
+    const now = new Date(2026, 5, 13, 10)
+    let state = createEmptyState()
+    for (let index = 0; index < 8; index += 1) {
+      state = awardSunlight(state, `nectar-${index}`, now)
+    }
+    expect(state.nectar).toBe(DAILY_SUNLIGHT_CAP * NECTAR_PER_SUNLIGHT)
   })
 
   it('awards one seed with the first Sunlight of each local day', () => {

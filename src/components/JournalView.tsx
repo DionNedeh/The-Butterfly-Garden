@@ -64,15 +64,15 @@ export function JournalView({
         </div>
       </header>
 
-      <section className="card field-notes" aria-labelledby="species-journal-title">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Field notes</p>
-            <h2 id="species-journal-title">Butterflies welcomed</h2>
-          </div>
+      <details className="card field-notes">
+        <summary>
+          <span>
+            <span className="eyebrow">Field notes</span>
+            <strong id="species-journal-title">Butterflies welcomed</strong>
+          </span>
           <span className="count-badge">{emerged.length} / {species.length}</span>
-        </div>
-        <div className="species-grid">
+        </summary>
+        <div className="species-grid" aria-labelledby="species-journal-title">
           {species.map((definition) => {
             const creature = emerged.find(
               (item) => item.speciesId === definition.id,
@@ -103,7 +103,7 @@ export function JournalView({
             )
           })}
         </div>
-      </section>
+      </details>
 
       <section className="card streak-card" aria-labelledby="streak-title">
         <div className="streak-icon">

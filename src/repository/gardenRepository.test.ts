@@ -12,8 +12,63 @@ describe('garden repository', () => {
     const state = { ...createEmptyState(), seeds: 4 }
     await gardenRepository.save(state)
     await expect(gardenRepository.load()).resolves.toMatchObject({
-      version: 1,
+      version: 2,
       seeds: 4,
+    })
+  })
+
+  it('migrates a version-one garden without backfilling Nectar', async () => {
+    const current = createEmptyState()
+    const legacy = {
+      ...current,
+      version: 1,
+      seeds: 7,
+      profile: {
+        id: 'profile',
+        name: 'Legacy Gardener',
+        gardenName: 'Remembered Garden',
+        createdAt: '2026-05-01T12:00:00.000Z',
+        reducedMotion: false,
+      },
+      plants: [
+        {
+          id: 'remembered-plant',
+          plantId: 'aster',
+          growth: 2,
+          plantedAt: '2026-05-02T12:00:00.000Z',
+        },
+      ],
+      sunlight: [
+        {
+          id: 'old-light',
+          localDate: '2026-06-01',
+          source: 'old-goal',
+          awardedAt: '2026-06-01T12:00:00.000Z',
+        },
+      ],
+    } as Record<string, unknown>
+    delete legacy.nectar
+    delete legacy.ownedFlightPatternIds
+    delete legacy.selectedFlightPatternId
+    await gardenRepository.save(createEmptyState())
+    const db = await openDB('butterfly-garden', 1)
+    try {
+      await db.put('state', legacy, 'current')
+    } finally {
+      db.close()
+    }
+
+    await expect(gardenRepository.load()).resolves.toMatchObject({
+      version: 2,
+      seeds: 7,
+      nectar: 0,
+      ownedFlightPatternIds: ['gentle-drift'],
+      selectedFlightPatternId: 'gentle-drift',
+      profile: expect.objectContaining({
+        name: 'Legacy Gardener',
+        gardenName: 'Remembered Garden',
+      }),
+      plants: [expect.objectContaining({ id: 'remembered-plant', growth: 2 })],
     })
   })
 

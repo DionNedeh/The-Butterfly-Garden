@@ -3,6 +3,7 @@ import {
   DAILY_SEED_REWARD,
   DAILY_SUNLIGHT_CAP,
   EMERGENCE_SEED_REWARD,
+  NECTAR_PER_SUNLIGHT,
   PLANT_SEED_COST,
   STARTER_SEEDS,
 } from '../lib/progression'
@@ -12,6 +13,7 @@ import {
   unlockedBackdropIds,
 } from '../lib/appearance'
 import type { AppState, GardenBackdropId } from '../types'
+import { PLANT_CAPACITY } from '../lib/plantManagement'
 
 const guideSections = [
   {
@@ -20,7 +22,11 @@ const guideSections = [
   },
   {
     title: 'Seeds and planting',
-    body: `You begin with ${STARTER_SEEDS} seeds. The first Sunlight you earn each local day adds ${DAILY_SEED_REWARD} seed, and every butterfly that emerges adds ${EMERGENCE_SEED_REWARD} more. Planting costs ${PLANT_SEED_COST} seed. Open Plant a seed in the Garden to choose a host or nectar plant.`,
+    body: `You begin with ${STARTER_SEEDS} seeds. The first Sunlight you earn each local day adds ${DAILY_SEED_REWARD} seed, and every butterfly that emerges adds ${EMERGENCE_SEED_REWARD} more. Planting costs ${PLANT_SEED_COST} seed. Your garden holds ${PLANT_CAPACITY} plants. Select a plant to read its field guide or remove it without a seed refund. A plant supporting a caterpillar or chrysalis is protected until the butterfly emerges.`,
+  },
+  {
+    title: 'Nectar, the Shop, and Flight Patterns',
+    body: `Every newly earned Sunlight also adds ${NECTAR_PER_SUNLIGHT} Nectar to your wallet. Visit Shop to permanently purchase new movement styles, then open Flight Patterns to select one for every butterfly in the garden. Buying a pattern does not equip it automatically, and purchases are local, permanent, and non-refundable.`,
   },
   {
     title: 'Host plants, nectar plants, and growth',
@@ -177,12 +183,12 @@ export function SettingsView({
             <h2 id="guide-title">How everything works</h2>
           </div>
           <span className="guide-seed-balance">
-            {state.seeds} seed{state.seeds === 1 ? '' : 's'} ready
+            {state.seeds} seed{state.seeds === 1 ? '' : 's'} · {state.nectar} Nectar
           </span>
         </div>
         <p className="section-explainer">
           Open any topic for a plain-language explanation. Your current seed
-          balance is shown above.
+          resource balances are shown above.
         </p>
         <div className="guide-list">
           {guideSections.map((section, index) => (

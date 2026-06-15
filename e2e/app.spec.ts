@@ -63,6 +63,7 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
     .locator('nav:visible')
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
+  await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Blue Morpho')).toBeVisible()
   await expect(
     page.getByRole('heading', { name: 'Sunlight streak' }),
@@ -109,6 +110,15 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   await expect(
     page.getByRole('button', { name: 'Switch to sunlight mode' }),
   ).toBeVisible()
+  const starLayers = await page.evaluate(() => ({
+    shell: getComputedStyle(document.querySelector('.app-shell')!).backgroundImage,
+    garden: getComputedStyle(
+      document.querySelector('.garden-hero')!,
+      '::before',
+    ).backgroundImage,
+  }))
+  expect(starLayers.shell).not.toContain('radial-gradient')
+  expect(starLayers.garden).toContain('radial-gradient')
   const nightResults = await new AxeBuilder({ page }).analyze()
   expect(
     nightResults.violations.filter(
@@ -183,6 +193,184 @@ test('guide explains the three plant growth stages and their timing', async ({
   ).toBeVisible()
 })
 
+test('earns Nectar, purchases every tier, and persists a selected flight pattern', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Today', exact: true })
+    .click()
+  await page.getByRole('button', { name: /bright/i }).click()
+  await page.getByRole('button', { name: /save check-in/i }).click()
+  await page.getByLabel('Add a goal').fill('Stretch')
+  await page.getByRole('button', { name: 'Add goal' }).click()
+  await page.getByRole('button', { name: /complete stretch/i }).click()
+  await page.locator('#daily-reflection').fill('A quiet moment.')
+  await page.getByRole('button', { name: /keep this reflection/i }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('9')
+
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Shop', exact: true })
+    .click()
+  await page.waitForTimeout(450)
+  const shopA11y = await new AxeBuilder({ page }).analyze()
+  expect(
+    shopA11y.violations.filter(
+      (violation) =>
+        violation.impact === 'serious' || violation.impact === 'critical',
+    ),
+  ).toEqual([])
+  await page.getByRole('button', { name: 'Buy Petal Hop' }).click()
+  await expect(page.getByRole('button', { name: 'Owned' }).first()).toBeDisabled()
+
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden', 1)
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const tx = db.transaction('state', 'readwrite')
+          const store = tx.objectStore('state')
+          const get = store.get('current')
+          get.onsuccess = () => {
+            const state = get.result
+            state.nectar = 126
+            store.put(state, 'current')
+          }
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          tx.onerror = () => reject(tx.error)
+        }
+      }),
+  )
+  await page.reload()
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Shop', exact: true })
+    .click()
+  for (const name of [
+    'Figure Eight',
+    'Sunbeam Swoop',
+    'Spiral Rise',
+    'Garden Waltz',
+  ]) {
+    await page.getByRole('button', { name: `Buy ${name}` }).click()
+  }
+  await expect(page.getByTitle('Nectar balance')).toContainText('0')
+
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Flight Patterns', exact: true })
+    .click()
+  await page.waitForTimeout(450)
+  const patternsA11y = await new AxeBuilder({ page }).analyze()
+  expect(
+    patternsA11y.violations.filter(
+      (violation) =>
+        violation.impact === 'serious' || violation.impact === 'critical',
+    ),
+  ).toEqual([])
+  await page.getByRole('button', { name: /Garden Waltz.*Owned - select pattern/i }).click()
+  await page.reload()
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Flight Patterns', exact: true })
+    .click()
+  await expect(page.getByRole('button', { name: /Garden Waltz.*Selected/i })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Garden', exact: true })
+    .click()
+  await expect(page.locator('.flying-butterfly').first()).toHaveClass(
+    /pattern-garden-waltz/,
+  )
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Settings', exact: true })
+    .click()
+  await page.getByLabel('Reduce garden motion').check()
+  await page.getByRole('button', { name: 'Save settings' }).click()
+  await expect(page.locator('.app-shell')).toHaveClass(/reduce-motion/)
+})
+
+test('shows plant details, protects active hosts, and frees a full garden space', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden', 1)
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const tx = db.transaction('state', 'readwrite')
+          const store = tx.objectStore('state')
+          const get = store.get('current')
+          get.onsuccess = () => {
+            const state = get.result
+            state.creatures[0].sourcePlantId = state.plants[0].id
+            while (state.plants.length < 8) {
+              state.plants.push({
+                id: `extra-${state.plants.length}`,
+                plantId: 'zinnia',
+                growth: 0,
+                plantedAt: new Date().toISOString(),
+              })
+            }
+            store.put(state, 'current')
+          }
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          tx.onerror = () => reject(tx.error)
+        }
+      }),
+  )
+  await page.reload()
+  await expect(page.getByText(/all 8 plant spaces filled/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: /plant a seed/i })).toBeDisabled()
+
+  await page.getByRole('button', { name: /View Milkweed/i }).click()
+  await expect(page.getByRole('heading', { name: 'Milkweed' })).toBeVisible()
+  await expect(page.getByText('Asclepias spp.')).toBeVisible()
+  await expect(page.getByText(/chrysalis is still connected/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: /remove this plant/i })).toBeDisabled()
+  const plantA11y = await new AxeBuilder({ page }).analyze()
+  expect(
+    plantA11y.violations.filter(
+      (violation) =>
+        violation.impact === 'serious' || violation.impact === 'critical',
+    ),
+  ).toEqual([])
+
+  await page.getByRole('button', { name: /View Aster/i }).click()
+  await page.getByRole('button', { name: /remove this plant/i }).click()
+  await page.getByRole('button', { name: /yes, remove plant/i }).click()
+  await expect(page.getByText('7 / 8')).toBeVisible()
+  await expect(page.getByRole('button', { name: /plant a seed/i })).toBeEnabled()
+})
+
+test('keeps butterfly field notes collapsed until requested', async ({ page }) => {
+  await enterGarden(page)
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Journal', exact: true })
+    .click()
+  await expect(page.locator('.field-notes .species-grid')).toBeHidden()
+  await page.getByText('Butterflies welcomed').click()
+  await expect(page.locator('.field-notes .species-grid')).toBeVisible()
+})
+
 test('persists emergence and selects the new butterfly as companion', async ({ page }) => {
   await enterGarden(page)
   await page.evaluate(
@@ -214,6 +402,7 @@ test('persists emergence and selects the new butterfly as companion', async ({ p
     .locator('nav:visible')
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
+  await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Danaus plexippus')).toBeVisible()
 })
 
