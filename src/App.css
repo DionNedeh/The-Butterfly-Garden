@@ -862,7 +862,7 @@
   bottom: -8px;
   left: 50%;
   width: 5px;
-  height: 86px;
+  height: 112px;
   border-radius: 8px;
   background: #4c784d;
 }
@@ -875,12 +875,12 @@
   background: #6a9456;
 }
 
-.leaf-one { bottom: 30px; left: 13px; rotate: 18deg; }
-.leaf-two { right: 7px; bottom: 49px; rotate: 150deg; }
+.leaf-one { bottom: 42px; left: 13px; rotate: 18deg; }
+.leaf-two { right: 7px; bottom: 62px; rotate: 150deg; }
 
 .flower {
   position: absolute;
-  bottom: -4px;
+  bottom: 84px;
   left: 50%;
   width: 36px;
   height: 36px;
