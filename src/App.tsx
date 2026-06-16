@@ -153,6 +153,7 @@ function App() {
             onPlant={garden.plant}
             onRemovePlant={garden.removePlant}
             onSelectCompanion={garden.selectCompanion}
+            onRenameCreature={garden.renameCreature}
           />
         )}
         {view === 'shop' && (

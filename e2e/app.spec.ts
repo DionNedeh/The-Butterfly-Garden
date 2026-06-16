@@ -398,12 +398,18 @@ test('persists emergence and selects the new butterfly as companion', async ({ p
   )
   await page.reload()
   await expect(page.getByText('Exploring with you')).toBeVisible()
+  await page.getByLabel('Name for Sol').fill('Luna')
+  await page.getByRole('button', { name: 'Save name' }).click()
+  await expect(page.getByText('Luna')).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('Name for Luna')).toHaveValue('Luna')
   await page
     .locator('nav:visible')
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
   await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Danaus plexippus')).toBeVisible()
+  await expect(page.getByText('Welcomed as Luna')).toBeVisible()
 })
 
 test('has no serious accessibility violations and relaunches offline', async ({

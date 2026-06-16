@@ -38,7 +38,7 @@ const guideSections = [
   },
   {
     title: 'Butterflies and companions',
-    body: 'All emerged butterflies live in the garden. Choose one butterfly card as your active companion. Butterflies fly through the garden, pause near flowers, and show tiny hearts when tapped or clicked. Marigold remains your monarch guide.',
+    body: 'All emerged butterflies live in the garden. Choose one butterfly card as your active companion, and rename each emerged butterfly from its companion card whenever you like. Butterflies fly through the garden, pause near flowers, and show tiny hearts when tapped or clicked. Marigold remains your monarch guide.',
   },
   {
     title: 'Journal and Sunlight streak',

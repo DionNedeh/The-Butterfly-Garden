@@ -97,6 +97,7 @@ export function JournalView({
                 <div>
                   <strong>{definition.commonName}</strong>
                   <em>{creature ? definition.scientificName : 'Not yet welcomed'}</em>
+                  {creature && <small>Welcomed as {creature.name}</small>}
                   {creature && <p>{definition.fact}</p>}
                 </div>
               </article>

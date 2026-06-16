@@ -219,6 +219,16 @@ export function useGardenState() {
           : undefined,
       }))
     },
+    renameCreature(creatureId: string, name: string) {
+      const trimmed = name.trim()
+      if (!trimmed) return
+      update((current) => ({
+        ...current,
+        creatures: current.creatures.map((creature) =>
+          creature.id === creatureId ? { ...creature, name: trimmed } : creature,
+        ),
+      }))
+    },
     selectBackdrop(backdropId: GardenBackdropId) {
       update((current) => {
         const progressed = progressGarden(current)

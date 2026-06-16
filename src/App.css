@@ -859,10 +859,10 @@
 
 .stem {
   position: absolute;
-  bottom: 0;
+  bottom: -8px;
   left: 50%;
   width: 5px;
-  height: 105px;
+  height: 86px;
   border-radius: 8px;
   background: #4c784d;
 }
@@ -875,18 +875,19 @@
   background: #6a9456;
 }
 
-.leaf-one { bottom: 38px; left: 11px; rotate: 18deg; }
-.leaf-two { right: 4px; bottom: 65px; rotate: 150deg; }
+.leaf-one { bottom: 30px; left: 13px; rotate: 18deg; }
+.leaf-two { right: 7px; bottom: 49px; rotate: 150deg; }
 
 .flower {
   position: absolute;
-  top: 13px;
-  left: 25px;
+  bottom: -4px;
+  left: 50%;
   width: 36px;
   height: 36px;
   border: 7px dotted var(--plant-color);
   border-radius: 50%;
   background: #d8a541;
+  transform: translateX(-50%);
 }
 
 .growth-0 .flower,
@@ -964,11 +965,11 @@
 
 .companion-card {
   display: grid;
-  place-items: center;
+  gap: 0.7rem;
   border: 1px solid #d8dfd4;
   border-radius: 18px;
   background: #f8faf5;
-  padding: 1rem 0.5rem;
+  padding: 1rem 0.65rem;
 }
 
 .companion-card.selected {
@@ -977,15 +978,40 @@
   box-shadow: inset 0 0 0 1px var(--forest);
 }
 
+.companion-select-button {
+  display: grid;
+  place-items: center;
+  gap: 0.45rem;
+  background: transparent;
+  color: inherit;
+}
+
 .companion-card small {
   color: var(--muted);
 }
 
-.companion-card > span:last-child {
+.companion-select-button > span:last-child {
   margin-top: 0.4rem;
   color: var(--forest);
   font-size: 0.72rem;
   font-weight: 800;
+}
+
+.butterfly-name-form {
+  display: grid;
+  gap: 0.55rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+.butterfly-name-form label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.butterfly-name-form input {
+  padding: 0.58rem 0.7rem;
 }
 
 .catalog-grid {

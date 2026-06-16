@@ -23,15 +23,18 @@ export function GardenView({
   onPlant,
   onRemovePlant,
   onSelectCompanion,
+  onRenameCreature,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
   onRemovePlant: (plantId: string) => void
   onSelectCompanion: (creatureId: string) => void
+  onRenameCreature: (creatureId: string, name: string) => void
 }) {
   const [showSeedTray, setShowSeedTray] = useState(false)
   const [selectedPlantId, setSelectedPlantId] = useState<string>()
   const [confirmPlantRemoval, setConfirmPlantRemoval] = useState(false)
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
   const emerged = state.creatures.filter((creature) => creature.stage === 'emerged')
   const developing = state.creatures.filter(
     (creature) => creature.stage !== 'emerged',
@@ -408,20 +411,50 @@ export function GardenView({
                 )
                 const selected = creature.id === state.profile?.activeCompanionId
                 return (
-                  <button
+                  <article
                     className={`companion-card ${selected ? 'selected' : ''}`}
-                    onClick={() => onSelectCompanion(creature.id)}
                     key={creature.id}
-                    aria-pressed={selected}
                   >
-                    <Butterfly
-                      speciesId={creature.speciesId}
-                      label={definition?.commonName ?? 'Butterfly'}
-                    />
-                    <strong>{creature.name}</strong>
-                    <small>{definition?.commonName}</small>
-                    <span>{selected ? 'Exploring with you' : 'Choose companion'}</span>
-                  </button>
+                    <button
+                      className="companion-select-button"
+                      onClick={() => onSelectCompanion(creature.id)}
+                      aria-pressed={selected}
+                    >
+                      <Butterfly
+                        speciesId={creature.speciesId}
+                        label={definition?.commonName ?? 'Butterfly'}
+                      />
+                      <strong>{creature.name}</strong>
+                      <small>{definition?.commonName}</small>
+                      <span>{selected ? 'Exploring with you' : 'Choose companion'}</span>
+                    </button>
+                    <form
+                      className="butterfly-name-form"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        const draft = nameDrafts[creature.id] ?? creature.name
+                        onRenameCreature(creature.id, draft)
+                      }}
+                    >
+                      <label>
+                        Butterfly name
+                        <input
+                          value={nameDrafts[creature.id] ?? creature.name}
+                          onChange={(event) =>
+                            setNameDrafts((current) => ({
+                              ...current,
+                              [creature.id]: event.target.value,
+                            }))
+                          }
+                          maxLength={40}
+                          aria-label={`Name for ${creature.name}`}
+                        />
+                      </label>
+                      <button className="secondary-button compact" type="submit">
+                        Save name
+                      </button>
+                    </form>
+                  </article>
                 )
               })}
             </div>
