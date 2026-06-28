@@ -22,7 +22,7 @@ const CATERPILLAR_CARE_TO_CHRYSALIS = 2
 
 export function createEmptyState(): AppState {
   return {
-    version: 2,
+    version: 3,
     goals: [],
     completions: [],
     moods: [],
@@ -34,6 +34,8 @@ export function createEmptyState(): AppState {
     nectar: 0,
     ownedFlightPatternIds: [DEFAULT_FLIGHT_PATTERN_ID],
     selectedFlightPatternId: DEFAULT_FLIGHT_PATTERN_ID,
+    jars: [],
+    jarPlacements: [],
   }
 }
 

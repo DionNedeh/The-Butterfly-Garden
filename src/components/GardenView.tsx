@@ -1,7 +1,13 @@
 import { useState, type CSSProperties } from 'react'
 import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
+import { jarColors } from '../data/jars'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
+import { flightRouteStyleFor } from '../lib/flightRoutes'
+import {
+  availableJars,
+  jarForPlant,
+} from '../lib/jars'
 import {
   DAILY_SEED_REWARD,
   EMERGENCE_SEED_REWARD,
@@ -18,16 +24,30 @@ import { Butterfly } from './Butterfly'
 import { ChrysalisCountdown } from './ChrysalisCountdown'
 import { Icon } from './Icons'
 
+function jarStyle(colorId: string): CSSProperties {
+  const color = jarColors.find((item) => item.id === colorId) ?? jarColors[0]
+  return {
+    '--jar-fill': color.fill,
+    '--jar-text': color.text,
+    '--jar-border': color.border,
+    '--jar-highlight': color.highlight,
+  } as CSSProperties
+}
+
 export function GardenView({
   state,
   onPlant,
   onRemovePlant,
+  onPlaceJar,
+  onRemoveJarPlacement,
   onSelectCompanion,
   onRenameCreature,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
   onRemovePlant: (plantId: string) => void
+  onPlaceJar: (jarId: string, plantId: string) => void
+  onRemoveJarPlacement: (plantId: string) => void
   onSelectCompanion: (creatureId: string) => void
   onRenameCreature: (creatureId: string, name: string) => void
 }) {
@@ -68,6 +88,29 @@ export function GardenView({
   const removalBlocker = selectedPlant
     ? plantRemovalBlocker(state, selectedPlant.id)
     : undefined
+  const visiblePlants = state.plants.slice(0, PLANT_CAPACITY)
+  const visiblePlantIds = new Set(visiblePlants.map((plant) => plant.id))
+  const selectedPlantIsVisible = selectedPlant
+    ? visiblePlantIds.has(selectedPlant.id)
+    : false
+  const selectedPlantJar = selectedPlant
+    ? jarForPlant(state, selectedPlant.id)
+    : undefined
+  const availableJarItems = availableJars(state)
+  const placedJarSummaries = state.jarPlacements
+    .map((placement) => {
+      const jar = state.jars.find((item) => item.id === placement.jarId)
+      const plant = state.plants.find((item) => item.id === placement.plantId)
+      const plantDefinition = plants.find((item) => item.id === plant?.plantId)
+      const color = jarColors.find((item) => item.id === jar?.colorId)
+      if (!jar || !plant || !plantDefinition || !color) return undefined
+      return {
+        placement,
+        jar,
+        label: `${color.label} ${jar.character} on ${plantDefinition.name}`,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
   const selectedPattern =
     flightPatterns.find(
       (pattern) => pattern.id === state.selectedFlightPatternId,
@@ -89,30 +132,35 @@ export function GardenView({
         </div>
 
         <div className="garden-flight-space" aria-label="Butterflies flying in the garden">
-          {gardenButterflies.map((butterfly, index) => (
-            <div
-              className={`flying-butterfly flight-${index % 4} ${selectedPattern.animationClass}`}
-              style={
-                {
-                  '--flight-delay': `${index * -4.3}s`,
-                  '--flight-duration': `${18 + (index % 3) * 3}s`,
-                  '--flight-size': `${0.82 + (index % 4) * 0.08}`,
-                } as CSSProperties
-              }
-              key={butterfly.id}
-            >
-              <Butterfly
-                speciesId={butterfly.speciesId}
-                label={butterfly.label}
-                pettable
-              />
-            </div>
-          ))}
+          {gardenButterflies.map((butterfly, index) => {
+            const route = flightRouteStyleFor(butterfly.id, index)
+            return (
+              <div
+                className={`flying-butterfly ${route.className} ${selectedPattern.animationClass}`}
+                style={route.style as CSSProperties}
+                key={butterfly.id}
+              >
+                <Butterfly
+                  speciesId={butterfly.speciesId}
+                  label={butterfly.label}
+                  pettable
+                />
+              </div>
+            )
+          })}
         </div>
 
         <div className="garden-plants" aria-label="Plants in your garden">
-          {state.plants.slice(0, 8).map((plant, index) => {
+          {visiblePlants.map((plant, index) => {
             const definition = plants.find((item) => item.id === plant.plantId)
+            const placedJar = jarForPlant(state, plant.id)
+            const placedJarColor = jarColors.find(
+              (item) => item.id === placedJar?.colorId,
+            )
+            const jarLabel =
+              placedJar && placedJarColor
+                ? ` with ${placedJarColor.label} ${placedJar.character} jar`
+                : ''
             return (
               <button
                 type="button"
@@ -123,7 +171,7 @@ export function GardenView({
                 } as CSSProperties}
                 key={plant.id}
                 title={`${definition?.name}: growth ${plant.growth} of ${MAX_PLANT_GROWTH}`}
-                aria-label={`View ${definition?.name ?? 'plant'}, growth ${plant.growth} of ${MAX_PLANT_GROWTH}`}
+                aria-label={`View ${definition?.name ?? 'plant'}, growth ${plant.growth} of ${MAX_PLANT_GROWTH}${jarLabel}`}
                 aria-pressed={selectedPlantId === plant.id}
                 onClick={() => {
                   setSelectedPlantId(plant.id)
@@ -134,6 +182,15 @@ export function GardenView({
                 <span className="leaf leaf-one" />
                 <span className="leaf leaf-two" />
                 <span className="flower" />
+                {placedJar && (
+                  <span
+                    className="decorative-jar plant-jar"
+                    style={jarStyle(placedJar.colorId)}
+                    aria-hidden="true"
+                  >
+                    <span>{placedJar.character}</span>
+                  </span>
+                )}
               </button>
             )
           })}
@@ -254,6 +311,132 @@ export function GardenView({
                 <dd>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(selectedPlant.plantedAt))}</dd>
               </div>
             </dl>
+            <div className="jar-manager" aria-labelledby="jar-manager-title">
+              <div className="section-heading compact-heading">
+                <div>
+                  <p className="eyebrow">Jar inventory</p>
+                  <h3 id="jar-manager-title">Decorate this plant spot</h3>
+                </div>
+                <span className="count-badge">
+                  {availableJarItems.length} ready
+                </span>
+              </div>
+              {!selectedPlantIsVisible ? (
+                <p className="empty-copy">
+                  Jars can be placed on the eight visible garden spots. Remove
+                  plants above the limit to bring this plant into the scene.
+                </p>
+              ) : (
+                <>
+                  <div className="current-jar-card">
+                    {selectedPlantJar ? (
+                      <>
+                        <span
+                          className="decorative-jar"
+                          style={jarStyle(selectedPlantJar.colorId)}
+                          aria-hidden="true"
+                        >
+                          <span>{selectedPlantJar.character}</span>
+                        </span>
+                        <div>
+                          <strong>
+                            {jarColors.find(
+                              (color) => color.id === selectedPlantJar.colorId,
+                            )?.label ?? 'Custom'}{' '}
+                            {selectedPlantJar.character} jar
+                          </strong>
+                          <small>Placed on this plant spot.</small>
+                        </div>
+                        <button
+                          type="button"
+                          className="secondary-button compact"
+                          onClick={() => onRemoveJarPlacement(selectedPlant.id)}
+                        >
+                          Return to inventory
+                        </button>
+                      </>
+                    ) : (
+                      <p className="empty-copy">
+                        This plant spot is empty. Choose a jar below to cover
+                        the base.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="jar-inventory-grid" aria-label="Available jars">
+                    {state.jars.filter((jar) => jar.id !== selectedPlantJar?.id)
+                      .length === 0 ? (
+                      <p className="empty-copy">
+                        {selectedPlantJar
+                          ? 'No other jars are ready to place here.'
+                          : 'No jars are waiting in inventory. Buy letters and numbers in the Shop with Nectar.'}
+                      </p>
+                    ) : (
+                      state.jars
+                        .filter((jar) => jar.id !== selectedPlantJar?.id)
+                        .map((jar) => {
+                        const color = jarColors.find(
+                          (item) => item.id === jar.colorId,
+                        )
+                        const colorLabel = color?.label ?? 'Custom'
+                        const currentPlacement = state.jarPlacements.find(
+                          (placement) => placement.jarId === jar.id,
+                        )
+                        const currentPlant = state.plants.find(
+                          (plant) => plant.id === currentPlacement?.plantId,
+                        )
+                        const currentPlantDefinition = plants.find(
+                          (plant) => plant.id === currentPlant?.plantId,
+                        )
+                        const action = currentPlacement
+                          ? `Move from ${currentPlantDefinition?.name ?? 'another spot'}`
+                          : 'Place'
+                        return (
+                          <button
+                            type="button"
+                            key={jar.id}
+                            className="jar-inventory-button"
+                            onClick={() => onPlaceJar(jar.id, selectedPlant.id)}
+                            aria-label={`${action} ${colorLabel} ${jar.character} jar on ${selectedPlantDefinition.name}`}
+                          >
+                            <span
+                              className="decorative-jar"
+                              style={jarStyle(jar.colorId)}
+                              aria-hidden="true"
+                            >
+                              <span>{jar.character}</span>
+                            </span>
+                            <span>{colorLabel}</span>
+                            <small>{action}</small>
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                </>
+              )}
+              {placedJarSummaries.length > 0 && (
+                <details className="placed-jars-list">
+                  <summary>
+                    Placed jars ({placedJarSummaries.length})
+                  </summary>
+                  <ul>
+                    {placedJarSummaries.map(({ placement, jar, label }) => (
+                      <li key={placement.jarId}>
+                        <span
+                          className="decorative-jar small"
+                          style={jarStyle(jar.colorId)}
+                          aria-hidden="true"
+                        >
+                          <span>{jar.character}</span>
+                        </span>
+                        {label}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
             <div className="plant-removal">
               {removalBlocker && <p className="protected-plant-note">{removalBlocker} It cannot be removed yet.</p>}
               {!confirmPlantRemoval ? (

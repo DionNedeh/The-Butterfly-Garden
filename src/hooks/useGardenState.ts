@@ -10,6 +10,11 @@ import {
   purchaseFlightPattern,
   selectFlightPattern,
 } from '../lib/flightPatterns'
+import {
+  placeJar,
+  purchaseJar,
+  removeJarPlacement,
+} from '../lib/jars'
 import { removePlant } from '../lib/plantManagement'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
@@ -18,6 +23,7 @@ import type {
   GardenBackdropId,
   Goal,
   GoalSchedule,
+  JarColorId,
   MoodEntry,
   ReflectionEntry,
 } from '../types'
@@ -210,6 +216,15 @@ export function useGardenState() {
     },
     selectFlightPattern(patternId: FlightPatternId) {
       update((current) => selectFlightPattern(current, patternId))
+    },
+    purchaseJar(character: string, colorId: JarColorId) {
+      update((current) => purchaseJar(current, character, colorId))
+    },
+    placeJar(jarId: string, plantId: string) {
+      update((current) => placeJar(current, jarId, plantId))
+    },
+    removeJarPlacement(plantId: string) {
+      update((current) => removeJarPlacement(current, plantId))
     },
     selectCompanion(creatureId: string) {
       update((current) => ({

@@ -20,6 +20,15 @@ export type GardenBackdropId =
   | 'sunlit-meadow'
   | 'woodland-brook'
   | 'secret-conservatory'
+export type JarColorId =
+  | 'blue'
+  | 'yellow'
+  | 'pink'
+  | 'purple'
+  | 'green'
+  | 'orange'
+  | 'white'
+  | 'charcoal'
 
 export interface Profile {
   id: 'profile'
@@ -94,8 +103,20 @@ export interface SunlightAward {
   awardedAt: string
 }
 
+export interface JarInstance {
+  id: string
+  character: string
+  colorId: JarColorId
+  purchasedAt: string
+}
+
+export interface JarPlacement {
+  plantId: string
+  jarId: string
+}
+
 export interface AppState {
-  version: 2
+  version: 3
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -108,6 +129,8 @@ export interface AppState {
   nectar: number
   ownedFlightPatternIds: FlightPatternId[]
   selectedFlightPatternId: FlightPatternId
+  jars: JarInstance[]
+  jarPlacements: JarPlacement[]
 }
 
 export interface SpeciesDefinition {
@@ -146,4 +169,13 @@ export interface FlightPatternDefinition {
   description: string
   cost: number
   animationClass: string
+}
+
+export interface JarColorDefinition {
+  id: JarColorId
+  label: string
+  fill: string
+  text: string
+  border: string
+  highlight: string
 }

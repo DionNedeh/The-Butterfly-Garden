@@ -301,6 +301,83 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await expect(page.locator('.app-shell')).toHaveClass(/reduce-motion/)
 })
 
+test('buys reusable jars, places, moves, replaces, and removes them', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden', 1)
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const tx = db.transaction('state', 'readwrite')
+          const store = tx.objectStore('state')
+          const get = store.get('current')
+          get.onsuccess = () => {
+            const state = get.result
+            state.nectar = 18
+            store.put(state, 'current')
+          }
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          tx.onerror = () => reject(tx.error)
+        }
+      }),
+  )
+  await page.reload()
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Shop', exact: true })
+    .click()
+  await expect(page.getByRole('heading', { name: 'Buy letters and numbers' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Buy Blue A jar' }).click()
+  await page.getByRole('button', { name: 'S', exact: true }).click()
+  await page.getByRole('button', { name: 'Yellow', exact: true }).click()
+  await page.getByRole('button', { name: 'Buy Yellow S jar' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('6')
+
+  await page
+    .locator('nav:visible')
+    .getByRole('button', { name: 'Garden', exact: true })
+    .click()
+  await page.getByRole('button', { name: /View Milkweed/i }).click()
+  await page.getByRole('button', { name: /Place Blue A jar on Milkweed/i }).click()
+  await expect(
+    page.getByRole('button', { name: /View Milkweed.*Blue A jar/i }),
+  ).toBeVisible()
+
+  await page.reload()
+  await expect(
+    page.getByRole('button', { name: /View Milkweed.*Blue A jar/i }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: /View Aster/i }).click()
+  await page
+    .getByRole('button', { name: /Move from Milkweed Blue A jar on Aster/i })
+    .click()
+  await expect(
+    page.getByRole('button', { name: /View Aster.*Blue A jar/i }),
+  ).toBeVisible()
+
+  await page.getByRole('button', { name: /View Milkweed/i }).click()
+  await page.getByRole('button', { name: /Place Yellow S jar on Milkweed/i }).click()
+  await page
+    .getByRole('button', { name: /Move from Aster Blue A jar on Milkweed/i })
+    .click()
+  await expect(
+    page.getByRole('button', { name: /View Milkweed.*Blue A jar/i }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /Place Yellow S jar on Milkweed/i }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: /Return to inventory/i }).click()
+  await expect(page.getByText(/This plant spot is empty/i)).toBeVisible()
+})
+
 test('shows plant details, protects active hosts, and frees a full garden space', async ({
   page,
 }) => {

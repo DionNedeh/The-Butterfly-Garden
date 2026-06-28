@@ -14,6 +14,7 @@ import {
 } from '../lib/appearance'
 import type { AppState, GardenBackdropId } from '../types'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
+import { JAR_PRICE } from '../data/jars'
 
 const guideSections = [
   {
@@ -26,7 +27,11 @@ const guideSections = [
   },
   {
     title: 'Nectar, the Shop, and Flight Patterns',
-    body: `Every newly earned Sunlight also adds ${NECTAR_PER_SUNLIGHT} Nectar to your wallet. Visit Shop to permanently purchase new movement styles, then open Flight Patterns to select one for every butterfly in the garden. Buying a pattern does not equip it automatically, and purchases are local, permanent, and non-refundable.`,
+    body: `Every newly earned Sunlight also adds ${NECTAR_PER_SUNLIGHT} Nectar to your wallet. Visit Shop to buy reusable letter and number jars for ${JAR_PRICE} Nectar each, or permanently purchase new movement styles. Flight patterns are equipped from Flight Patterns and apply to every butterfly. Buying a pattern does not equip it automatically, and purchases are local, permanent, and non-refundable.`,
+  },
+  {
+    title: 'Custom jars and plant spots',
+    body: `Shop jars use uppercase A-Z letters or 0-9 numbers with a fixed color palette. Each purchase creates one reusable jar copy. Select a visible plant in the Garden, then use Jar Inventory to place, move, replace, or return jars. A plant spot can hold one jar, and removing a plant returns its jar to inventory with no Nectar refund.`,
   },
   {
     title: 'Host plants, nectar plants, and growth',

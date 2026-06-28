@@ -152,6 +152,8 @@ function App() {
             state={state}
             onPlant={garden.plant}
             onRemovePlant={garden.removePlant}
+            onPlaceJar={garden.placeJar}
+            onRemoveJarPlacement={garden.removeJarPlacement}
             onSelectCompanion={garden.selectCompanion}
             onRenameCreature={garden.renameCreature}
           />
@@ -159,7 +161,8 @@ function App() {
         {view === 'shop' && (
           <ShopView
             state={state}
-            onPurchase={garden.purchaseFlightPattern}
+            onPurchasePattern={garden.purchaseFlightPattern}
+            onPurchaseJar={garden.purchaseJar}
           />
         )}
         {view === 'flight-patterns' && (

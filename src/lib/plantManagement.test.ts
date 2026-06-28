@@ -41,6 +41,26 @@ describe('plant management', () => {
     expect(next.seeds).toBe(state.seeds)
   })
 
+  it('returns a removed plant spot jar to inventory', () => {
+    const state: AppState = {
+      ...fullGarden(),
+      jars: [
+        {
+          id: 'jar-a',
+          character: 'A',
+          colorId: 'blue',
+          purchasedAt: '2026-06-03T12:00:00.000Z',
+        },
+      ],
+      jarPlacements: [{ jarId: 'jar-a', plantId: 'plant-0' }],
+    }
+    const next = removePlant(state, 'plant-0')
+
+    expect(next.plants).toHaveLength(PLANT_CAPACITY - 1)
+    expect(next.jars).toEqual(state.jars)
+    expect(next.jarPlacements).toEqual([])
+  })
+
   it('protects plants supporting developing creatures', () => {
     const state: AppState = {
       ...fullGarden(),

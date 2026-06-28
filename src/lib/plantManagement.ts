@@ -26,6 +26,9 @@ export function removePlant(state: AppState, plantId: string): AppState {
   return {
     ...state,
     plants: state.plants.filter((plant) => plant.id !== plantId),
+    jarPlacements: state.jarPlacements.filter(
+      (placement) => placement.plantId !== plantId,
+    ),
   }
 }
 

@@ -12,7 +12,7 @@ describe('garden repository', () => {
     const state = { ...createEmptyState(), seeds: 4 }
     await gardenRepository.save(state)
     await expect(gardenRepository.load()).resolves.toMatchObject({
-      version: 2,
+      version: 3,
       seeds: 4,
     })
   })
@@ -50,6 +50,8 @@ describe('garden repository', () => {
     delete legacy.nectar
     delete legacy.ownedFlightPatternIds
     delete legacy.selectedFlightPatternId
+    delete legacy.jars
+    delete legacy.jarPlacements
     await gardenRepository.save(createEmptyState())
     const db = await openDB('butterfly-garden', 1)
     try {
@@ -59,16 +61,47 @@ describe('garden repository', () => {
     }
 
     await expect(gardenRepository.load()).resolves.toMatchObject({
-      version: 2,
+      version: 3,
       seeds: 7,
       nectar: 0,
       ownedFlightPatternIds: ['gentle-drift'],
       selectedFlightPatternId: 'gentle-drift',
+      jars: [],
+      jarPlacements: [],
       profile: expect.objectContaining({
         name: 'Legacy Gardener',
         gardenName: 'Remembered Garden',
       }),
       plants: [expect.objectContaining({ id: 'remembered-plant', growth: 2 })],
+    })
+  })
+
+  it('migrates a version-two garden with an empty jar inventory', async () => {
+    const legacy = {
+      ...createEmptyState(),
+      version: 2,
+      nectar: 15,
+      ownedFlightPatternIds: ['gentle-drift', 'petal-hop'],
+      selectedFlightPatternId: 'petal-hop',
+    } as Record<string, unknown>
+    delete legacy.jars
+    delete legacy.jarPlacements
+
+    await gardenRepository.save(createEmptyState())
+    const db = await openDB('butterfly-garden', 1)
+    try {
+      await db.put('state', legacy, 'current')
+    } finally {
+      db.close()
+    }
+
+    await expect(gardenRepository.load()).resolves.toMatchObject({
+      version: 3,
+      nectar: 15,
+      ownedFlightPatternIds: ['gentle-drift', 'petal-hop'],
+      selectedFlightPatternId: 'petal-hop',
+      jars: [],
+      jarPlacements: [],
     })
   })
 
