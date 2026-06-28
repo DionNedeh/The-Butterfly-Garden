@@ -18,6 +18,9 @@ export function Butterfly({
     '--wing-primary': definition?.wingColors[0] ?? '#e87832',
     '--wing-secondary': definition?.wingColors[1] ?? '#27231f',
   } as CSSProperties
+  const visualClass = definition
+    ? `species-${definition.id} pattern-${definition.visualPattern} shape-${definition.wingShape}`
+    : ''
   const pet = () => {
     if (pettable) setPetCount((count) => count + 1)
   }
@@ -29,7 +32,7 @@ export function Butterfly({
 
   return (
     <div
-      className={`butterfly butterfly-profile ${pettable ? 'pettable' : ''} ${className}`}
+      className={`butterfly butterfly-profile ${visualClass} ${pettable ? 'pettable' : ''} ${className}`}
       style={style}
       role={pettable ? 'button' : 'img'}
       aria-label={pettable ? `Pet ${label}` : label}

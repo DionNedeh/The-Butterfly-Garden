@@ -20,6 +20,14 @@ export type GardenBackdropId =
   | 'sunlit-meadow'
   | 'woodland-brook'
   | 'secret-conservatory'
+export type ButterflyWingShape =
+  | 'rounded'
+  | 'swallowtail'
+  | 'longwing'
+  | 'small'
+  | 'ragged'
+  | 'broad'
+  | 'clear'
 export type JarColorId =
   | 'blue'
   | 'yellow'
@@ -139,6 +147,8 @@ export interface SpeciesDefinition {
   scientificName: string
   hostPlantIds: string[]
   wingColors: [string, string]
+  visualPattern: string
+  wingShape: ButterflyWingShape
   fact: string
 }
 

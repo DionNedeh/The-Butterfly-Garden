@@ -476,11 +476,29 @@
   position: absolute;
   left: 27px;
   transform-origin: 12% 88%;
-  border: 3px solid var(--wing-secondary);
-  background:
+  border: 3px solid var(--wing-edge, var(--wing-secondary));
+  background: var(--wing-background,
     radial-gradient(circle at 66% 32%, #fff6 0 5%, transparent 6%),
-    linear-gradient(145deg, color-mix(in srgb, var(--wing-primary), white 16%), var(--wing-primary) 55%, var(--wing-secondary));
+    linear-gradient(145deg, color-mix(in srgb, var(--wing-primary), white 16%), var(--wing-primary) 55%, var(--wing-secondary)));
   box-shadow: inset 0 0 0 2px #fff2, 0 3px 4px #1e3c3030;
+}
+
+.profile-wing::before,
+.profile-wing::after {
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+  content: '';
+}
+
+.profile-wing::before {
+  inset: 0;
+  background: var(--wing-marking, transparent);
+  opacity: var(--wing-mark-opacity, 1);
+}
+
+.profile-wing::after {
+  display: none;
 }
 
 .profile-wing-front {
@@ -499,10 +517,310 @@
   left: 24px;
   width: 33px;
   height: 28px;
+  background: var(--wing-back-background, var(--wing-background,
+    radial-gradient(circle at 66% 32%, #fff6 0 5%, transparent 6%),
+    linear-gradient(145deg, color-mix(in srgb, var(--wing-primary), white 16%), var(--wing-primary) 55%, var(--wing-secondary))));
   border-radius: 60% 38% 72% 42%;
   filter: brightness(0.82);
   rotate: 16deg;
   animation: profile-flap-back 420ms ease-in-out infinite;
+}
+
+.profile-wing-back::before {
+  background: var(--wing-back-marking, var(--wing-marking, transparent));
+}
+
+.shape-swallowtail .profile-wing-back::after {
+  right: -7px;
+  bottom: -7px;
+  display: block;
+  width: 15px;
+  height: 22px;
+  border-radius: 70% 20% 80% 20%;
+  background: var(--wing-edge, var(--wing-secondary));
+  clip-path: polygon(12% 0, 100% 8%, 32% 100%);
+  rotate: -22deg;
+}
+
+.shape-longwing .profile-wing-front {
+  width: 48px;
+  height: 28px;
+  border-radius: 78% 42% 58% 28%;
+}
+
+.shape-longwing .profile-wing-back {
+  top: 19px;
+  width: 43px;
+  height: 22px;
+  border-radius: 72% 32% 76% 30%;
+}
+
+.shape-small {
+  width: 66px;
+  height: 50px;
+}
+
+.shape-small .profile-wing-front {
+  width: 32px;
+  height: 31px;
+}
+
+.shape-small .profile-wing-back {
+  width: 28px;
+  height: 24px;
+}
+
+.shape-ragged .profile-wing {
+  border-radius: 70% 38% 66% 28%;
+  clip-path: polygon(0 20%, 18% 0, 48% 8%, 80% 0, 100% 24%, 90% 62%, 100% 100%, 58% 88%, 16% 100%, 0 70%);
+}
+
+.shape-broad .profile-wing-front {
+  width: 43px;
+  height: 39px;
+  border-radius: 80% 48% 72% 38%;
+}
+
+.shape-broad .profile-wing-back {
+  width: 37px;
+  height: 31px;
+}
+
+.shape-clear .profile-wing {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.38), 0 3px 4px #1e3c3030;
+}
+
+.pattern-monarch-veins {
+  --wing-background:
+    radial-gradient(circle at 78% 25%, #f8d9a1 0 5%, transparent 6%),
+    repeating-linear-gradient(67deg, transparent 0 11px, var(--wing-secondary) 12px 14px, transparent 15px 23px),
+    linear-gradient(145deg, #f19a42, var(--wing-primary) 62%, #9d3f22);
+  --wing-marking:
+    radial-gradient(circle at 70% 70%, #fff6d7 0 6%, transparent 7%),
+    linear-gradient(90deg, transparent 0 68%, var(--wing-secondary) 69% 74%, transparent 75%);
+}
+
+.pattern-swallowtail-gold-spots {
+  --wing-background:
+    radial-gradient(circle at 76% 29%, var(--wing-secondary) 0 7%, transparent 8%),
+    radial-gradient(circle at 80% 68%, var(--wing-secondary) 0 6%, transparent 7%),
+    linear-gradient(145deg, #11181c, var(--wing-primary));
+  --wing-marking:
+    radial-gradient(circle at 72% 24%, #f4dc72 0 7%, transparent 8%),
+    radial-gradient(circle at 78% 58%, #f4dc72 0 6%, transparent 7%),
+    radial-gradient(circle at 52% 76%, #6ab5d8 0 5%, transparent 6%);
+}
+
+.pattern-tiger-stripes {
+  --wing-background:
+    repeating-linear-gradient(105deg, transparent 0 10px, var(--wing-secondary) 11px 15px, transparent 16px 25px),
+    linear-gradient(145deg, #ffe36a, var(--wing-primary));
+  --wing-marking:
+    radial-gradient(circle at 83% 78%, #2f60a8 0 5%, transparent 6%),
+    linear-gradient(90deg, transparent 0 76%, var(--wing-secondary) 77% 83%, transparent 84%);
+}
+
+.pattern-admiral-red-bands {
+  --wing-background:
+    linear-gradient(32deg, transparent 0 42%, var(--wing-secondary) 43% 55%, transparent 56%),
+    linear-gradient(145deg, #171717, var(--wing-primary));
+  --wing-marking:
+    linear-gradient(30deg, transparent 0 38%, #ef6a42 39% 54%, transparent 55%),
+    radial-gradient(circle at 76% 24%, #eef3f0 0 5%, transparent 6%);
+}
+
+.pattern-painted-mosaic {
+  --wing-background:
+    radial-gradient(circle at 72% 25%, #f1e0b8 0 6%, transparent 7%),
+    radial-gradient(circle at 42% 67%, #2b2a2b 0 8%, transparent 9%),
+    radial-gradient(circle at 82% 72%, #f7c26f 0 6%, transparent 7%),
+    linear-gradient(145deg, #e89654, var(--wing-primary) 55%, var(--wing-secondary));
+  --wing-marking:
+    repeating-linear-gradient(30deg, transparent 0 8px, rgba(255, 255, 255, 0.2) 9px 12px, transparent 13px 20px);
+}
+
+.pattern-sulphur-blush {
+  --wing-background:
+    radial-gradient(circle at 78% 72%, #f5a258 0 13%, transparent 14%),
+    linear-gradient(145deg, #fff28f, var(--wing-primary));
+  --wing-edge: #d98933;
+  --wing-marking: radial-gradient(circle at 76% 28%, #eeb157 0 4%, transparent 5%);
+}
+
+.pattern-morpho-shimmer {
+  --wing-background:
+    radial-gradient(circle at 28% 30%, #9ce9ff 0 12%, transparent 13%),
+    linear-gradient(115deg, #0b4e91, #22b8ef 45%, #064985 78%, var(--wing-secondary));
+  --wing-edge: #163457;
+  --wing-marking:
+    linear-gradient(90deg, transparent 0 70%, rgba(255, 255, 255, 0.35) 71% 76%, transparent 77%);
+}
+
+.pattern-glasswing-clear {
+  --wing-background:
+    radial-gradient(circle at 60% 34%, rgba(255, 255, 255, 0.48) 0 12%, transparent 13%),
+    linear-gradient(145deg, rgba(240, 255, 250, 0.26), rgba(154, 198, 184, 0.18));
+  --wing-edge: #75513d;
+  --wing-marking:
+    linear-gradient(90deg, transparent 0 72%, #75513d 73% 78%, transparent 79%);
+}
+
+.pattern-queen-pale-dots {
+  --wing-background: linear-gradient(145deg, #b65d36, var(--wing-primary) 58%, var(--wing-secondary));
+  --wing-marking:
+    radial-gradient(circle at 72% 24%, #f5d0a2 0 5%, transparent 6%),
+    radial-gradient(circle at 82% 46%, #f5d0a2 0 4%, transparent 5%),
+    radial-gradient(circle at 65% 70%, #f5d0a2 0 4%, transparent 5%);
+}
+
+.pattern-fritillary-silver {
+  --wing-background:
+    radial-gradient(circle at 70% 25%, #ffe2a6 0 5%, transparent 6%),
+    linear-gradient(145deg, #ef7b30, var(--wing-primary) 62%, var(--wing-secondary));
+  --wing-back-background:
+    radial-gradient(circle at 70% 28%, #e8e2d6 0 7%, transparent 8%),
+    radial-gradient(circle at 48% 66%, #e8e2d6 0 6%, transparent 7%),
+    linear-gradient(145deg, #8b5634, #543324);
+  --wing-marking:
+    radial-gradient(circle at 50% 35%, #4a2d24 0 4%, transparent 5%),
+    radial-gradient(circle at 75% 61%, #4a2d24 0 4%, transparent 5%);
+}
+
+.pattern-zebra-long-stripes {
+  --wing-background:
+    repeating-linear-gradient(112deg, var(--wing-primary) 0 9px, #f5dd71 10px 15px, var(--wing-primary) 16px 28px);
+  --wing-edge: #151515;
+  --wing-marking: linear-gradient(90deg, transparent 0 70%, #f5dd71 71% 76%, transparent 77%);
+}
+
+.pattern-buckeye-eyespots {
+  --wing-background: linear-gradient(145deg, #b48963, var(--wing-primary), var(--wing-secondary));
+  --wing-marking:
+    radial-gradient(circle at 73% 28%, #111 0 5%, #d6943d 6% 9%, #5aa0c8 10% 12%, transparent 13%),
+    radial-gradient(circle at 68% 70%, #111 0 6%, #d6943d 7% 10%, #5aa0c8 11% 13%, transparent 14%);
+}
+
+.pattern-viceroy-black-line {
+  --wing-background:
+    repeating-linear-gradient(68deg, transparent 0 13px, var(--wing-secondary) 14px 16px, transparent 17px 24px),
+    linear-gradient(145deg, #e17a39, var(--wing-primary));
+  --wing-marking:
+    linear-gradient(22deg, transparent 0 50%, var(--wing-secondary) 51% 58%, transparent 59%),
+    radial-gradient(circle at 78% 25%, #f7d9a7 0 4%, transparent 5%);
+}
+
+.pattern-mourning-gold-border {
+  --wing-background:
+    radial-gradient(circle at 55% 58%, #28315f 0 7%, transparent 8%),
+    linear-gradient(145deg, #4e3347, var(--wing-primary));
+  --wing-edge: #e8cd79;
+  --wing-marking:
+    linear-gradient(90deg, transparent 0 74%, #e8cd79 75% 100%),
+    radial-gradient(circle at 78% 28%, #27428b 0 4%, transparent 5%);
+}
+
+.pattern-spicebush-blue-dust {
+  --wing-background:
+    radial-gradient(circle at 63% 64%, #48b7b0 0 17%, transparent 18%),
+    linear-gradient(145deg, #111, var(--wing-primary));
+  --wing-marking:
+    radial-gradient(circle at 74% 26%, #f0df82 0 5%, transparent 6%),
+    radial-gradient(circle at 82% 42%, #f0df82 0 4%, transparent 5%);
+}
+
+.pattern-giant-yellow-sashes {
+  --wing-background:
+    linear-gradient(34deg, transparent 0 34%, #efd56d 35% 48%, transparent 49%),
+    linear-gradient(145deg, #111, var(--wing-primary));
+  --wing-marking:
+    linear-gradient(90deg, transparent 0 65%, #efd56d 66% 78%, transparent 79%);
+}
+
+.pattern-cabbage-ink-spots {
+  --wing-background: linear-gradient(145deg, #fffdf0, var(--wing-primary));
+  --wing-edge: #77736c;
+  --wing-marking:
+    radial-gradient(circle at 72% 32%, #44413c 0 6%, transparent 7%),
+    radial-gradient(circle at 70% 66%, #44413c 0 4%, transparent 5%);
+}
+
+.pattern-baltimore-checkers {
+  --wing-background:
+    repeating-conic-gradient(from 45deg, #1f2424 0 25%, #f07b36 0 50%) 0 0 / 18px 18px,
+    linear-gradient(145deg, var(--wing-primary), var(--wing-secondary));
+  --wing-edge: #171717;
+  --wing-marking:
+    radial-gradient(circle at 76% 22%, #fff0a8 0 5%, transparent 6%),
+    radial-gradient(circle at 58% 76%, #fff0a8 0 4%, transparent 5%);
+}
+
+.pattern-pipevine-iridescent {
+  --wing-background:
+    radial-gradient(circle at 65% 62%, #2ec8e9 0 18%, transparent 19%),
+    linear-gradient(145deg, #05070a, #182436 58%, #225a8e);
+  --wing-edge: #0c1016;
+  --wing-marking:
+    radial-gradient(circle at 82% 28%, #f6efe3 0 4%, transparent 5%),
+    radial-gradient(circle at 84% 48%, #f6efe3 0 3%, transparent 4%);
+}
+
+.pattern-american-lady-eyes {
+  --wing-background: linear-gradient(145deg, #ef8a4e, var(--wing-primary), var(--wing-secondary));
+  --wing-marking:
+    radial-gradient(circle at 72% 28%, #101010 0 5%, #f1d17a 6% 8%, transparent 9%),
+    radial-gradient(circle at 76% 72%, #101010 0 8%, #78a3d6 9% 12%, transparent 13%),
+    linear-gradient(35deg, transparent 0 58%, #f6e5c0 59% 65%, transparent 66%);
+}
+
+.pattern-spangled-fritillary {
+  --wing-background:
+    radial-gradient(circle at 72% 26%, #392516 0 4%, transparent 5%),
+    radial-gradient(circle at 55% 54%, #392516 0 5%, transparent 6%),
+    radial-gradient(circle at 80% 72%, #392516 0 4%, transparent 5%),
+    linear-gradient(145deg, #e7873f, var(--wing-primary));
+  --wing-back-background:
+    radial-gradient(circle at 74% 26%, #f1ead4 0 6%, transparent 7%),
+    radial-gradient(circle at 54% 64%, #f1ead4 0 5%, transparent 6%),
+    linear-gradient(145deg, #8a5430, #5a3323);
+}
+
+.pattern-azure-soft-edge {
+  --wing-background:
+    radial-gradient(circle at 62% 32%, #faffff 0 11%, transparent 12%),
+    linear-gradient(145deg, #d9ebff, var(--wing-primary));
+  --wing-edge: #6b83ad;
+  --wing-marking: linear-gradient(90deg, transparent 0 80%, #6b83ad 81% 100%);
+}
+
+.pattern-red-spotted-purple {
+  --wing-background:
+    radial-gradient(circle at 70% 62%, #3156aa 0 17%, transparent 18%),
+    linear-gradient(145deg, #070a14, var(--wing-primary));
+  --wing-edge: #0b0e19;
+  --wing-marking:
+    radial-gradient(circle at 82% 26%, #e25f37 0 5%, transparent 6%),
+    radial-gradient(circle at 86% 48%, #e25f37 0 4%, transparent 5%),
+    radial-gradient(circle at 78% 78%, #e25f37 0 4%, transparent 5%);
+}
+
+.pattern-california-sister-bands {
+  --wing-background:
+    linear-gradient(30deg, transparent 0 36%, #f4ead0 37% 49%, transparent 50%),
+    linear-gradient(145deg, #1f1a17, var(--wing-primary));
+  --wing-marking:
+    radial-gradient(circle at 77% 21%, #e77c2f 0 10%, transparent 11%),
+    linear-gradient(90deg, transparent 0 72%, #f4ead0 73% 80%, transparent 81%);
+}
+
+.pattern-atala-jewel-spots {
+  --wing-background:
+    radial-gradient(circle at 62% 58%, #24bfd5 0 11%, transparent 12%),
+    radial-gradient(circle at 80% 72%, #e0443d 0 7%, transparent 8%),
+    linear-gradient(145deg, #05070a, var(--wing-primary));
+  --wing-edge: #05070a;
+  --wing-marking:
+    radial-gradient(circle at 78% 26%, #2cd6e8 0 5%, transparent 6%),
+    radial-gradient(circle at 86% 46%, #2cd6e8 0 4%, transparent 5%);
 }
 
 .antenna {
