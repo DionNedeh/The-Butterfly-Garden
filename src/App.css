@@ -923,7 +923,7 @@
 .plant-jar {
   position: absolute;
   z-index: 6;
-  bottom: -13px;
+  bottom: 0;
   left: 50%;
   transform: translateX(-50%);
 }
