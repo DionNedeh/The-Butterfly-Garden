@@ -531,15 +531,15 @@
 }
 
 .shape-swallowtail .profile-wing-back::after {
-  right: -7px;
-  bottom: -7px;
+  bottom: -10px;
+  left: -3px;
   display: block;
   width: 15px;
   height: 22px;
   border-radius: 70% 20% 80% 20%;
   background: var(--wing-edge, var(--wing-secondary));
-  clip-path: polygon(12% 0, 100% 8%, 32% 100%);
-  rotate: -22deg;
+  clip-path: polygon(100% 0, 12% 8%, 68% 100%);
+  rotate: 22deg;
 }
 
 .shape-longwing .profile-wing-front {
