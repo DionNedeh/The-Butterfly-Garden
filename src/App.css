@@ -1248,7 +1248,7 @@
   position: absolute;
   z-index: 6;
   bottom: 2px;
-  left: 64%;
+  left: calc(50% + 30px);
   transform: translateX(-50%) scale(0.72);
   transform-origin: bottom center;
 }
