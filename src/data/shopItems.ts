@@ -121,6 +121,17 @@ export const shopItems: ShopItemDefinition[] = [
     cost: 6,
     currency: 'stardust',
   },
+  {
+    id: 'moonlit-halo',
+    kind: 'cosmetic',
+    slot: 'headwear',
+    stages: ['egg', 'caterpillar', 'chrysalis', 'butterfly'],
+    name: 'Moonlit Halo',
+    description: 'A soft ring of moonlight that hovers wherever they rest.',
+    icon: 'moon',
+    cost: 7,
+    currency: 'stardust',
+  },
 
   // ---- Accessories ---------------------------------------------------
   {
@@ -176,6 +187,17 @@ export const shopItems: ShopItemDefinition[] = [
     description: 'Glows faintly on new-moon nights.',
     icon: 'moon',
     cost: 5,
+    currency: 'stardust',
+  },
+  {
+    id: 'comet-brooch',
+    kind: 'cosmetic',
+    slot: 'accessory',
+    stages: ['caterpillar', 'chrysalis', 'butterfly'],
+    name: 'Comet Brooch',
+    description: 'A shooting star pinned mid-flight, tail still glittering.',
+    icon: 'sparkle',
+    cost: 4,
     currency: 'stardust',
   },
 

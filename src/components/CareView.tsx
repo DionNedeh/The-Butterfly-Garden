@@ -17,6 +17,7 @@ import { visibleOutfit } from '../lib/wardrobe'
 import { toLocalDate } from '../lib/date'
 import type { AppState, CreatureStage, OutfitSlot } from '../types'
 import { CreatureSprite } from './sprites/CreatureSprite'
+import { PettableCreature } from './PettableCreature'
 import { Icon } from './Icons'
 
 const stageDescriptions: Record<CreatureStage, string> = {
@@ -137,7 +138,7 @@ export function CareView({
       <section className="card care-stage-card">
         <div className="care-stage-layout">
           <div className="care-portrait">
-            <CreatureSprite
+            <PettableCreature
               speciesId={selected.speciesId}
               stage={selected.stage}
               size={190}

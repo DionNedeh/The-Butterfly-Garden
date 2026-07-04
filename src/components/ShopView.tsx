@@ -45,6 +45,50 @@ export function ShopView({
   ).length
   const canBuyJar = state.nectar >= JAR_PRICE
 
+  const cosmeticCard = (item: (typeof cosmeticItems)[number]) => {
+    const owned = state.ownedItemIds.includes(item.id)
+    const balance =
+      (item.currency === 'stardust' ? state.stardust : state.nectar) ?? 0
+    const affordable = balance >= item.cost
+    return (
+      <article
+        className={`card shop-item-card ${item.currency === 'stardust' ? 'stardust-item' : ''}`}
+        key={item.id}
+      >
+        <span className={`shop-item-icon ${item.currency === 'stardust' ? 'premium' : ''}`}>
+          <Icon name={item.icon as Parameters<typeof Icon>[0]['name']} size={30} />
+        </span>
+        <h3>{item.name}</h3>
+        <p>{item.description}</p>
+        <small className="owned-note">
+          {item.slot === 'headwear'
+            ? 'Headwear'
+            : item.slot === 'accessory'
+              ? 'Accessory'
+              : 'Aura'}{' '}
+          · Fits: {(item.stages ?? []).map((stage) => stageLabels[stage]).join(', ')}
+        </small>
+        <div className="pattern-card-footer">
+          <span className="pattern-cost">
+            <Icon name={item.currency === 'stardust' ? 'stardust' : 'nectar'} size={18} />
+            {item.cost}
+          </span>
+          <button
+            className={owned ? 'secondary-button' : 'primary-button'}
+            disabled={owned || !affordable}
+            onClick={() => onPurchaseItem(item.id)}
+          >
+            {owned
+              ? 'Owned'
+              : affordable
+                ? 'Buy'
+                : `Not enough ${item.currency === 'stardust' ? 'Stardust' : 'Nectar'}`}
+          </button>
+        </div>
+      </article>
+    )
+  }
+
   return (
     <div className="view shop-view">
       <header className="page-header">
@@ -143,46 +187,29 @@ export function ShopView({
             it fits.
           </p>
           <div className="shop-grid">
-            {cosmeticItems.map((item) => {
-              const owned = state.ownedItemIds.includes(item.id)
-              const balance =
-                item.currency === 'stardust' ? state.stardust : state.nectar
-              const affordable = balance >= item.cost
-              return (
-                <article className="card shop-item-card" key={item.id}>
-                  <span className="shop-item-icon">
-                    <Icon name={item.icon as Parameters<typeof Icon>[0]['name']} size={30} />
-                  </span>
-                  <h3>{item.name}</h3>
-                  <p>{item.description}</p>
-                  <small className="owned-note">
-                    {item.slot === 'headwear'
-                      ? 'Headwear'
-                      : item.slot === 'accessory'
-                        ? 'Accessory'
-                        : 'Aura'}{' '}
-                    · Fits: {(item.stages ?? []).map((stage) => stageLabels[stage]).join(', ')}
-                  </small>
-                  <div className="pattern-card-footer">
-                    <span className="pattern-cost">
-                      <Icon name={item.currency === 'stardust' ? 'stardust' : 'nectar'} size={18} />
-                      {item.cost}
-                    </span>
-                    <button
-                      className={owned ? 'secondary-button' : 'primary-button'}
-                      disabled={owned || !affordable}
-                      onClick={() => onPurchaseItem(item.id)}
-                    >
-                      {owned
-                        ? 'Owned'
-                        : affordable
-                          ? 'Buy'
-                          : `Not enough ${item.currency === 'stardust' ? 'Stardust' : 'Nectar'}`}
-                    </button>
-                  </div>
-                </article>
-              )
-            })}
+            {cosmeticItems
+              .filter((item) => item.currency === 'nectar')
+              .map((item) => cosmeticCard(item))}
+          </div>
+
+          <div className="section-heading shop-section-heading stardust-heading">
+            <div>
+              <p className="eyebrow">Spend your Stardust</p>
+              <h2 id="atelier-title">The Stardust atelier</h2>
+            </div>
+            <span className="pattern-cost">
+              <Icon name="stardust" size={18} />
+              {state.stardust} on hand
+            </span>
+          </div>
+          <p className="section-explainer">
+            Rare pieces priced in Stardust — earned from bond levels and every
+            butterfly that emerges.
+          </p>
+          <div className="shop-grid">
+            {cosmeticItems
+              .filter((item) => item.currency === 'stardust')
+              .map((item) => cosmeticCard(item))}
           </div>
         </section>
       )}
@@ -294,18 +321,31 @@ export function ShopView({
           <div className="shop-grid">
             {patterns.map((pattern) => {
               const owned = state.ownedFlightPatternIds.includes(pattern.id)
-              const affordable = state.nectar >= pattern.cost
+              const balance =
+                (pattern.currency === 'stardust'
+                  ? state.stardust
+                  : state.nectar) ?? 0
+              const affordable = balance >= pattern.cost
+              const currencyLabel =
+                pattern.currency === 'stardust' ? 'Stardust' : 'Nectar'
               return (
                 <article className="card pattern-card" key={pattern.id}>
                   <div className={`pattern-preview ${pattern.animationClass}`} aria-hidden="true">
                     <span className="preview-flight-dot" />
                   </div>
-                  <p className="eyebrow">Flight pattern</p>
+                  <p className="eyebrow">
+                    {pattern.currency === 'stardust'
+                      ? 'Stardust flight pattern'
+                      : 'Flight pattern'}
+                  </p>
                   <h2>{pattern.name}</h2>
                   <p>{pattern.description}</p>
                   <div className="pattern-card-footer">
                     <span className="pattern-cost">
-                      <Icon name="nectar" size={18} />
+                      <Icon
+                        name={pattern.currency === 'stardust' ? 'stardust' : 'nectar'}
+                        size={18}
+                      />
                       {pattern.cost}
                     </span>
                     <button
@@ -313,7 +353,11 @@ export function ShopView({
                       disabled={owned || !affordable}
                       onClick={() => onPurchasePattern(pattern.id)}
                     >
-                      {owned ? 'Owned' : affordable ? `Buy ${pattern.name}` : 'Not enough Nectar'}
+                      {owned
+                        ? 'Owned'
+                        : affordable
+                          ? `Buy ${pattern.name}`
+                          : `Not enough ${currencyLabel}`}
                     </button>
                   </div>
                 </article>

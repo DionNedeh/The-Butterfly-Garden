@@ -188,6 +188,18 @@ describe('shop purchases and wardrobe', () => {
     expect(twice).toBe(once)
   })
 
+  it('sells Stardust pieces only for Stardust, never Nectar', () => {
+    const richInNectar = makeState({ nectar: 999, stardust: 0 })
+    expect(purchaseShopItem(richInNectar, 'star-diadem')).toBe(richInNectar)
+    expect(purchaseShopItem(richInNectar, 'moonlit-halo')).toBe(richInNectar)
+
+    const stargazer = makeState({ nectar: 0, stardust: 7 })
+    const bought = purchaseShopItem(stargazer, 'star-diadem')
+    expect(bought.ownedItemIds).toContain('star-diadem')
+    expect(bought.stardust).toBe(1)
+    expect(bought.nectar).toBe(0)
+  })
+
   it('never sells Garden Pass exclusives yet', () => {
     const state = makeState({ nectar: 999, stardust: 999 })
     expect(purchaseShopItem(state, 'royal-crown')).toBe(state)

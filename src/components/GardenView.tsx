@@ -74,7 +74,7 @@ export function GardenView({
   const active = emerged.find(
     (creature) => creature.id === state.profile?.activeCompanionId,
   )
-  const gardenButterflies = [
+  const allGardenButterflies = [
     {
       id: 'marigold-guide',
       speciesId: 'monarch',
@@ -88,6 +88,29 @@ export function GardenView({
       outfit: visibleOutfit(state, creature.id),
     })),
   ]
+  // Keep the scene smooth on modest devices: at most 12 butterflies fly at
+  // once. Marigold and the active companion always fly; the rest rotate
+  // daily so every butterfly gets regular time in the air.
+  const MAX_VISIBLE_FLYERS = 12
+  let gardenButterflies = allGardenButterflies
+  if (allGardenButterflies.length > MAX_VISIBLE_FLYERS) {
+    const always = allGardenButterflies.filter(
+      (butterfly) =>
+        butterfly.id === 'marigold-guide' ||
+        butterfly.id === state.profile?.activeCompanionId,
+    )
+    const rest = allGardenButterflies.filter(
+      (butterfly) => !always.includes(butterfly),
+    )
+    const offset = getDailyPromptIndex(toLocalDate(), Math.max(1, rest.length))
+    gardenButterflies = [
+      ...always,
+      ...Array.from(
+        { length: MAX_VISIBLE_FLYERS - always.length },
+        (_, index) => rest[(offset + index) % rest.length],
+      ),
+    ]
+  }
   const observationChoices = observations.filter(
     (item) => item.speciesId === 'all' || item.speciesId === active?.speciesId,
   )

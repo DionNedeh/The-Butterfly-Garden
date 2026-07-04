@@ -13,7 +13,8 @@ export function purchaseShopItem(state: AppState, itemId: string): AppState {
     return state
   }
 
-  const balance = item.currency === 'stardust' ? state.stardust : state.nectar
+  const balance =
+    (item.currency === 'stardust' ? state.stardust : state.nectar) ?? 0
   if (balance < item.cost) return state
   const paid =
     item.currency === 'stardust'
