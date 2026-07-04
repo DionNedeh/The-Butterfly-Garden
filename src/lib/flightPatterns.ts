@@ -9,10 +9,17 @@ export function purchaseFlightPattern(
 ): AppState {
   if (state.ownedFlightPatternIds.includes(patternId)) return state
   const pattern = flightPatterns.find((item) => item.id === patternId)
-  if (!pattern || pattern.cost <= 0 || state.nectar < pattern.cost) return state
+  if (!pattern || pattern.cost <= 0) return state
+  const balance =
+    (pattern.currency === 'stardust' ? state.stardust : state.nectar) ?? 0
+  if (balance < pattern.cost) return state
+  const paid =
+    pattern.currency === 'stardust'
+      ? { stardust: state.stardust - pattern.cost }
+      : { nectar: state.nectar - pattern.cost }
   return {
     ...state,
-    nectar: state.nectar - pattern.cost,
+    ...paid,
     ownedFlightPatternIds: [...state.ownedFlightPatternIds, patternId],
   }
 }

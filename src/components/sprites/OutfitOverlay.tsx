@@ -63,6 +63,14 @@ function headwear(itemId: string): ReactNode {
           <path d="M0 -6 L1.3 -2.6 L4.8 -2.6 L2 -0.5 L3 3 L0 0.9 L-3 3 L-2 -0.5 L-4.8 -2.6 L-1.3 -2.6 Z" fill="#f5e4a3" stroke="#d4b358" strokeWidth="0.5" />
         </g>
       )
+    case 'moonlit-halo':
+      return (
+        <g>
+          <ellipse cx="0" cy="-8" rx="8.5" ry="2.6" fill="none" stroke="#e8e2b8" strokeWidth="1.8" opacity="0.95" />
+          <ellipse cx="0" cy="-8" rx="8.5" ry="2.6" fill="none" stroke="#fdfaf0" strokeWidth="0.7" />
+          <circle cx="6.4" cy="-9.2" r="0.8" fill="#fdfaf0" />
+        </g>
+      )
     case 'royal-crown':
       return (
         <g>
@@ -114,6 +122,14 @@ function accessory(itemId: string): ReactNode {
           <path d="M-4.5 -1 A4.5 2.6 0 0 0 4.5 -1" stroke="#9a94b8" strokeWidth="0.8" fill="none" />
           <circle cx="0" cy="3.4" r="2.6" fill="#dcd9f2" stroke="#8f88bb" strokeWidth="0.8" />
           <path d="M1 2 A2 2 0 0 0 -1 4.8 A2.6 2.6 0 0 1 1 2 Z" fill="#b4aede" />
+        </g>
+      )
+    case 'comet-brooch':
+      return (
+        <g>
+          <path d="M1.5 2 L2.6 4.6 L5.4 4.9 L3.4 6.8 L4 9.5 L1.5 8.1 L-1 9.5 L-0.4 6.8 L-2.4 4.9 L0.4 4.6 Z" fill="#f2e18f" stroke="#c9ab4e" strokeWidth="0.5" />
+          <path d="M-2 3.6 C-4.4 2.4 -6.4 0.8 -7.6 -1" stroke="#e8dcb0" strokeWidth="1.1" strokeLinecap="round" opacity="0.85" />
+          <path d="M-1 5.4 C-3.6 4.8 -5.8 3.6 -7.4 2" stroke="#e8dcb0" strokeWidth="0.8" strokeLinecap="round" opacity="0.6" />
         </g>
       )
     case 'celestial-cape':

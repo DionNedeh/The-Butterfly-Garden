@@ -27,6 +27,18 @@ describe('flight pattern ownership', () => {
     expect(purchaseFlightPattern(owned, 'petal-hop')).toBe(owned)
   })
 
+  it('prices premium patterns in Stardust and never Nectar', () => {
+    const richInNectar = { ...createEmptyState(), nectar: 500, stardust: 0 }
+    expect(purchaseFlightPattern(richInNectar, 'spiral-rise')).toBe(richInNectar)
+    expect(purchaseFlightPattern(richInNectar, 'garden-waltz')).toBe(richInNectar)
+
+    const stargazer = { ...createEmptyState(), nectar: 0, stardust: 8 }
+    const bought = purchaseFlightPattern(stargazer, 'spiral-rise')
+    expect(bought.ownedFlightPatternIds).toContain('spiral-rise')
+    expect(bought.stardust).toBe(1)
+    expect(bought.nectar).toBe(0)
+  })
+
   it('selects only an owned pattern', () => {
     const state = { ...createEmptyState(), nectar: 9 }
     expect(selectFlightPattern(state, 'petal-hop')).toBe(state)

@@ -989,6 +989,7 @@
 
 .garden-flight-space {
   position: absolute;
+  container-type: size;
   z-index: 5;
   inset: 0;
   overflow: hidden;
@@ -998,10 +999,11 @@
 
 .flying-butterfly {
   position: absolute;
-  top: var(--route-y0);
-  left: var(--route-x0);
+  top: 0;
+  left: 0;
   pointer-events: auto;
-  transform: scale(var(--flight-size));
+  transform: translate(var(--route-x0), var(--route-y0)) scale(var(--flight-size));
+  will-change: transform;
   filter: drop-shadow(0 7px 6px rgba(20, 45, 36, 0.25));
   animation: garden-flight var(--flight-duration) ease-in-out var(--flight-delay) infinite;
 }
@@ -1031,61 +1033,61 @@
 }
 
 @keyframes garden-flight {
-  0% { top: var(--route-y0); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-3deg); }
-  18% { top: var(--route-y1); left: var(--route-x1); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
-  34%, 43% { top: var(--route-y2); left: var(--route-x2); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(1deg); }
-  51% { top: var(--route-y3); left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-3deg); }
-  68% { top: var(--route-y1); left: var(--route-x1); transform: scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(4deg); }
-  82%, 90% { top: var(--route-y4); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { top: var(--route-y0); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-3deg); }
+  0% { transform: translate(var(--route-x0), var(--route-y0)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-3deg); }
+  18% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
+  34%, 43% { transform: translate(var(--route-x2), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(1deg); }
+  51% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-3deg); }
+  68% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(4deg); }
+  82%, 90% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), var(--route-y0)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-3deg); }
 }
 
 @keyframes petal-hop {
-  0%, 12% { top: var(--route-y2); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  25% { top: var(--route-y1); left: var(--route-x1); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  31%, 43% { top: var(--route-y2); left: var(--route-x2); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  57% { top: var(--route-y3); left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-5deg); }
-  64%, 76% { top: var(--route-y4); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  83% { top: var(--route-y3); left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { top: var(--route-y2); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  0%, 12% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  25% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
+  31%, 43% { transform: translate(var(--route-x2), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  57% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-5deg); }
+  64%, 76% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  83% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
 }
 
 @keyframes figure-eight {
-  0% { top: var(--route-y3); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  20% { top: var(--route-y1); left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  42%, 50% { top: var(--route-y3); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  70% { top: var(--route-y2); left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-5deg); }
-  92% { top: var(--route-y3); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { top: var(--route-y3); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  0% { transform: translate(var(--route-x0), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  20% { transform: translate(var(--route-x3), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
+  42%, 50% { transform: translate(var(--route-x4), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  70% { transform: translate(var(--route-x3), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-5deg); }
+  92% { transform: translate(var(--route-x0), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
 }
 
 @keyframes sunbeam-swoop {
-  0% { top: var(--route-y1); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
-  25% { top: 10%; left: var(--route-x1); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  48% { top: var(--route-y2); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-7deg); }
-  52%, 64% { top: var(--route-y4); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  82% { top: var(--route-y1); left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(5deg); }
-  100% { top: var(--route-y1); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  0% { transform: translate(var(--route-x0), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
+  25% { transform: translate(var(--route-x1), 10cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  48% { transform: translate(var(--route-x4), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-7deg); }
+  52%, 64% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  82% { transform: translate(var(--route-x3), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(5deg); }
+  100% { transform: translate(var(--route-x0), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
 }
 
 @keyframes spiral-rise {
-  0%, 10% { top: var(--route-y4); left: var(--route-x2); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  25% { top: var(--route-y3); left: var(--route-x1); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-5deg); }
-  42% { top: var(--route-y1); left: var(--route-x2); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  58% { top: 14%; left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(5deg); }
-  72% { top: var(--route-y1); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  88% { top: var(--route-y3); left: var(--route-x3); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { top: var(--route-y4); left: var(--route-x2); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  0%, 10% { transform: translate(var(--route-x2), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  25% { transform: translate(var(--route-x1), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-5deg); }
+  42% { transform: translate(var(--route-x2), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  58% { transform: translate(var(--route-x3), 14cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(5deg); }
+  72% { transform: translate(var(--route-x4), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  88% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x2), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
 }
 
 @keyframes garden-waltz {
-  0%, 9% { top: var(--route-y4); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  22% { top: var(--route-y1); left: var(--route-x1); transform: scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  35%, 44% { top: var(--route-y2); left: var(--route-x2); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  57% { top: var(--route-y1); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-4deg); }
-  70%, 79% { top: var(--route-y4); left: var(--route-x4); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  90% { top: var(--route-y3); left: var(--route-x1); transform: scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { top: var(--route-y4); left: var(--route-x0); transform: scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  0%, 9% { transform: translate(var(--route-x0), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  22% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
+  35%, 44% { transform: translate(var(--route-x2), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  57% { transform: translate(var(--route-x4), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-4deg); }
+  70%, 79% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  90% { transform: translate(var(--route-x1), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
 }
 
 .garden-plants {
@@ -1247,15 +1249,15 @@
   z-index: 6;
   bottom: 2px;
   left: 50%;
-  transform: translateX(-42%) scale(0.72);
+  transform: translateX(-50%) scale(0.72);
   transform-origin: bottom center;
 }
 
 /* Counter the plant's growth scaling so jars stay a consistent small size,
    sitting centered on the sprite's stalk. */
-.garden-plant.growth-0 .plant-jar { transform: translateX(-42%) scale(1); }
-.garden-plant.growth-1 .plant-jar { transform: translateX(-42%) scale(0.88); }
-.garden-plant.growth-2 .plant-jar { transform: translateX(-42%) scale(0.78); }
+.garden-plant.growth-0 .plant-jar { transform: translateX(-50%) scale(1); }
+.garden-plant.growth-1 .plant-jar { transform: translateX(-50%) scale(0.88); }
+.garden-plant.growth-2 .plant-jar { transform: translateX(-50%) scale(0.78); }
 
 .garden-stats {
   position: relative;

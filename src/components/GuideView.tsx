@@ -1,4 +1,5 @@
 import { STAGE_CARE_DAYS } from '../lib/lifecycle'
+import { PLANT_CAPACITY } from '../lib/plantManagement'
 import {
   DAILY_SEED_REWARD,
   DAILY_SUNLIGHT_CAP,
@@ -29,8 +30,9 @@ const sections: GuideSection[] = [
     eyebrow: 'Growing things',
     title: 'Seeds, plants, and butterfly eggs',
     paragraphs: [
-      `Each seed plants one flower, shrub, or tree (${PLANT_SEED_COST} seed per plant, up to 8 spaces in the scene). Host plants shelter particular butterfly species; nectar plants feed everyone.`,
-      'Plants grow one stage per Sunlight: seed, sprout, budding, full bloom. When a host plant reaches full bloom, look closely — a butterfly egg appears on its leaves, and a new companion begins.',
+      `Each seed plants one flower, shrub, or tree (${PLANT_SEED_COST} seed per plant, up to ${PLANT_CAPACITY} spaces in the scene). Host plants shelter particular butterfly species; nectar plants feed everyone. Shared host plants prefer a species you have not welcomed yet.`,
+      'Plants grow one stage per Sunlight — seed, sprout, budding, full bloom — with each Sunlight tending the earliest plant that can still grow. When a host plant reaches full bloom, look closely: a butterfly egg appears on its leaves, and a new companion begins.',
+      'Missed days simply pause growth; nothing ever wilts. You can remove a plant from its field-guide panel (no seed refund), but a plant sheltering an egg, caterpillar, or chrysalis is protected until its butterfly emerges.',
     ],
   },
   {
@@ -66,7 +68,7 @@ const sections: GuideSection[] = [
     title: 'Nectar and Stardust',
     paragraphs: [
       'Nectar is the everyday currency: earned from Sunlight, spent on supplies, outfits, jars, and flight patterns.',
-      'Stardust is rarer: earned from bond level-ups and butterfly emergences, spent on prestige cosmetics like the Star Diadem and Firefly Glow. Save it for the pieces you love.',
+      'Stardust is rarer: earned from bond level-ups and butterfly emergences, spent in the Stardust atelier of the Boutique (pieces like the Star Diadem, Moonlit Halo, and Firefly Glow) and on the two most graceful flight patterns, Spiral Rise and Garden Waltz. Save it for what you love.',
     ],
   },
   {
@@ -91,8 +93,26 @@ const sections: GuideSection[] = [
     eyebrow: 'Gentle structure',
     title: 'Goals, skipping, and snoozing',
     paragraphs: [
-      'Goals can repeat daily, on chosen weekdays, or happen just once. Completing one earns Sunlight.',
+      'Goals can repeat daily, on chosen weekdays, or happen just once. Completing one earns Sunlight — though repeating the same completed activity never creates extra Sunlight, and recurrence follows the calendar date on this device (daylight-saving changes are handled for you).',
       'Not every day has room for every goal. Skip sets a goal aside for today with zero penalty — it simply rests. Snooze tucks it away until tomorrow, and planned one-time goals move to the new day automatically. You can wake a snoozed goal any time.',
+    ],
+  },
+  {
+    icon: 'flight',
+    eyebrow: 'Life in the scene',
+    title: 'Companions in the garden',
+    paragraphs: [
+      'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly for a little burst of hearts; on the Care page, every stage answers the same way, egg to butterfly.',
+      'Choose one butterfly as your active companion from its card in the Garden, and rename any companion whenever you like from its card or the Care page.',
+    ],
+  },
+  {
+    icon: 'journal',
+    eyebrow: 'Kept as you wrote it',
+    title: 'Journal and the Sunlight streak',
+    paragraphs: [
+      'The Journal holds your dated moods, reflections, and butterfly field notes. Personal entries can be edited or deleted at any time, and nothing you write is scored or analyzed.',
+      'Your Sunlight streak grows when you earn at least one Sunlight on consecutive days and restarts after a completely missed day. It is just a gentle mirror — it never changes plant or butterfly progress.',
     ],
   },
   {
@@ -108,7 +128,8 @@ const sections: GuideSection[] = [
     eyebrow: 'Keepsakes',
     title: 'Letter jars',
     paragraphs: [
-      'Letter and number jars are decorative keepsakes for your plant spots. Buy any character in any color, then place it from a plant\'s detail panel in the Garden. Spell names, dates, or tiny messages across your flowerbed.',
+      'Letter and number jars are decorative keepsakes for your plant spots: uppercase A–Z and 0–9 in eight colors, one reusable jar per purchase. Place, move, or return them from a plant\'s detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.',
+      'Removing a plant returns its jar safely to inventory. Like all shop purchases, jars are local, permanent, and non-refundable.',
     ],
   },
   {
@@ -128,12 +149,21 @@ const sections: GuideSection[] = [
     ],
   },
   {
+    icon: 'settings',
+    eyebrow: 'Take it with you',
+    title: 'Install, offline, and updates',
+    paragraphs: [
+      'After the first successful load, the whole garden works offline. Supported browsers offer an Install button in the header for a standalone home-screen app, and when a new version is ready the app always asks before refreshing to apply it.',
+    ],
+  },
+  {
     icon: 'moon',
     eyebrow: 'Yours alone',
-    title: 'Privacy, offline, and backdrops',
+    title: 'Privacy, backdrops, and starting over',
     paragraphs: [
-      'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts and nothing is uploaded. The app works fully offline once installed.',
-      'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings.',
+      'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Reduce garden motion in Settings pauses decorative animation.',
+      'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme.',
+      'Delete all local data in Settings permanently removes this garden from the current browser; clearing site storage does the same. There is no undo, so treat it kindly.',
     ],
   },
 ]

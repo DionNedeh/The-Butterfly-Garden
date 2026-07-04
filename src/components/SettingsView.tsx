@@ -1,71 +1,10 @@
 import { useState } from 'react'
 import {
-  DAILY_SEED_REWARD,
-  DAILY_SUNLIGHT_CAP,
-  EMERGENCE_SEED_REWARD,
-  NECTAR_PER_SUNLIGHT,
-  PLANT_SEED_COST,
-  STARTER_SEEDS,
-} from '../lib/progression'
-import {
   daysUntilBackdrop,
   gardenBackdrops,
   unlockedBackdropIds,
 } from '../lib/appearance'
 import type { AppState, GardenBackdropId } from '../types'
-import { PLANT_CAPACITY } from '../lib/plantManagement'
-import { JAR_PRICE } from '../data/jars'
-
-const guideSections = [
-  {
-    title: 'Garden and daily care',
-    body: `The Garden shows your plants, developing caterpillars and chrysalises, and every butterfly you have welcomed. In Today, a mood check-in, a completed goal, or a saved reflection can each earn one Sunlight. You can earn up to ${DAILY_SUNLIGHT_CAP} Sunlight per local calendar day. Missing a day never harms plants or butterflies.`,
-  },
-  {
-    title: 'Seeds and planting',
-    body: `You begin with ${STARTER_SEEDS} seeds. The first Sunlight you earn each local day adds ${DAILY_SEED_REWARD} seed, and every butterfly that emerges adds ${EMERGENCE_SEED_REWARD} more. Planting costs ${PLANT_SEED_COST} seed. Your garden holds ${PLANT_CAPACITY} plants. Select a plant to read its field guide or remove it without a seed refund. A plant supporting a caterpillar or chrysalis is protected until the butterfly emerges.`,
-  },
-  {
-    title: 'Nectar, the Shop, and Flight Patterns',
-    body: `Every newly earned Sunlight also adds ${NECTAR_PER_SUNLIGHT} Nectar to your wallet. Visit Shop to buy reusable letter and number jars for ${JAR_PRICE} Nectar each, or permanently purchase new movement styles. Flight patterns are equipped from Flight Patterns and apply to every butterfly. Buying a pattern does not equip it automatically, and purchases are local, permanent, and non-refundable.`,
-  },
-  {
-    title: 'Custom jars and plant spots',
-    body: `Shop jars use uppercase A-Z letters or 0-9 numbers with a fixed color palette. Each purchase creates one reusable jar copy. Select a visible plant in the Garden, then use Jar Inventory to place, move, replace, or return jars. A plant spot can hold one jar, and removing a plant returns its jar to inventory with no Nectar refund.`,
-  },
-  {
-    title: 'Host plants, nectar plants, and growth',
-    body: 'A newly planted seed begins in a waiting state, then needs three eligible Sunlight to finish its three visible growth stages: the first Sunlight produces a small sprout, the second creates a fuller growing plant with buds, and the third makes it mature and blooming. Growth is based on care, not a fixed hour timer. At one Sunlight per day, a new plant takes about three days to mature; with three available Sunlight it can mature in one day. Sunlight automatically goes first to a caterpillar that needs care, then to the earliest plant that can still grow, so other garden life may make a particular plant take longer. Missed days simply pause growth without wilting or losing progress. A mature host plant can welcome one of its matching caterpillars, while nectar plants enrich the sanctuary for adult butterflies but do not attract caterpillars. Shared host plants prefer a species you have not discovered yet.',
-  },
-  {
-    title: 'Caterpillars, chrysalises, and emergence',
-    body: 'A caterpillar needs two care moments before forming a chrysalis. The chrysalis then transforms for a fixed 72 real hours. Its timer updates while the app is open and when you return. Once emergence is reached it cannot reverse, even if the device clock changes. The new butterfly joins your field notes and brings two seeds.',
-  },
-  {
-    title: 'Butterflies and companions',
-    body: 'All emerged butterflies live in the garden. Choose one butterfly card as your active companion, and rename each emerged butterfly from its companion card whenever you like. Butterflies fly through the garden, pause near flowers, and show tiny hearts when tapped or clicked. Marigold remains your monarch guide.',
-  },
-  {
-    title: 'Journal and Sunlight streak',
-    body: 'The Journal contains your butterfly field notes, dated moods, and reflections. Personal entries can be edited or deleted. Your Sunlight streak grows when you earn at least one Sunlight on consecutive local calendar days and restarts after a completely missed day. It does not change plant or butterfly progress.',
-  },
-  {
-    title: 'Goals and the local calendar',
-    body: 'Goals can happen once, every day, or on selected weekdays. Recurrence uses the calendar date on this device and is designed to handle daylight-saving changes. Repeating the same completed activity does not create extra Sunlight.',
-  },
-  {
-    title: 'Offline use, updates, and installation',
-    body: 'After the first successful load, the app shell is available offline. Changes remain in this browser and save locally. Supported browsers may offer an Install app button for a standalone home-screen experience. When a new version is ready, the app asks before refreshing to apply it.',
-  },
-  {
-    title: 'Backdrops and night mode',
-    body: 'Sunlit Meadow is available from the beginning. Woodland Brook unlocks after 30 elapsed days and Secret Conservatory after 60. Once unlocked, a backdrop stays available in Settings. The moon button at the far right of the top bar switches the whole app into a starry night theme; use the sun button to return to daylight.',
-  },
-  {
-    title: 'Privacy, motion, and starting over',
-    body: 'There are no accounts, analytics, cloud sync, social features, or analysis of your writing. Reduce garden motion pauses decorative animation. Delete all local data permanently removes this garden from the current browser. Clearing site storage or uninstalling without preserving data can do the same.',
-  },
-]
 
 export function SettingsView({
   state,
@@ -178,30 +117,6 @@ export function SettingsView({
               </button>
             )
           })}
-        </div>
-      </section>
-
-      <section className="card guide-card" aria-labelledby="guide-title">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Garden handbook</p>
-            <h2 id="guide-title">How everything works</h2>
-          </div>
-          <span className="guide-seed-balance">
-            {state.seeds} seed{state.seeds === 1 ? '' : 's'} · {state.nectar} Nectar
-          </span>
-        </div>
-        <p className="section-explainer">
-          Open any topic for a plain-language explanation. Your current seed
-          resource balances are shown above.
-        </p>
-        <div className="guide-list">
-          {guideSections.map((section, index) => (
-            <details key={section.title} open={index === 1}>
-              <summary>{section.title}</summary>
-              <p>{section.body}</p>
-            </details>
-          ))}
         </div>
       </section>
 

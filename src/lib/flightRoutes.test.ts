@@ -24,8 +24,8 @@ describe('butterfly flight routes', () => {
     expect(uniqueRoutes.size).toBeGreaterThanOrEqual(8)
     expect(uniqueDurations.size).toBeGreaterThan(4)
     expect(routes[0].style).toMatchObject({
-      '--route-x0': expect.stringMatching(/%$/),
-      '--route-y4': expect.stringMatching(/%$/),
+      '--route-x0': expect.stringMatching(/^\d+cqw$/),
+      '--route-y4': expect.stringMatching(/^\d+cqh$/),
     })
   })
 })

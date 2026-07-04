@@ -6,6 +6,7 @@ export const flightPatterns: FlightPatternDefinition[] = [
     name: 'Gentle Drift',
     description: 'Easy garden loops with quiet pauses near the flowers.',
     cost: 0,
+    currency: 'nectar',
     animationClass: 'pattern-gentle-drift',
   },
   {
@@ -13,6 +14,7 @@ export const flightPatterns: FlightPatternDefinition[] = [
     name: 'Petal Hop',
     description: 'Short flower-to-flower movements with frequent little rests.',
     cost: 9,
+    currency: 'nectar',
     animationClass: 'pattern-petal-hop',
   },
   {
@@ -20,6 +22,7 @@ export const flightPatterns: FlightPatternDefinition[] = [
     name: 'Figure Eight',
     description: 'Smooth crossing loops with a gentle hover through the center.',
     cost: 18,
+    currency: 'nectar',
     animationClass: 'pattern-figure-eight',
   },
   {
@@ -27,20 +30,23 @@ export const flightPatterns: FlightPatternDefinition[] = [
     name: 'Sunbeam Swoop',
     description: 'High sunny arcs followed by low pauses over the blooms.',
     cost: 27,
+    currency: 'nectar',
     animationClass: 'pattern-sunbeam-swoop',
   },
   {
     id: 'spiral-rise',
     name: 'Spiral Rise',
     description: 'Climbing circles that settle into a slow, graceful descent.',
-    cost: 36,
+    cost: 7,
+    currency: 'stardust',
     animationClass: 'pattern-spiral-rise',
   },
   {
     id: 'garden-waltz',
     name: 'Garden Waltz',
     description: 'Broad alternating loops with several flower-side rests.',
-    cost: 45,
+    cost: 10,
+    currency: 'stardust',
     animationClass: 'pattern-garden-waltz',
   },
 ]

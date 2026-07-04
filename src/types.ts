@@ -207,6 +207,7 @@ export interface FlightPatternDefinition {
   name: string
   description: string
   cost: number
+  currency: Extract<CurrencyId, 'nectar' | 'stardust'>
   animationClass: string
 }
 

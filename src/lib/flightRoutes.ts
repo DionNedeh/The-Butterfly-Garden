@@ -15,6 +15,10 @@ const routes = [
   [['88%', '62%'], ['63%', '16%'], ['28%', '51%'], ['52%', '76%'], ['11%', '25%']],
 ] as const
 
+function toCq(percent: string, axis: 'w' | 'h'): string {
+  return `${percent.replace('%', '')}cq${axis}`
+}
+
 function stableHash(input: string): number {
   let hash = 2166136261
   for (const char of input) {
@@ -42,16 +46,18 @@ export function flightRouteStyleFor(id: string, index: number) {
       '--flight-size': size.toFixed(2),
       '--flip-a': `${direction}`,
       '--flip-b': `${direction * -1}`,
-      '--route-x0': route[0][0],
-      '--route-y0': route[0][1],
-      '--route-x1': route[1][0],
-      '--route-y1': route[1][1],
-      '--route-x2': route[2][0],
-      '--route-y2': route[2][1],
-      '--route-x3': route[3][0],
-      '--route-y3': route[3][1],
-      '--route-x4': route[4][0],
-      '--route-y4': route[4][1],
+      // Container-query units so the flight path animates with pure
+      // transforms (compositor-friendly) instead of top/left layout.
+      '--route-x0': toCq(route[0][0], 'w'),
+      '--route-y0': toCq(route[0][1], 'h'),
+      '--route-x1': toCq(route[1][0], 'w'),
+      '--route-y1': toCq(route[1][1], 'h'),
+      '--route-x2': toCq(route[2][0], 'w'),
+      '--route-y2': toCq(route[2][1], 'h'),
+      '--route-x3': toCq(route[3][0], 'w'),
+      '--route-y3': toCq(route[3][1], 'h'),
+      '--route-x4': toCq(route[4][0], 'w'),
+      '--route-y4': toCq(route[4][1], 'h'),
     },
   }
 }
