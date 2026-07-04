@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { CareView } from './components/CareView'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { JournalView } from './components/JournalView'
 import { Onboarding } from './components/Onboarding'
 import { SettingsView } from './components/SettingsView'
 import { ShopView } from './components/ShopView'
+import { SplashScreen } from './components/SplashScreen'
 import { FlightPatternsView } from './components/FlightPatternsView'
 import { TodayView } from './components/TodayView'
 import { UpdatePrompt } from './components/UpdatePrompt'
@@ -19,16 +21,19 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+const SPLASH_MINIMUM_MS = 2400
+
 const navigation: Array<{
   id: AppView
   label: string
-  icon: 'garden' | 'today' | 'journal' | 'shop' | 'flight' | 'settings'
+  icon: 'garden' | 'care' | 'today' | 'journal' | 'shop' | 'flight' | 'settings'
 }> = [
   { id: 'garden', label: 'Garden', icon: 'garden' },
+  { id: 'care', label: 'Care', icon: 'care' },
   { id: 'today', label: 'Today', icon: 'today' },
   { id: 'journal', label: 'Journal', icon: 'journal' },
   { id: 'shop', label: 'Shop', icon: 'shop' },
-  { id: 'flight-patterns', label: 'Flight Patterns', icon: 'flight' },
+  { id: 'flight-patterns', label: 'Flight', icon: 'flight' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ]
 
@@ -37,6 +42,12 @@ function App() {
   const [view, setView] = useState<AppView>('garden')
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
+  const [splashDone, setSplashDone] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSplashDone(true), SPLASH_MINIMUM_MS)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     const handleOnline = () => setOnline(true)
@@ -55,13 +66,8 @@ function App() {
     }
   }, [])
 
-  if (garden.loading) {
-    return (
-      <main className="loading-screen">
-        <span className="chrysalis" aria-hidden="true" />
-        <p>Waking the garden...</p>
-      </main>
-    )
+  if (garden.loading || !splashDone) {
+    return <SplashScreen />
   }
 
   if (!garden.state?.profile) {
@@ -107,6 +113,11 @@ function App() {
             <Icon name="nectar" size={19} />
             <strong>{state.nectar}</strong>
             <span>Nectar</span>
+          </span>
+          <span className="stardust-wallet" title="Stardust balance">
+            <Icon name="stardust" size={19} />
+            <strong>{state.stardust}</strong>
+            <span>Stardust</span>
           </span>
           {installPrompt && (
             <button
@@ -156,6 +167,17 @@ function App() {
             onRemoveJarPlacement={garden.removeJarPlacement}
             onSelectCompanion={garden.selectCompanion}
             onRenameCreature={garden.renameCreature}
+            onOpenCare={() => setView('care')}
+          />
+        )}
+        {view === 'care' && (
+          <CareView
+            state={state}
+            onCare={garden.careForCreature}
+            onEquip={garden.equipItem}
+            onUnequip={garden.unequipSlot}
+            onRenameCreature={garden.renameCreature}
+            onGoToShop={() => setView('shop')}
           />
         )}
         {view === 'shop' && (
@@ -163,6 +185,7 @@ function App() {
             state={state}
             onPurchasePattern={garden.purchaseFlightPattern}
             onPurchaseJar={garden.purchaseJar}
+            onPurchaseItem={garden.purchaseItem}
           />
         )}
         {view === 'flight-patterns' && (

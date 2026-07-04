@@ -8,21 +8,22 @@ import type {
 import { toLocalDate } from './date'
 import { progressAppearance } from './appearance'
 import { DEFAULT_FLIGHT_PATTERN_ID } from './flightPatterns'
+import { EMERGENCE_SEED_REWARD } from './lifecycle'
 import { PLANT_CAPACITY } from './plantManagement'
+
+export { EMERGENCE_SEED_REWARD }
 
 export const DAILY_SUNLIGHT_CAP = 5
 export const NECTAR_PER_SUNLIGHT = 3
-export const CHRYSALIS_DURATION_MS = 72 * 60 * 60 * 1000
 export const MAX_PLANT_GROWTH = 3
 export const STARTER_SEEDS = 2
+export const STARTER_NECTAR = 10
 export const DAILY_SEED_REWARD = 1
-export const EMERGENCE_SEED_REWARD = 2
 export const PLANT_SEED_COST = 1
-const CATERPILLAR_CARE_TO_CHRYSALIS = 2
 
 export function createEmptyState(): AppState {
   return {
-    version: 3,
+    version: 4,
     goals: [],
     completions: [],
     moods: [],
@@ -32,6 +33,9 @@ export function createEmptyState(): AppState {
     sunlight: [],
     seeds: 0,
     nectar: 0,
+    stardust: 0,
+    inventory: {},
+    ownedItemIds: [],
     ownedFlightPatternIds: [DEFAULT_FLIGHT_PATTERN_ID],
     selectedFlightPatternId: DEFAULT_FLIGHT_PATTERN_ID,
     jars: [],
@@ -80,18 +84,26 @@ export function createInitialState(
         id: crypto.randomUUID(),
         speciesId: 'monarch',
         name: 'Sol',
-        stage: 'chrysalis',
+        stage: 'caterpillar',
+        careDates: {},
+        actionLog: {},
+        bond: 0,
+        outfit: {},
         carePoints: 0,
         discoveredAt: nowIso,
-        chrysalisStartedAt: nowIso,
-        emergeAt: new Date(now.getTime() + CHRYSALIS_DURATION_MS).toISOString(),
       },
     ],
     seeds: STARTER_SEEDS,
+    nectar: STARTER_NECTAR,
+    inventory: {
+      'leaf-bundle': 2,
+      'spring-water': 1,
+      'nectar-drop': 1,
+    },
   }
 }
 
-function discoverCaterpillar(
+function discoverEgg(
   state: AppState,
   maturePlant: PlantInstance,
   now: Date,
@@ -106,7 +118,7 @@ function discoverCaterpillar(
       (candidateId) =>
         !state.creatures.some(
           (creature) =>
-            creature.speciesId === candidateId && creature.stage !== 'emerged',
+            creature.speciesId === candidateId && creature.stage !== 'butterfly',
         ),
     )
   if (!speciesId) return undefined
@@ -115,13 +127,21 @@ function discoverCaterpillar(
     id: crypto.randomUUID(),
     speciesId,
     name: butterflyNames[count % butterflyNames.length],
-    stage: 'caterpillar',
+    stage: 'egg',
+    careDates: {},
+    actionLog: {},
+    bond: 0,
+    outfit: {},
     carePoints: 0,
     discoveredAt: now.toISOString(),
     sourcePlantId: maturePlant.id,
   }
 }
 
+/**
+ * Time-based housekeeping. Stage advancement is care-driven in 2.0, but
+ * chrysalises from 1.x saves still carry an emergeAt timer we honor.
+ */
 export function progressGarden(state: AppState, now = new Date()): AppState {
   const appearanceState = progressAppearance(state, now)
   let changed = appearanceState !== state
@@ -134,8 +154,9 @@ export function progressGarden(state: AppState, now = new Date()): AppState {
       changed = true
       return {
         ...creature,
-        stage: 'emerged' as const,
+        stage: 'butterfly' as const,
         emergedAt: creature.emergedAt ?? now.toISOString(),
+        emergeAt: undefined,
       }
     }
     return creature
@@ -143,8 +164,8 @@ export function progressGarden(state: AppState, now = new Date()): AppState {
   if (!changed) return state
   const newlyEmerged = creatures.filter(
     (creature, index) =>
-      creature.stage === 'emerged' &&
-      appearanceState.creatures[index]?.stage !== 'emerged',
+      creature.stage === 'butterfly' &&
+      appearanceState.creatures[index]?.stage !== 'butterfly',
   ).length
   return {
     ...appearanceState,
@@ -155,13 +176,17 @@ export function progressGarden(state: AppState, now = new Date()): AppState {
         ? {
             ...appearanceState.profile,
             activeCompanionId: creatures.find(
-              (creature) => creature.stage === 'emerged',
+              (creature) => creature.stage === 'butterfly',
             )?.id,
           }
         : appearanceState.profile,
   }
 }
 
+/**
+ * Self-care Sunlight: capped daily, converts to Nectar, grows one plant per
+ * award. When a host plant reaches full bloom it may reveal a butterfly egg.
+ */
 export function awardSunlight(
   inputState: AppState,
   source: string,
@@ -180,39 +205,16 @@ export function awardSunlight(
     awardedAt: now.toISOString(),
   }
 
-  let usedCare = false
-  let creatures = state.creatures.map((creature) => {
-    if (usedCare || creature.stage !== 'caterpillar') return creature
-    usedCare = true
-    const carePoints = creature.carePoints + 1
-    if (carePoints < CATERPILLAR_CARE_TO_CHRYSALIS) {
-      return { ...creature, carePoints }
-    }
-    return {
-      ...creature,
-      carePoints,
-      stage: 'chrysalis' as const,
-      chrysalisStartedAt: now.toISOString(),
-      emergeAt: new Date(now.getTime() + CHRYSALIS_DURATION_MS).toISOString(),
-    }
+  let creatures = state.creatures
+  let grownPlant: PlantInstance | undefined
+  const plants = state.plants.map((plant) => {
+    if (grownPlant || plant.growth >= MAX_PLANT_GROWTH) return plant
+    grownPlant = { ...plant, growth: plant.growth + 1 }
+    return grownPlant
   })
-
-  let plants = state.plants
-  if (!usedCare) {
-    let grownPlant: PlantInstance | undefined
-    plants = state.plants.map((plant) => {
-      if (grownPlant || plant.growth >= MAX_PLANT_GROWTH) return plant
-      grownPlant = { ...plant, growth: plant.growth + 1 }
-      return grownPlant
-    })
-    if (grownPlant?.growth === MAX_PLANT_GROWTH) {
-      const discovered = discoverCaterpillar(
-        { ...state, creatures },
-        grownPlant,
-        now,
-      )
-      if (discovered) creatures = [...creatures, discovered]
-    }
+  if (grownPlant?.growth === MAX_PLANT_GROWTH) {
+    const discovered = discoverEgg(state, grownPlant, now)
+    if (discovered) creatures = [...creatures, discovered]
   }
 
   return {
@@ -221,8 +223,7 @@ export function awardSunlight(
     creatures,
     sunlight: [...state.sunlight, award],
     nectar: state.nectar + NECTAR_PER_SUNLIGHT,
-    seeds:
-      state.seeds + (firstSunlightToday ? DAILY_SEED_REWARD : 0),
+    seeds: state.seeds + (firstSunlightToday ? DAILY_SEED_REWARD : 0),
   }
 }
 

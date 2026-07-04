@@ -77,11 +77,12 @@ export function Onboarding({
               <article>
                 <span className="chrysalis small" aria-hidden="true" />
                 <div>
-                  <h2>Chrysalises</h2>
+                  <h2>Four stages of life</h2>
                   <p>
-                    A butterfly’s “cocoon” is properly called a chrysalis.
-                    Caterpillars form one after receiving care, then transform
-                    safely inside. Missed days never harm them.
+                    Egg, caterpillar, chrysalis, butterfly. Visit the Care page
+                    and tend each little one — feed, bathe, play, keep warm.
+                    Three days of care (they never need to be in a row) carries
+                    them to the next stage. Missed days never harm them.
                   </p>
                 </div>
               </article>
@@ -92,11 +93,12 @@ export function Onboarding({
                   className="lesson-butterfly"
                 />
                 <div>
-                  <h2>Emerging butterflies</h2>
+                  <h2>Companions for life</h2>
                   <p>
-                    After about three real days, the butterfly emerges. You will
-                    welcome it by name, add its field note, and may choose it as
-                    the companion flying through your garden.
+                    When a butterfly emerges, the care continues: share nectar,
+                    groom wings, fly together, and dress them from the
+                    boutique. Every day of care deepens your bond and earns
+                    rewards.
                   </p>
                 </div>
               </article>
@@ -108,7 +110,7 @@ export function Onboarding({
                     Care activities earn Sunlight, and your first Sunlight each
                     day brings one seed. You begin with two seeds, and every
                     emerging butterfly brings two more. Each seed adds one new
-                    plant; mature host plants welcome matching caterpillars.
+                    plant; mature host plants reveal butterfly eggs.
                   </p>
                 </div>
               </article>
@@ -116,8 +118,8 @@ export function Onboarding({
             <div className="chrysalis-note">
               <span className="chrysalis small" aria-hidden="true" />
               <p>
-                Sol’s monarch chrysalis is already waiting. They will emerge in
-                about three days, even if you take a break.
+                Sol, your monarch caterpillar, is already waiting on the Care
+                page — with fresh leaves packed in your satchel.
               </p>
             </div>
             <button

@@ -1,5 +1,6 @@
 export type AppView =
   | 'garden'
+  | 'care'
   | 'today'
   | 'journal'
   | 'shop'
@@ -7,7 +8,7 @@ export type AppView =
   | 'settings'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
-export type CreatureStage = 'caterpillar' | 'chrysalis' | 'emerged'
+export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
 export type AppearanceTheme = 'sunlight' | 'night'
 export type FlightPatternId =
   | 'gentle-drift'
@@ -37,6 +38,10 @@ export type JarColorId =
   | 'orange'
   | 'white'
   | 'charcoal'
+
+export type CurrencyId = 'nectar' | 'stardust' | 'seeds'
+export type OutfitSlot = 'headwear' | 'accessory' | 'aura'
+export type ShopItemKind = 'supply' | 'cosmetic'
 
 export interface Profile {
   id: 'profile'
@@ -96,9 +101,19 @@ export interface CreatureInstance {
   speciesId: string
   name: string
   stage: CreatureStage
-  carePoints: number
+  /** Distinct local dates on which this creature received care, per stage. */
+  careDates: Partial<Record<CreatureStage, string[]>>
+  /** actionId -> local date the action was last performed (once per day each). */
+  actionLog: Record<string, string>
+  /** Lifetime bond points earned through care. */
+  bond: number
+  /** Equipped cosmetics by slot (item ids from the shop catalog). */
+  outfit: Partial<Record<OutfitSlot, string>>
   discoveredAt: string
+  /** Legacy 1.x care counter, kept for old saves. */
+  carePoints: number
   chrysalisStartedAt?: string
+  /** Legacy 1.x chrysalis timer; still honored for old saves. */
   emergeAt?: string
   emergedAt?: string
   sourcePlantId?: string
@@ -124,7 +139,7 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  version: 3
+  version: 4
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -135,6 +150,11 @@ export interface AppState {
   sunlight: SunlightAward[]
   seeds: number
   nectar: number
+  stardust: number
+  /** Consumable care supplies: itemId -> count on hand. */
+  inventory: Record<string, number>
+  /** Cosmetic items owned (shared closet, equip on any creature). */
+  ownedItemIds: string[]
   ownedFlightPatternIds: FlightPatternId[]
   selectedFlightPatternId: FlightPatternId
   jars: JarInstance[]
@@ -188,4 +208,32 @@ export interface JarColorDefinition {
   text: string
   border: string
   highlight: string
+}
+
+export interface CareActionDefinition {
+  id: string
+  stage: CreatureStage
+  name: string
+  description: string
+  icon: string
+  /** Bond points granted when performed. */
+  bond: number
+  /** Supply item consumed from inventory, if any. Free actions omit this. */
+  requiresItemId?: string
+}
+
+export interface ShopItemDefinition {
+  id: string
+  kind: ShopItemKind
+  name: string
+  description: string
+  icon: string
+  cost: number
+  currency: Extract<CurrencyId, 'nectar' | 'stardust'>
+  /** Cosmetics only: which slot the item occupies. */
+  slot?: OutfitSlot
+  /** Cosmetics only: stages the item can be worn in. */
+  stages?: CreatureStage[]
+  /** Garden Pass exclusives — visible but not purchasable yet. */
+  premium?: boolean
 }

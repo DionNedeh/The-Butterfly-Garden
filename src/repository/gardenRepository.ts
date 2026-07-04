@@ -27,13 +27,57 @@ function database() {
   return databasePromise
 }
 
+const CREATURE_STAGES = new Set(['egg', 'caterpillar', 'chrysalis', 'butterfly'])
+
+function migrateCreatures(creatures: unknown[]): AppState['creatures'] {
+  return creatures
+    .filter((creature): creature is Record<string, unknown> => {
+      return Boolean(creature) && typeof creature === 'object'
+    })
+    .filter(
+      (creature) =>
+        typeof creature.id === 'string' &&
+        typeof creature.speciesId === 'string',
+    )
+    .map((creature) => {
+      // 1.x used 'emerged' as the final stage; 2.0 renames it 'butterfly'
+      // and adds the 'egg' stage plus per-stage care tracking.
+      const rawStage = creature.stage === 'emerged' ? 'butterfly' : creature.stage
+      const stage = (
+        typeof rawStage === 'string' && CREATURE_STAGES.has(rawStage)
+          ? rawStage
+          : 'caterpillar'
+      ) as AppState['creatures'][number]['stage']
+      return {
+        ...(creature as unknown as AppState['creatures'][number]),
+        stage,
+        careDates:
+          creature.careDates && typeof creature.careDates === 'object'
+            ? (creature.careDates as AppState['creatures'][number]['careDates'])
+            : {},
+        actionLog:
+          creature.actionLog && typeof creature.actionLog === 'object'
+            ? (creature.actionLog as Record<string, string>)
+            : {},
+        bond: typeof creature.bond === 'number' ? creature.bond : 0,
+        outfit:
+          creature.outfit && typeof creature.outfit === 'object'
+            ? (creature.outfit as AppState['creatures'][number]['outfit'])
+            : {},
+        carePoints:
+          typeof creature.carePoints === 'number' ? creature.carePoints : 0,
+      }
+    })
+}
+
 function migrateState(value: unknown): AppState | undefined {
   if (!value || typeof value !== 'object') return undefined
   const candidate = value as Record<string, unknown>
   if (
     (candidate.version !== 1 &&
       candidate.version !== 2 &&
-      candidate.version !== 3) ||
+      candidate.version !== 3 &&
+      candidate.version !== 4) ||
     !Array.isArray(candidate.goals) ||
     !Array.isArray(candidate.completions) ||
     !Array.isArray(candidate.moods) ||
@@ -119,8 +163,19 @@ function migrateState(value: unknown): AppState | undefined {
     : []
   return {
     ...(candidate as unknown as AppState),
-    version: 3,
+    version: 4,
+    creatures: migrateCreatures(candidate.creatures),
     nectar: typeof candidate.nectar === 'number' ? candidate.nectar : 0,
+    stardust: typeof candidate.stardust === 'number' ? candidate.stardust : 0,
+    inventory:
+      candidate.inventory && typeof candidate.inventory === 'object'
+        ? (candidate.inventory as Record<string, number>)
+        : {},
+    ownedItemIds: Array.isArray(candidate.ownedItemIds)
+      ? candidate.ownedItemIds.filter(
+          (id): id is string => typeof id === 'string',
+        )
+      : [],
     ownedFlightPatternIds: owned as AppState['ownedFlightPatternIds'],
     selectedFlightPatternId: selected as AppState['selectedFlightPatternId'],
     jars,
