@@ -5,6 +5,7 @@ export type AppView =
   | 'journal'
   | 'shop'
   | 'flight-patterns'
+  | 'guide'
   | 'settings'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
@@ -50,6 +51,8 @@ export interface Profile {
   createdAt: string
   activeCompanionId?: string
   reducedMotion: boolean
+  /** Generative garden soundscape (breeze, chimes, birdsong). */
+  ambientSound?: boolean
   theme?: AppearanceTheme
   selectedBackdropId?: GardenBackdropId
   unlockedBackdropIds?: GardenBackdropId[]
@@ -62,6 +65,12 @@ export interface Goal {
   weekdays: number[]
   createdDate: string
   archived: boolean
+  /** One-time goals planned for a specific day from the month planner. */
+  scheduledDate?: string
+  /** Hidden from Today until this local date (snooze). */
+  snoozedUntil?: string
+  /** Local dates the user chose to skip — no pressure, no penalty. */
+  skippedDates?: string[]
 }
 
 export interface DailyCompletion {

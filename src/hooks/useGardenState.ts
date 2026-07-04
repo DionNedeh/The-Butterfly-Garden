@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { toLocalDate } from '../lib/date'
+import { addDaysToLocalDate, toLocalDate } from '../lib/date'
 import {
   awardSunlight,
   createInitialState,
@@ -103,6 +103,67 @@ export function useGardenState() {
       update((current) => ({
         ...current,
         goals: current.goals.map((item) => (item.id === goal.id ? goal : item)),
+      }))
+    },
+    planGoal(title: string, scheduledDate: string) {
+      const trimmed = title.trim()
+      if (!trimmed) return
+      update((current) => ({
+        ...current,
+        goals: [
+          ...current.goals,
+          {
+            id: crypto.randomUUID(),
+            title: trimmed,
+            schedule: 'once' as const,
+            weekdays: [],
+            createdDate: toLocalDate(),
+            archived: false,
+            scheduledDate,
+          },
+        ],
+      }))
+    },
+    skipGoal(goalId: string) {
+      const localDate = toLocalDate()
+      update((current) => ({
+        ...current,
+        goals: current.goals.map((goal) => {
+          if (goal.id !== goalId) return goal
+          const skipped = goal.skippedDates ?? []
+          return {
+            ...goal,
+            skippedDates: skipped.includes(localDate)
+              ? skipped.filter((date) => date !== localDate)
+              : [...skipped, localDate],
+          }
+        }),
+      }))
+    },
+    snoozeGoal(goalId: string, days: number) {
+      const until = addDaysToLocalDate(toLocalDate(), Math.max(1, days))
+      update((current) => ({
+        ...current,
+        goals: current.goals.map((goal) => {
+          if (goal.id !== goalId) return goal
+          return {
+            ...goal,
+            snoozedUntil: until,
+            // A snoozed planned goal moves to its new day.
+            scheduledDate:
+              goal.schedule === 'once' && goal.scheduledDate
+                ? until
+                : goal.scheduledDate,
+          }
+        }),
+      }))
+    },
+    wakeGoal(goalId: string) {
+      update((current) => ({
+        ...current,
+        goals: current.goals.map((goal) =>
+          goal.id === goalId ? { ...goal, snoozedUntil: undefined } : goal,
+        ),
       }))
     },
     deleteGoal(goalId: string) {
@@ -273,6 +334,14 @@ export function useGardenState() {
           profile: { ...profile, selectedBackdropId: backdropId },
         }
       })
+    },
+    toggleAmbientSound() {
+      update((current) => ({
+        ...current,
+        profile: current.profile
+          ? { ...current.profile, ambientSound: !current.profile.ambientSound }
+          : undefined,
+      }))
     },
     toggleTheme() {
       update((current) => ({

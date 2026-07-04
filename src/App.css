@@ -1245,14 +1245,17 @@
 .plant-jar {
   position: absolute;
   z-index: 6;
-  bottom: 0;
+  bottom: 2px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-42%) scale(0.72);
+  transform-origin: bottom center;
 }
 
-.garden-plant.growth-0 .plant-jar { transform: translateX(-50%) scale(2.8); }
-.garden-plant.growth-1 .plant-jar { transform: translateX(-50%) scale(1.8); }
-.garden-plant.growth-2 .plant-jar { transform: translateX(-50%) scale(1.28); }
+/* Counter the plant's growth scaling so jars stay a consistent small size,
+   sitting centered on the sprite's stalk. */
+.garden-plant.growth-0 .plant-jar { transform: translateX(-42%) scale(1); }
+.garden-plant.growth-1 .plant-jar { transform: translateX(-42%) scale(0.88); }
+.garden-plant.growth-2 .plant-jar { transform: translateX(-42%) scale(0.78); }
 
 .garden-stats {
   position: relative;
@@ -3665,4 +3668,480 @@
     padding: 0.45rem 0.6rem;
     font-size: 0.85rem;
   }
+}
+
+/* =====================================================================
+   2.0 polish pass — motion, depth, and modern surfaces
+   ===================================================================== */
+
+:root {
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-soft: 0 2px 6px rgba(36, 58, 50, 0.06), 0 12px 32px rgba(36, 58, 50, 0.1);
+  --shadow-lift: 0 4px 10px rgba(36, 58, 50, 0.1), 0 22px 48px rgba(36, 58, 50, 0.16);
+}
+
+/* Views glide in */
+.view {
+  animation: view-in 460ms var(--ease-spring) both;
+}
+
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards get layered depth and a lift on hover */
+.card {
+  transition: transform 220ms var(--ease-spring), box-shadow 220ms ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lift);
+}
+
+/* Buttons: satisfying press */
+.primary-button,
+.secondary-button,
+.goal-check,
+.care-action,
+.creature-chip,
+.shop-tabs button,
+.wardrobe-item,
+.calendar-day {
+  transition:
+    transform 160ms var(--ease-spring),
+    box-shadow 200ms ease,
+    background 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease;
+}
+
+.primary-button:not(:disabled):active,
+.secondary-button:not(:disabled):active,
+.goal-check:not(:disabled):active,
+.care-action:not(:disabled):active,
+.shop-tabs button:active,
+.calendar-day:active {
+  transform: scale(0.96);
+}
+
+.primary-button {
+  background-image: linear-gradient(135deg, var(--forest), #3f7a5f 55%, var(--forest-dark));
+  background-size: 160% 160%;
+  animation: gradient-drift 7s ease-in-out infinite alternate;
+}
+
+@keyframes gradient-drift {
+  from { background-position: 0% 30%; }
+  to { background-position: 100% 70%; }
+}
+
+/* Header brand butterfly bobs gently */
+.brand img {
+  transition: transform 300ms var(--ease-spring);
+}
+
+.brand:hover img {
+  transform: rotate(-8deg) scale(1.08);
+}
+
+/* Sound toggle */
+.sound-toggle.sound-on {
+  border-color: var(--gold);
+  color: #a87716;
+  background: #fff4d4;
+  box-shadow: 0 0 0 4px rgba(231, 173, 69, 0.18);
+}
+
+.sound-toggle.sound-on svg {
+  animation: sound-bounce 2.2s ease-in-out infinite;
+}
+
+@keyframes sound-bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-2px) rotate(-6deg); }
+  60% { transform: translateY(1px) rotate(5deg); }
+}
+
+/* Floating petals over the garden hero */
+.hero-petals {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.hero-petal {
+  position: absolute;
+  top: -6%;
+  width: 12px;
+  height: 9px;
+  border-radius: 80% 20% 70% 30%;
+  background: linear-gradient(130deg, rgba(255, 231, 240, 0.95), rgba(240, 178, 205, 0.85));
+  box-shadow: 0 1px 3px rgba(70, 40, 60, 0.15);
+  animation: petal-fall linear infinite;
+}
+
+.petal-1 { left: 12%; animation-duration: 13s; animation-delay: 0s; }
+.petal-2 { left: 28%; animation-duration: 17s; animation-delay: -4s; width: 9px; height: 7px; }
+.petal-3 { left: 44%; animation-duration: 15s; animation-delay: -9s; }
+.petal-4 { left: 58%; animation-duration: 19s; animation-delay: -2s; width: 10px; height: 8px; }
+.petal-5 { left: 71%; animation-duration: 14s; animation-delay: -7s; }
+.petal-6 { left: 84%; animation-duration: 18s; animation-delay: -12s; width: 9px; height: 7px; }
+.petal-7 { left: 93%; animation-duration: 16s; animation-delay: -5s; }
+
+@keyframes petal-fall {
+  0% { transform: translateY(-4vh) translateX(0) rotate(0deg); opacity: 0; }
+  8% { opacity: 1; }
+  50% { transform: translateY(30vh) translateX(-26px) rotate(200deg); }
+  92% { opacity: 1; }
+  100% { transform: translateY(62vh) translateX(14px) rotate(390deg); opacity: 0; }
+}
+
+/* Goal rows: skip / snooze */
+.goal-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.goal-row.skipped {
+  opacity: 0.62;
+}
+
+.goal-row.skipped strong {
+  text-decoration: line-through;
+  text-decoration-color: rgba(70, 88, 79, 0.5);
+}
+
+.snoozed-goals {
+  margin-top: 0.9rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 0.7rem;
+}
+
+.snoozed-goals summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.snoozed-goals ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.snoozed-goals li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f6f7ef;
+  padding: 0.55rem 0.9rem;
+}
+
+.snoozed-goals li span { display: grid; }
+.snoozed-goals li small { color: var(--muted); }
+
+/* Month planner */
+.month-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.month-switch strong {
+  min-width: 10ch;
+  text-align: center;
+  color: var(--forest-dark);
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3rem;
+  margin: 0.8rem 0 1.1rem;
+}
+
+.calendar-heading {
+  padding: 0.2rem 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  position: relative;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  align-content: start;
+  min-height: 58px;
+  border: 1.6px solid transparent;
+  border-radius: 14px;
+  background: #f3f5ec;
+  padding: 0.35rem 0.2rem 0.4rem;
+}
+
+.calendar-day:hover { background: #eaf0e0; }
+.calendar-day.past { opacity: 0.75; }
+
+.calendar-day.today {
+  border-color: var(--gold);
+  background: #fdf4dc;
+}
+
+.calendar-day.selected {
+  border-color: var(--forest);
+  background: #e8f2e4;
+  box-shadow: 0 6px 16px rgba(49, 92, 75, 0.16);
+}
+
+.calendar-day-number {
+  color: var(--forest-dark);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.calendar-day-marks {
+  display: flex;
+  gap: 0.2rem;
+  align-items: center;
+  min-height: 14px;
+  font-size: 0.66rem;
+}
+
+.calendar-sun {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe9ad, var(--gold));
+}
+
+.calendar-goal-dots {
+  display: flex;
+  gap: 0.18rem;
+}
+
+.calendar-goal-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+}
+
+.calendar-goal-dots span.done { background: var(--forest); }
+.calendar-goal-dots span.skipped { background: #c9c2ad; }
+
+.calendar-day-detail {
+  border-top: 1px dashed var(--line);
+  padding-top: 0.9rem;
+}
+
+.calendar-day-detail h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.calendar-goal-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 0.7rem;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-goal-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  padding: 0.45rem 0.8rem;
+}
+
+.calendar-goal-list li.done { border-color: #b5cdb0; background: #eef5e8; }
+.calendar-goal-list li.skipped { opacity: 0.65; }
+.calendar-goal-list small { color: var(--muted); }
+
+.calendar-sunlight-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #8a6420;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.calendar-plan-form {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.calendar-plan-form button { justify-self: start; }
+
+/* Guide */
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 1rem;
+}
+
+.guide-card {
+  position: relative;
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  border-top: 4px solid var(--sage);
+}
+
+.guide-card:nth-child(3n + 1) { border-top-color: var(--gold); }
+.guide-card:nth-child(3n + 2) { border-top-color: var(--coral); }
+.guide-card:nth-child(3n) { border-top-color: var(--lavender); }
+
+.guide-card h2 { font-size: 1.2rem; margin-bottom: 0.2rem; }
+
+.guide-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.guide-card .eyebrow { margin-bottom: 0; }
+
+.guide-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(150deg, #eef4e4, #dcead2);
+  color: var(--forest);
+  margin-bottom: 0.3rem;
+}
+
+/* =====================================================================
+   Night theme for the 2.0 surfaces
+   ===================================================================== */
+
+.theme-night .creature-chip,
+.theme-night .care-action,
+.theme-night .wardrobe-item,
+.theme-night .shop-tabs button,
+.theme-night .shop-item-card,
+.theme-night .calendar-goal-list li,
+.theme-night .snoozed-goals li {
+  border-color: #385463;
+  background: #152f3e;
+  color: var(--ink);
+}
+
+.theme-night .creature-chip.selected,
+.theme-night .care-action.done,
+.theme-night .wardrobe-item.equipped {
+  border-color: #6fae8f;
+  background: #1c3d40;
+}
+
+.theme-night .shop-tabs button.active {
+  border-color: #6fae8f;
+  background: #254b4b;
+  color: #f1fbf6;
+}
+
+.theme-night .care-portrait {
+  background:
+    radial-gradient(circle at 50% 88%, rgba(52, 96, 88, 0.5), transparent 60%),
+    linear-gradient(170deg, #14303c, #10262f);
+}
+
+.theme-night .care-action-icon,
+.theme-night .shop-item-icon,
+.theme-night .guide-icon {
+  background: linear-gradient(150deg, #1c3a44, #16303c);
+  color: #9fd3b4;
+}
+
+.theme-night .calendar-day { background: #142c38; }
+.theme-night .calendar-day:hover { background: #1a3644; }
+.theme-night .calendar-day.today { border-color: #e4bf68; background: #33301f; }
+.theme-night .calendar-day.selected { border-color: #6fae8f; background: #1c3d40; }
+.theme-night .calendar-day-number { color: #e7f3ec; }
+
+.theme-night .care-name-input { color: #eef7f1; }
+.theme-night .care-name-input:hover,
+.theme-night .care-name-input:focus { background: #142c38; border-color: #385463; }
+
+.theme-night .bond-bar { background: #1d3a47; }
+.theme-night .lifecycle-dot { background: #234352; }
+.theme-night .lifecycle-step.done .lifecycle-dot { background: #4f7d6a; }
+
+.theme-night .supply-chip { background: #1e3c33; color: #b9e4c8; }
+.theme-night .supply-chip.empty { background: #46262a; color: #f0b3ae; }
+.theme-night .bond-chip { background: #452f28; color: #f0c1a3; }
+
+.theme-night .sound-toggle.sound-on {
+  border-color: #e4bf68;
+  background: #33301f;
+  color: #f6d477;
+}
+
+.theme-night .stardust-wallet {
+  background: linear-gradient(120deg, #33305c, #4c4180);
+}
+
+.theme-night .splash-screen {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(96, 86, 44, 0.45), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(31, 74, 66, 0.55), transparent 50%),
+    linear-gradient(160deg, #0a1a26, #10283a 55%, #0e2233);
+}
+
+.theme-night .splash-title h1 { color: #eef7f1; text-shadow: none; }
+
+/* Reduced motion respects everything new */
+.reduce-motion .view,
+.reduce-motion .hero-petal,
+.reduce-motion .splash-flyer {
+  animation: none !important;
+}
+
+@media (max-width: 640px) {
+  .calendar-day { min-height: 46px; border-radius: 10px; }
+  .calendar-day-marks { display: none; }
+  .month-switch strong { min-width: 8ch; font-size: 0.9rem; }
+  .guide-grid { grid-template-columns: 1fr; }
+}
+
+/* Brand column may shrink gracefully instead of sliding under the nav */
+.app-header {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+}
+
+.brand,
+.brand > span {
+  min-width: 0;
+}
+
+.brand strong,
+.brand small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
