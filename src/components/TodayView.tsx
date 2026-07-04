@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react'
 import { reflectionPrompts, suggestedGoals } from '../data/content'
-import { getDailyPromptIndex, isGoalDue, toLocalDate } from '../lib/date'
+import {
+  formatJournalDate,
+  getDailyPromptIndex,
+  isGoalDue,
+  isGoalSkipped,
+  toLocalDate,
+} from '../lib/date'
 import {
   DAILY_SEED_REWARD,
   DAILY_SUNLIGHT_CAP,
@@ -8,6 +14,7 @@ import {
 } from '../lib/progression'
 import type { AppState, Goal, GoalSchedule, MoodEntry } from '../types'
 import { Icon } from './Icons'
+import { MonthPlanner } from './MonthPlanner'
 
 const moods: Array<{ level: MoodEntry['level']; name: string; weather: string }> = [
   { level: 1, name: 'Stormy', weather: 'Heavy clouds' },
@@ -25,6 +32,10 @@ export function TodayView({
   onUpdateGoal,
   onDeleteGoal,
   onCompleteGoal,
+  onSkipGoal,
+  onSnoozeGoal,
+  onWakeGoal,
+  onPlanGoal,
 }: {
   state: AppState
   onSaveMood: (level: MoodEntry['level'], note: string) => void
@@ -33,6 +44,10 @@ export function TodayView({
   onUpdateGoal: (goal: Goal) => void
   onDeleteGoal: (goalId: string) => void
   onCompleteGoal: (goalId: string) => void
+  onSkipGoal: (goalId: string) => void
+  onSnoozeGoal: (goalId: string, days: number) => void
+  onWakeGoal: (goalId: string) => void
+  onPlanGoal: (title: string, scheduledDate: string) => void
 }) {
   const today = toLocalDate()
   const existingMood = state.moods.find((entry) => entry.localDate === today)
@@ -51,6 +66,14 @@ export function TodayView({
   const prompt = reflectionPrompts[getDailyPromptIndex(today, reflectionPrompts.length)]
   const dueGoals = useMemo(
     () => state.goals.filter((goal) => isGoalDue(goal, today)),
+    [state.goals, today],
+  )
+  const snoozedGoals = useMemo(
+    () =>
+      state.goals.filter(
+        (goal) =>
+          !goal.archived && goal.snoozedUntil && goal.snoozedUntil > today,
+      ),
     [state.goals, today],
   )
   const sunlight = sunlightForDate(state, today)
@@ -130,36 +153,90 @@ export function TodayView({
           {dueGoals.length === 0 && (
             <p className="empty-copy">Add one small thing you would like to care for.</p>
           )}
-          {dueGoals.map((goal) => (
-            <article className={`goal-row ${isComplete(goal.id) ? 'complete' : ''}`} key={goal.id}>
-              <button
-                className="goal-check"
-                onClick={() => onCompleteGoal(goal.id)}
-                disabled={isComplete(goal.id)}
-                aria-label={
-                  isComplete(goal.id)
-                    ? `${goal.title} completed`
-                    : `Complete ${goal.title}`
-                }
+          {dueGoals.map((goal) => {
+            const skipped = isGoalSkipped(goal, today)
+            const complete = isComplete(goal.id)
+            return (
+              <article
+                className={`goal-row ${complete ? 'complete' : ''} ${skipped ? 'skipped' : ''}`}
+                key={goal.id}
               >
-                {isComplete(goal.id) ? 'Done' : 'Care'}
-              </button>
-              <div>
-                <strong>{goal.title}</strong>
-                <small>
-                  {goal.schedule === 'once'
-                    ? 'One time'
-                    : goal.schedule === 'daily'
-                      ? 'Every day'
-                      : 'Selected days'}
-                </small>
-              </div>
-              <button className="text-button" onClick={() => setEditingGoal(goal)}>
-                Edit
-              </button>
-            </article>
-          ))}
+                <button
+                  className="goal-check"
+                  onClick={() => onCompleteGoal(goal.id)}
+                  disabled={complete || skipped}
+                  aria-label={
+                    complete ? `${goal.title} completed` : `Complete ${goal.title}`
+                  }
+                >
+                  {complete ? 'Done' : 'Care'}
+                </button>
+                <div>
+                  <strong>{goal.title}</strong>
+                  <small>
+                    {goal.schedule === 'once'
+                      ? goal.scheduledDate
+                        ? `Planned · ${formatJournalDate(goal.scheduledDate)}`
+                        : 'One time'
+                      : goal.schedule === 'daily'
+                        ? 'Every day'
+                        : 'Selected days'}
+                    {skipped && ' · skipped today'}
+                  </small>
+                </div>
+                <div className="goal-row-actions">
+                  {!complete && (
+                    <>
+                      <button
+                        className="text-button"
+                        onClick={() => onSkipGoal(goal.id)}
+                        title={
+                          skipped
+                            ? 'Bring this goal back today'
+                            : 'Set aside for today, guilt-free'
+                        }
+                      >
+                        {skipped ? 'Unskip' : 'Skip'}
+                      </button>
+                      {!skipped && (
+                        <button
+                          className="text-button"
+                          onClick={() => onSnoozeGoal(goal.id, 1)}
+                          title="Snooze until tomorrow"
+                        >
+                          Snooze
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button className="text-button" onClick={() => setEditingGoal(goal)}>
+                    Edit
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </div>
+        {snoozedGoals.length > 0 && (
+          <details className="snoozed-goals">
+            <summary>Snoozed ({snoozedGoals.length})</summary>
+            <ul>
+              {snoozedGoals.map((goal) => (
+                <li key={goal.id}>
+                  <span>
+                    <strong>{goal.title}</strong>
+                    <small>
+                      Resting until {formatJournalDate(goal.snoozedUntil ?? today)}
+                    </small>
+                  </span>
+                  <button className="text-button" onClick={() => onWakeGoal(goal.id)}>
+                    Wake now
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
 
         {editingGoal ? (
           <form
@@ -256,6 +333,8 @@ export function TodayView({
           </form>
         )}
       </section>
+
+      <MonthPlanner state={state} onPlanGoal={onPlanGoal} />
 
       <section className="card reflection-card" aria-labelledby="reflection-title">
         <p className="eyebrow">Optional reflection</p>

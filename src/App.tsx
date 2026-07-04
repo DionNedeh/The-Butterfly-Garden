@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { CareView } from './components/CareView'
 import { GardenView } from './components/GardenView'
+import { GuideView } from './components/GuideView'
 import { Icon } from './components/Icons'
 import { JournalView } from './components/JournalView'
 import { Onboarding } from './components/Onboarding'
@@ -11,6 +12,7 @@ import { SplashScreen } from './components/SplashScreen'
 import { FlightPatternsView } from './components/FlightPatternsView'
 import { TodayView } from './components/TodayView'
 import { UpdatePrompt } from './components/UpdatePrompt'
+import { useAmbientSound } from './hooks/useAmbientSound'
 import { useGardenState } from './hooks/useGardenState'
 import { sunlightForDate } from './lib/progression'
 import { toLocalDate } from './lib/date'
@@ -26,7 +28,15 @@ const SPLASH_MINIMUM_MS = 2400
 const navigation: Array<{
   id: AppView
   label: string
-  icon: 'garden' | 'care' | 'today' | 'journal' | 'shop' | 'flight' | 'settings'
+  icon:
+    | 'garden'
+    | 'care'
+    | 'today'
+    | 'journal'
+    | 'shop'
+    | 'flight'
+    | 'flower'
+    | 'settings'
 }> = [
   { id: 'garden', label: 'Garden', icon: 'garden' },
   { id: 'care', label: 'Care', icon: 'care' },
@@ -34,12 +44,14 @@ const navigation: Array<{
   { id: 'journal', label: 'Journal', icon: 'journal' },
   { id: 'shop', label: 'Shop', icon: 'shop' },
   { id: 'flight-patterns', label: 'Flight', icon: 'flight' },
+  { id: 'guide', label: 'Guide', icon: 'flower' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ]
 
 function App() {
   const garden = useGardenState()
   const [view, setView] = useState<AppView>('garden')
+  useAmbientSound(Boolean(garden.state?.profile?.ambientSound))
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
   const [splashDone, setSplashDone] = useState(false)
@@ -132,6 +144,23 @@ function App() {
             </button>
           )}
           <button
+            className={`theme-toggle sound-toggle ${profile.ambientSound ? 'sound-on' : ''}`}
+            onClick={garden.toggleAmbientSound}
+            aria-pressed={profile.ambientSound ?? false}
+            aria-label={
+              profile.ambientSound
+                ? 'Turn off garden sounds'
+                : 'Turn on garden sounds'
+            }
+            title={
+              profile.ambientSound
+                ? 'Turn off garden sounds'
+                : 'Garden sounds: breeze, chimes, and birdsong'
+            }
+          >
+            <Icon name="music" />
+          </button>
+          <button
             className="theme-toggle"
             onClick={garden.toggleTheme}
             aria-label={
@@ -203,8 +232,13 @@ function App() {
             onUpdateGoal={garden.updateGoal}
             onDeleteGoal={garden.deleteGoal}
             onCompleteGoal={garden.completeGoal}
+            onSkipGoal={garden.skipGoal}
+            onSnoozeGoal={garden.snoozeGoal}
+            onWakeGoal={garden.wakeGoal}
+            onPlanGoal={garden.planGoal}
           />
         )}
+        {view === 'guide' && <GuideView />}
         {view === 'journal' && (
           <JournalView
             state={state}

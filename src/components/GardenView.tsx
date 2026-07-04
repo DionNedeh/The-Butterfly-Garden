@@ -137,6 +137,11 @@ export function GardenView({
         className={`garden-hero backdrop-${state.profile?.selectedBackdropId ?? 'sunlit-meadow'}`}
         aria-labelledby="garden-title"
       >
+        <div className="hero-petals" aria-hidden="true">
+          {Array.from({ length: 7 }, (_, index) => (
+            <span key={index} className={`hero-petal petal-${index + 1}`} />
+          ))}
+        </div>
         <div className="garden-heading">
           <p className="eyebrow">Your living sanctuary</p>
           <h1 id="garden-title">{state.profile?.gardenName}</h1>
