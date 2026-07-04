@@ -20,8 +20,16 @@ import {
   plantRemovalBlocker,
   remainingPlantGrowth,
 } from '../lib/plantManagement'
+import {
+  careDaysCompleted,
+  hasCaredToday,
+  STAGE_CARE_DAYS,
+  stageLabels,
+} from '../lib/lifecycle'
+import { visibleOutfit } from '../lib/wardrobe'
 import { Butterfly } from './Butterfly'
-import { ChrysalisCountdown } from './ChrysalisCountdown'
+import { CreatureSprite } from './sprites/CreatureSprite'
+import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 
 function jarStyle(colorId: string): CSSProperties {
@@ -42,6 +50,7 @@ export function GardenView({
   onRemoveJarPlacement,
   onSelectCompanion,
   onRenameCreature,
+  onOpenCare,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
@@ -50,14 +59,17 @@ export function GardenView({
   onRemoveJarPlacement: (plantId: string) => void
   onSelectCompanion: (creatureId: string) => void
   onRenameCreature: (creatureId: string, name: string) => void
+  onOpenCare: () => void
 }) {
   const [showSeedTray, setShowSeedTray] = useState(false)
   const [selectedPlantId, setSelectedPlantId] = useState<string>()
   const [confirmPlantRemoval, setConfirmPlantRemoval] = useState(false)
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
-  const emerged = state.creatures.filter((creature) => creature.stage === 'emerged')
+  const emerged = state.creatures.filter(
+    (creature) => creature.stage === 'butterfly',
+  )
   const developing = state.creatures.filter(
-    (creature) => creature.stage !== 'emerged',
+    (creature) => creature.stage !== 'butterfly',
   )
   const active = emerged.find(
     (creature) => creature.id === state.profile?.activeCompanionId,
@@ -67,11 +79,13 @@ export function GardenView({
       id: 'marigold-guide',
       speciesId: 'monarch',
       label: 'Marigold, your monarch garden guide',
+      outfit: undefined as ReturnType<typeof visibleOutfit> | undefined,
     },
     ...emerged.map((creature) => ({
       id: creature.id,
       speciesId: creature.speciesId,
       label: `${creature.name}, ${species.find((item) => item.id === creature.speciesId)?.commonName ?? 'butterfly'}`,
+      outfit: visibleOutfit(state, creature.id),
     })),
   ]
   const observationChoices = observations.filter(
@@ -143,6 +157,7 @@ export function GardenView({
                 <Butterfly
                   speciesId={butterfly.speciesId}
                   label={butterfly.label}
+                  outfit={butterfly.outfit}
                   pettable
                 />
               </div>
@@ -178,10 +193,12 @@ export function GardenView({
                   setConfirmPlantRemoval(false)
                 }}
               >
-                <span className="stem" />
-                <span className="leaf leaf-one" />
-                <span className="leaf leaf-two" />
-                <span className="flower" />
+                <FlowerSprite
+                  plantId={plant.plantId}
+                  growth={plant.growth}
+                  size={84}
+                  swayDelay={index * -0.7}
+                />
                 {placedJar && (
                   <span
                     className="decorative-jar plant-jar"
@@ -535,12 +552,13 @@ export function GardenView({
             <span className="count-badge">{developing.length}</span>
           </div>
           <p className="section-explainer">
-            Caterpillars become chrysalises after care. A chrysalis never loses
-            progress and opens after about three real days.
+            Eggs hatch into caterpillars, caterpillars form chrysalises, and
+            chrysalises open into butterflies — each after three days of care
+            on the Care page. Progress is never lost.
           </p>
           {developing.length === 0 ? (
             <p className="empty-copy">
-              Mature a host plant to welcome a new caterpillar.
+              Mature a host plant to welcome a new butterfly egg.
             </p>
           ) : (
             <div className="creature-list">
@@ -548,23 +566,24 @@ export function GardenView({
                 const definition = species.find(
                   (item) => item.id === creature.speciesId,
                 )
+                const cared = hasCaredToday(creature)
                 return (
                   <article className="creature-row" key={creature.id}>
-                    <span
-                      className={
-                        creature.stage === 'chrysalis'
-                          ? 'chrysalis'
-                          : 'caterpillar'
-                      }
-                      aria-hidden="true"
+                    <CreatureSprite
+                      speciesId={creature.speciesId}
+                      stage={creature.stage}
+                      size={54}
+                      outfit={visibleOutfit(state, creature.id)}
                     />
                     <div>
                       <strong>{creature.name}</strong>
-                      <span>{definition?.commonName}</span>
+                      <span>
+                        {stageLabels[creature.stage]} ·{' '}
+                        {definition?.commonName}
+                      </span>
                       <small>
-                        {creature.stage === 'chrysalis'
-                          ? <ChrysalisCountdown emergeAt={creature.emergeAt} />
-                          : `${creature.carePoints} of 2 care moments`}
+                        {careDaysCompleted(creature)} of {STAGE_CARE_DAYS} care
+                        days{cared ? ' · cared for today' : ''}
                       </small>
                     </div>
                   </article>
@@ -572,6 +591,9 @@ export function GardenView({
               })}
             </div>
           )}
+          <button className="secondary-button compact" onClick={onOpenCare}>
+            Open the Care page
+          </button>
         </div>
 
         <div className="card">
@@ -606,6 +628,7 @@ export function GardenView({
                       <Butterfly
                         speciesId={creature.speciesId}
                         label={definition?.commonName ?? 'Butterfly'}
+                        outfit={visibleOutfit(state, creature.id)}
                       />
                       <strong>{creature.name}</strong>
                       <small>{definition?.commonName}</small>

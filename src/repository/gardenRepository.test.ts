@@ -12,7 +12,7 @@ describe('garden repository', () => {
     const state = { ...createEmptyState(), seeds: 4 }
     await gardenRepository.save(state)
     await expect(gardenRepository.load()).resolves.toMatchObject({
-      version: 3,
+      version: 4,
       seeds: 4,
     })
   })
@@ -61,7 +61,7 @@ describe('garden repository', () => {
     }
 
     await expect(gardenRepository.load()).resolves.toMatchObject({
-      version: 3,
+      version: 4,
       seeds: 7,
       nectar: 0,
       ownedFlightPatternIds: ['gentle-drift'],
@@ -96,7 +96,7 @@ describe('garden repository', () => {
     }
 
     await expect(gardenRepository.load()).resolves.toMatchObject({
-      version: 3,
+      version: 4,
       nectar: 15,
       ownedFlightPatternIds: ['gentle-drift', 'petal-hop'],
       selectedFlightPatternId: 'petal-hop',

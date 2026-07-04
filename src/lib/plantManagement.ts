@@ -8,9 +8,12 @@ export function plantRemovalBlocker(
 ): string | undefined {
   const developing = state.creatures.find(
     (creature) =>
-      creature.sourcePlantId === plantId && creature.stage !== 'emerged',
+      creature.sourcePlantId === plantId && creature.stage !== 'butterfly',
   )
   if (!developing) return undefined
+  if (developing.stage === 'egg') {
+    return `${developing.name}'s egg is resting on this host plant.`
+  }
   return developing.stage === 'caterpillar'
     ? `${developing.name} is still growing on this host plant.`
     : `${developing.name}'s chrysalis is still connected to this host plant.`

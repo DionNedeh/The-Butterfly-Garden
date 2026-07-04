@@ -48,7 +48,7 @@ export function JournalView({
       ).sort((a, b) => b.localeCompare(a)),
     [state.moods, state.reflections],
   )
-  const emerged = state.creatures.filter((creature) => creature.stage === 'emerged')
+  const emerged = state.creatures.filter((creature) => creature.stage === 'butterfly')
   const streak = useMemo(
     () => calculateSunlightStreak(state.sunlight, today),
     [state.sunlight, today],

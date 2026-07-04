@@ -15,6 +15,12 @@ import {
   purchaseJar,
   removeJarPlacement,
 } from '../lib/jars'
+import { performCare } from '../lib/lifecycle'
+import {
+  equipOutfitItem,
+  purchaseShopItem,
+  unequipOutfitSlot,
+} from '../lib/wardrobe'
 import { removePlant } from '../lib/plantManagement'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
@@ -25,6 +31,7 @@ import type {
   GoalSchedule,
   JarColorId,
   MoodEntry,
+  OutfitSlot,
   ReflectionEntry,
 } from '../types'
 
@@ -207,6 +214,18 @@ export function useGardenState() {
     },
     plant(plantId: string) {
       update((current) => plantSeed(current, plantId))
+    },
+    careForCreature(creatureId: string, actionId: string) {
+      update((current) => performCare(current, creatureId, actionId).state)
+    },
+    purchaseItem(itemId: string) {
+      update((current) => purchaseShopItem(current, itemId))
+    },
+    equipItem(creatureId: string, itemId: string) {
+      update((current) => equipOutfitItem(current, creatureId, itemId))
+    },
+    unequipSlot(creatureId: string, slot: OutfitSlot) {
+      update((current) => unequipOutfitSlot(current, creatureId, slot))
     },
     removePlant(plantId: string) {
       update((current) => removePlant(current, plantId))

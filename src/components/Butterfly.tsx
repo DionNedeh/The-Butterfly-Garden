@@ -1,26 +1,27 @@
-import { useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { getSpecies } from '../lib/progression'
+import { useState, type KeyboardEvent } from 'react'
+import type { OutfitSlot } from '../types'
+import { ButterflySprite } from './sprites/ButterflySprite'
 
+/**
+ * Interactive butterfly: renders the detailed SVG sprite and, when
+ * pettable, answers taps with a little burst of hearts.
+ */
 export function Butterfly({
   speciesId,
   label,
   className = '',
   pettable = false,
+  size = 96,
+  outfit,
 }: {
   speciesId: string
   label: string
   className?: string
   pettable?: boolean
+  size?: number
+  outfit?: Partial<Record<OutfitSlot, string>>
 }) {
-  const definition = getSpecies(speciesId)
   const [petCount, setPetCount] = useState(0)
-  const style = {
-    '--wing-primary': definition?.wingColors[0] ?? '#e87832',
-    '--wing-secondary': definition?.wingColors[1] ?? '#27231f',
-  } as CSSProperties
-  const visualClass = definition
-    ? `species-${definition.id} pattern-${definition.visualPattern} shape-${definition.wingShape}`
-    : ''
   const pet = () => {
     if (pettable) setPetCount((count) => count + 1)
   }
@@ -32,19 +33,14 @@ export function Butterfly({
 
   return (
     <div
-      className={`butterfly butterfly-profile ${visualClass} ${pettable ? 'pettable' : ''} ${className}`}
-      style={style}
+      className={`butterfly ${pettable ? 'pettable' : ''} ${className}`}
       role={pettable ? 'button' : 'img'}
       aria-label={pettable ? `Pet ${label}` : label}
       tabIndex={pettable ? 0 : undefined}
       onClick={pet}
       onKeyDown={handleKeyDown}
     >
-      <span className="butterfly-body" />
-      <span className="profile-wing profile-wing-back" />
-      <span className="profile-wing profile-wing-front" />
-      <span className="antenna antenna-one" />
-      <span className="antenna antenna-two" />
+      <ButterflySprite speciesId={speciesId} label={label} size={size} outfit={outfit} />
       {petCount > 0 && (
         <span className="heart-burst" key={petCount} aria-hidden="true">
           <span>♥</span>
