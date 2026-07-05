@@ -152,63 +152,49 @@ h2 {
   background:
     radial-gradient(120% 90% at 50% -10%, var(--aurora-veil), transparent 60%),
     var(--cream);
-  overflow-x: clip;
+  /* clip (not scroll) contains the oversized ambient layers without adding
+     scroll height, and keeps the sticky header anchored to the viewport. */
+  overflow: clip;
 }
 
-/* Drifting aurora ribbons behind the whole app */
+/* Drifting aurora ribbons behind the whole app.
+   NOTE: intentionally position:absolute (not fixed). A fixed, blurred layer
+   read by backdrop-filter glass surfaces corrupts on scroll in Android
+   WebView, so this scrolls with the page and uses transform-only motion. */
 .app-shell::before {
   content: '';
-  position: fixed;
-  inset: -35%;
+  position: absolute;
+  inset: -20%;
   z-index: -2;
   background:
-    radial-gradient(38% 44% at 18% 22%, var(--aurora-1), transparent 62%),
-    radial-gradient(34% 40% at 82% 26%, var(--aurora-2), transparent 60%),
-    radial-gradient(46% 50% at 30% 82%, var(--aurora-3), transparent 64%),
-    radial-gradient(40% 46% at 78% 78%, var(--aurora-4), transparent 62%);
-  filter: blur(26px) saturate(1.1);
+    radial-gradient(58% 52% at 16% 16%, var(--aurora-1), transparent 70%),
+    radial-gradient(54% 48% at 86% 22%, var(--aurora-2), transparent 68%),
+    radial-gradient(68% 58% at 26% 88%, var(--aurora-3), transparent 72%),
+    radial-gradient(60% 52% at 82% 82%, var(--aurora-4), transparent 70%);
+  filter: saturate(1.05);
+  transform: translateZ(0);
   will-change: transform;
-  animation: aurora-drift 44s ease-in-out infinite alternate;
+  animation: aurora-drift 48s ease-in-out infinite alternate;
   pointer-events: none;
 }
 
-/* Fine film grain + soft vignette to make the glass feel photographic */
+/* Faint light motes / pollen for texture (static — no per-frame repaint). */
 .app-shell::after {
   content: '';
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(130% 100% at 50% 0%, transparent 66%, rgba(30, 48, 40, 0.12) 100%);
-  opacity: 0.8;
-}
-
-/* Slow-drifting light motes / pollen across the entire canvas */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(circle, var(--mote-color) 0 1.4px, transparent 2px),
-    radial-gradient(circle, var(--mote-color) 0 1px, transparent 1.6px);
-  background-size: 220px 220px, 340px 340px;
-  background-position: 0 0, 80px 120px;
-  opacity: 0.5;
-  animation: mote-rise 34s linear infinite;
+    radial-gradient(circle, var(--mote-color) 0 1.3px, transparent 2px) 0 0 / 240px 240px,
+    radial-gradient(circle, var(--mote-color) 0 1px, transparent 1.6px) 80px 120px / 360px 360px;
+  opacity: 0.4;
 }
 
 @keyframes aurora-drift {
-  0% { transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1.05); }
-  50% { transform: translate3d(4%, 3%, 0) rotate(8deg) scale(1.18); }
-  100% { transform: translate3d(-2%, 4%, 0) rotate(-4deg) scale(1.08); }
-}
-
-@keyframes mote-rise {
-  from { background-position: 0 0, 80px 120px; }
-  to { background-position: -60px -220px, 20px -340px; }
+  0% { transform: translate3d(-2%, -1%, 0) rotate(0deg) scale(1.05); }
+  50% { transform: translate3d(3%, 2%, 0) rotate(6deg) scale(1.16); }
+  100% { transform: translate3d(-1%, 3%, 0) rotate(-3deg) scale(1.08); }
 }
 
 /* ------------------------------------------------------------------
@@ -521,8 +507,10 @@ body::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(60% 40% at 78% 12%, rgba(255, 240, 200, 0.4), transparent 60%);
-  mix-blend-mode: screen;
+  /* No mix-blend-mode: blend modes inside this clipped, image-backed,
+     animated container corrupt on scroll in Android WebView. Plain alpha
+     compositing gives the same sun-glow without the repaint bug. */
+  background: radial-gradient(60% 42% at 78% 10%, rgba(255, 244, 214, 0.34), transparent 62%);
   animation: hero-glow 9s ease-in-out infinite alternate;
   pointer-events: none;
 }
@@ -871,7 +859,6 @@ body::after {
    20. Motion & accessibility guards
    ------------------------------------------------------------------ */
 .reduce-motion .app-shell::before,
-.reduce-motion body::after,
 .reduce-motion .garden-hero .hero-petals::after,
 .reduce-motion .streak-icon,
 .reduce-motion .splash-screen::before,
@@ -888,7 +875,6 @@ body::after {
 
 @media (prefers-reduced-motion: reduce) {
   .app-shell::before,
-  body::after,
   .garden-hero .hero-petals::after,
   .streak-icon,
   .splash-screen::before,
@@ -902,14 +888,14 @@ body::after {
   }
 }
 
-/* Slightly calmer aurora on small screens to protect battery & clarity */
+/* Slightly calmer aurora on small screens to protect battery & clarity.
+   (No blur filter here — a blurred fixed/large layer is what janks on mobile.) */
 @media (max-width: 640px) {
   .app-shell::before {
-    filter: blur(20px);
     animation-duration: 60s;
   }
-  body::after {
-    opacity: 0.32;
+  .app-shell::after {
+    opacity: 0.28;
   }
   .card {
     border-radius: 22px;
