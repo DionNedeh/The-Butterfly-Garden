@@ -131,15 +131,19 @@ export function CreatureSprite({
           ))}
           {/* head */}
           <circle cx="99" cy="60" r="11" fill={primary} stroke={secondary} strokeWidth="1.6" />
+          {/* two eyes for a friendly, forward-tilted face */}
+          <circle cx="95" cy="57.4" r="2" fill="#2b2118" />
+          <circle cx="95.7" cy="56.7" r="0.7" fill="#fdf8ea" />
           <circle cx="103" cy="57" r="2" fill="#2b2118" />
           <circle cx="103.7" cy="56.3" r="0.7" fill="#fdf8ea" />
-          <path d="M96 64 Q100 67 104 64" stroke="#2b2118" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+          <path d="M95 64 Q99 67 103 64" stroke="#2b2118" strokeWidth="1.4" fill="none" strokeLinecap="round" />
           <path d="M94 51 C92 45 90 42 87 40" stroke={secondary} strokeWidth="2" fill="none" strokeLinecap="round" />
           <path d="M102 50 C103 45 105 41 108 39" stroke={secondary} strokeWidth="2" fill="none" strokeLinecap="round" />
           <circle cx="87" cy="40" r="1.6" fill={secondary} />
           <circle cx="108" cy="39" r="1.6" fill={secondary} />
         </g>
-        <OutfitOverlay outfit={outfit} anchor={{ headX: 99, headY: 50, bodyX: 63, bodyY: 58, scale: 1 }} />
+        {/* accX/accY place a pendant at the neck by the head, not mid-body */}
+        <OutfitOverlay outfit={outfit} anchor={{ headX: 99, headY: 50, bodyX: 63, bodyY: 58, accX: 88, accY: 59, scale: 1 }} />
       </svg>
     )
   }
