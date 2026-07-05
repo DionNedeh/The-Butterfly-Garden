@@ -3,9 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/The-Butterfly-Garden/icons/icon-192.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#315c4b" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f3e8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#07131f" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="A private, gentle self-care garden that grows with you." />
+
+    <!-- Progressive typography: enhances online, falls back to the bundled
+         system serif/sans stack offline so the PWA stays self-contained. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,400&family=Nunito+Sans:wght@400;600;700;800&display=swap"
+    />
+
     <title>The Butterfly Garden</title>
   </head>
   <body>
