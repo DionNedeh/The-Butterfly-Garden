@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import './theme-aurora.css'
 import { CareView } from './components/CareView'
 import { GardenView } from './components/GardenView'
 import { GuideView } from './components/GuideView'
