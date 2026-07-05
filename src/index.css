@@ -1,23 +1,84 @@
+/* =====================================================================
+   The Butterfly Garden — foundation
+   Semantic design tokens + base elements. Every component style in
+   App.css consumes only the semantic tokens defined here; .theme-night
+   swaps them once and the whole app re-lights itself.
+   ===================================================================== */
+
 :root {
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  color: #243a32;
-  background: #f7f3e8;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  /* Brand hues */
+  --fern: #33604c; --fern-strong: #24503d; --fern-deep: #1e4234;
+  --sage: #7d987f; --meadow: #f5f1e4; --paper-hue: #fffdf6;
+  --marigold: #e9a93d; --marigold-deep: #b97f1e;
+  --monarch: #d2694a; --wisteria: #8a7ba4; --wisteria-deep: #5b4b8a;
+  --dew: #6f9d99; --danger-hue: #a5453c;
+
+  /* Semantic surfaces (night swaps these) */
+  --bg: var(--meadow); --bg-deep: #ece6d2;
+  --surface: rgba(255, 253, 246, 0.92); --surface-solid: #fffdf6;
+  --surface-2: #f2f4e9; --surface-3: #e9eedd; --raised: #ffffff;
+  --ink: #223a30; --ink-strong: #16302a;
+  --muted: #5b6f63; --faint: #8b9a8e;
+  --border-soft: rgba(45, 84, 66, 0.14); --border-strong: rgba(45, 84, 66, 0.3);
+  --accent: var(--fern); --accent-strong: var(--fern-deep); --accent-contrast: #fffdf6;
+  --danger: var(--danger-hue); --danger-soft: #f7e6e1;
+  --focus-ring: #b98430;
+
+  /* Accent tints (chips: bg + fg pairs) */
+  --tint-gold-bg: #fbeec7;   --tint-gold-fg: #7c5410;
+  --tint-coral-bg: #f9e5da;  --tint-coral-fg: #96432a;
+  --tint-violet-bg: #ece5f4; --tint-violet-fg: #574a7a;
+  --tint-green-bg: #e4efdd;  --tint-green-fg: #2c5b41;
+  --tint-dew-bg: #e0eeec;    --tint-dew-fg: #2e5f5a;
+
+  /* Elevation */
+  --shadow-soft: 0 1px 2px rgba(30,58,45,.05), 0 10px 30px rgba(30,58,45,.10);
+  --shadow-lift: 0 4px 10px rgba(30,58,45,.10), 0 24px 50px rgba(30,58,45,.16);
+  --shadow-hero: 0 30px 70px rgba(24,52,40,.28);
+  --shadow: var(--shadow-soft); /* legacy alias */
+
+  /* Shape & motion */
+  --r-lg: 26px; --r-md: 18px; --r-sm: 12px;
+  --ease-spring: cubic-bezier(.22, 1, .36, 1);
+  --ease-soft: cubic-bezier(.4, 0, .2, 1);
+
+  /* Type */
+  --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
+  --font-body: 'Nunito Variable', 'Segoe UI', system-ui, sans-serif;
+
+  /* Legacy aliases so nothing old can break */
+  --forest: var(--fern); --forest-dark: var(--fern-deep);
+  --cream: var(--bg); --paper: var(--surface-solid);
+  --gold: var(--marigold); --coral: var(--monarch); --lavender: var(--wisteria);
+  --line: var(--border-soft);
+
+  font-family: var(--font-body); color: var(--ink); background: var(--bg);
+  font-synthesis: none; text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --forest: #315c4b;
-  --forest-dark: #224438;
-  --sage: #76917c;
-  --cream: #f7f3e8;
-  --paper: #fffdf7;
-  --gold: #e7ad45;
-  --coral: #cc725c;
-  --lavender: #8a7ba4;
-  --ink: #243a32;
-  --muted: #46584f;
-  --line: #d9d8c8;
-  --danger: #9f413b;
-  --shadow: 0 16px 45px rgba(46, 72, 59, 0.12);
+  -webkit-tap-highlight-color: transparent;
+  accent-color: var(--fern);
+}
+
+.theme-night {
+  --bg: #0b1622; --bg-deep: #081019;
+  --surface: rgba(17, 34, 47, 0.92); --surface-solid: #12212e;
+  --surface-2: #172c3b; --surface-3: #1e3849; --raised: #1b3345;
+  --ink: #e6f1ea; --ink-strong: #f4faf6;
+  --muted: #a8bfb3; --faint: #7f958c;
+  --border-soft: rgba(168, 207, 188, 0.16); --border-strong: rgba(168, 207, 188, 0.38);
+  --accent: #8cc9ab; --accent-strong: #b7e3cc; --accent-contrast: #0d2018;
+  --danger: #f0948c; --danger-soft: #46262a;
+  --focus-ring: #e9c46a;
+  --tint-gold-bg: #3b3320;   --tint-gold-fg: #f2d488;
+  --tint-coral-bg: #452e26;  --tint-coral-fg: #f4bfa4;
+  --tint-violet-bg: #322c4d; --tint-violet-fg: #d4c8f0;
+  --tint-green-bg: #1c3a2e;  --tint-green-fg: #b4e2c4;
+  --tint-dew-bg: #163636;    --tint-dew-fg: #a5dcd4;
+  --shadow-soft: 0 2px 6px rgba(0,4,12,.35), 0 14px 36px rgba(0,4,12,.42);
+  --shadow-lift: 0 6px 14px rgba(0,4,12,.40), 0 26px 56px rgba(0,4,12,.50);
+  --shadow-hero: 0 30px 80px rgba(0,3,10,.60);
+  --forest: var(--accent); --forest-dark: var(--accent-strong);
+  --cream: var(--bg); --paper: var(--surface-solid); --line: var(--border-soft);
 }
 
 * {
@@ -27,7 +88,7 @@
 html {
   min-width: 320px;
   min-height: 100%;
-  background: var(--cream);
+  background: var(--bg);
 }
 
 body {
@@ -35,6 +96,10 @@ body {
   min-width: 320px;
   min-height: 100vh;
   min-height: 100svh;
+}
+
+::selection {
+  background: rgba(233, 169, 61, 0.35);
 }
 
 button,
@@ -57,7 +122,7 @@ textarea {
 }
 
 :focus-visible {
-  outline: 3px solid #ad6c22;
+  outline: 3px solid var(--focus-ring);
 }
 
 h1,
@@ -70,21 +135,28 @@ p {
 h1,
 h2,
 h3 {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-display);
+  font-variation-settings: 'SOFT' 60, 'WONK' 1;
+  font-weight: 560;
   color: var(--forest-dark);
 }
 
 h1 {
   margin-bottom: 0.5rem;
-  font-size: clamp(2.15rem, 5vw, 3.8rem);
-  line-height: 1.03;
-  letter-spacing: -0.035em;
+  font-size: clamp(2.1rem, 5vw, 3.6rem);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
 }
 
 h2 {
   margin-bottom: 0.75rem;
-  font-size: clamp(1.45rem, 3vw, 2rem);
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  font-weight: 600;
   line-height: 1.15;
+}
+
+h3 {
+  font-weight: 620;
 }
 
 p {
@@ -102,11 +174,20 @@ input,
 select,
 textarea {
   width: 100%;
-  border: 1px solid #bfc8bd;
+  border: 1.5px solid var(--border-soft);
   border-radius: 14px;
-  background: #fff;
+  background: var(--raised);
   padding: 0.82rem 0.95rem;
   color: var(--ink);
+  transition: border-color 160ms var(--ease-soft), box-shadow 160ms var(--ease-soft);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+  outline: none;
 }
 
 textarea {

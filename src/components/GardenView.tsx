@@ -160,6 +160,20 @@ export function GardenView({
         className={`garden-hero backdrop-${state.profile?.selectedBackdropId ?? 'sunlit-meadow'}`}
         aria-labelledby="garden-title"
       >
+        <div className="hero-scenery" aria-hidden="true">
+          <span className="scenery-sun"><span className="scenery-rays" /></span>
+          <span className="scenery-cloud cloud-1" />
+          <span className="scenery-cloud cloud-2" />
+          <span className="scenery-cloud cloud-3" />
+          <span className="scenery-stars" />
+          <span className="scenery-hill hill-far" />
+          <span className="scenery-hill hill-mid" />
+          <span className="scenery-hill hill-near" />
+          <span className="scenery-glow" />
+          {Array.from({ length: 6 }, (_, index) => (
+            <span key={index} className={`scenery-firefly firefly-${index + 1}`} />
+          ))}
+        </div>
         <div className="hero-petals" aria-hidden="true">
           {Array.from({ length: 7 }, (_, index) => (
             <span key={index} className={`hero-petal petal-${index + 1}`} />
