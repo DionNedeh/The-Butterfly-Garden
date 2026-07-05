@@ -1,0 +1,933 @@
+/* =====================================================================
+   THE BUTTERFLY GARDEN — 3.0 "AURORA ATRIUM"
+   A luminous glassmorphism overhaul layered on top of App.css.
+
+   Design intent: a serene, living conservatory. Soft aurora light drifts
+   behind frosted glass. Surfaces glow gently, motion is calm and organic,
+   and every accent nods to iridescent butterfly wings.
+
+   Engineering notes:
+   - Purely additive. No React/DOM/logic changes required.
+   - Imported AFTER App.css so the cascade lets these rules win.
+   - Every ambient animation is disabled under prefers-reduced-motion
+     and the app's own .reduce-motion class.
+   - Colours stay high-contrast for AA-friendly reading.
+   ===================================================================== */
+
+/* ------------------------------------------------------------------
+   1. Design tokens — light ("sunlight") atmosphere
+   ------------------------------------------------------------------ */
+:root {
+  /* Typography */
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-body: 'Nunito Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* Iridescent accent gradients */
+  --grad-wing: linear-gradient(120deg, #f7a072 0%, #e07a9c 34%, #8a7ba4 66%, #4aa3c7 100%);
+  --grad-morpho: linear-gradient(125deg, #2ec5ec 0%, #5b8ff0 45%, #7a6bd8 100%);
+  --grad-gold: linear-gradient(120deg, #ffd776, #e7ad45 55%, #d98a33);
+  --grad-forest: linear-gradient(135deg, #47996f, #2f6a4f 55%, #224438);
+  --grad-nectar: linear-gradient(125deg, #f2a6d6, #c169a6 60%, #8a4f83);
+  --grad-stardust: linear-gradient(125deg, #8a7bd8, #6c5a9c 55%, #40395c);
+
+  /* Glass surfaces */
+  --glass-card: linear-gradient(160deg, rgba(255, 255, 253, 0.86), rgba(250, 247, 238, 0.72));
+  --glass-header: linear-gradient(180deg, rgba(255, 254, 249, 0.86), rgba(255, 253, 246, 0.66));
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-hairline: rgba(49, 92, 75, 0.14);
+  --card-radius: 26px;
+
+  /* Ambient aurora blobs (light) */
+  --aurora-1: rgba(255, 214, 158, 0.55);
+  --aurora-2: rgba(240, 168, 197, 0.42);
+  --aurora-3: rgba(148, 200, 170, 0.5);
+  --aurora-4: rgba(150, 196, 231, 0.4);
+  --aurora-veil: rgba(247, 243, 232, 0.5);
+  --mote-color: rgba(255, 246, 214, 0.9);
+
+  /* Depth */
+  --shadow-glass: 0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 2px 8px rgba(36, 58, 50, 0.06),
+    0 20px 46px -18px rgba(36, 58, 50, 0.28);
+  --shadow-glow-forest: 0 10px 30px -8px rgba(49, 92, 75, 0.5);
+  --shadow-glow-gold: 0 8px 26px -8px rgba(231, 173, 69, 0.65);
+  --ring-focus: 0 0 0 3px rgba(173, 108, 34, 0.35);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-glide: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ------------------------------------------------------------------
+   2. Deep-night atmosphere overrides
+   ------------------------------------------------------------------ */
+.theme-night {
+  --grad-wing: linear-gradient(120deg, #7ad0ff 0%, #7a8bf0 40%, #c07adf 72%, #f0a0c8 100%);
+  --grad-forest: linear-gradient(135deg, #3f9c76, #2c6f56 60%, #1c3d40);
+  --glass-card: linear-gradient(160deg, rgba(24, 52, 70, 0.78), rgba(14, 34, 48, 0.68));
+  --glass-header: linear-gradient(180deg, rgba(15, 38, 54, 0.82), rgba(10, 27, 40, 0.6));
+  --glass-border: rgba(140, 201, 171, 0.22);
+  --glass-hairline: rgba(140, 201, 171, 0.2);
+
+  --aurora-1: rgba(64, 196, 168, 0.34);
+  --aurora-2: rgba(126, 108, 216, 0.4);
+  --aurora-3: rgba(46, 120, 150, 0.42);
+  --aurora-4: rgba(214, 120, 190, 0.3);
+  --aurora-veil: rgba(7, 19, 31, 0.55);
+  --mote-color: rgba(210, 240, 255, 0.85);
+
+  --shadow-glass: 0 1px 0 rgba(150, 210, 190, 0.14) inset,
+    0 2px 10px rgba(0, 6, 14, 0.4),
+    0 24px 54px -20px rgba(0, 8, 18, 0.7);
+  --shadow-glow-forest: 0 12px 34px -10px rgba(60, 150, 116, 0.55);
+  --ring-focus: 0 0 0 3px rgba(246, 212, 119, 0.4);
+}
+
+/* ------------------------------------------------------------------
+   3. Typography refresh
+   ------------------------------------------------------------------ */
+body {
+  font-family: var(--font-body);
+  letter-spacing: 0.002em;
+}
+
+h1,
+h2,
+h3,
+.brand strong,
+.splash-title h1,
+.care-name-input,
+.streak-count strong,
+.pattern-select-copy strong,
+.marigold-speech,
+.timeline-entry time,
+.shop-item-card h3,
+.field-notes > summary strong,
+.pumpkin-message {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+h1 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+h2 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.eyebrow {
+  background: var(--grad-gold);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+::selection {
+  background: rgba(231, 173, 69, 0.35);
+  color: inherit;
+}
+
+/* Elegant thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(49, 92, 75, 0.35) transparent;
+}
+.theme-night * {
+  scrollbar-color: rgba(140, 201, 171, 0.35) transparent;
+}
+
+:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: var(--ring-focus);
+  border-radius: 8px;
+}
+
+/* ------------------------------------------------------------------
+   4. Living aurora atmosphere
+   ------------------------------------------------------------------ */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 90% at 50% -10%, var(--aurora-veil), transparent 60%),
+    var(--cream);
+  overflow-x: clip;
+}
+
+/* Drifting aurora ribbons behind the whole app */
+.app-shell::before {
+  content: '';
+  position: fixed;
+  inset: -35%;
+  z-index: -2;
+  background:
+    radial-gradient(38% 44% at 18% 22%, var(--aurora-1), transparent 62%),
+    radial-gradient(34% 40% at 82% 26%, var(--aurora-2), transparent 60%),
+    radial-gradient(46% 50% at 30% 82%, var(--aurora-3), transparent 64%),
+    radial-gradient(40% 46% at 78% 78%, var(--aurora-4), transparent 62%);
+  filter: blur(26px) saturate(1.1);
+  will-change: transform;
+  animation: aurora-drift 44s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* Fine film grain + soft vignette to make the glass feel photographic */
+.app-shell::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 100% at 50% 0%, transparent 66%, rgba(30, 48, 40, 0.12) 100%);
+  opacity: 0.8;
+}
+
+/* Slow-drifting light motes / pollen across the entire canvas */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle, var(--mote-color) 0 1.4px, transparent 2px),
+    radial-gradient(circle, var(--mote-color) 0 1px, transparent 1.6px);
+  background-size: 220px 220px, 340px 340px;
+  background-position: 0 0, 80px 120px;
+  opacity: 0.5;
+  animation: mote-rise 34s linear infinite;
+}
+
+@keyframes aurora-drift {
+  0% { transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1.05); }
+  50% { transform: translate3d(4%, 3%, 0) rotate(8deg) scale(1.18); }
+  100% { transform: translate3d(-2%, 4%, 0) rotate(-4deg) scale(1.08); }
+}
+
+@keyframes mote-rise {
+  from { background-position: 0 0, 80px 120px; }
+  to { background-position: -60px -220px, 20px -340px; }
+}
+
+/* ------------------------------------------------------------------
+   5. Floating glass header
+   ------------------------------------------------------------------ */
+.app-header {
+  background: var(--glass-header);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border-bottom: 1px solid transparent;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 10px 30px -20px rgba(30, 52, 42, 0.5);
+}
+.app-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-hairline) 20%, var(--glass-hairline) 80%, transparent);
+}
+.theme-night .app-header {
+  background: var(--glass-header);
+}
+
+.brand img {
+  box-shadow: 0 4px 16px rgba(49, 92, 75, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+}
+.brand strong {
+  background: var(--grad-forest);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.01em;
+}
+.theme-night .brand strong {
+  background: linear-gradient(120deg, #b8ecd2, #8cc9ab);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Nav track becomes a frosted rail with a glowing active pill */
+.app-header nav {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 2px 6px rgba(36, 58, 50, 0.08);
+  backdrop-filter: blur(8px);
+}
+.theme-night .app-header nav {
+  background: rgba(10, 30, 44, 0.55);
+  border-color: rgba(140, 201, 171, 0.18);
+}
+.app-header nav button {
+  position: relative;
+  color: var(--muted);
+  transition: color 200ms var(--ease-glide), transform 200ms var(--ease-spring);
+}
+.app-header nav button:hover {
+  color: var(--forest-dark);
+  transform: translateY(-1px);
+}
+.app-header nav button.active {
+  color: #fffdf7;
+  background: var(--grad-forest);
+  box-shadow: var(--shadow-glow-forest), 0 1px 0 rgba(255, 255, 255, 0.25) inset;
+}
+.app-header nav button.active svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+.theme-night .app-header nav button.active {
+  color: #f1fbf6;
+}
+
+/* ------------------------------------------------------------------
+   6. Currency jewels
+   ------------------------------------------------------------------ */
+.header-sunlight,
+.nectar-wallet,
+.stardust-wallet,
+.sunlight-meter {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 6px 16px -8px rgba(40, 40, 40, 0.4);
+}
+.header-sunlight,
+.sunlight-meter {
+  background: linear-gradient(140deg, #fff3c8, #ffe08a 70%, #f6c85a);
+  color: #6b4a12;
+}
+.nectar-wallet {
+  background: linear-gradient(140deg, #fbe4f4, #f2b8e0 70%, #d98fc6);
+  color: #6d2f5c;
+}
+.stardust-wallet {
+  background: var(--grad-stardust);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+/* A slow glint sweeping across each jewel */
+.header-sunlight::after,
+.nectar-wallet::after,
+.stardust-wallet::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  left: -30%;
+  width: 40%;
+  height: 220%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: rotate(18deg);
+  animation: jewel-glint 6.5s ease-in-out infinite;
+}
+.nectar-wallet::after { animation-delay: 2.2s; }
+.stardust-wallet::after { animation-delay: 4.4s; }
+
+@keyframes jewel-glint {
+  0%, 62% { left: -40%; opacity: 0; }
+  70% { opacity: 0.9; }
+  86%, 100% { left: 130%; opacity: 0; }
+}
+
+/* Round toggles become soft glass pucks */
+.theme-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.8), rgba(247, 244, 233, 0.6));
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 16px -8px rgba(38, 65, 53, 0.5), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  transition: transform 220ms var(--ease-spring), box-shadow 220ms ease, background 220ms ease;
+}
+.theme-toggle:hover {
+  transform: translateY(-2px) rotate(-6deg);
+}
+.install-button {
+  background: var(--grad-forest);
+  box-shadow: var(--shadow-glow-forest);
+}
+
+/* ------------------------------------------------------------------
+   7. Buttons — glossy, with a light sweep
+   ------------------------------------------------------------------ */
+.primary-button {
+  position: relative;
+  overflow: hidden;
+  background-image: var(--grad-forest);
+  background-size: 180% 180%;
+  box-shadow: var(--shadow-glow-forest), 0 1px 0 rgba(255, 255, 255, 0.28) inset;
+  letter-spacing: 0.01em;
+}
+.primary-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.42) 50%, transparent 80%);
+  transform: translateX(-120%);
+  transition: transform 700ms var(--ease-glide);
+}
+.primary-button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px -10px rgba(49, 92, 75, 0.6), 0 1px 0 rgba(255, 255, 255, 0.3) inset;
+}
+.primary-button:not(:disabled):hover::before {
+  transform: translateX(120%);
+}
+
+.secondary-button {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(246, 248, 242, 0.7));
+  border: 1px solid rgba(49, 92, 75, 0.28);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 16px -10px rgba(36, 58, 50, 0.4);
+  transition: transform 200ms var(--ease-spring), border-color 200ms ease, box-shadow 200ms ease;
+}
+.secondary-button:not(:disabled):hover {
+  transform: translateY(-2px);
+  border-color: var(--forest);
+  box-shadow: 0 12px 24px -12px rgba(36, 58, 50, 0.5);
+}
+.theme-night .secondary-button {
+  background: linear-gradient(160deg, rgba(30, 58, 74, 0.8), rgba(18, 42, 56, 0.7));
+  border-color: rgba(140, 201, 171, 0.28);
+}
+.danger-button {
+  box-shadow: 0 10px 26px -10px rgba(159, 65, 59, 0.6);
+}
+.text-button {
+  position: relative;
+}
+.text-button::after {
+  content: '';
+  position: absolute;
+  left: 0.4rem;
+  right: 0.4rem;
+  bottom: 0.2rem;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  opacity: 0.5;
+  transition: transform 240ms var(--ease-spring);
+}
+.text-button:hover::after {
+  transform: scaleX(1);
+}
+
+/* ------------------------------------------------------------------
+   8. Frosted glass cards
+   ------------------------------------------------------------------ */
+.card,
+.garden-stats {
+  position: relative;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--card-radius);
+  background: var(--glass-card);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--shadow-glass);
+  transition: transform 300ms var(--ease-spring), box-shadow 300ms ease;
+}
+/* Top sheen + hairline */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.7), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.9;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 6px 16px rgba(36, 58, 50, 0.1),
+    0 34px 60px -24px rgba(36, 58, 50, 0.4);
+}
+.theme-night .card::before {
+  background: linear-gradient(160deg, rgba(150, 210, 190, 0.28), transparent 45%);
+}
+
+/* Gentle staggered rise for cards inside a view */
+.view > .card,
+.view > * > .card {
+  animation: card-rise 620ms var(--ease-spring) both;
+}
+.view > .card:nth-child(2) { animation-delay: 60ms; }
+.view > .card:nth-child(3) { animation-delay: 120ms; }
+.view > .card:nth-child(4) { animation-delay: 180ms; }
+.view > .card:nth-child(5) { animation-delay: 240ms; }
+.view > .card:nth-child(n + 6) { animation-delay: 300ms; }
+
+@keyframes card-rise {
+  from { opacity: 0; transform: translateY(22px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Reflection / streak / guide feature cards get a soft accent aura */
+.reflection-card {
+  background:
+    radial-gradient(80% 120% at 100% 0%, rgba(138, 123, 164, 0.16), transparent 55%),
+    var(--glass-card);
+}
+.streak-card {
+  background:
+    radial-gradient(60% 130% at 6% 20%, rgba(250, 205, 94, 0.28), transparent 46%),
+    var(--glass-card);
+}
+
+/* ------------------------------------------------------------------
+   9. Headings & page intro
+   ------------------------------------------------------------------ */
+.page-header h1,
+.field-notes > summary strong {
+  background: var(--grad-forest);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.theme-night .page-header h1,
+.theme-night .field-notes > summary strong {
+  background: linear-gradient(120deg, #d9f2e5, #8cc9ab 70%, #6fae8f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.count-badge {
+  background: linear-gradient(150deg, rgba(232, 239, 230, 0.9), rgba(214, 228, 214, 0.7));
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 8px -4px rgba(36, 58, 50, 0.4);
+}
+
+/* ------------------------------------------------------------------
+   10. Garden hero — cinematic light
+   ------------------------------------------------------------------ */
+.garden-hero {
+  box-shadow:
+    0 30px 70px -30px rgba(30, 52, 42, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.16) inset;
+}
+/* Sun-shimmer sweeping the scene */
+.garden-hero .hero-petals::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 40% at 78% 12%, rgba(255, 240, 200, 0.4), transparent 60%);
+  mix-blend-mode: screen;
+  animation: hero-glow 9s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes hero-glow {
+  from { opacity: 0.55; transform: translateX(-4%); }
+  to { opacity: 0.95; transform: translateX(4%); }
+}
+.garden-heading h1 {
+  color: #fffdf7;
+  text-shadow: 0 2px 30px rgba(20, 48, 37, 0.4), 0 0 1px rgba(255, 255, 255, 0.5);
+}
+.garden-observation {
+  text-shadow: 0 1px 12px rgba(20, 48, 37, 0.45);
+}
+.garden-stats {
+  backdrop-filter: blur(18px) saturate(1.5);
+}
+.garden-stats > div :is(strong, svg) {
+  filter: drop-shadow(0 1px 4px rgba(49, 92, 75, 0.15));
+}
+
+/* ------------------------------------------------------------------
+   11. Today — mood, meter, goals
+   ------------------------------------------------------------------ */
+.mood-button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.7), rgba(244, 247, 240, 0.55));
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  transition: transform 220ms var(--ease-spring), box-shadow 220ms ease, border-color 220ms ease, background 220ms ease;
+}
+.mood-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 30px -16px rgba(36, 58, 50, 0.5);
+  border-color: var(--sage);
+}
+.mood-button.selected {
+  background: linear-gradient(165deg, rgba(232, 239, 230, 0.95), rgba(214, 232, 216, 0.8));
+  box-shadow: 0 0 0 1px var(--forest), 0 14px 30px -16px rgba(49, 92, 75, 0.55);
+}
+.mood-button.selected::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 60% at 50% 0%, rgba(231, 173, 69, 0.18), transparent 60%);
+  pointer-events: none;
+}
+.theme-night .mood-button {
+  background: linear-gradient(165deg, rgba(30, 58, 74, 0.75), rgba(18, 42, 56, 0.6));
+  border-color: rgba(140, 201, 171, 0.2);
+}
+
+.goal-row {
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.6), rgba(244, 246, 240, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  transition: transform 200ms var(--ease-spring), box-shadow 200ms ease;
+}
+.goal-row:hover {
+  transform: translateX(2px);
+  box-shadow: 0 12px 24px -16px rgba(36, 58, 50, 0.45);
+}
+.theme-night .goal-row {
+  background: linear-gradient(120deg, rgba(24, 50, 64, 0.7), rgba(18, 42, 56, 0.6));
+  border-color: rgba(140, 201, 171, 0.16);
+}
+.goal-check {
+  transition: transform 200ms var(--ease-spring), background 200ms ease, color 200ms ease;
+}
+.goal-row.complete .goal-check {
+  background: var(--grad-forest);
+  box-shadow: var(--shadow-glow-forest);
+}
+
+/* ------------------------------------------------------------------
+   12. Care — portrait & actions
+   ------------------------------------------------------------------ */
+.care-portrait {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background:
+    radial-gradient(circle at 50% 20%, rgba(255, 236, 189, 0.6), transparent 55%),
+    radial-gradient(circle at 50% 92%, rgba(118, 145, 124, 0.32), transparent 60%),
+    linear-gradient(170deg, rgba(243, 247, 236, 0.95), rgba(227, 237, 218, 0.85));
+  box-shadow: 0 20px 44px -24px rgba(36, 58, 50, 0.5), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+}
+.care-action,
+.creature-chip,
+.wardrobe-item {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.78), rgba(247, 249, 243, 0.6));
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+}
+.theme-night .care-action,
+.theme-night .creature-chip,
+.theme-night .wardrobe-item {
+  background: linear-gradient(160deg, rgba(28, 56, 72, 0.72), rgba(18, 42, 56, 0.62));
+  border-color: rgba(140, 201, 171, 0.18);
+}
+.care-action-icon,
+.shop-item-icon,
+.guide-icon {
+  box-shadow: 0 8px 18px -10px rgba(49, 92, 75, 0.6), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+}
+.bond-bar span,
+.lifecycle-step.current .lifecycle-dot {
+  box-shadow: 0 0 14px -2px rgba(231, 173, 69, 0.7);
+}
+.cared-today-badge,
+.done-chip {
+  background: var(--grad-forest);
+  box-shadow: var(--shadow-glow-forest);
+}
+
+/* ------------------------------------------------------------------
+   13. Shop
+   ------------------------------------------------------------------ */
+.shop-tabs button {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.75), rgba(247, 249, 243, 0.55));
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px);
+}
+.shop-tabs button.active {
+  background: var(--grad-forest);
+  border-color: transparent;
+  box-shadow: var(--shadow-glow-forest);
+}
+.theme-night .shop-tabs button {
+  background: linear-gradient(160deg, rgba(28, 56, 72, 0.7), rgba(18, 42, 56, 0.6));
+  border-color: rgba(140, 201, 171, 0.2);
+}
+.shop-item-icon.premium,
+.stardust-wallet {
+  box-shadow: 0 10px 26px -10px rgba(108, 90, 156, 0.7), 0 1px 0 rgba(255, 255, 255, 0.2) inset;
+}
+.garden-pass-banner {
+  box-shadow: 0 26px 60px -28px rgba(55, 49, 90, 0.85);
+}
+.garden-pass-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(40% 60% at 20% 30%, rgba(255, 255, 255, 0.12), transparent 60%);
+  pointer-events: none;
+}
+.pattern-cost,
+.premium-cost {
+  filter: drop-shadow(0 1px 3px rgba(104, 64, 95, 0.2));
+}
+
+/* ------------------------------------------------------------------
+   14. Journal & streak
+   ------------------------------------------------------------------ */
+.streak-icon {
+  background: var(--grad-gold);
+  box-shadow: var(--shadow-glow-gold), 0 0 0 6px rgba(255, 255, 255, 0.45) inset;
+  animation: streak-pulse 3.4s ease-in-out infinite;
+}
+@keyframes streak-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+.streak-count {
+  background: linear-gradient(160deg, rgba(255, 244, 206, 0.95), rgba(255, 232, 170, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.timeline-entry::before {
+  background: var(--grad-forest);
+  box-shadow: 0 0 0 3px var(--cream), 0 0 12px -2px rgba(49, 92, 75, 0.6);
+}
+.timeline::before {
+  background: linear-gradient(var(--sage), transparent);
+}
+
+/* ------------------------------------------------------------------
+   15. Guide & settings
+   ------------------------------------------------------------------ */
+.guide-card {
+  overflow: hidden;
+}
+.guide-card::after {
+  content: '';
+  position: absolute;
+  top: -40%;
+  right: -20%;
+  width: 60%;
+  height: 120%;
+  background: radial-gradient(circle, rgba(231, 173, 69, 0.12), transparent 70%);
+  pointer-events: none;
+}
+.toggle-row {
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.6), rgba(241, 244, 237, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.theme-night .toggle-row {
+  background: linear-gradient(120deg, rgba(24, 50, 64, 0.7), rgba(18, 42, 56, 0.6));
+  border-color: rgba(140, 201, 171, 0.16);
+}
+.backdrop-choice {
+  overflow: hidden;
+  transition: transform 240ms var(--ease-spring), box-shadow 240ms ease;
+}
+.backdrop-choice:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 34px -20px rgba(36, 58, 50, 0.5);
+}
+.backdrop-choice .backdrop-preview {
+  transition: transform 500ms var(--ease-glide);
+}
+.backdrop-choice:hover .backdrop-preview {
+  transform: scale(1.06);
+}
+
+/* ------------------------------------------------------------------
+   16. Onboarding — a glowing threshold
+   ------------------------------------------------------------------ */
+.onboarding-shell {
+  position: relative;
+  isolation: isolate;
+}
+.onboarding-shell::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  z-index: -1;
+  background:
+    radial-gradient(40% 44% at 20% 22%, rgba(255, 214, 158, 0.5), transparent 60%),
+    radial-gradient(40% 44% at 82% 78%, rgba(148, 200, 170, 0.45), transparent 60%);
+  filter: blur(20px);
+  animation: aurora-drift 40s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.onboarding-card {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: var(--glass-card);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 40px 90px -40px rgba(29, 52, 43, 0.7);
+}
+.onboarding-card h1 {
+  background: var(--grad-forest);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.lesson-grid article {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.7), rgba(245, 247, 241, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  transition: transform 240ms var(--ease-spring), box-shadow 240ms ease;
+}
+.lesson-grid article:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 36px -22px rgba(36, 58, 50, 0.5);
+}
+
+/* ------------------------------------------------------------------
+   17. Splash — the garden wakes
+   ------------------------------------------------------------------ */
+.splash-screen {
+  background:
+    radial-gradient(circle at 20% 12%, rgba(255, 236, 179, 0.7), transparent 42%),
+    radial-gradient(circle at 84% 82%, rgba(148, 200, 168, 0.6), transparent 48%),
+    radial-gradient(circle at 60% 50%, rgba(240, 178, 205, 0.28), transparent 55%),
+    linear-gradient(160deg, #f4eedd, #dce8d4 55%, #cfe0cb);
+}
+/* Radiant god-rays behind the title */
+.splash-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(40% 50% at 50% 46%, rgba(255, 248, 224, 0.7), transparent 62%);
+  animation: splash-breathe 4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes splash-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+.splash-title h1 {
+  background: linear-gradient(120deg, #2f6a4f, #47996f 45%, #8a7ba4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 2px 20px rgba(255, 253, 247, 0.9));
+  letter-spacing: -0.015em;
+}
+.splash-shimmer {
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 253, 247, 0.95), transparent) 0 0 / 45% 100% no-repeat,
+    linear-gradient(90deg, #47996f, #e7ad45, #8a7ba4);
+}
+.theme-night .splash-title h1 {
+  background: linear-gradient(120deg, #8cc9ab, #7ad0ff 50%, #c07adf);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ------------------------------------------------------------------
+   18. Mobile bottom nav — floating glass dock
+   ------------------------------------------------------------------ */
+@media (max-width: 1080px) {
+  .bottom-nav {
+    background: var(--glass-header) !important;
+    border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    box-shadow: 0 18px 44px -18px rgba(35, 62, 51, 0.55), 0 1px 0 rgba(255, 255, 255, 0.5) inset !important;
+  }
+  .bottom-nav button {
+    transition: color 200ms var(--ease-glide), transform 200ms var(--ease-spring);
+  }
+  .bottom-nav button.active {
+    background: var(--grad-forest);
+    color: #fffdf7;
+    box-shadow: var(--shadow-glow-forest);
+  }
+  .bottom-nav button.active svg {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+  }
+  .bottom-nav button:active {
+    transform: scale(0.92);
+  }
+}
+
+/* ------------------------------------------------------------------
+   19. Misc surfaces
+   ------------------------------------------------------------------ */
+.update-toast {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: var(--glass-card);
+  backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow: 0 20px 48px -20px rgba(27, 54, 43, 0.55);
+  animation: card-rise 500ms var(--ease-spring) both;
+}
+.offline-banner {
+  background: linear-gradient(120deg, #3e6658, #315c4b);
+}
+.loading-screen {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 236, 179, 0.5), transparent 45%),
+    linear-gradient(160deg, #edf1e8, #dbe6d6);
+}
+
+/* ------------------------------------------------------------------
+   20. Motion & accessibility guards
+   ------------------------------------------------------------------ */
+.reduce-motion .app-shell::before,
+.reduce-motion body::after,
+.reduce-motion .garden-hero .hero-petals::after,
+.reduce-motion .streak-icon,
+.reduce-motion .splash-screen::before,
+.reduce-motion .onboarding-shell::before,
+.reduce-motion .header-sunlight::after,
+.reduce-motion .nectar-wallet::after,
+.reduce-motion .stardust-wallet::after,
+.reduce-motion .primary-button {
+  animation: none !important;
+}
+.reduce-motion .primary-button::before {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell::before,
+  body::after,
+  .garden-hero .hero-petals::after,
+  .streak-icon,
+  .splash-screen::before,
+  .onboarding-shell::before,
+  .header-sunlight::after,
+  .nectar-wallet::after,
+  .stardust-wallet::after,
+  .primary-button,
+  .primary-button::before {
+    animation: none !important;
+  }
+}
+
+/* Slightly calmer aurora on small screens to protect battery & clarity */
+@media (max-width: 640px) {
+  .app-shell::before {
+    filter: blur(20px);
+    animation-duration: 60s;
+  }
+  body::after {
+    opacity: 0.32;
+  }
+  .card {
+    border-radius: 22px;
+  }
+}
+
+/* Tidy the header brand on phones so the name never crushes to "T…".
+   The garden name already headlines the hero, so it can retire here. */
+@media (max-width: 620px) {
+  .brand small {
+    display: none;
+  }
+  .brand strong {
+    font-size: 1rem;
+  }
+}
+@media (max-width: 440px) {
+  .brand > span {
+    display: none;
+  }
+}
