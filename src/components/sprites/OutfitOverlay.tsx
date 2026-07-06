@@ -6,14 +6,6 @@ export interface OutfitAnchor {
   headY: number
   bodyX: number
   bodyY: number
-  /**
-   * Where a neck/chest accessory (pendant, bow, scarf, cape) sits. Defaults to
-   * the body point, but sprites with a long horizontal body — like the
-   * caterpillar — set this near the neck so a pendant hangs by the head instead
-   * of floating mid-body. The aura keeps using bodyX/bodyY so it stays centred.
-   */
-  accX?: number
-  accY?: number
   scale: number
 }
 
@@ -223,13 +215,14 @@ function aura(itemId: string): ReactNode {
 export function OutfitOverlay({
   outfit,
   anchor,
+  hideAccessory = false,
 }: {
   outfit: Partial<Record<OutfitSlot, string>>
   anchor: OutfitAnchor
+  /** Suppress neck/chest accessories (e.g. caterpillars, where they don't fit). */
+  hideAccessory?: boolean
 }) {
   const { headX, headY, bodyX, bodyY, scale } = anchor
-  const accX = anchor.accX ?? bodyX
-  const accY = anchor.accY ?? bodyY
   return (
     <g className="outfit-overlay" aria-hidden="true">
       {outfit.aura && (
@@ -237,8 +230,8 @@ export function OutfitOverlay({
           {aura(outfit.aura)}
         </g>
       )}
-      {outfit.accessory && (
-        <g transform={`translate(${accX} ${accY}) scale(${scale})`}>
+      {!hideAccessory && outfit.accessory && (
+        <g transform={`translate(${bodyX} ${bodyY}) scale(${scale})`}>
           {accessory(outfit.accessory)}
         </g>
       )}
