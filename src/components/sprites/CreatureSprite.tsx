@@ -142,8 +142,9 @@ export function CreatureSprite({
           <circle cx="87" cy="40" r="1.6" fill={secondary} />
           <circle cx="108" cy="39" r="1.6" fill={secondary} />
         </g>
-        {/* accX/accY place a pendant at the neck by the head, not mid-body */}
-        <OutfitOverlay outfit={outfit} anchor={{ headX: 99, headY: 50, bodyX: 63, bodyY: 58, accX: 88, accY: 59, scale: 1 }} />
+        {/* Caterpillars keep headwear + aura, but neck accessories don't
+            suit the long low body, so they're hidden here. */}
+        <OutfitOverlay outfit={outfit} anchor={{ headX: 99, headY: 50, bodyX: 63, bodyY: 58, scale: 1 }} hideAccessory />
       </svg>
     )
   }
