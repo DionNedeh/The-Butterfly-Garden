@@ -6,6 +6,11 @@ import {
 } from '../lib/appearance'
 import type { AppState, GardenBackdropId } from '../types'
 
+const secretNameMessages = new Map([
+  ['pumpkin', 'Made for you with ❤️- S'],
+  ['shanna', 'Made with ❤️- S'],
+])
+
 export function SettingsView({
   state,
   onUpdateProfile,
@@ -29,6 +34,7 @@ export function SettingsView({
   const [deleteStep, setDeleteStep] = useState(false)
   const profile = state.profile
   const unlockedBackdrops = profile ? unlockedBackdropIds(profile) : []
+  const secretMessage = secretNameMessages.get(name.trim().toLowerCase())
 
   return (
     <div className="view settings-view">
@@ -53,8 +59,8 @@ export function SettingsView({
             Your name
             <input value={name} onChange={(event) => setName(event.target.value)} />
           </label>
-          {name.trim().toLowerCase() === 'pumpkin' && (
-            <p className="pumpkin-message">Made for you with ❤️- S</p>
+          {secretMessage && (
+            <p className="pumpkin-message">{secretMessage}</p>
           )}
           <label>
             Garden name

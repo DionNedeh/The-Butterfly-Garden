@@ -90,7 +90,11 @@ test('supports plant selection and permanent local reset confirmation', async ({
   await expect(page.getByText('Seeds and planting')).toBeVisible()
   await expect(page.getByText(/first Sunlight you earn each local day/i)).toBeVisible()
   await page.getByLabel('Your name').fill('Pumpkin')
-  await expect(page.getByText('Made for you with ❤️- S')).toBeVisible()
+  await expect(
+    page.getByText('Made for you with ❤️- S', { exact: true }),
+  ).toBeVisible()
+  await page.getByLabel('Your name').fill('Shanna')
+  await expect(page.getByText('Made with ❤️- S', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: /begin deletion/i }).click()
   await expect(page.getByText(/are you certain/i)).toBeVisible()
   await page.getByRole('button', { name: /keep my garden/i }).click()
