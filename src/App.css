@@ -2777,7 +2777,8 @@
   .mood-grid {
     grid-template-columns: repeat(5, minmax(100px, 1fr));
     overflow-x: auto;
-    padding-bottom: 0.4rem;
+    /* Keep selected rings and hover lift inside the scrollport on every edge. */
+    padding-block: 0.4rem;
   }
 
   .goal-form {
