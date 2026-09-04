@@ -61,6 +61,7 @@ export function createInitialState(
       gardenName: gardenName.trim() || 'My Butterfly Garden',
       createdAt: nowIso,
       reducedMotion: false,
+      ambientTrack: 'garden-chimes',
       theme: 'sunlight',
       selectedBackdropId: 'sunlit-meadow',
       unlockedBackdropIds: ['sunlit-meadow'],

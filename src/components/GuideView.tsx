@@ -143,9 +143,9 @@ const sections: GuideSection[] = [
   {
     icon: 'music',
     eyebrow: 'Set the mood',
-    title: 'Ambient garden sound',
+    title: 'Your garden soundscape',
     paragraphs: [
-      'The note button in the header plays a soft, endless garden soundscape — breeze, wind chimes, and distant birdsong — generated right on your device, so it works offline and never repeats. Toggle it off any time; your choice is remembered.',
+      'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, or an original classical-style piano loop in Settings. Everything is generated on your device, works offline, and can be toggled off at any time.',
     ],
   },
   {

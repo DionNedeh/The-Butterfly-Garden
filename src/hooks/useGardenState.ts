@@ -24,6 +24,7 @@ import {
 import { removePlant } from '../lib/plantManagement'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
+  AmbientTrackId,
   AppState,
   FlightPatternId,
   GardenBackdropId,
@@ -340,6 +341,14 @@ export function useGardenState() {
         ...current,
         profile: current.profile
           ? { ...current.profile, ambientSound: !current.profile.ambientSound }
+          : undefined,
+      }))
+    },
+    selectAmbientTrack(ambientTrack: AmbientTrackId) {
+      update((current) => ({
+        ...current,
+        profile: current.profile
+          ? { ...current.profile, ambientTrack }
           : undefined,
       }))
     },

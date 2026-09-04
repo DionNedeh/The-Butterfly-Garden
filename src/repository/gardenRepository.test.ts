@@ -1,6 +1,6 @@
 import { openDB } from 'idb'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createEmptyState } from '../lib/progression'
+import { createEmptyState, createInitialState } from '../lib/progression'
 import { gardenRepository } from './gardenRepository'
 
 afterEach(async () => {
@@ -14,6 +14,22 @@ describe('garden repository', () => {
     await expect(gardenRepository.load()).resolves.toMatchObject({
       version: 4,
       seeds: 4,
+    })
+  })
+
+  it('persists the selected ambient track', async () => {
+    const state = createInitialState('Sound Tester', 'Listening Garden')
+    if (!state.profile) throw new Error('Expected an initialized profile')
+    state.profile.ambientSound = true
+    state.profile.ambientTrack = 'piano-music'
+
+    await gardenRepository.save(state)
+
+    await expect(gardenRepository.load()).resolves.toMatchObject({
+      profile: {
+        ambientSound: true,
+        ambientTrack: 'piano-music',
+      },
     })
   })
 
@@ -71,6 +87,7 @@ describe('garden repository', () => {
       profile: expect.objectContaining({
         name: 'Legacy Gardener',
         gardenName: 'Remembered Garden',
+        ambientTrack: 'garden-chimes',
       }),
       plants: [expect.objectContaining({ id: 'remembered-plant', growth: 2 })],
     })

@@ -4,7 +4,11 @@ import {
   gardenBackdrops,
   unlockedBackdropIds,
 } from '../lib/appearance'
-import type { AppState, GardenBackdropId } from '../types'
+import {
+  ambientTracks,
+  DEFAULT_AMBIENT_TRACK_ID,
+} from '../data/ambientTracks'
+import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
 
 const secretNameMessages = new Map([
   ['pumpkin', 'Made for you with ❤️- S'],
@@ -14,6 +18,7 @@ const secretNameMessages = new Map([
 export function SettingsView({
   state,
   onUpdateProfile,
+  onSelectAmbientTrack,
   onSelectBackdrop,
   onDeleteAll,
 }: {
@@ -23,6 +28,7 @@ export function SettingsView({
     gardenName: string,
     reducedMotion: boolean,
   ) => void
+  onSelectAmbientTrack: (trackId: AmbientTrackId) => void
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
   onDeleteAll: () => Promise<void>
 }) {
@@ -83,6 +89,50 @@ export function SettingsView({
           </label>
           <button className="primary-button" type="submit">Save settings</button>
         </form>
+      </section>
+
+      <section
+        className="card sound-settings-card"
+        aria-labelledby="sound-settings-title"
+      >
+        <p className="eyebrow">Garden audio</p>
+        <h2 id="sound-settings-title">Choose what you hear</h2>
+        <p className="section-explainer">
+          Your choice plays whenever the music button in the header is on.
+          Everything is created on this device and works offline.
+        </p>
+        <fieldset className="sound-options">
+          <legend className="sr-only">Sound option</legend>
+          {ambientTracks.map((track) => {
+            const selected =
+              (profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID) === track.id
+            return (
+              <label
+                className={`sound-option ${selected ? 'selected' : ''}`}
+                key={track.id}
+              >
+                <input
+                  type="radio"
+                  name="ambient-track"
+                  value={track.id}
+                  checked={selected}
+                  onChange={() => onSelectAmbientTrack(track.id)}
+                />
+                <span>
+                  <strong>{track.name}</strong>
+                  <small>{track.description}</small>
+                  <em>
+                    {selected
+                      ? profile?.ambientSound
+                        ? 'Playing now'
+                        : 'Selected'
+                      : 'Select sound'}
+                  </em>
+                </span>
+              </label>
+            )
+          })}
+        </fieldset>
       </section>
 
       <section className="card backdrop-card" aria-labelledby="backdrop-title">

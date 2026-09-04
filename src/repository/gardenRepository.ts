@@ -3,7 +3,8 @@ import { createEmptyState } from '../lib/progression'
 import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarCharacters, jarColors } from '../data/jars'
-import type { AppState } from '../types'
+import { DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
+import type { AmbientTrackId, AppState } from '../types'
 
 interface GardenDatabase extends DBSchema {
   state: {
@@ -28,6 +29,11 @@ function database() {
 }
 
 const CREATURE_STAGES = new Set(['egg', 'caterpillar', 'chrysalis', 'butterfly'])
+const AMBIENT_TRACK_IDS = new Set<AmbientTrackId>([
+  'garden-chimes',
+  'garden',
+  'piano-music',
+])
 
 function migrateCreatures(creatures: unknown[]): AppState['creatures'] {
   return creatures
@@ -161,9 +167,24 @@ function migrateState(value: unknown): AppState | undefined {
         },
       )
     : []
+  const candidateProfile =
+    candidate.profile && typeof candidate.profile === 'object'
+      ? (candidate.profile as Record<string, unknown>)
+      : undefined
+  const ambientTrack =
+    typeof candidateProfile?.ambientTrack === 'string' &&
+    AMBIENT_TRACK_IDS.has(candidateProfile.ambientTrack as AmbientTrackId)
+      ? (candidateProfile.ambientTrack as AmbientTrackId)
+      : DEFAULT_AMBIENT_TRACK_ID
   return {
     ...(candidate as unknown as AppState),
     version: 4,
+    profile: candidateProfile
+      ? {
+          ...(candidateProfile as unknown as NonNullable<AppState['profile']>),
+          ambientTrack,
+        }
+      : undefined,
     creatures: migrateCreatures(candidate.creatures),
     nectar: typeof candidate.nectar === 'number' ? candidate.nectar : 0,
     stardust: typeof candidate.stardust === 'number' ? candidate.stardust : 0,

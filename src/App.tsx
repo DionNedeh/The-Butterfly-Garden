@@ -13,6 +13,10 @@ import { SplashScreen } from './components/SplashScreen'
 import { FlightPatternsView } from './components/FlightPatternsView'
 import { TodayView } from './components/TodayView'
 import { UpdatePrompt } from './components/UpdatePrompt'
+import {
+  ambientTrackName,
+  DEFAULT_AMBIENT_TRACK_ID,
+} from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
 import { useGardenState } from './hooks/useGardenState'
 import { sunlightForDate } from './lib/progression'
@@ -52,7 +56,10 @@ const navigation: Array<{
 function App() {
   const garden = useGardenState()
   const [view, setView] = useState<AppView>('garden')
-  useAmbientSound(Boolean(garden.state?.profile?.ambientSound))
+  useAmbientSound(
+    Boolean(garden.state?.profile?.ambientSound),
+    garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
+  )
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
   const [splashDone, setSplashDone] = useState(false)
@@ -91,6 +98,7 @@ function App() {
   const profile = state.profile
   if (!profile) return <Onboarding onComplete={garden.onboard} />
   const sunlight = sunlightForDate(state, toLocalDate())
+  const activeTrackName = ambientTrackName(profile.ambientTrack)
 
   return (
     <div
@@ -150,13 +158,13 @@ function App() {
             aria-pressed={profile.ambientSound ?? false}
             aria-label={
               profile.ambientSound
-                ? 'Turn off garden sounds'
-                : 'Turn on garden sounds'
+                ? `Turn off ${activeTrackName}`
+                : `Turn on ${activeTrackName}`
             }
             title={
               profile.ambientSound
-                ? 'Turn off garden sounds'
-                : 'Garden sounds: breeze, chimes, and birdsong'
+                ? `Turn off ${activeTrackName}`
+                : `Turn on ${activeTrackName}`
             }
           >
             <Icon name="music" />
@@ -253,6 +261,7 @@ function App() {
           <SettingsView
             state={state}
             onUpdateProfile={garden.updateProfile}
+            onSelectAmbientTrack={garden.selectAmbientTrack}
             onSelectBackdrop={garden.selectBackdrop}
             onDeleteAll={garden.deleteAll}
           />

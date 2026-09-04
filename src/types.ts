@@ -11,6 +11,7 @@ export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
 export type AppearanceTheme = 'sunlight' | 'night'
+export type AmbientTrackId = 'garden-chimes' | 'garden' | 'piano-music'
 export type FlightPatternId =
   | 'gentle-drift'
   | 'petal-hop'
@@ -51,8 +52,10 @@ export interface Profile {
   createdAt: string
   activeCompanionId?: string
   reducedMotion: boolean
-  /** Generative garden soundscape (breeze, chimes, birdsong). */
+  /** Whether the selected on-device soundscape is playing. */
   ambientSound?: boolean
+  /** Soundscape played while ambient sound is enabled. */
+  ambientTrack?: AmbientTrackId
   theme?: AppearanceTheme
   selectedBackdropId?: GardenBackdropId
   unlockedBackdropIds?: GardenBackdropId[]
