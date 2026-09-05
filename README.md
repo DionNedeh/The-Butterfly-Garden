@@ -74,6 +74,12 @@ settings, set **Pages > Build and deployment > Source** to **GitHub Actions**.
 
 ## Licence
 
-Code is MIT licensed (see `LICENSE`). The bundled Fraunces and Nunito Sans
-typefaces are under the SIL Open Font License 1.1; their licences sit beside
-the font files in `src/assets/fonts`.
+**Proprietary — all rights reserved.** The source is visible here, but that is
+not a grant of rights to it: no use, copying, modification or redistribution is
+permitted without written permission. See `LICENSE`.
+
+Third-party components that ship inside the built app (React, idb, Workbox,
+and the Fraunces and Nunito Sans typefaces) keep their own permissive licences.
+All of them allow commercial distribution through application stores, and all
+of them require their notices to travel with the build — those are collected in
+`THIRD-PARTY-NOTICES.md`, which must be included in any release.
