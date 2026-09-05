@@ -30,6 +30,36 @@ async function writeRaw(record: unknown) {
   }
 }
 
+/** A garden whose plants are all fully grown, so nothing can grow further. */
+function maturedGarden(): AppState {
+  const seed = createInitialState('Dirty', 'Dirty Garden')
+  return {
+    ...seed,
+    plants: seed.plants.map((plant) => ({
+      ...plant,
+      growth: MAX_PLANT_GROWTH,
+    })),
+  }
+}
+
+/** What `saveMood` in useGardenState does to the state, without the hook. */
+function checkInWithMood(state: AppState, now = new Date()): AppState {
+  const localDate = toLocalDate(now)
+  const entry: MoodEntry = {
+    id: 'mood-under-test',
+    localDate,
+    level: 3,
+    note: 'A quiet day.',
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  }
+  return awardSunlight(
+    { ...state, moods: [...state.moods, entry] },
+    `mood:${localDate}`,
+    now,
+  )
+}
+
 describe('garden repository', () => {
   it('persists and reloads versioned state', async () => {
     const state = { ...createEmptyState(), seeds: 4 }
@@ -240,36 +270,6 @@ describe('garden repository', () => {
   })
 
 describe('detecting what a write actually changed', () => {
-  /** A garden whose plants are all fully grown, so nothing can grow further. */
-  function maturedGarden(): AppState {
-    const seed = createInitialState('Dirty', 'Dirty Garden')
-    return {
-      ...seed,
-      plants: seed.plants.map((plant) => ({
-        ...plant,
-        growth: MAX_PLANT_GROWTH,
-      })),
-    }
-  }
-
-  /** What `saveMood` in useGardenState does to the state, without the hook. */
-  function checkInWithMood(state: AppState, now = new Date()): AppState {
-    const localDate = toLocalDate(now)
-    const entry: MoodEntry = {
-      id: 'mood-under-test',
-      localDate,
-      level: 3,
-      note: 'A quiet day.',
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    }
-    return awardSunlight(
-      { ...state, moods: [...state.moods, entry] },
-      `mood:${localDate}`,
-      now,
-    )
-  }
-
   it('treats collections with the same elements as unchanged', () => {
     const items = [{ id: 'a' }, { id: 'b' }]
     expect(sameCollection(items, items)).toBe(true)
@@ -331,4 +331,87 @@ describe('detecting what a write actually changed', () => {
     ])
   })
 })
+})
+
+describe('writing only what changed', () => {
+  const UNTOUCHED = ['completions', 'creatures', 'plants', 'goals'] as const
+
+  /** Overwrite stores with a marker, so a needless rewrite is visible. */
+  async function markStores() {
+    const db = await openDB('butterfly-garden')
+    try {
+      const tx = db.transaction(UNTOUCHED, 'readwrite')
+      await Promise.all([
+        ...UNTOUCHED.map((store) =>
+          tx.objectStore(store).put(['untouched-marker'], 'current'),
+        ),
+        tx.done,
+      ])
+    } finally {
+      db.close()
+    }
+  }
+
+  async function readStore(name: string): Promise<unknown> {
+    const db = await openDB('butterfly-garden')
+    try {
+      return await db.get(name, 'current')
+    } finally {
+      db.close()
+    }
+  }
+
+  it('leaves the collections a mood check-in did not change alone', async () => {
+    const before = maturedGarden()
+    await gardenRepository.save(before)
+    await markStores()
+
+    const after = checkInWithMood(before)
+    await gardenRepository.save(after)
+
+    // The markers survive only because those stores were never written to.
+    for (const store of UNTOUCHED) {
+      expect(await readStore(store)).toEqual(['untouched-marker'])
+    }
+    // What did change was written.
+    expect(await readStore('moods')).toHaveLength(after.moods.length)
+    expect(await readStore('sunlight')).toHaveLength(after.sunlight.length)
+    expect(await readStore('meta')).toMatchObject({ nectar: after.nectar })
+  })
+
+  it('writes nothing at all when the garden did not change', async () => {
+    const state = maturedGarden()
+    await gardenRepository.save(state)
+    await markStores()
+
+    await gardenRepository.save({ ...state })
+
+    for (const store of UNTOUCHED) {
+      expect(await readStore(store)).toEqual(['untouched-marker'])
+    }
+  })
+
+  it('writes every part of a garden it has no stored baseline for', async () => {
+    const state = maturedGarden()
+    // Opens the database (creating the stores) without establishing a
+    // baseline: an empty garden leaves nothing on disk to diff against.
+    await expect(gardenRepository.load()).resolves.toMatchObject({
+      status: 'empty',
+    })
+    await markStores()
+    await gardenRepository.save(state)
+
+    // No baseline means every part is dirty, so the markers are all replaced.
+    for (const store of UNTOUCHED) {
+      expect(await readStore(store)).not.toEqual(['untouched-marker'])
+    }
+  })
+
+  it('keeps writing the whole legacy record while both layouts are live', async () => {
+    const state = maturedGarden()
+    await gardenRepository.save(state)
+    await gardenRepository.save(checkInWithMood(state))
+
+    expect(await readStore('state')).toMatchObject({ version: 4 })
+  })
 })

@@ -1,4 +1,4 @@
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from 'idb'
 import { createEmptyState } from '../lib/progression'
 import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
@@ -202,6 +202,28 @@ const DATABASE_NAME = 'butterfly-garden'
  */
 const DATABASE_VERSION = 3
 let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
+
+/**
+ * The state believed to be on disk, used to work out what a write must touch.
+ * Set only after a load or a write that actually committed, so a failed write
+ * leaves it pointing at the last known-good garden and the next attempt
+ * recomputes the same work rather than trusting a write that never landed.
+ */
+let persisted: AppState | undefined
+
+function metaOf(state: AppState): GardenMeta {
+  return {
+    version: state.version,
+    profile: state.profile,
+    seeds: state.seeds,
+    nectar: state.nectar,
+    stardust: state.stardust,
+    inventory: state.inventory,
+    ownedItemIds: state.ownedItemIds,
+    ownedFlightPatternIds: state.ownedFlightPatternIds,
+    selectedFlightPatternId: state.selectedFlightPatternId,
+  }
+}
 
 function database() {
   databasePromise ??= openDB<GardenDatabase>(DATABASE_NAME, DATABASE_VERSION, {
@@ -463,6 +485,7 @@ export const gardenRepository = {
     try {
       saved = await (await database()).get('state', 'current')
     } catch {
+      persisted = undefined
       return {
         status: 'withheld',
         state: createEmptyState(),
@@ -470,19 +493,60 @@ export const gardenRepository = {
       }
     }
     if (saved === undefined) {
+      persisted = undefined
       return { status: 'empty', state: createEmptyState() }
     }
     const migrated = migrateState(saved)
-    if (migrated) return { status: 'loaded', state: migrated }
+    if (migrated) {
+      persisted = migrated
+      return { status: 'loaded', state: migrated }
+    }
 
     const reason = classifyRecord(saved) === 'incompatible' ? 'incompatible' : 'malformed'
     await quarantine(saved, reason)
+    persisted = undefined
     return { status: 'withheld', state: createEmptyState(), reason }
   },
 
-  /** Write the garden. Rejects on failure so callers can tell the user. */
+  /**
+   * Write the garden, touching only the parts that changed.
+   *
+   * Everything goes in one transaction so the stored garden is never
+   * internally inconsistent -- a creature that references a plant must not
+   * survive a partial write in which the plant is missing. Rejects on failure
+   * so callers can tell the user.
+   */
   async save(state: AppState): Promise<void> {
-    await (await database()).put('state', state, 'current')
+    const dirty = changedParts(persisted, state)
+    if (dirty.length === 0) return
+
+    const stores: StoreNames<GardenDatabase>[] = ['state']
+    for (const part of dirty) {
+      stores.push(part === 'meta' ? 'meta' : COLLECTION_STORES[part])
+    }
+
+    const db = await database()
+    const tx = db.transaction(stores, 'readwrite')
+    const writes: Promise<unknown>[] = [
+      // Dual-written through the rollout: a build without the split still
+      // finds a whole garden here, so a crash mid-rollout leaves data that
+      // either build can read.
+      tx.objectStore('state').put(state, 'current'),
+    ]
+    for (const part of dirty) {
+      if (part === 'meta') {
+        writes.push(tx.objectStore('meta').put(metaOf(state), 'current'))
+        continue
+      }
+      // The store and the field it holds are paired by COLLECTION_STORES, but
+      // that correspondence is beyond what the index signature can express.
+      const store = tx.objectStore(COLLECTION_STORES[part]) as {
+        put: (value: unknown, key: 'current') => Promise<unknown>
+      }
+      writes.push(store.put(state[part], 'current'))
+    }
+    await Promise.all([...writes, tx.done])
+    persisted = state
   },
 
   /** Records this build could not read, kept so they are never lost. */
@@ -507,6 +571,7 @@ export const gardenRepository = {
     const db = await database()
     db.close()
     databasePromise = undefined
+    persisted = undefined
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.deleteDatabase(DATABASE_NAME)
       request.onsuccess = () => resolve()
