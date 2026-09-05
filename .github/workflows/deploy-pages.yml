@@ -10,8 +10,11 @@ on:
 permissions:
   contents: read
 
+# Scoped per ref: a new run only supersedes an earlier run of the same branch
+# or pull request. A shared literal group would let any run in the repo cancel
+# a main deploy that is already under way.
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -84,6 +87,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    # Publishing keeps the single site-wide slot, but queues instead of
+    # cancelling: two deploys racing for the same Pages site clobber each other.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
