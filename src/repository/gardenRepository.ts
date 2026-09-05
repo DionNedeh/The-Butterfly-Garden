@@ -122,10 +122,54 @@ export function changedParts(
   return dirty
 }
 
+/** The small fields, stored together in the `meta` record. */
+export type GardenMeta = Pick<AppState, MetaField>
+
 interface GardenDatabase extends DBSchema {
+  /** The pre-split whole-garden record. Still read as the migration source. */
   state: {
     key: 'current'
     value: AppState
+  }
+  meta: {
+    key: 'current'
+    value: GardenMeta
+  }
+  goals: {
+    key: 'current'
+    value: AppState['goals']
+  }
+  completions: {
+    key: 'current'
+    value: AppState['completions']
+  }
+  moods: {
+    key: 'current'
+    value: AppState['moods']
+  }
+  reflections: {
+    key: 'current'
+    value: AppState['reflections']
+  }
+  plants: {
+    key: 'current'
+    value: AppState['plants']
+  }
+  creatures: {
+    key: 'current'
+    value: AppState['creatures']
+  }
+  sunlight: {
+    key: 'current'
+    value: AppState['sunlight']
+  }
+  jars: {
+    key: 'current'
+    value: AppState['jars']
+  }
+  placements: {
+    key: 'current'
+    value: AppState['jarPlacements']
   }
   quarantine: {
     key: string
@@ -133,18 +177,43 @@ interface GardenDatabase extends DBSchema {
   }
 }
 
+/** Every store this build expects to exist, created on upgrade if missing. */
+const OBJECT_STORES = [
+  'state',
+  'meta',
+  'goals',
+  'completions',
+  'moods',
+  'reflections',
+  'plants',
+  'creatures',
+  'sunlight',
+  'jars',
+  'placements',
+  'quarantine',
+] as const
+
 const DATABASE_NAME = 'butterfly-garden'
-const DATABASE_VERSION = 2
+/**
+ * Which object stores exist. Distinct from AppState.version, which describes
+ * the shape of the document and is unchanged by the split: bumping that
+ * instead would make every existing client treat its own data as written by a
+ * newer build and refuse to write.
+ */
+const DATABASE_VERSION = 3
 let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
 
 function database() {
   databasePromise ??= openDB<GardenDatabase>(DATABASE_NAME, DATABASE_VERSION, {
     upgrade(db) {
-      if (!db.objectStoreNames.contains('state')) {
-        db.createObjectStore('state')
-      }
-      if (!db.objectStoreNames.contains('quarantine')) {
-        db.createObjectStore('quarantine')
+      // Creating stores is all that happens here. Data is moved lazily on the
+      // first load instead, because a version-change transaction is an awkward
+      // place to do async work and a half-finished migration inside one is
+      // precisely the silent loss this repository exists to prevent.
+      for (const store of OBJECT_STORES) {
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store)
+        }
       }
     },
   })

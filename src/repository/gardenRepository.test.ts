@@ -22,7 +22,7 @@ afterEach(async () => {
 })
 
 async function writeRaw(record: unknown) {
-  const db = await openDB('butterfly-garden', 2)
+  const db = await openDB('butterfly-garden')
   try {
     await db.put('state', record, 'current')
   } finally {
@@ -180,7 +180,7 @@ describe('garden repository', () => {
 
       // The newer record must survive: the app refuses to write while withheld,
       // so a later read still finds it exactly as the newer client left it.
-      const db = await openDB('butterfly-garden', 2)
+      const db = await openDB('butterfly-garden')
       try {
         const stored = (await db.get('state', 'current')) as Record<string, unknown>
         expect(stored.version).toBe(5)
@@ -227,7 +227,7 @@ describe('garden repository', () => {
 
     it('refuses to report success while another tab holds the data', async () => {
       await gardenRepository.save(createInitialState('Held', 'Held Garden'))
-      const otherTab = await openDB('butterfly-garden', 2)
+      const otherTab = await openDB('butterfly-garden')
       try {
         await expect(gardenRepository.clear()).rejects.toThrow(/another open tab/i)
         // The garden is still there, exactly as it should be.
