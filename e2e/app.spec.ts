@@ -35,7 +35,11 @@ const profileNoteFixtures: ReadonlyArray<readonly [number[], number[]]> = [
   ],
 ]
 
-/** The stored garden, as the tests need to reach into it. */
+/**
+ * The stored garden, as the tests need to reach into it. The garden lives in
+ * one store per collection now, so this is assembled from the parts the tests
+ * touch and written back to those same parts.
+ */
 interface GardenRecord {
   profile: {
     createdAt: string
@@ -55,8 +59,13 @@ interface GardenRecord {
 
 /**
  * Edit the stored garden directly, the way a test needs to fast-forward time
- * or top up a balance. Waits out the app's debounced write first, and opens
- * the database at whatever version it is currently on.
+ * or top up a balance. Waits out the app's write first, and opens the database
+ * at whatever version it is currently on.
+ *
+ * The garden is stored across one record per collection, so this reads the
+ * three parts the tests reach into, presents them as a single object, and
+ * writes the parts back. Deliberately white-box: this is the one place
+ * outside the repository that is allowed to know how storage is laid out.
  */
 async function editGardenRecord(
   page: import('@playwright/test').Page,
@@ -64,26 +73,44 @@ async function editGardenRecord(
 ) {
   // Let the app's write land first, or this edit would be overwritten.
   await page.waitForTimeout(250)
-  const state = await page.evaluate(
+  const stored = await page.evaluate(
     () =>
-      new Promise<GardenRecord>((resolve, reject) => {
+      new Promise<Record<string, unknown>>((resolve, reject) => {
         // No pinned version: the schema gains stores over time.
         const request = indexedDB.open('butterfly-garden')
         request.onerror = () => reject(request.error)
         request.onsuccess = () => {
           const db = request.result
-          const get = db.transaction('state', 'readonly').objectStore('state').get('current')
-          get.onsuccess = () => {
-            db.close()
-            resolve(get.result as GardenRecord)
+          const names = ['meta', 'plants', 'creatures']
+          const tx = db.transaction(names, 'readonly')
+          const parts: Record<string, unknown> = {}
+          for (const name of names) {
+            const get = tx.objectStore(name).get('current')
+            get.onsuccess = () => {
+              parts[name] = get.result
+            }
           }
-          get.onerror = () => reject(get.error)
+          tx.oncomplete = () => {
+            db.close()
+            resolve(parts)
+          }
+          tx.onerror = () => reject(tx.error)
         }
       }),
   )
+
+  const state = {
+    ...(stored.meta as Record<string, unknown>),
+    plants: stored.plants,
+    creatures: stored.creatures,
+  } as unknown as GardenRecord
+
   // The mutation runs here in Node rather than being eval'd in the page, which
   // the app's Content-Security-Policy rightly forbids.
   mutate(state)
+
+  const { plants, creatures, ...meta } = state as GardenRecord &
+    Record<string, unknown>
   await page.evaluate(
     (next) =>
       new Promise<void>((resolve, reject) => {
@@ -91,8 +118,13 @@ async function editGardenRecord(
         request.onerror = () => reject(request.error)
         request.onsuccess = () => {
           const db = request.result
-          const tx = db.transaction('state', 'readwrite')
-          tx.objectStore('state').put(next, 'current')
+          const tx = db.transaction(
+            ['meta', 'plants', 'creatures'],
+            'readwrite',
+          )
+          tx.objectStore('meta').put(next.meta, 'current')
+          tx.objectStore('plants').put(next.plants, 'current')
+          tx.objectStore('creatures').put(next.creatures, 'current')
           tx.oncomplete = () => {
             db.close()
             resolve()
@@ -100,7 +132,7 @@ async function editGardenRecord(
           tx.onerror = () => reject(tx.error)
         }
       }),
-    state,
+    { meta, plants, creatures },
   )
 }
 

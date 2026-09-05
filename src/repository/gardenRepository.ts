@@ -1,4 +1,4 @@
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from 'idb'
 import { createEmptyState } from '../lib/progression'
 import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
@@ -18,10 +18,158 @@ export interface QuarantineRecord {
   raw: unknown
 }
 
+/**
+ * The large collections, each of which becomes its own stored record. The
+ * value is the object store that holds it; only `jarPlacements` differs from
+ * its field name, because `placements` reads better as a store.
+ */
+export const COLLECTION_STORES = {
+  goals: 'goals',
+  completions: 'completions',
+  moods: 'moods',
+  reflections: 'reflections',
+  plants: 'plants',
+  creatures: 'creatures',
+  sunlight: 'sunlight',
+  jarPlacements: 'placements',
+  jars: 'jars',
+} as const
+
+export type GardenCollection = keyof typeof COLLECTION_STORES
+
+export const GARDEN_COLLECTIONS = Object.keys(
+  COLLECTION_STORES,
+) as GardenCollection[]
+
+/**
+ * Everything that is not a large collection. These are tiny and nearly always
+ * change together, so they share one record rather than paying for a store
+ * each.
+ */
+export const META_FIELDS = [
+  'version',
+  'profile',
+  'seeds',
+  'nectar',
+  'stardust',
+  'inventory',
+  'ownedItemIds',
+  'ownedFlightPatternIds',
+  'selectedFlightPatternId',
+] as const
+
+export type MetaField = (typeof META_FIELDS)[number]
+export type GardenPart = GardenCollection | 'meta'
+
+/**
+ * Whether two collections hold the same elements, compared by reference.
+ *
+ * Plain `a === b` is not enough: `awardSunlight` maps over `plants` on every
+ * award, so an untouched collection still arrives with a fresh array identity
+ * and a reference check would call it dirty forever. Comparing element-wise
+ * costs O(n) pointer comparisons and allocates nothing, which is orders of
+ * magnitude cheaper than serialising the collection to find out.
+ *
+ * Every update in `src/lib` replaces rather than mutates, so an element that
+ * kept its identity cannot have changed. A false "unchanged" would lose data;
+ * this comparison cannot produce one.
+ */
+export function sameCollection(
+  a: readonly unknown[],
+  b: readonly unknown[],
+): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+function metaChanged(before: AppState, after: AppState): boolean {
+  for (const field of META_FIELDS) {
+    const previous: unknown = before[field]
+    const next: unknown = after[field]
+    if (previous === next) continue
+    if (
+      Array.isArray(previous) &&
+      Array.isArray(next) &&
+      sameCollection(previous, next)
+    ) {
+      continue
+    }
+    return true
+  }
+  return false
+}
+
+/**
+ * Which parts of the garden a write actually has to touch. With no known
+ * previous state every part is dirty, which is the safe answer.
+ */
+export function changedParts(
+  before: AppState | undefined,
+  after: AppState,
+): GardenPart[] {
+  if (!before) return ['meta', ...GARDEN_COLLECTIONS]
+  const dirty: GardenPart[] = []
+  if (metaChanged(before, after)) dirty.push('meta')
+  for (const collection of GARDEN_COLLECTIONS) {
+    if (!sameCollection(before[collection], after[collection])) {
+      dirty.push(collection)
+    }
+  }
+  return dirty
+}
+
+/** The small fields, stored together in the `meta` record. */
+export type GardenMeta = Pick<AppState, MetaField>
+
 interface GardenDatabase extends DBSchema {
+  /** The pre-split whole-garden record. Still read as the migration source. */
   state: {
     key: 'current'
     value: AppState
+  }
+  meta: {
+    key: 'current'
+    value: GardenMeta
+  }
+  goals: {
+    key: 'current'
+    value: AppState['goals']
+  }
+  completions: {
+    key: 'current'
+    value: AppState['completions']
+  }
+  moods: {
+    key: 'current'
+    value: AppState['moods']
+  }
+  reflections: {
+    key: 'current'
+    value: AppState['reflections']
+  }
+  plants: {
+    key: 'current'
+    value: AppState['plants']
+  }
+  creatures: {
+    key: 'current'
+    value: AppState['creatures']
+  }
+  sunlight: {
+    key: 'current'
+    value: AppState['sunlight']
+  }
+  jars: {
+    key: 'current'
+    value: AppState['jars']
+  }
+  placements: {
+    key: 'current'
+    value: AppState['jarPlacements']
   }
   quarantine: {
     key: string
@@ -29,18 +177,72 @@ interface GardenDatabase extends DBSchema {
   }
 }
 
+/** Every store this build expects to exist, created on upgrade if missing. */
+const OBJECT_STORES = [
+  'state',
+  'meta',
+  'goals',
+  'completions',
+  'moods',
+  'reflections',
+  'plants',
+  'creatures',
+  'sunlight',
+  'jars',
+  'placements',
+  'quarantine',
+] as const
+
 const DATABASE_NAME = 'butterfly-garden'
-const DATABASE_VERSION = 2
+/**
+ * Which object stores exist. Distinct from AppState.version, which describes
+ * the shape of the document and is unchanged by the split: bumping that
+ * instead would make every existing client treat its own data as written by a
+ * newer build and refuse to write.
+ */
+const DATABASE_VERSION = 3
 let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
+
+/**
+ * The state believed to be on disk, used to work out what a write must touch.
+ * Set only after a load or a write that actually committed, so a failed write
+ * leaves it pointing at the last known-good garden and the next attempt
+ * recomputes the same work rather than trusting a write that never landed.
+ */
+let persisted: AppState | undefined
+
+/** Stores holding the split garden. The legacy record is deliberately not
+ *  among them: it is read only when there is no split garden to read. */
+const PART_STORES: StoreNames<GardenDatabase>[] = [
+  'meta',
+  ...GARDEN_COLLECTIONS.map((collection) => COLLECTION_STORES[collection]),
+]
+
+function metaOf(state: AppState): GardenMeta {
+  return {
+    version: state.version,
+    profile: state.profile,
+    seeds: state.seeds,
+    nectar: state.nectar,
+    stardust: state.stardust,
+    inventory: state.inventory,
+    ownedItemIds: state.ownedItemIds,
+    ownedFlightPatternIds: state.ownedFlightPatternIds,
+    selectedFlightPatternId: state.selectedFlightPatternId,
+  }
+}
 
 function database() {
   databasePromise ??= openDB<GardenDatabase>(DATABASE_NAME, DATABASE_VERSION, {
     upgrade(db) {
-      if (!db.objectStoreNames.contains('state')) {
-        db.createObjectStore('state')
-      }
-      if (!db.objectStoreNames.contains('quarantine')) {
-        db.createObjectStore('quarantine')
+      // Creating stores is all that happens here. Data is moved lazily on the
+      // first load instead, because a version-change transaction is an awkward
+      // place to do async work and a half-finished migration inside one is
+      // precisely the silent loss this repository exists to prevent.
+      for (const store of OBJECT_STORES) {
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store)
+        }
       }
     },
   })
@@ -236,6 +438,55 @@ function migrateState(value: unknown): AppState | undefined {
   }
 }
 
+/** Read every part of the split garden in one transaction. */
+async function readParts(
+  db: IDBPDatabase<GardenDatabase>,
+): Promise<{ meta: unknown; collections: unknown[] }> {
+  const tx = db.transaction(PART_STORES, 'readonly')
+  const requests = [
+    tx.objectStore('meta').get('current') as Promise<unknown>,
+    ...GARDEN_COLLECTIONS.map((collection) =>
+      (
+        tx.objectStore(COLLECTION_STORES[collection]) as {
+          get: (key: 'current') => Promise<unknown>
+        }
+      ).get('current'),
+    ),
+  ]
+  const [meta, ...collections] = await Promise.all(requests)
+  await tx.done
+  return { meta, collections }
+}
+
+/** Write the whole garden across every part store, atomically. */
+async function writeAllParts(
+  db: IDBPDatabase<GardenDatabase>,
+  state: AppState,
+): Promise<void> {
+  const tx = db.transaction(PART_STORES, 'readwrite')
+  const writes: Promise<unknown>[] = [
+    tx.objectStore('meta').put(metaOf(state), 'current'),
+  ]
+  for (const collection of GARDEN_COLLECTIONS) {
+    const store = tx.objectStore(COLLECTION_STORES[collection]) as {
+      put: (value: unknown, key: 'current') => Promise<unknown>
+    }
+    writes.push(store.put(state[collection], 'current'))
+  }
+  await Promise.all([...writes, tx.done])
+}
+
+/** Rebuild the AppState the rest of the app expects from its stored parts. */
+function assembleGarden(meta: unknown, collections: unknown[]): unknown {
+  const assembled: Record<string, unknown> = {
+    ...(meta && typeof meta === 'object' ? meta : {}),
+  }
+  GARDEN_COLLECTIONS.forEach((collection, index) => {
+    assembled[collection] = collections[index]
+  })
+  return assembled
+}
+
 /**
  * What happened when the garden was read back.
  *
@@ -280,36 +531,152 @@ export function readImportedState(value: unknown): AppState | undefined {
   return migrateState(payload)
 }
 
+/**
+ * Move a pre-split garden into the split stores, or report that there is
+ * nothing to move.
+ *
+ * The legacy record is left in place afterwards, on purpose. It is the
+ * migration's source, so keeping it is what makes a revert of this work
+ * possible, and it means a build without the split still finds a garden
+ * rather than an empty database that it would onboard over. It does go stale
+ * from this point, since writes now go to the split stores only.
+ *
+ * If the process dies before the write below commits, the split stores stay
+ * empty and the next launch simply runs this again -- nothing is lost.
+ */
+async function loadFromLegacyRecord(
+  db: IDBPDatabase<GardenDatabase>,
+): Promise<LoadResult> {
+  let legacy: unknown
+  try {
+    legacy = await db.get('state', 'current')
+  } catch {
+    persisted = undefined
+    return {
+      status: 'withheld',
+      state: createEmptyState(),
+      reason: 'unavailable',
+    }
+  }
+
+  if (legacy === undefined) {
+    persisted = undefined
+    return { status: 'empty', state: createEmptyState() }
+  }
+
+  const migrated = migrateState(legacy)
+  if (!migrated) {
+    const reason =
+      classifyRecord(legacy) === 'incompatible' ? 'incompatible' : 'malformed'
+    await quarantine(legacy, reason)
+    persisted = undefined
+    return { status: 'withheld', state: createEmptyState(), reason }
+  }
+
+  try {
+    await writeAllParts(db, migrated)
+  } catch {
+    // The legacy record is untouched, so this is safe to retry on the next
+    // launch. Staying read-only until then keeps the two layouts from
+    // diverging in the meantime.
+    persisted = undefined
+    return {
+      status: 'withheld',
+      state: createEmptyState(),
+      reason: 'unavailable',
+    }
+  }
+
+  persisted = migrated
+  return { status: 'loaded', state: migrated }
+}
+
 export const gardenRepository = {
   /**
    * Read the garden. A record this build cannot understand is preserved and
    * reported as 'withheld' rather than silently replaced with a blank garden.
    */
   async load(): Promise<LoadResult> {
-    let saved: unknown
+    let db: IDBPDatabase<GardenDatabase>
+    let parts: { meta: unknown; collections: unknown[] }
     try {
-      saved = await (await database()).get('state', 'current')
+      db = await database()
+      parts = await readParts(db)
     } catch {
+      persisted = undefined
       return {
         status: 'withheld',
         state: createEmptyState(),
         reason: 'unavailable',
       }
     }
-    if (saved === undefined) {
-      return { status: 'empty', state: createEmptyState() }
-    }
-    const migrated = migrateState(saved)
-    if (migrated) return { status: 'loaded', state: migrated }
 
-    const reason = classifyRecord(saved) === 'incompatible' ? 'incompatible' : 'malformed'
-    await quarantine(saved, reason)
+    const { meta, collections } = parts
+    const nothingStored =
+      meta === undefined && collections.every((part) => part === undefined)
+
+    // No split garden: either a pre-split one to move across, or a new
+    // gardener. The legacy record is read only here, so an ordinary launch
+    // never pays to deserialise the snapshot left behind by the migration.
+    if (nothingStored) return await loadFromLegacyRecord(db)
+
+    // A hole in an otherwise present garden cannot be filled in by guessing:
+    // an absent collection is not an empty one. Withhold the whole garden
+    // rather than hand back a half-read one.
+    const complete =
+      meta !== undefined && collections.every((part) => part !== undefined)
+    const candidate = complete ? assembleGarden(meta, collections) : undefined
+    const migrated = candidate ? migrateState(candidate) : undefined
+    if (migrated) {
+      persisted = migrated
+      return { status: 'loaded', state: migrated }
+    }
+
+    const storedVersion = (meta as { version?: unknown } | undefined)?.version
+    const reason =
+      typeof storedVersion === 'number' && storedVersion > CURRENT_STATE_VERSION
+        ? 'incompatible'
+        : 'malformed'
+    // Quarantine the whole assembled candidate: half a garden is not something
+    // anyone could put back together by hand.
+    await quarantine(candidate ?? assembleGarden(meta, collections), reason)
+    persisted = undefined
     return { status: 'withheld', state: createEmptyState(), reason }
   },
 
-  /** Write the garden. Rejects on failure so callers can tell the user. */
+  /**
+   * Write the garden, touching only the parts that changed.
+   *
+   * Everything goes in one transaction so the stored garden is never
+   * internally inconsistent -- a creature that references a plant must not
+   * survive a partial write in which the plant is missing. Rejects on failure
+   * so callers can tell the user.
+   */
   async save(state: AppState): Promise<void> {
-    await (await database()).put('state', state, 'current')
+    const dirty = changedParts(persisted, state)
+    if (dirty.length === 0) return
+
+    const stores: StoreNames<GardenDatabase>[] = dirty.map((part) =>
+      part === 'meta' ? 'meta' : COLLECTION_STORES[part],
+    )
+
+    const db = await database()
+    const tx = db.transaction(stores, 'readwrite')
+    const writes: Promise<unknown>[] = []
+    for (const part of dirty) {
+      if (part === 'meta') {
+        writes.push(tx.objectStore('meta').put(metaOf(state), 'current'))
+        continue
+      }
+      // The store and the field it holds are paired by COLLECTION_STORES, but
+      // that correspondence is beyond what the index signature can express.
+      const store = tx.objectStore(COLLECTION_STORES[part]) as {
+        put: (value: unknown, key: 'current') => Promise<unknown>
+      }
+      writes.push(store.put(state[part], 'current'))
+    }
+    await Promise.all([...writes, tx.done])
+    persisted = state
   },
 
   /** Records this build could not read, kept so they are never lost. */
@@ -334,6 +701,7 @@ export const gardenRepository = {
     const db = await database()
     db.close()
     databasePromise = undefined
+    persisted = undefined
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.deleteDatabase(DATABASE_NAME)
       request.onsuccess = () => resolve()
