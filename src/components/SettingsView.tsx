@@ -10,10 +10,43 @@ import {
 } from '../data/ambientTracks'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
 
-const secretNameMessages = new Map([
-  ['pumpkin', 'Made for you with ❤️- S'],
-  ['shanna', 'Made with ❤️- S'],
-])
+/** Optional inline note rendered beneath the name field. */
+const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
+  [
+    0xd9b9523f,
+    [
+      21106, 55768, 21083, 55772, 21023, 55775, 21072, 55755, 21023, 55744,
+      21072, 55756, 21023, 55758, 21078, 55757, 21079, 55705, 30043, 10166,
+      21010, 55705, 21100,
+    ],
+  ],
+  [
+    0xaee8413c,
+    [
+      16753, 44681, 16728, 44685, 16668, 44703, 16725, 44700, 16724, 44744,
+      26200, 20711, 16657, 44744, 16751,
+    ],
+  ],
+]
+
+function foldName(value: string): number {
+  let hash = 2166136261
+  for (const char of value) {
+    hash ^= char.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function noteForName(value: string): string | undefined {
+  const key = foldName(value.trim().toLowerCase())
+  return nameNotes
+    .find(([id]) => id === key)?.[1]
+    .map((code, index) =>
+      String.fromCodePoint(code ^ ((key >>> ((index % 2) * 16)) & 0xffff)),
+    )
+    .join('')
+}
 
 export function SettingsView({
   state,
@@ -40,7 +73,7 @@ export function SettingsView({
   const [deleteStep, setDeleteStep] = useState(false)
   const profile = state.profile
   const unlockedBackdrops = profile ? unlockedBackdropIds(profile) : []
-  const secretMessage = secretNameMessages.get(name.trim().toLowerCase())
+  const nameNote = noteForName(name)
 
   return (
     <div className="view settings-view">
@@ -65,9 +98,7 @@ export function SettingsView({
             Your name
             <input value={name} onChange={(event) => setName(event.target.value)} />
           </label>
-          {secretMessage && (
-            <p className="pumpkin-message">{secretMessage}</p>
-          )}
+          {nameNote && <p className="profile-note">{nameNote}</p>}
           <label>
             Garden name
             <input
