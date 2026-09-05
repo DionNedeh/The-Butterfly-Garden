@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   daysUntilBackdrop,
   gardenBackdrops,
@@ -8,6 +8,7 @@ import {
   ambientTracks,
   DEFAULT_AMBIENT_TRACK_ID,
 } from '../data/ambientTracks'
+import type { PersistenceStatus } from '../hooks/useGardenState'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
 
 /** Optional inline note rendered beneath the name field. */
@@ -50,12 +51,16 @@ function noteForName(value: string): string | undefined {
 
 export function SettingsView({
   state,
+  persistence,
   onUpdateProfile,
   onSelectAmbientTrack,
   onSelectBackdrop,
+  onExportGarden,
+  onImportGarden,
   onDeleteAll,
 }: {
   state: AppState
+  persistence: PersistenceStatus
   onUpdateProfile: (
     name: string,
     gardenName: string,
@@ -63,7 +68,9 @@ export function SettingsView({
   ) => void
   onSelectAmbientTrack: (trackId: AmbientTrackId) => void
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
-  onDeleteAll: () => Promise<void>
+  onExportGarden: () => string
+  onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
+  onDeleteAll: () => Promise<{ ok: boolean; message?: string }>
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -71,6 +78,31 @@ export function SettingsView({
     state.profile?.reducedMotion ?? false,
   )
   const [deleteStep, setDeleteStep] = useState(false)
+  const [deleteError, setDeleteError] = useState<string>()
+  const [backupNote, setBackupNote] = useState<string>()
+  const [restoreStep, setRestoreStep] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const downloadBackup = () => {
+    try {
+      const blob = new Blob([onExportGarden()], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `butterfly-garden-${new Date().toISOString().slice(0, 10)}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      setBackupNote('Backup downloaded. Keep it somewhere safe.')
+    } catch {
+      setBackupNote('This browser would not start the download.')
+    }
+  }
+
+  const restoreBackup = async (file: File) => {
+    const result = await onImportGarden(await file.text())
+    setBackupNote(result.message)
+    if (result.ok) setRestoreStep(false)
+  }
   const profile = state.profile
   const unlockedBackdrops = profile ? unlockedBackdropIds(profile) : []
   const nameNote = noteForName(name)
@@ -96,7 +128,11 @@ export function SettingsView({
         >
           <label>
             Your name
-            <input value={name} onChange={(event) => setName(event.target.value)} />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={60}
+            />
           </label>
           {nameNote && <p className="profile-note">{nameNote}</p>}
           <label>
@@ -104,6 +140,7 @@ export function SettingsView({
             <input
               value={gardenName}
               onChange={(event) => setGardenName(event.target.value)}
+              maxLength={60}
               required
             />
           </label>
@@ -207,6 +244,63 @@ export function SettingsView({
         </div>
       </section>
 
+      <section className="card backup-card" aria-labelledby="backup-title">
+        <p className="eyebrow">Keep a copy</p>
+        <h2 id="backup-title">Backup and restore</h2>
+        <p className="section-explainer">
+          Your garden lives only in this browser. A backup file is the only way
+          to move it to another device or bring it back after site data is
+          cleared. Nothing is uploaded — the file is saved straight to this
+          device.
+        </p>
+        <div className="form-actions">
+          <button className="secondary-button" onClick={downloadBackup}>
+            Download a backup
+          </button>
+          {!restoreStep ? (
+            <button
+              className="text-button"
+              onClick={() => {
+                setBackupNote(undefined)
+                setRestoreStep(true)
+              }}
+            >
+              Restore from a backup
+            </button>
+          ) : (
+            <button className="text-button" onClick={() => setRestoreStep(false)}>
+              Cancel restore
+            </button>
+          )}
+        </div>
+        {restoreStep && (
+          <div className="delete-confirmation" role="alert">
+            <strong>
+              Restoring replaces everything currently in this browser.
+            </strong>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              aria-label="Backup file"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void restoreBackup(file)
+              }}
+            />
+          </div>
+        )}
+        {backupNote && <p className="settings-note">{backupNote}</p>}
+        {persistence.readOnly && (
+          <p className="settings-note error">
+            Saving is paused because the stored garden could not be read. The
+            unreadable copy has been set aside untouched; restoring a backup
+            here will start saving again.
+          </p>
+        )}
+      </section>
+
       <section className="card privacy-card" aria-labelledby="privacy-title">
         <p className="eyebrow">Plain-language privacy</p>
         <h2 id="privacy-title">This garden stays on this device</h2>
@@ -216,9 +310,15 @@ export function SettingsView({
           your entries to a server, or analyze what you write.
         </p>
         <p>
+          The garden makes no network requests of its own once it has loaded —
+          even its lettering is bundled with the app rather than fetched from a
+          font service, so opening it tells no one that you did.
+        </p>
+        <p>
           Clearing this site&apos;s browser storage, uninstalling without keeping
-          site data, or using another device can remove your garden. Automatic
-          backup and cross-device sync are not part of this first release.
+          site data, or using another device can remove your garden. Cross-device
+          sync is not part of this release, so keep a backup above if the garden
+          matters to you.
         </p>
       </section>
 
@@ -239,7 +339,12 @@ export function SettingsView({
             <div className="form-actions">
               <button
                 className="danger-button"
-                onClick={() => void onDeleteAll()}
+                onClick={() => {
+                  setDeleteError(undefined)
+                  void onDeleteAll().then((result) => {
+                    if (!result.ok) setDeleteError(result.message)
+                  })
+                }}
               >
                 Yes, delete everything
               </button>
@@ -247,6 +352,7 @@ export function SettingsView({
                 Keep my garden
               </button>
             </div>
+            {deleteError && <p className="settings-note error">{deleteError}</p>}
           </div>
         )}
       </section>

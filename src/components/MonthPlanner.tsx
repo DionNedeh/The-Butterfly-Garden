@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import {
   isGoalPlannedOn,
   isGoalSkipped,
@@ -6,8 +6,7 @@ import {
   monthDates,
   toLocalDate,
 } from '../lib/date'
-import { sunlightForDate } from '../lib/progression'
-import type { AppState } from '../types'
+import type { AppState, Goal, MoodEntry } from '../types'
 import { Icon } from './Icons'
 
 const weekdayHeadings = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -18,7 +17,23 @@ const moodGlyphs = ['', '🌧', '🌦', '☁️', '🌤', '☀️']
  * went (sunlight, mood, completions), and plan one-time goals onto any
  * future day.
  */
-export function MonthPlanner({
+interface DayInfo {
+  planned: Goal[]
+  completedGoalIds: Set<string>
+  completions: number
+  mood?: MoodEntry
+  sunlight: number
+}
+
+const EMPTY_DAY: DayInfo = {
+  planned: [],
+  completedGoalIds: new Set(),
+  completions: 0,
+  mood: undefined,
+  sunlight: 0,
+}
+
+export const MonthPlanner = memo(function MonthPlanner({
   state,
   onPlanGoal,
 }: {
@@ -50,21 +65,63 @@ export function MonthPlanner({
     })
   }
 
-  const dayInfo = (date: string) => {
-    const planned = state.goals.filter((goal) => isGoalPlannedOn(goal, date))
-    const completions = state.completions.filter(
-      (completion) => completion.localDate === date,
-    )
-    const mood = state.moods.find((entry) => entry.localDate === date)
-    return {
-      planned,
-      completions,
-      mood,
-      sunlight: sunlightForDate(state, date),
+  /**
+   * One indexed pass over the whole history per data change, instead of
+   * re-scanning goals, completions, moods and sunlight for every day drawn.
+   * With a few years of entries the old shape cost several milliseconds on
+   * every keystroke in the surrounding Today form.
+   */
+  const byDate = useMemo(() => {
+    const index = new Map<string, DayInfo>()
+    const dayFor = (date: string): DayInfo => {
+      let day = index.get(date)
+      if (!day) {
+        day = {
+          planned: [],
+          completedGoalIds: new Set(),
+          completions: 0,
+          mood: undefined,
+          sunlight: 0,
+        }
+        index.set(date, day)
+      }
+      return day
     }
+    for (const completion of state.completions) {
+      const day = dayFor(completion.localDate)
+      day.completions += 1
+      day.completedGoalIds.add(completion.goalId)
+    }
+    for (const entry of state.moods) dayFor(entry.localDate).mood = entry
+    for (const award of state.sunlight) dayFor(award.localDate).sunlight += 1
+    return index
+  }, [state.completions, state.moods, state.sunlight])
+
+  /** Goal scheduling still depends on the month on screen, so index that too. */
+  const plannedByDate = useMemo(() => {
+    const index = new Map<string, Goal[]>()
+    for (const date of dates) {
+      const planned = state.goals.filter((goal) => isGoalPlannedOn(goal, date))
+      if (planned.length) index.set(date, planned)
+    }
+    return index
+  }, [state.goals, dates])
+
+  const dayInfo = (date: string): DayInfo => {
+    const base = byDate.get(date) ?? EMPTY_DAY
+    const planned = plannedByDate.get(date)
+    if (!planned) return base
+    return { ...base, planned }
   }
 
-  const selected = dayInfo(selectedDate)
+  const selectedPlanned = useMemo(
+    () => state.goals.filter((goal) => isGoalPlannedOn(goal, selectedDate)),
+    [state.goals, selectedDate],
+  )
+  const selected: DayInfo = {
+    ...(byDate.get(selectedDate) ?? EMPTY_DAY),
+    planned: selectedPlanned,
+  }
   const selectedLabel = new Intl.DateTimeFormat(undefined, {
     weekday: 'long',
     month: 'long',
@@ -102,9 +159,13 @@ export function MonthPlanner({
         days went. Pick any upcoming day to plan a one-time goal for it.
       </p>
 
-      <div className="calendar-grid" role="grid" aria-label={monthLabel}>
+      {/* Not role="grid": that promises row/gridcell structure this flat CSS
+          grid does not have, which axe flags as critical. Each day is a button
+          that announces its own date and counts, so a labelled group is both
+          honest and easier to navigate. */}
+      <div className="calendar-grid" role="group" aria-label={monthLabel}>
         {weekdayHeadings.map((day) => (
-          <span className="calendar-heading" key={day}>
+          <span className="calendar-heading" key={day} aria-hidden="true">
             {day}
           </span>
         ))}
@@ -114,7 +175,7 @@ export function MonthPlanner({
         {dates.map((date) => {
           const info = dayInfo(date)
           const dayNumber = Number(date.slice(-2))
-          const done = info.completions.length
+          const done = info.completions
           const isPast = date < today
           return (
             <button
@@ -126,7 +187,11 @@ export function MonthPlanner({
                 isPast ? 'past' : '',
               ].join(' ')}
               aria-pressed={date === selectedDate}
-              aria-label={`${date}: ${info.planned.length} goals, ${done} completed`}
+              aria-label={`${new Intl.DateTimeFormat(undefined, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              }).format(localDateToNoon(date))}: ${info.planned.length} goals, ${done} completed`}
               onClick={() => setSelectedDate(date)}
             >
               <span className="calendar-day-number">{dayNumber}</span>
@@ -142,11 +207,7 @@ export function MonthPlanner({
                     <span
                       key={goal.id}
                       className={
-                        state.completions.some(
-                          (completion) =>
-                            completion.goalId === goal.id &&
-                            completion.localDate === date,
-                        )
+                        info.completedGoalIds.has(goal.id)
                           ? 'done'
                           : isGoalSkipped(goal, date)
                             ? 'skipped'
@@ -168,11 +229,7 @@ export function MonthPlanner({
         ) : (
           <ul className="calendar-goal-list">
             {selected.planned.map((goal) => {
-              const done = state.completions.some(
-                (completion) =>
-                  completion.goalId === goal.id &&
-                  completion.localDate === selectedDate,
-              )
+              const done = selected.completedGoalIds.has(goal.id)
               const skipped = isGoalSkipped(goal, selectedDate)
               return (
                 <li key={goal.id} className={done ? 'done' : skipped ? 'skipped' : ''}>
@@ -225,4 +282,4 @@ export function MonthPlanner({
       </div>
     </section>
   )
-}
+})

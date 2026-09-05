@@ -1,5 +1,6 @@
-import { JAR_PRICE, jarCharacters, jarColors } from '../data/jars'
+import { JAR_CAPACITY, JAR_PRICE, jarCharacters, jarColors } from '../data/jars'
 import type { AppState, JarColorId, JarInstance } from '../types'
+import { createId } from './id'
 
 export function normalizeJarCharacter(character: string): string | undefined {
   const normalized = character.trim().toUpperCase()
@@ -17,12 +18,17 @@ export function purchaseJar(
   now = new Date(),
 ): AppState {
   const normalizedCharacter = normalizeJarCharacter(character)
-  if (!normalizedCharacter || !isJarColorId(colorId) || state.nectar < JAR_PRICE) {
+  if (
+    !normalizedCharacter ||
+    !isJarColorId(colorId) ||
+    state.nectar < JAR_PRICE ||
+    state.jars.length >= JAR_CAPACITY
+  ) {
     return state
   }
 
   const jar: JarInstance = {
-    id: crypto.randomUUID(),
+    id: createId(),
     character: normalizedCharacter,
     colorId,
     purchasedAt: now.toISOString(),
@@ -44,6 +50,10 @@ export function jarForPlant(state: AppState, plantId: string) {
   return placement
     ? state.jars.find((jar) => jar.id === placement.jarId)
     : undefined
+}
+
+export function jarCapacityReached(state: AppState): boolean {
+  return state.jars.length >= JAR_CAPACITY
 }
 
 export function availableJars(state: AppState): JarInstance[] {

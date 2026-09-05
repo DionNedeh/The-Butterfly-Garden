@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import type { OutfitSlot } from '../../types'
 
 export interface OutfitAnchor {
@@ -151,7 +151,7 @@ function accessory(itemId: string): ReactNode {
   }
 }
 
-function aura(itemId: string): ReactNode {
+function aura(itemId: string, glow: string): ReactNode {
   switch (itemId) {
     case 'sparkle-aura':
       return (
@@ -200,7 +200,7 @@ function aura(itemId: string): ReactNode {
     case 'rainbow-trail':
       return (
         <g className="aura aura-aurora">
-          <circle r="46" fill="none" stroke="url(#morphoGlow)" strokeWidth="3" opacity="0.5" />
+          <circle r="46" fill="none" stroke={glow} strokeWidth="3" opacity="0.5" />
         </g>
       )
     default:
@@ -223,12 +223,24 @@ export function OutfitOverlay({
   hideAccessory?: boolean
 }) {
   const { headX, headY, bodyX, bodyY, scale } = anchor
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const glowId = `auraglow-${uid}`
   return (
     <g className="outfit-overlay" aria-hidden="true">
       {outfit.aura && (
-        <g transform={`translate(${bodyX} ${bodyY}) scale(${scale})`}>
-          {aura(outfit.aura)}
-        </g>
+        <>
+          {/* Defined here so the aura works on every life stage, not only
+              inside the butterfly sprite that used to own this gradient. */}
+          <defs>
+            <radialGradient id={glowId} cx="40%" cy="40%" r="70%">
+              <stop offset="0%" stopColor="#9adcff" />
+              <stop offset="100%" stopColor="#168bd2" />
+            </radialGradient>
+          </defs>
+          <g transform={`translate(${bodyX} ${bodyY}) scale(${scale})`}>
+            {aura(outfit.aura, `url(#${glowId})`)}
+          </g>
+        </>
       )}
       {!hideAccessory && outfit.accessory && (
         <g transform={`translate(${bodyX} ${bodyY}) scale(${scale})`}>

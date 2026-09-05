@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { reflectionPrompts, suggestedGoals } from '../data/content'
 import {
+  completionKey,
   formatJournalDate,
   getDailyPromptIndex,
   isGoalDue,
   isGoalSkipped,
-  toLocalDate,
+  retiredOnceGoalIds,
 } from '../lib/date'
 import {
   DAILY_SEED_REWARD,
@@ -26,6 +27,7 @@ const moods: Array<{ level: MoodEntry['level']; name: string; weather: string }>
 
 export function TodayView({
   state,
+  today,
   onSaveMood,
   onSaveReflection,
   onAddGoal,
@@ -36,8 +38,11 @@ export function TodayView({
   onSnoozeGoal,
   onWakeGoal,
   onPlanGoal,
+  onSetGoalArchived,
 }: {
   state: AppState
+  /** Current local date, refreshed across midnight by the app shell. */
+  today: string
   onSaveMood: (level: MoodEntry['level'], note: string) => void
   onSaveReflection: (promptId: string, body: string) => void
   onAddGoal: (title: string, schedule: GoalSchedule, weekdays?: number[]) => void
@@ -48,8 +53,8 @@ export function TodayView({
   onSnoozeGoal: (goalId: string, days: number) => void
   onWakeGoal: (goalId: string) => void
   onPlanGoal: (title: string, scheduledDate: string) => void
+  onSetGoalArchived: (goalId: string, archived: boolean) => void
 }) {
-  const today = toLocalDate()
   const existingMood = state.moods.find((entry) => entry.localDate === today)
   const existingReflection = state.reflections.find(
     (entry) => entry.localDate === today,
@@ -64,9 +69,28 @@ export function TodayView({
   const [reflection, setReflection] = useState(existingReflection?.body ?? '')
   const [editingGoal, setEditingGoal] = useState<Goal>()
   const prompt = reflectionPrompts[getDailyPromptIndex(today, reflectionPrompts.length)]
+  // One pass over completions instead of a scan per goal per render.
+  const completed = useMemo(
+    () =>
+      new Set(
+        state.completions.map((completion) =>
+          completionKey(completion.goalId, completion.localDate),
+        ),
+      ),
+    [state.completions],
+  )
+  const retired = useMemo(
+    () => retiredOnceGoalIds(state.completions, today),
+    [state.completions, today],
+  )
   const dueGoals = useMemo(
-    () => state.goals.filter((goal) => isGoalDue(goal, today)),
-    [state.goals, today],
+    () =>
+      state.goals.filter(
+        (goal) =>
+          isGoalDue(goal, today) &&
+          !(goal.schedule === 'once' && retired.has(goal.id)),
+      ),
+    [state.goals, today, retired],
   )
   const snoozedGoals = useMemo(
     () =>
@@ -76,12 +100,12 @@ export function TodayView({
       ),
     [state.goals, today],
   )
+  const archivedGoals = useMemo(
+    () => state.goals.filter((goal) => goal.archived),
+    [state.goals],
+  )
   const sunlight = sunlightForDate(state, today)
-  const isComplete = (goalId: string) =>
-    state.completions.some(
-      (completion) =>
-        completion.goalId === goalId && completion.localDate === today,
-    )
+  const isComplete = (goalId: string) => completed.has(completionKey(goalId, today))
 
   return (
     <div className="view today-view">
@@ -129,6 +153,7 @@ export function TodayView({
             value={moodNote}
             onChange={(event) => setMoodNote(event.target.value)}
             placeholder="A few words are plenty"
+            maxLength={280}
           />
         </label>
         <button
@@ -237,6 +262,27 @@ export function TodayView({
             </ul>
           </details>
         )}
+        {archivedGoals.length > 0 && (
+          <details className="snoozed-goals">
+            <summary>Archived ({archivedGoals.length})</summary>
+            <ul>
+              {archivedGoals.map((goal) => (
+                <li key={goal.id}>
+                  <span>
+                    <strong>{goal.title}</strong>
+                    <small>Kept for your records, hidden from Today</small>
+                  </span>
+                  <button
+                    className="text-button"
+                    onClick={() => onSetGoalArchived(goal.id, false)}
+                  >
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
 
         {editingGoal ? (
           <form
@@ -254,11 +300,23 @@ export function TodayView({
                 onChange={(event) =>
                   setEditingGoal({ ...editingGoal, title: event.target.value })
                 }
+                maxLength={120}
                 required
               />
             </label>
             <div className="form-actions">
               <button className="secondary-button" type="submit">Save</button>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => {
+                  onSetGoalArchived(editingGoal.id, true)
+                  setEditingGoal(undefined)
+                }}
+                title="Stop showing this goal without losing the days you completed it"
+              >
+                Archive
+              </button>
               <button
                 className="text-button danger-text"
                 type="button"
@@ -266,6 +324,7 @@ export function TodayView({
                   onDeleteGoal(editingGoal.id)
                   setEditingGoal(undefined)
                 }}
+                title="Remove the goal and every record of completing it"
               >
                 Delete
               </button>
@@ -291,6 +350,7 @@ export function TodayView({
                 value={goalTitle}
                 onChange={(event) => setGoalTitle(event.target.value)}
                 placeholder="One small act of care"
+                maxLength={120}
                 required
               />
               <datalist id="suggested-goals">
@@ -345,6 +405,7 @@ export function TodayView({
           value={reflection}
           onChange={(event) => setReflection(event.target.value)}
           placeholder="Write as much or as little as you like..."
+          maxLength={4000}
           rows={5}
         />
         <button

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarColors } from '../data/jars'
@@ -32,8 +32,16 @@ import { CreatureSprite } from './sprites/CreatureSprite'
 import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 
+/** Catalogs are static, so index them once at module load instead of scanning
+ *  them inside every render loop. */
+const plantsById = new Map(plants.map((plant) => [plant.id, plant]))
+const speciesById = new Map(species.map((item) => [item.id, item]))
+const jarColorsById = new Map<string, (typeof jarColors)[number]>(
+  jarColors.map((color) => [color.id, color]),
+)
+
 function jarStyle(colorId: string): CSSProperties {
-  const color = jarColors.find((item) => item.id === colorId) ?? jarColors[0]
+  const color = jarColorsById.get(colorId) ?? jarColors[0]
   return {
     '--jar-fill': color.fill,
     '--jar-text': color.text,
@@ -84,7 +92,7 @@ export function GardenView({
     ...emerged.map((creature) => ({
       id: creature.id,
       speciesId: creature.speciesId,
-      label: `${creature.name}, ${species.find((item) => item.id === creature.speciesId)?.commonName ?? 'butterfly'}`,
+      label: `${creature.name}, ${speciesById.get(creature.speciesId)?.commonName ?? 'butterfly'}`,
       outfit: visibleOutfit(state, creature.id),
     })),
   ]
@@ -119,9 +127,9 @@ export function GardenView({
       getDailyPromptIndex(toLocalDate(), observationChoices.length)
     ]
   const selectedPlant = state.plants.find((plant) => plant.id === selectedPlantId)
-  const selectedPlantDefinition = plants.find(
-    (plant) => plant.id === selectedPlant?.plantId,
-  )
+  const selectedPlantDefinition = selectedPlant
+    ? plantsById.get(selectedPlant.plantId)
+    : undefined
   const removalBlocker = selectedPlant
     ? plantRemovalBlocker(state, selectedPlant.id)
     : undefined
@@ -133,21 +141,30 @@ export function GardenView({
   const selectedPlantJar = selectedPlant
     ? jarForPlant(state, selectedPlant.id)
     : undefined
-  const availableJarItems = availableJars(state)
-  const placedJarSummaries = state.jarPlacements
-    .map((placement) => {
-      const jar = state.jars.find((item) => item.id === placement.jarId)
-      const plant = state.plants.find((item) => item.id === placement.plantId)
-      const plantDefinition = plants.find((item) => item.id === plant?.plantId)
-      const color = jarColors.find((item) => item.id === jar?.colorId)
-      if (!jar || !plant || !plantDefinition || !color) return undefined
-      return {
-        placement,
-        jar,
-        label: `${color.label} ${jar.character} on ${plantDefinition.name}`,
-      }
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  // What the grid below actually offers: every jar except the one already on
+  // this plant. Jars sitting on another plant move here when chosen.
+  const placeableJars = state.jars.filter(
+    (jar) => jar.id !== selectedPlantJar?.id,
+  )
+  const unplacedJarCount = availableJars(state).length
+  const placedJarSummaries = useMemo(() => {
+    const jarsById = new Map(state.jars.map((jar) => [jar.id, jar]))
+    const gardenPlantsById = new Map(state.plants.map((plant) => [plant.id, plant]))
+    return state.jarPlacements
+      .map((placement) => {
+        const jar = jarsById.get(placement.jarId)
+        const plant = gardenPlantsById.get(placement.plantId)
+        const plantDefinition = plant ? plantsById.get(plant.plantId) : undefined
+        const color = jar ? jarColorsById.get(jar.colorId) : undefined
+        if (!jar || !plant || !plantDefinition || !color) return undefined
+        return {
+          placement,
+          jar,
+          label: `${color.label} ${jar.character} on ${plantDefinition.name}`,
+        }
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  }, [state.jarPlacements, state.jars, state.plants])
   const selectedPattern =
     flightPatterns.find(
       (pattern) => pattern.id === state.selectedFlightPatternId,
@@ -178,7 +195,7 @@ export function GardenView({
             const route = flightRouteStyleFor(butterfly.id, index)
             return (
               <div
-                className={`flying-butterfly ${route.className} ${selectedPattern.animationClass}`}
+                className={`flying-butterfly ${selectedPattern.animationClass}`}
                 style={route.style as CSSProperties}
                 key={butterfly.id}
               >
@@ -195,11 +212,11 @@ export function GardenView({
 
         <div className="garden-plants" aria-label="Plants in your garden">
           {visiblePlants.map((plant, index) => {
-            const definition = plants.find((item) => item.id === plant.plantId)
+            const definition = plantsById.get(plant.plantId)
             const placedJar = jarForPlant(state, plant.id)
-            const placedJarColor = jarColors.find(
-              (item) => item.id === placedJar?.colorId,
-            )
+            const placedJarColor = placedJar
+              ? jarColorsById.get(placedJar.colorId)
+              : undefined
             const jarLabel =
               placedJar && placedJarColor
                 ? ` with ${placedJarColor.label} ${placedJar.character} jar`
@@ -288,7 +305,7 @@ export function GardenView({
         </p>
         <div className="plant-management-list" aria-label="All garden plants">
           {state.plants.map((plant, index) => {
-            const definition = plants.find((item) => item.id === plant.plantId)
+            const definition = plantsById.get(plant.plantId)
             return (
               <button
                 key={plant.id}
@@ -345,7 +362,7 @@ export function GardenView({
                 <dd>
                   {selectedPlantDefinition.speciesIds.length
                     ? selectedPlantDefinition.speciesIds
-                        .map((id) => species.find((item) => item.id === id)?.commonName)
+                        .map((id) => speciesById.get(id)?.commonName)
                         .filter(Boolean)
                         .join(' and ')
                     : 'Adult butterflies visiting for nectar'}
@@ -363,7 +380,7 @@ export function GardenView({
                   <h3 id="jar-manager-title">Decorate this plant spot</h3>
                 </div>
                 <span className="count-badge">
-                  {availableJarItems.length} ready
+                  {placeableJars.length} to place
                 </span>
               </div>
               {!selectedPlantIsVisible ? (
@@ -385,9 +402,8 @@ export function GardenView({
                         </span>
                         <div>
                           <strong>
-                            {jarColors.find(
-                              (color) => color.id === selectedPlantJar.colorId,
-                            )?.label ?? 'Custom'}{' '}
+                            {jarColorsById.get(selectedPlantJar.colorId)?.label ??
+                              'Custom'}{' '}
                             {selectedPlantJar.character} jar
                           </strong>
                           <small>Placed on this plant spot.</small>
@@ -403,26 +419,23 @@ export function GardenView({
                     ) : (
                       <p className="empty-copy">
                         This plant spot is empty. Choose a jar below to cover
-                        the base.
+                        the base — {unplacedJarCount} of your jars{' '}
+                        {unplacedJarCount === 1 ? 'is' : 'are'} not on a plant
+                        yet.
                       </p>
                     )}
                   </div>
 
                   <div className="jar-inventory-grid" aria-label="Available jars">
-                    {state.jars.filter((jar) => jar.id !== selectedPlantJar?.id)
-                      .length === 0 ? (
+                    {placeableJars.length === 0 ? (
                       <p className="empty-copy">
                         {selectedPlantJar
                           ? 'No other jars are ready to place here.'
                           : 'No jars are waiting in inventory. Buy letters and numbers in the Shop with Nectar.'}
                       </p>
                     ) : (
-                      state.jars
-                        .filter((jar) => jar.id !== selectedPlantJar?.id)
-                        .map((jar) => {
-                        const color = jarColors.find(
-                          (item) => item.id === jar.colorId,
-                        )
+                      placeableJars.map((jar) => {
+                        const color = jarColorsById.get(jar.colorId)
                         const colorLabel = color?.label ?? 'Custom'
                         const currentPlacement = state.jarPlacements.find(
                           (placement) => placement.jarId === jar.id,
@@ -555,11 +568,7 @@ export function GardenView({
                 <small>
                   {plant.kind === 'host'
                     ? `Host for ${plant.speciesIds
-                        .map(
-                          (speciesId) =>
-                            species.find((item) => item.id === speciesId)
-                              ?.commonName,
-                        )
+                        .map((speciesId) => speciesById.get(speciesId)?.commonName)
                         .filter(Boolean)
                         .join(' and ')}`
                     : 'Nectar plant for visiting butterflies'}
@@ -591,9 +600,7 @@ export function GardenView({
           ) : (
             <div className="creature-list">
               {developing.map((creature) => {
-                const definition = species.find(
-                  (item) => item.id === creature.speciesId,
-                )
+                const definition = speciesById.get(creature.speciesId)
                 const cared = hasCaredToday(creature)
                 return (
                   <article className="creature-row" key={creature.id}>
@@ -639,9 +646,7 @@ export function GardenView({
           ) : (
             <div className="companion-grid">
               {emerged.map((creature) => {
-                const definition = species.find(
-                  (item) => item.id === creature.speciesId,
-                )
+                const definition = speciesById.get(creature.speciesId)
                 const selected = creature.id === state.profile?.activeCompanionId
                 return (
                   <article

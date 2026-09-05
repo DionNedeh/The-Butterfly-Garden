@@ -6,15 +6,31 @@ import { jarCharacters, jarColors } from '../data/jars'
 import { DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { AmbientTrackId, AppState } from '../types'
 
+/** Newest schema this build understands. Anything higher was written by a
+ *  newer client and must be left untouched rather than overwritten. */
+export const CURRENT_STATE_VERSION = 4
+const READABLE_STATE_VERSIONS = new Set([1, 2, 3, 4])
+
+export interface QuarantineRecord {
+  id: string
+  reason: 'incompatible' | 'malformed'
+  storedAt: string
+  raw: unknown
+}
+
 interface GardenDatabase extends DBSchema {
   state: {
     key: 'current'
     value: AppState
   }
+  quarantine: {
+    key: string
+    value: QuarantineRecord
+  }
 }
 
 const DATABASE_NAME = 'butterfly-garden'
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
 
 function database() {
@@ -22,6 +38,9 @@ function database() {
     upgrade(db) {
       if (!db.objectStoreNames.contains('state')) {
         db.createObjectStore('state')
+      }
+      if (!db.objectStoreNames.contains('quarantine')) {
+        db.createObjectStore('quarantine')
       }
     },
   })
@@ -59,7 +78,7 @@ function migrateCreatures(creatures: unknown[]): AppState['creatures'] {
         stage,
         careDates:
           creature.careDates && typeof creature.careDates === 'object'
-            ? (creature.careDates as AppState['creatures'][number]['careDates'])
+            ? (creature.careDates)
             : {},
         actionLog:
           creature.actionLog && typeof creature.actionLog === 'object'
@@ -68,7 +87,7 @@ function migrateCreatures(creatures: unknown[]): AppState['creatures'] {
         bond: typeof creature.bond === 'number' ? creature.bond : 0,
         outfit:
           creature.outfit && typeof creature.outfit === 'object'
-            ? (creature.outfit as AppState['creatures'][number]['outfit'])
+            ? (creature.outfit)
             : {},
         carePoints:
           typeof creature.carePoints === 'number' ? creature.carePoints : 0,
@@ -76,14 +95,27 @@ function migrateCreatures(creatures: unknown[]): AppState['creatures'] {
     })
 }
 
+/**
+ * Why a stored record could not be read. 'incompatible' means a newer client
+ * wrote it; that data is still good and must never be overwritten.
+ */
+export function classifyRecord(
+  value: unknown,
+): 'readable' | 'incompatible' | 'malformed' {
+  if (!value || typeof value !== 'object') return 'malformed'
+  const version = (value as Record<string, unknown>).version
+  if (typeof version === 'number' && version > CURRENT_STATE_VERSION) {
+    return 'incompatible'
+  }
+  return migrateState(value) ? 'readable' : 'malformed'
+}
+
 function migrateState(value: unknown): AppState | undefined {
   if (!value || typeof value !== 'object') return undefined
   const candidate = value as Record<string, unknown>
   if (
-    (candidate.version !== 1 &&
-      candidate.version !== 2 &&
-      candidate.version !== 3 &&
-      candidate.version !== 4) ||
+    typeof candidate.version !== 'number' ||
+    !READABLE_STATE_VERSIONS.has(candidate.version) ||
     !Array.isArray(candidate.goals) ||
     !Array.isArray(candidate.completions) ||
     !Array.isArray(candidate.moods) ||
@@ -197,27 +229,107 @@ function migrateState(value: unknown): AppState | undefined {
           (id): id is string => typeof id === 'string',
         )
       : [],
-    ownedFlightPatternIds: owned as AppState['ownedFlightPatternIds'],
+    ownedFlightPatternIds: owned,
     selectedFlightPatternId: selected as AppState['selectedFlightPatternId'],
     jars,
     jarPlacements,
   }
 }
 
+/**
+ * What happened when the garden was read back.
+ *
+ * - `loaded`   a real garden was found and migrated.
+ * - `empty`    nothing has been stored yet (a genuinely new gardener).
+ * - `withheld` a record exists but this build cannot read it. The state
+ *              handed back is empty *for display only* — writing over the
+ *              stored record would destroy the gardener's data, so callers
+ *              must stay read-only until the user resolves it.
+ */
+export type LoadStatus = 'loaded' | 'empty' | 'withheld'
+
+export interface LoadResult {
+  status: LoadStatus
+  state: AppState
+  /** Present when status is 'withheld'. */
+  reason?: 'incompatible' | 'malformed' | 'unavailable'
+}
+
+async function quarantine(
+  raw: unknown,
+  reason: 'incompatible' | 'malformed',
+): Promise<void> {
+  try {
+    const id = `${reason}-${new Date().toISOString()}`
+    const db = await database()
+    await db.put('quarantine', { id, reason, storedAt: new Date().toISOString(), raw }, id)
+  } catch {
+    // Quarantining is best effort; never let it mask the original problem.
+  }
+}
+
+/**
+ * Validate a garden that came from an exported backup file. Returns undefined
+ * when the file is not a garden this build can read.
+ */
+export function readImportedState(value: unknown): AppState | undefined {
+  const payload =
+    value && typeof value === 'object' && 'garden' in (value)
+      ? (value).garden
+      : value
+  return migrateState(payload)
+}
+
 export const gardenRepository = {
-  async load(): Promise<AppState> {
+  /**
+   * Read the garden. A record this build cannot understand is preserved and
+   * reported as 'withheld' rather than silently replaced with a blank garden.
+   */
+  async load(): Promise<LoadResult> {
+    let saved: unknown
     try {
-      const saved = await (await database()).get('state', 'current')
-      return migrateState(saved) ?? createEmptyState()
+      saved = await (await database()).get('state', 'current')
     } catch {
-      return createEmptyState()
+      return {
+        status: 'withheld',
+        state: createEmptyState(),
+        reason: 'unavailable',
+      }
     }
+    if (saved === undefined) {
+      return { status: 'empty', state: createEmptyState() }
+    }
+    const migrated = migrateState(saved)
+    if (migrated) return { status: 'loaded', state: migrated }
+
+    const reason = classifyRecord(saved) === 'incompatible' ? 'incompatible' : 'malformed'
+    await quarantine(saved, reason)
+    return { status: 'withheld', state: createEmptyState(), reason }
   },
 
+  /** Write the garden. Rejects on failure so callers can tell the user. */
   async save(state: AppState): Promise<void> {
     await (await database()).put('state', state, 'current')
   },
 
+  /** Records this build could not read, kept so they are never lost. */
+  async quarantined(): Promise<QuarantineRecord[]> {
+    try {
+      return await (await database()).getAll('quarantine')
+    } catch {
+      return []
+    }
+  },
+
+  async clearQuarantine(): Promise<void> {
+    const db = await database()
+    await db.clear('quarantine')
+  },
+
+  /**
+   * Delete every trace of the garden. Rejects if another tab still holds the
+   * database open — reporting success there would be a lie about deleted data.
+   */
   async clear(): Promise<void> {
     const db = await database()
     db.close()
@@ -225,8 +337,14 @@ export const gardenRepository = {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.deleteDatabase(DATABASE_NAME)
       request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
-      request.onblocked = () => resolve()
+      request.onerror = () =>
+        reject(request.error ?? new Error('The garden could not be deleted.'))
+      request.onblocked = () =>
+        reject(
+          new Error(
+            'Another open tab of the garden is holding your data. Close the other tabs and try again.',
+          ),
+        )
     })
   },
 }

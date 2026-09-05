@@ -10,8 +10,21 @@ import type { AmbientTrackId } from '../types'
 interface AmbientEngine {
   context: AudioContext
   master: GainNode
-  timers: number[]
+  /** Pending timeouts only — entries are removed as they fire, so a long
+   *  listening session does not accumulate thousands of stale handles. */
+  timers: Set<number>
   stopped: boolean
+  /** Detaches the "resume on first gesture" listeners, if any are attached. */
+  releaseGesture?: () => void
+}
+
+/** Schedule work on the engine, keeping the pending-timer set accurate. */
+function schedule(engine: AmbientEngine, run: () => void, delay: number) {
+  const id = window.setTimeout(() => {
+    engine.timers.delete(id)
+    run()
+  }, delay)
+  engine.timers.add(id)
 }
 
 interface PianoNote {
@@ -76,9 +89,40 @@ function createEngine(): AmbientEngine | undefined {
   master.gain.value = 0
   master.connect(context.destination)
   master.gain.linearRampToValueAtTime(0.5, context.currentTime + 3)
+
+  const engine: AmbientEngine = {
+    context,
+    master,
+    timers: new Set(),
+    stopped: false,
+  }
+
   void context.resume().catch(() => undefined)
 
-  return { context, master, timers: [], stopped: false }
+  // A page reloaded with sound already switched on has had no user gesture
+  // yet, so the browser keeps the context suspended and the garden is silent
+  // while the button reads "on". Resume at the first interaction instead.
+  if (context.state === 'suspended') {
+    const events: Array<keyof WindowEventMap> = [
+      'pointerdown',
+      'keydown',
+      'touchstart',
+    ]
+    const resume = () => {
+      if (engine.stopped) return
+      void context.resume().catch(() => undefined)
+      engine.releaseGesture?.()
+    }
+    engine.releaseGesture = () => {
+      events.forEach((event) => window.removeEventListener(event, resume))
+      engine.releaseGesture = undefined
+    }
+    events.forEach((event) =>
+      window.addEventListener(event, resume, { once: false, passive: true }),
+    )
+  }
+
+  return engine
 }
 
 function startGardenSound(engine: AmbientEngine, includeNotes: boolean) {
@@ -148,11 +192,9 @@ function startGardenSound(engine: AmbientEngine, includeNotes: boolean) {
         osc.stop(when + 3)
         shimmer.stop(when + 2)
       }
-      engine.timers.push(
-        window.setTimeout(notes, 3500 + Math.random() * 8000),
-      )
+      schedule(engine, notes, 3500 + Math.random() * 8000)
     }
-    engine.timers.push(window.setTimeout(notes, 1500))
+    schedule(engine, notes, 1500)
   }
 
   // Rare, quiet birds from far away.
@@ -176,11 +218,9 @@ function startGardenSound(engine: AmbientEngine, includeNotes: boolean) {
       osc.start(when)
       osc.stop(when + 0.2)
     }
-    engine.timers.push(
-      window.setTimeout(bird, 6000 + Math.random() * 14000),
-    )
+    schedule(engine, bird, 6000 + Math.random() * 14000)
   }
-  engine.timers.push(window.setTimeout(bird, 4000))
+  schedule(engine, bird, 4000)
 }
 
 function midiToFrequency(midi: number) {
@@ -291,7 +331,7 @@ function startPiano(engine: AmbientEngine) {
       schedulePianoLoop(engine, pianoBus, nextLoopStart)
       nextLoopStart += loopSeconds
     }
-    engine.timers.push(window.setTimeout(refill, (loopSeconds * 1000) / 2))
+    schedule(engine, refill, (loopSeconds * 1000) / 2)
   }
   refill()
 }
@@ -310,7 +350,9 @@ function startEngine(trackId: AmbientTrackId): AmbientEngine | undefined {
 
 function stopEngine(engine: AmbientEngine) {
   engine.stopped = true
+  engine.releaseGesture?.()
   engine.timers.forEach((timer) => window.clearTimeout(timer))
+  engine.timers.clear()
   const { context, master } = engine
   try {
     master.gain.cancelScheduledValues(context.currentTime)

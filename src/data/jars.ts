@@ -2,6 +2,9 @@ import type { JarColorDefinition } from '../types'
 
 export const JAR_PRICE = 6
 
+/** Enough for a name or a short word on every plant spot, several times over. */
+export const JAR_CAPACITY = 60
+
 export const jarCharacters = [
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
   ...'0123456789'.split(''),

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { plants } from '../../data/content'
 
 /**
@@ -77,6 +77,7 @@ function fallbackVisual(plantId: string): PlantVisual {
 }
 
 function daisyHead(
+  dotsId: string,
   cx: number,
   cy: number,
   petalColor: string,
@@ -100,7 +101,7 @@ function daisyHead(
         />
       ))}
       <circle r="4.6" fill={centerColor} />
-      <circle r="4.6" fill="url(#flowerCenterDots)" opacity="0.5" />
+      <circle r="4.6" fill={`url(#${dotsId})`} opacity="0.5" />
     </g>
   )
 }
@@ -115,15 +116,15 @@ function leaf(x: number, y: number, angle: number, color: string, length = 16): 
   )
 }
 
-function bloomFor(visual: PlantVisual): ReactNode {
+function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
   const { archetype, bloom, bloomAccent, foliage, foliageDark, extra } = visual
   switch (archetype) {
     case 'daisy':
       return (
         <g>
-          {daisyHead(50, 30, bloom, '#e7b445', 18, 17, 2.2)}
-          {daisyHead(33, 48, bloom, '#e7b445', 16, 12, 1.8, 0.75)}
-          {daisyHead(66, 46, bloom, '#e7b445', 16, 12, 1.8, 0.7)}
+          {daisyHead(dotsId, 50, 30, bloom, '#e7b445', 18, 17, 2.2)}
+          {daisyHead(dotsId, 33, 48, bloom, '#e7b445', 16, 12, 1.8, 0.75)}
+          {daisyHead(dotsId, 66, 46, bloom, '#e7b445', 16, 12, 1.8, 0.7)}
           <path d="M33 52 C36 62 44 70 50 74" stroke={foliageDark} strokeWidth="2" fill="none" />
           <path d="M66 50 C63 60 56 70 50 74" stroke={foliageDark} strokeWidth="2" fill="none" />
         </g>
@@ -520,6 +521,9 @@ export function FlowerSprite({
   swayDelay?: number
 }) {
   const visual = visuals[plantId] ?? fallbackVisual(plantId)
+  // Scoped to this sprite: a shared literal id repeats across every flower in
+  // the scene, and url(#…) then resolves to whichever one is first in the DOM.
+  const dotsId = `flowerdots-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   const stage = Math.max(0, Math.min(3, growth))
   // Trees, willows, vines, and dogwood draw their own trunk or stake from
   // the ground up; low plants hug the soil; everything else gets a stem.
@@ -540,7 +544,7 @@ export function FlowerSprite({
       aria-hidden="true"
     >
       <defs>
-        <pattern id="flowerCenterDots" width="2.4" height="2.4" patternUnits="userSpaceOnUse">
+        <pattern id={dotsId} width="2.4" height="2.4" patternUnits="userSpaceOnUse">
           <circle cx="1.2" cy="1.2" r="0.5" fill="#8a5b16" />
         </pattern>
       </defs>
@@ -597,7 +601,7 @@ export function FlowerSprite({
                   : 'translate(0 26) scale(1.05)'
             }
           >
-            {bloomFor(visual)}
+            {bloomFor(visual, dotsId)}
           </g>
         </g>
       )}

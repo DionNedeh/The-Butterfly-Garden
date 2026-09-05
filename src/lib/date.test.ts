@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { Goal } from '../types'
 import {
   addDaysToLocalDate,
+  completionKey,
   isGoalDue,
   isGoalPlannedOn,
   isGoalSkipped,
   localDateToNoon,
   monthDates,
+  retiredOnceGoalIds,
   toLocalDate,
 } from './date'
 
@@ -73,5 +75,26 @@ describe('local calendar handling', () => {
     expect(days).toHaveLength(28)
     expect(days[0]).toBe('2026-02-01')
     expect(days.at(-1)).toBe('2026-02-28')
+  })
+})
+
+describe('retiring one-time goals', () => {
+  it('retires a one-time goal completed on an earlier day', () => {
+    const retired = retiredOnceGoalIds(
+      [
+        { goalId: 'tidy', localDate: '2026-09-01' },
+        { goalId: 'water', localDate: '2026-09-05' },
+      ],
+      '2026-09-05',
+    )
+    // Completed yesterday: done with, and off Today.
+    expect(retired.has('tidy')).toBe(true)
+    // Completed today: still shown, so the day reads as finished rather than
+    // having the goal vanish the moment it is ticked.
+    expect(retired.has('water')).toBe(false)
+  })
+
+  it('builds a stable key for a goal on a day', () => {
+    expect(completionKey('tidy', '2026-09-05')).toBe('tidy:2026-09-05')
   })
 })

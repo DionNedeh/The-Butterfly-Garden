@@ -1,4 +1,4 @@
-import type { Goal } from '../types'
+import type { DailyCompletion, Goal } from '../types'
 
 export function toLocalDate(date = new Date()): string {
   const year = date.getFullYear()
@@ -65,4 +65,25 @@ export function getDailyPromptIndex(localDate: string, count: number): number {
   const [year, month, day] = localDate.split('-').map(Number)
   const stableDay = Math.floor(Date.UTC(year, month - 1, day) / 86_400_000)
   return stableDay % count
+}
+
+/**
+ * One-time goals that were completed on an earlier day have served their
+ * purpose and should stop appearing on Today. They stay in the month planner
+ * and the journal, so the day they were done is never lost.
+ */
+export function retiredOnceGoalIds(
+  completions: ReadonlyArray<Pick<DailyCompletion, 'goalId' | 'localDate'>>,
+  today: string,
+): Set<string> {
+  const retired = new Set<string>()
+  for (const completion of completions) {
+    if (completion.localDate < today) retired.add(completion.goalId)
+  }
+  return retired
+}
+
+/** Key used to look up whether a goal was completed on a given day. */
+export function completionKey(goalId: string, localDate: string): string {
+  return `${goalId}:${localDate}`
 }

@@ -1,5 +1,3 @@
-export const FLIGHT_ROUTE_COUNT = 12
-
 const routes = [
   [['78%', '19%'], ['53%', '31%'], ['18%', '72%'], ['32%', '54%'], ['78%', '70%']],
   [['14%', '55%'], ['39%', '27%'], ['56%', '68%'], ['44%', '41%'], ['12%', '71%']],
@@ -39,7 +37,6 @@ export function flightRouteStyleFor(id: string, index: number) {
 
   return {
     routeIndex,
-    className: `flight-route-${routeIndex}`,
     style: {
       '--flight-delay': `${delay - index * 1.35}s`,
       '--flight-duration': `${duration}s`,
@@ -61,3 +58,6 @@ export function flightRouteStyleFor(id: string, index: number) {
     },
   }
 }
+
+/** Number of distinct flight paths butterflies are spread across. */
+export const FLIGHT_ROUTE_COUNT = routes.length

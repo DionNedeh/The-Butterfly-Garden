@@ -6,10 +6,11 @@ import {
   NECTAR_PER_SUNLIGHT,
   PLANT_SEED_COST,
 } from '../lib/progression'
+import type { IconName } from '../types'
 import { Icon } from './Icons'
 
 interface GuideSection {
-  icon: Parameters<typeof Icon>[0]['name']
+  icon: IconName
   eyebrow: string
   title: string
   paragraphs: string[]
