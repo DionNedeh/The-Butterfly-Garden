@@ -17,7 +17,7 @@
   "dependencies": {
     "idb": "^8.0.3",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
@@ -28,7 +28,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
+    "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
