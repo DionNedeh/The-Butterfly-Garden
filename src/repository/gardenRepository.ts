@@ -211,6 +211,13 @@ let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
  */
 let persisted: AppState | undefined
 
+/** Stores holding the split garden. The legacy record is deliberately not
+ *  among them: it is read only when there is no split garden to read. */
+const PART_STORES: StoreNames<GardenDatabase>[] = [
+  'meta',
+  ...GARDEN_COLLECTIONS.map((collection) => COLLECTION_STORES[collection]),
+]
+
 function metaOf(state: AppState): GardenMeta {
   return {
     version: state.version,
@@ -431,6 +438,55 @@ function migrateState(value: unknown): AppState | undefined {
   }
 }
 
+/** Read every part of the split garden in one transaction. */
+async function readParts(
+  db: IDBPDatabase<GardenDatabase>,
+): Promise<{ meta: unknown; collections: unknown[] }> {
+  const tx = db.transaction(PART_STORES, 'readonly')
+  const requests = [
+    tx.objectStore('meta').get('current') as Promise<unknown>,
+    ...GARDEN_COLLECTIONS.map((collection) =>
+      (
+        tx.objectStore(COLLECTION_STORES[collection]) as {
+          get: (key: 'current') => Promise<unknown>
+        }
+      ).get('current'),
+    ),
+  ]
+  const [meta, ...collections] = await Promise.all(requests)
+  await tx.done
+  return { meta, collections }
+}
+
+/** Write the whole garden across every part store, atomically. */
+async function writeAllParts(
+  db: IDBPDatabase<GardenDatabase>,
+  state: AppState,
+): Promise<void> {
+  const tx = db.transaction(PART_STORES, 'readwrite')
+  const writes: Promise<unknown>[] = [
+    tx.objectStore('meta').put(metaOf(state), 'current'),
+  ]
+  for (const collection of GARDEN_COLLECTIONS) {
+    const store = tx.objectStore(COLLECTION_STORES[collection]) as {
+      put: (value: unknown, key: 'current') => Promise<unknown>
+    }
+    writes.push(store.put(state[collection], 'current'))
+  }
+  await Promise.all([...writes, tx.done])
+}
+
+/** Rebuild the AppState the rest of the app expects from its stored parts. */
+function assembleGarden(meta: unknown, collections: unknown[]): unknown {
+  const assembled: Record<string, unknown> = {
+    ...(meta && typeof meta === 'object' ? meta : {}),
+  }
+  GARDEN_COLLECTIONS.forEach((collection, index) => {
+    assembled[collection] = collections[index]
+  })
+  return assembled
+}
+
 /**
  * What happened when the garden was read back.
  *
@@ -475,15 +531,77 @@ export function readImportedState(value: unknown): AppState | undefined {
   return migrateState(payload)
 }
 
+/**
+ * Move a pre-split garden into the split stores, or report that there is
+ * nothing to move.
+ *
+ * The legacy record is left in place afterwards, on purpose. It is the
+ * migration's source, so keeping it is what makes a revert of this work
+ * possible, and it means a build without the split still finds a garden
+ * rather than an empty database that it would onboard over. It does go stale
+ * from this point, since writes now go to the split stores only.
+ *
+ * If the process dies before the write below commits, the split stores stay
+ * empty and the next launch simply runs this again -- nothing is lost.
+ */
+async function loadFromLegacyRecord(
+  db: IDBPDatabase<GardenDatabase>,
+): Promise<LoadResult> {
+  let legacy: unknown
+  try {
+    legacy = await db.get('state', 'current')
+  } catch {
+    persisted = undefined
+    return {
+      status: 'withheld',
+      state: createEmptyState(),
+      reason: 'unavailable',
+    }
+  }
+
+  if (legacy === undefined) {
+    persisted = undefined
+    return { status: 'empty', state: createEmptyState() }
+  }
+
+  const migrated = migrateState(legacy)
+  if (!migrated) {
+    const reason =
+      classifyRecord(legacy) === 'incompatible' ? 'incompatible' : 'malformed'
+    await quarantine(legacy, reason)
+    persisted = undefined
+    return { status: 'withheld', state: createEmptyState(), reason }
+  }
+
+  try {
+    await writeAllParts(db, migrated)
+  } catch {
+    // The legacy record is untouched, so this is safe to retry on the next
+    // launch. Staying read-only until then keeps the two layouts from
+    // diverging in the meantime.
+    persisted = undefined
+    return {
+      status: 'withheld',
+      state: createEmptyState(),
+      reason: 'unavailable',
+    }
+  }
+
+  persisted = migrated
+  return { status: 'loaded', state: migrated }
+}
+
 export const gardenRepository = {
   /**
    * Read the garden. A record this build cannot understand is preserved and
    * reported as 'withheld' rather than silently replaced with a blank garden.
    */
   async load(): Promise<LoadResult> {
-    let saved: unknown
+    let db: IDBPDatabase<GardenDatabase>
+    let parts: { meta: unknown; collections: unknown[] }
     try {
-      saved = await (await database()).get('state', 'current')
+      db = await database()
+      parts = await readParts(db)
     } catch {
       persisted = undefined
       return {
@@ -492,18 +610,36 @@ export const gardenRepository = {
         reason: 'unavailable',
       }
     }
-    if (saved === undefined) {
-      persisted = undefined
-      return { status: 'empty', state: createEmptyState() }
-    }
-    const migrated = migrateState(saved)
+
+    const { meta, collections } = parts
+    const nothingStored =
+      meta === undefined && collections.every((part) => part === undefined)
+
+    // No split garden: either a pre-split one to move across, or a new
+    // gardener. The legacy record is read only here, so an ordinary launch
+    // never pays to deserialise the snapshot left behind by the migration.
+    if (nothingStored) return await loadFromLegacyRecord(db)
+
+    // A hole in an otherwise present garden cannot be filled in by guessing:
+    // an absent collection is not an empty one. Withhold the whole garden
+    // rather than hand back a half-read one.
+    const complete =
+      meta !== undefined && collections.every((part) => part !== undefined)
+    const candidate = complete ? assembleGarden(meta, collections) : undefined
+    const migrated = candidate ? migrateState(candidate) : undefined
     if (migrated) {
       persisted = migrated
       return { status: 'loaded', state: migrated }
     }
 
-    const reason = classifyRecord(saved) === 'incompatible' ? 'incompatible' : 'malformed'
-    await quarantine(saved, reason)
+    const storedVersion = (meta as { version?: unknown } | undefined)?.version
+    const reason =
+      typeof storedVersion === 'number' && storedVersion > CURRENT_STATE_VERSION
+        ? 'incompatible'
+        : 'malformed'
+    // Quarantine the whole assembled candidate: half a garden is not something
+    // anyone could put back together by hand.
+    await quarantine(candidate ?? assembleGarden(meta, collections), reason)
     persisted = undefined
     return { status: 'withheld', state: createEmptyState(), reason }
   },
@@ -520,19 +656,13 @@ export const gardenRepository = {
     const dirty = changedParts(persisted, state)
     if (dirty.length === 0) return
 
-    const stores: StoreNames<GardenDatabase>[] = ['state']
-    for (const part of dirty) {
-      stores.push(part === 'meta' ? 'meta' : COLLECTION_STORES[part])
-    }
+    const stores: StoreNames<GardenDatabase>[] = dirty.map((part) =>
+      part === 'meta' ? 'meta' : COLLECTION_STORES[part],
+    )
 
     const db = await database()
     const tx = db.transaction(stores, 'readwrite')
-    const writes: Promise<unknown>[] = [
-      // Dual-written through the rollout: a build without the split still
-      // finds a whole garden here, so a crash mid-rollout leaves data that
-      // either build can read.
-      tx.objectStore('state').put(state, 'current'),
-    ]
+    const writes: Promise<unknown>[] = []
     for (const part of dirty) {
       if (part === 'meta') {
         writes.push(tx.objectStore('meta').put(metaOf(state), 'current'))

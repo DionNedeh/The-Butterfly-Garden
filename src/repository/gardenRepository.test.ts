@@ -21,10 +21,34 @@ afterEach(async () => {
   await gardenRepository.clear().catch(() => undefined)
 })
 
+/** Stores that together hold a garden in the split layout. */
+const PART_STORES = [
+  'meta',
+  'goals',
+  'completions',
+  'moods',
+  'reflections',
+  'plants',
+  'creatures',
+  'sunlight',
+  'jars',
+  'placements',
+] as const
+
+/**
+ * Leave the database holding a pre-split garden: the legacy whole-garden
+ * record, and no split parts at all. That is exactly what an older build
+ * leaves behind, and what the lazy migration has to cope with.
+ */
 async function writeRaw(record: unknown) {
   const db = await openDB('butterfly-garden')
   try {
-    await db.put('state', record, 'current')
+    const tx = db.transaction(['state', ...PART_STORES], 'readwrite')
+    await Promise.all([
+      tx.objectStore('state').put(record, 'current'),
+      ...PART_STORES.map((store) => tx.objectStore(store).delete('current')),
+      tx.done,
+    ])
   } finally {
     db.close()
   }
@@ -261,7 +285,7 @@ describe('garden repository', () => {
       try {
         await expect(gardenRepository.clear()).rejects.toThrow(/another open tab/i)
         // The garden is still there, exactly as it should be.
-        const stored = await otherTab.get('state', 'current')
+        const stored = await otherTab.get('meta', 'current')
         expect(stored).toBeTruthy()
       } finally {
         otherTab.close()
@@ -407,11 +431,146 @@ describe('writing only what changed', () => {
     }
   })
 
-  it('keeps writing the whole legacy record while both layouts are live', async () => {
-    const state = maturedGarden()
-    await gardenRepository.save(state)
-    await gardenRepository.save(checkInWithMood(state))
+  it('keeps the pre-split record as a revert path but stops writing to it', async () => {
+    await gardenRepository.save(createEmptyState())
+    await writeRaw({ ...maturedGarden(), seeds: 41 })
 
-    expect(await readStore('state')).toMatchObject({ version: 4 })
+    const loaded = await gardenRepository.load()
+    expect(loaded.status).toBe('loaded')
+    expect(loaded.state.seeds).toBe(41)
+
+    await gardenRepository.save({ ...loaded.state, seeds: 99 })
+
+    // Frozen at the moment of migration, so a build without the split still
+    // finds a garden rather than an empty database it would onboard over.
+    expect(await readStore('state')).toMatchObject({ seeds: 41 })
+    expect(await readStore('meta')).toMatchObject({ seeds: 99 })
+  })
+})
+
+describe('moving a pre-split garden across', () => {
+  async function readStore(name: string): Promise<unknown> {
+    const db = await openDB('butterfly-garden')
+    try {
+      return await db.get(name, 'current')
+    } finally {
+      db.close()
+    }
+  }
+
+  it('migrates a pre-split garden on first load without losing anything', async () => {
+    const original = {
+      ...createInitialState('Mover', 'Moving Garden'),
+      seeds: 12,
+      nectar: 34,
+      moods: [
+        {
+          id: 'mood-1',
+          localDate: '2026-09-01',
+          level: 4 as const,
+          note: 'Kept safe across the move.',
+          createdAt: '2026-09-01T09:00:00.000Z',
+          updatedAt: '2026-09-01T09:00:00.000Z',
+        },
+      ],
+    }
+    await gardenRepository.save(createEmptyState())
+    await writeRaw(original)
+
+    const result = await gardenRepository.load()
+    expect(result.status).toBe('loaded')
+    expect(result.state).toMatchObject({
+      version: 4,
+      seeds: 12,
+      nectar: 34,
+      moods: original.moods,
+      plants: original.plants,
+    })
+
+    // The garden now genuinely lives in the split stores.
+    expect(await readStore('meta')).toMatchObject({ seeds: 12, nectar: 34 })
+    expect(await readStore('moods')).toEqual(original.moods)
+    expect(await readStore('plants')).toEqual(original.plants)
+  })
+
+  it('migrates a version-two garden into the split layout', async () => {
+    const legacy = {
+      ...createEmptyState(),
+      version: 2,
+      nectar: 15,
+    } as Record<string, unknown>
+    delete legacy.jars
+    delete legacy.jarPlacements
+
+    await gardenRepository.save(createEmptyState())
+    await writeRaw(legacy)
+
+    await expect(gardenRepository.load()).resolves.toMatchObject({
+      status: 'loaded',
+      state: { version: 4, nectar: 15, jars: [], jarPlacements: [] },
+    })
+    expect(await readStore('meta')).toMatchObject({ version: 4, nectar: 15 })
+    expect(await readStore('placements')).toEqual([])
+  })
+
+  it('runs the migration only once, and reads the same garden the second time', async () => {
+    await gardenRepository.save(createEmptyState())
+    await writeRaw({ ...createInitialState('Once', 'Once Garden'), seeds: 8 })
+
+    const first = await gardenRepository.load()
+    expect(first.status).toBe('loaded')
+
+    // Sabotage the legacy record. A second migration would pick this up; a
+    // load that reads the split stores cannot.
+    await writeRaw2({ broken: 'a second migration would read this' })
+
+    const second = await gardenRepository.load()
+    expect(second.status).toBe('loaded')
+    expect(second.state.seeds).toBe(8)
+  })
+
+  /** Overwrite only the legacy record, leaving the split stores in place. */
+  async function writeRaw2(record: unknown) {
+    const db = await openDB('butterfly-garden')
+    try {
+      await db.put('state', record, 'current')
+    } finally {
+      db.close()
+    }
+  }
+
+  it('withholds a split garden with a missing collection rather than half-reading it', async () => {
+    await gardenRepository.save(createInitialState('Holey', 'Holey Garden'))
+
+    const db = await openDB('butterfly-garden')
+    try {
+      await db.delete('reflections', 'current')
+    } finally {
+      db.close()
+    }
+
+    const result = await gardenRepository.load()
+    expect(result.status).toBe('withheld')
+    expect(result.reason).toBe('malformed')
+    expect(await gardenRepository.quarantined()).toHaveLength(1)
+  })
+
+  it('withholds a split garden written by a newer client', async () => {
+    await gardenRepository.save(createInitialState('Ahead', 'Ahead Garden'))
+
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      await db.put('meta', { ...meta, version: 5, seeds: 77 }, 'current')
+    } finally {
+      db.close()
+    }
+
+    const result = await gardenRepository.load()
+    expect(result.status).toBe('withheld')
+    expect(result.reason).toBe('incompatible')
+
+    // The newer garden must survive untouched.
+    expect(await readStore('meta')).toMatchObject({ version: 5, seeds: 77 })
   })
 })
