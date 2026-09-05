@@ -15,7 +15,7 @@ account, no server, no analytics, and no third-party request of any kind.
 - Egg, caterpillar, chrysalis and butterfly stages, advanced by days of care
 - Per-stage care activities, a bond meter, and a shared cosmetics wardrobe
 - A shop of supplies, outfits, lettered jars, and flight patterns
-- 26 real butterfly species with field notes, and selectable companions
+- 25 real butterfly species with field notes, and selectable companions
 - Three soundscapes synthesised on device — no audio files are downloaded
 - Backup and restore to a JSON file you keep
 - IndexedDB persistence with no account, analytics, or cloud transfer
@@ -36,11 +36,13 @@ The production app is configured for:
 ## Checks
 
 ```bash
-npm run lint       # type-aware ESLint over app, tests and config
+npm run lint       # ESLint everywhere; type-aware rules over src/
 npm run typecheck  # app, build config and end-to-end tests
 npm test           # unit and component tests
 npm run build
 npm run test:e2e   # Playwright, desktop and mobile, with an axe sweep
+
+npm audit --omit=dev --audit-level=high   # runtime dependencies only
 ```
 
 Playwright's browser binaries may need to be installed once with:
@@ -49,15 +51,21 @@ Playwright's browser binaries may need to be installed once with:
 npx playwright install chromium
 ```
 
-All of these run in CI on every push and pull request; a failure blocks the
-deploy.
+The lint, typecheck, unit, end-to-end and audit checks run in CI on every push
+and pull request, and a failure blocks the deploy. `npm run build` runs on
+pushes to `main` rather than on pull requests, since only a push can deploy.
 
 ## Privacy
 
 Goals, mood check-ins, reflections, and garden progress stay in the browser's
-IndexedDB storage. Nothing is uploaded, and the app makes no network requests
-after it loads — typefaces are bundled rather than fetched from a font CDN, so
+IndexedDB storage. Nothing is uploaded, and nothing is ever requested from a
+third party — typefaces are bundled rather than fetched from a font CDN, so
 opening the garden does not tell anyone that you did.
+
+The few requests made after launch all go to the app's own origin. The two
+backdrops that unlock later, and the extended-latin typefaces, are deliberately
+left out of the install and fetched the first time they are actually needed, so
+a new gardener does not download half a megabyte they cannot use yet.
 
 Clearing site data removes the garden, so **Settings → Backup and restore**
 writes a copy straight to your device. That file contains everything you have
