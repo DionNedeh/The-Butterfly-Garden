@@ -18,6 +18,110 @@ export interface QuarantineRecord {
   raw: unknown
 }
 
+/**
+ * The large collections, each of which becomes its own stored record. The
+ * value is the object store that holds it; only `jarPlacements` differs from
+ * its field name, because `placements` reads better as a store.
+ */
+export const COLLECTION_STORES = {
+  goals: 'goals',
+  completions: 'completions',
+  moods: 'moods',
+  reflections: 'reflections',
+  plants: 'plants',
+  creatures: 'creatures',
+  sunlight: 'sunlight',
+  jarPlacements: 'placements',
+  jars: 'jars',
+} as const
+
+export type GardenCollection = keyof typeof COLLECTION_STORES
+
+export const GARDEN_COLLECTIONS = Object.keys(
+  COLLECTION_STORES,
+) as GardenCollection[]
+
+/**
+ * Everything that is not a large collection. These are tiny and nearly always
+ * change together, so they share one record rather than paying for a store
+ * each.
+ */
+export const META_FIELDS = [
+  'version',
+  'profile',
+  'seeds',
+  'nectar',
+  'stardust',
+  'inventory',
+  'ownedItemIds',
+  'ownedFlightPatternIds',
+  'selectedFlightPatternId',
+] as const
+
+export type MetaField = (typeof META_FIELDS)[number]
+export type GardenPart = GardenCollection | 'meta'
+
+/**
+ * Whether two collections hold the same elements, compared by reference.
+ *
+ * Plain `a === b` is not enough: `awardSunlight` maps over `plants` on every
+ * award, so an untouched collection still arrives with a fresh array identity
+ * and a reference check would call it dirty forever. Comparing element-wise
+ * costs O(n) pointer comparisons and allocates nothing, which is orders of
+ * magnitude cheaper than serialising the collection to find out.
+ *
+ * Every update in `src/lib` replaces rather than mutates, so an element that
+ * kept its identity cannot have changed. A false "unchanged" would lose data;
+ * this comparison cannot produce one.
+ */
+export function sameCollection(
+  a: readonly unknown[],
+  b: readonly unknown[],
+): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+function metaChanged(before: AppState, after: AppState): boolean {
+  for (const field of META_FIELDS) {
+    const previous: unknown = before[field]
+    const next: unknown = after[field]
+    if (previous === next) continue
+    if (
+      Array.isArray(previous) &&
+      Array.isArray(next) &&
+      sameCollection(previous, next)
+    ) {
+      continue
+    }
+    return true
+  }
+  return false
+}
+
+/**
+ * Which parts of the garden a write actually has to touch. With no known
+ * previous state every part is dirty, which is the safe answer.
+ */
+export function changedParts(
+  before: AppState | undefined,
+  after: AppState,
+): GardenPart[] {
+  if (!before) return ['meta', ...GARDEN_COLLECTIONS]
+  const dirty: GardenPart[] = []
+  if (metaChanged(before, after)) dirty.push('meta')
+  for (const collection of GARDEN_COLLECTIONS) {
+    if (!sameCollection(before[collection], after[collection])) {
+      dirty.push(collection)
+    }
+  }
+  return dirty
+}
+
 interface GardenDatabase extends DBSchema {
   state: {
     key: 'current'

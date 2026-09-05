@@ -1,10 +1,20 @@
 import { openDB } from 'idb'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createEmptyState, createInitialState } from '../lib/progression'
 import {
+  MAX_PLANT_GROWTH,
+  awardSunlight,
+  createEmptyState,
+  createInitialState,
+} from '../lib/progression'
+import { toLocalDate } from '../lib/date'
+import type { AppState, MoodEntry } from '../types'
+import {
+  GARDEN_COLLECTIONS,
+  changedParts,
   classifyRecord,
   gardenRepository,
   readImportedState,
+  sameCollection,
 } from './gardenRepository'
 
 afterEach(async () => {
@@ -228,4 +238,97 @@ describe('garden repository', () => {
       }
     })
   })
+
+describe('detecting what a write actually changed', () => {
+  /** A garden whose plants are all fully grown, so nothing can grow further. */
+  function maturedGarden(): AppState {
+    const seed = createInitialState('Dirty', 'Dirty Garden')
+    return {
+      ...seed,
+      plants: seed.plants.map((plant) => ({
+        ...plant,
+        growth: MAX_PLANT_GROWTH,
+      })),
+    }
+  }
+
+  /** What `saveMood` in useGardenState does to the state, without the hook. */
+  function checkInWithMood(state: AppState, now = new Date()): AppState {
+    const localDate = toLocalDate(now)
+    const entry: MoodEntry = {
+      id: 'mood-under-test',
+      localDate,
+      level: 3,
+      note: 'A quiet day.',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    }
+    return awardSunlight(
+      { ...state, moods: [...state.moods, entry] },
+      `mood:${localDate}`,
+      now,
+    )
+  }
+
+  it('treats collections with the same elements as unchanged', () => {
+    const items = [{ id: 'a' }, { id: 'b' }]
+    expect(sameCollection(items, items)).toBe(true)
+    expect(sameCollection(items, [...items])).toBe(true)
+    expect(sameCollection(items, items.slice(0, 1))).toBe(false)
+    expect(sameCollection(items, [{ id: 'a' }, { id: 'b' }])).toBe(false)
+  })
+
+  it('treats a mood check-in as touching only moods, sunlight and meta', () => {
+    const before = maturedGarden()
+    const after = checkInWithMood(before)
+
+    // The trap: awardSunlight maps over plants unconditionally, so `plants`
+    // arrives with a new array identity even though no plant grew. A plain
+    // reference check would call it dirty on every single check-in.
+    expect(after.plants).not.toBe(before.plants)
+
+    expect(changedParts(before, after).sort()).toEqual(
+      ['meta', 'moods', 'sunlight'].sort(),
+    )
+  })
+
+  it('reports nothing dirty when the state did not change', () => {
+    const state = maturedGarden()
+    expect(changedParts(state, state)).toEqual([])
+    expect(changedParts(state, { ...state })).toEqual([])
+  })
+
+  it('reports every part dirty when nothing is known to be stored', () => {
+    const state = maturedGarden()
+    expect(changedParts(undefined, state).sort()).toEqual(
+      ['meta', ...GARDEN_COLLECTIONS].sort(),
+    )
+  })
+
+  it('notices a change confined to one collection', () => {
+    const before = maturedGarden()
+    const after = {
+      ...before,
+      goals: [
+        ...before.goals,
+        {
+          id: 'extra',
+          title: 'Water the ferns',
+          schedule: 'daily' as const,
+          weekdays: [0, 1, 2, 3, 4, 5, 6],
+          createdDate: '2026-09-05',
+          archived: false,
+        },
+      ],
+    }
+    expect(changedParts(before, after)).toEqual(['goals'])
+  })
+
+  it('notices a change confined to a meta field', () => {
+    const before = maturedGarden()
+    expect(changedParts(before, { ...before, nectar: before.nectar + 1 })).toEqual([
+      'meta',
+    ])
+  })
+})
 })
