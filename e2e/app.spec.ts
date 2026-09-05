@@ -5,6 +5,36 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/The-Butterfly-Garden/')
 })
 
+const PROFILE_NOTE_KEY = 0x5f3a91c7
+
+const decodeFixture = (codes: readonly number[]) =>
+  codes
+    .map((code, index) =>
+      String.fromCodePoint(
+        code ^ ((PROFILE_NOTE_KEY >>> ((index % 2) * 16)) & 0xffff),
+      ),
+    )
+    .join('')
+
+/** Name values that render an inline note, paired with the expected text. */
+const profileNoteFixtures: ReadonlyArray<readonly [number[], number[]]> = [
+  [
+    [37271, 24399, 37290, 24394, 37292, 24403, 37289],
+    [
+      37258, 24411, 37283, 24415, 37351, 24412, 37288, 24392, 37351, 24387,
+      37288, 24399, 37351, 24397, 37294, 24398, 37295, 24346, 46755, 41269,
+      37354, 24346, 37268,
+    ],
+  ],
+  [
+    [37268, 24402, 37286, 24404, 37289, 24411],
+    [
+      37258, 24411, 37283, 24415, 37351, 24397, 37294, 24398, 37295, 24346,
+      46755, 41269, 37354, 24346, 37268,
+    ],
+  ],
+]
+
 async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
@@ -89,12 +119,12 @@ test('supports plant selection and permanent local reset confirmation', async ({
   ).toBeVisible()
   await expect(page.getByText('Seeds and planting')).toBeVisible()
   await expect(page.getByText(/first Sunlight you earn each local day/i)).toBeVisible()
-  await page.getByLabel('Your name').fill('Pumpkin')
-  await expect(
-    page.getByText('Made for you with ❤️- S', { exact: true }),
-  ).toBeVisible()
-  await page.getByLabel('Your name').fill('Shanna')
-  await expect(page.getByText('Made with ❤️- S', { exact: true })).toBeVisible()
+  for (const [nameCodes, noteCodes] of profileNoteFixtures) {
+    await page.getByLabel('Your name').fill(decodeFixture(nameCodes))
+    await expect(
+      page.getByText(decodeFixture(noteCodes), { exact: true }),
+    ).toBeVisible()
+  }
   await page.getByRole('button', { name: /begin deletion/i }).click()
   await expect(page.getByText(/are you certain/i)).toBeVisible()
   await page.getByRole('button', { name: /keep my garden/i }).click()

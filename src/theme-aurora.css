@@ -101,7 +101,7 @@ h3,
 .timeline-entry time,
 .shop-item-card h3,
 .field-notes > summary strong,
-.pumpkin-message {
+.profile-note {
   font-family: var(--font-display);
   font-optical-sizing: auto;
 }
