@@ -4195,6 +4195,13 @@
 .theme-night .splash-title h1 { color: #eef7f1; text-shadow: none; }
 
 /* Reduced motion respects everything new */
+.page-hidden .flying-butterfly,
+.page-hidden .hero-petal,
+.page-hidden .butterfly-sprite.flapping .wing,
+.page-hidden .splash-flyer {
+  animation-play-state: paused;
+}
+
 .reduce-motion .view,
 .reduce-motion .hero-petal,
 .reduce-motion .splash-flyer {

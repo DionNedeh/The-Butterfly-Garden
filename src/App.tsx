@@ -95,6 +95,23 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [])
 
+  // Ambient motion costs nothing to keep running while nobody is looking, but
+  // it is not free on every device, so it stops when the tab is hidden.
+  useEffect(() => {
+    const syncVisibility = () => {
+      document.documentElement.classList.toggle(
+        'page-hidden',
+        document.visibilityState === 'hidden',
+      )
+    }
+    syncVisibility()
+    document.addEventListener('visibilitychange', syncVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', syncVisibility)
+      document.documentElement.classList.remove('page-hidden')
+    }
+  }, [])
+
   useEffect(() => {
     const handleOnline = () => setOnline(true)
     const handleOffline = () => setOnline(false)

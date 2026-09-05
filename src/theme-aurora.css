@@ -888,6 +888,13 @@ h2 {
   }
 }
 
+/* Nothing ambient needs to keep animating in a background tab. */
+.page-hidden .app-shell::before,
+.page-hidden .app-shell::after,
+.page-hidden .onboarding-shell::before {
+  animation-play-state: paused;
+}
+
 .reduce-motion .app-shell::before,
 .reduce-motion .garden-hero .hero-petals::after,
 .reduce-motion .streak-icon,

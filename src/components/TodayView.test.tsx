@@ -135,4 +135,12 @@ describe('TodayView goals', () => {
 
     expect(onSetGoalArchived).toHaveBeenCalledWith('resting', false)
   })
+
+  it('marks the day it is given as today, not whatever day the test runs', () => {
+    // The planner used to read the clock during render, so a session left open
+    // overnight kept highlighting yesterday and offered to plan onto it.
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    const todayCell = document.querySelector('.calendar-day.today')
+    expect(todayCell?.querySelector('.calendar-day-number')?.textContent).toBe('5')
+  })
 })

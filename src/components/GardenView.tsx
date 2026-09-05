@@ -147,6 +147,18 @@ export function GardenView({
     (jar) => jar.id !== selectedPlantJar?.id,
   )
   const unplacedJarCount = availableJars(state).length
+  /** Which plant each placed jar is sitting on, by jar id. */
+  const plantNameByJarId = useMemo(() => {
+    const gardenPlantsById = new Map(state.plants.map((plant) => [plant.id, plant]))
+    const names = new Map<string, string>()
+    for (const placement of state.jarPlacements) {
+      const plant = gardenPlantsById.get(placement.plantId)
+      const definition = plant ? plantsById.get(plant.plantId) : undefined
+      names.set(placement.jarId, definition?.name ?? 'another spot')
+    }
+    return names
+  }, [state.jarPlacements, state.plants])
+
   const placedJarSummaries = useMemo(() => {
     const jarsById = new Map(state.jars.map((jar) => [jar.id, jar]))
     const gardenPlantsById = new Map(state.plants.map((plant) => [plant.id, plant]))
@@ -437,17 +449,9 @@ export function GardenView({
                       placeableJars.map((jar) => {
                         const color = jarColorsById.get(jar.colorId)
                         const colorLabel = color?.label ?? 'Custom'
-                        const currentPlacement = state.jarPlacements.find(
-                          (placement) => placement.jarId === jar.id,
-                        )
-                        const currentPlant = state.plants.find(
-                          (plant) => plant.id === currentPlacement?.plantId,
-                        )
-                        const currentPlantDefinition = plants.find(
-                          (plant) => plant.id === currentPlant?.plantId,
-                        )
-                        const action = currentPlacement
-                          ? `Move from ${currentPlantDefinition?.name ?? 'another spot'}`
+                        const heldBy = plantNameByJarId.get(jar.id)
+                        const action = heldBy
+                          ? `Move from ${heldBy}`
                           : 'Place'
                         return (
                           <button

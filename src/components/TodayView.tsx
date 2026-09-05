@@ -394,7 +394,7 @@ export function TodayView({
         )}
       </section>
 
-      <MonthPlanner state={state} onPlanGoal={onPlanGoal} />
+      <MonthPlanner state={state} today={today} onPlanGoal={onPlanGoal} />
 
       <section className="card reflection-card" aria-labelledby="reflection-title">
         <p className="eyebrow">Optional reflection</p>

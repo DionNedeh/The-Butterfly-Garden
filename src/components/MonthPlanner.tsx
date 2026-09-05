@@ -4,7 +4,6 @@ import {
   isGoalSkipped,
   localDateToNoon,
   monthDates,
-  toLocalDate,
 } from '../lib/date'
 import type { AppState, Goal, MoodEntry } from '../types'
 import { Icon } from './Icons'
@@ -35,12 +34,14 @@ const EMPTY_DAY: DayInfo = {
 
 export const MonthPlanner = memo(function MonthPlanner({
   state,
+  today,
   onPlanGoal,
 }: {
   state: AppState
+  /** Current local date, refreshed across midnight by the app shell. */
+  today: string
   onPlanGoal: (title: string, scheduledDate: string) => void
 }) {
-  const today = toLocalDate()
   const [yearMonth, setYearMonth] = useState(() => {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() }
