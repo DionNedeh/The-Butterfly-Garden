@@ -268,6 +268,40 @@ describe('garden repository', () => {
       expect(readImportedState({ nope: true })).toBeUndefined()
       expect(readImportedState('not json')).toBeUndefined()
     })
+
+    it('restores a backup taken before the split into the split stores', async () => {
+      // A backup file written by the pre-split build: the same envelope, since
+      // the format is the gardener's only recovery path and must not change.
+      const envelope = {
+        format: 'the-butterfly-garden',
+        exportedAt: '2026-01-01T00:00:00.000Z',
+        garden: {
+          ...createInitialState('Restored', 'Restored Garden'),
+          seeds: 21,
+          moods: [
+            {
+              id: 'kept',
+              localDate: '2026-08-30',
+              level: 5 as const,
+              note: 'Survived the restore.',
+              createdAt: '2026-08-30T08:00:00.000Z',
+              updatedAt: '2026-08-30T08:00:00.000Z',
+            },
+          ],
+        },
+      }
+      // Something else is already in the garden, so this is a real replacement.
+      await gardenRepository.save(createInitialState('Old', 'Old Garden'))
+
+      const imported = readImportedState(envelope)
+      expect(imported).toBeTruthy()
+      await gardenRepository.save(imported!)
+
+      await expect(gardenRepository.load()).resolves.toMatchObject({
+        status: 'loaded',
+        state: { seeds: 21, moods: envelope.garden.moods },
+      })
+    })
   })
 
   describe('deletion', () => {
