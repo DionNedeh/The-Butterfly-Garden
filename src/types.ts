@@ -1,3 +1,30 @@
+export type IconName =
+  | 'garden'
+  | 'today'
+  | 'journal'
+  | 'settings'
+  | 'sun'
+  | 'moon'
+  | 'seed'
+  | 'leaf'
+  | 'nectar'
+  | 'shop'
+  | 'flight'
+  | 'care'
+  | 'droplet'
+  | 'music'
+  | 'eye'
+  | 'berry'
+  | 'bath'
+  | 'play'
+  | 'sparkle'
+  | 'stardust'
+  | 'hat'
+  | 'bow'
+  | 'crown'
+  | 'flower'
+  | 'lock'
+
 export type AppView =
   | 'garden'
   | 'care'
@@ -201,7 +228,8 @@ export interface ReflectionPrompt {
 
 export interface Observation {
   id: string
-  speciesId: string | 'all'
+  /** A species id, or the literal 'all' for lines any butterfly can prompt. */
+  speciesId: string
   text: string
 }
 
@@ -228,7 +256,7 @@ export interface CareActionDefinition {
   stage: CreatureStage
   name: string
   description: string
-  icon: string
+  icon: IconName
   /** Bond points granted when performed. */
   bond: number
   /** Supply item consumed from inventory, if any. Free actions omit this. */
@@ -240,7 +268,7 @@ export interface ShopItemDefinition {
   kind: ShopItemKind
   name: string
   description: string
-  icon: string
+  icon: IconName
   cost: number
   currency: Extract<CurrencyId, 'nectar' | 'stardust'>
   /** Cosmetics only: which slot the item occupies. */

@@ -35,6 +35,93 @@ const profileNoteFixtures: ReadonlyArray<readonly [number[], number[]]> = [
   ],
 ]
 
+/** The stored garden, as the tests need to reach into it. */
+interface GardenRecord {
+  profile: {
+    createdAt: string
+    selectedBackdropId?: string
+    unlockedBackdropIds?: string[]
+  }
+  nectar: number
+  stardust: number
+  plants: Array<{
+    id: string
+    plantId: string
+    growth: number
+    plantedAt: string
+  }>
+  creatures: Array<{ stage?: string; sourcePlantId?: string; emergeAt?: string }>
+}
+
+/**
+ * Edit the stored garden directly, the way a test needs to fast-forward time
+ * or top up a balance. Waits out the app's debounced write first, and opens
+ * the database at whatever version it is currently on.
+ */
+async function editGardenRecord(
+  page: import('@playwright/test').Page,
+  mutate: (state: GardenRecord) => void,
+) {
+  // Let the app's write land first, or this edit would be overwritten.
+  await page.waitForTimeout(250)
+  const state = await page.evaluate(
+    () =>
+      new Promise<GardenRecord>((resolve, reject) => {
+        // No pinned version: the schema gains stores over time.
+        const request = indexedDB.open('butterfly-garden')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const get = db.transaction('state', 'readonly').objectStore('state').get('current')
+          get.onsuccess = () => {
+            db.close()
+            resolve(get.result as GardenRecord)
+          }
+          get.onerror = () => reject(get.error)
+        }
+      }),
+  )
+  // The mutation runs here in Node rather than being eval'd in the page, which
+  // the app's Content-Security-Policy rightly forbids.
+  mutate(state)
+  await page.evaluate(
+    (next) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const tx = db.transaction('state', 'readwrite')
+          tx.objectStore('state').put(next, 'current')
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          tx.onerror = () => reject(tx.error)
+        }
+      }),
+    state,
+  )
+}
+
+/**
+ * Reload once the app's write has had a moment to commit. No app can promise
+ * durability against a reload fired in the same instant as a click, so tests
+ * that reload right after a mutation give the transaction a beat to land.
+ */
+async function reloadAfterSave(page: import('@playwright/test').Page) {
+  await page.waitForTimeout(250)
+  await page.reload()
+}
+
+/**
+ * The app's own navigation, whichever of the header or bottom bar is showing.
+ * Scoped by label so it never picks up the shop's own <nav> of tabs.
+ */
+function mainNav(page: import('@playwright/test').Page) {
+  return page.locator('nav[aria-label$="navigation" i]:visible').first()
+}
+
 async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
@@ -52,9 +139,11 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
   await expect(
     page.getByRole('heading', { name: /how your sanctuary grows/i }),
   ).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Chrysalises' })).toBeVisible()
   await expect(
-    page.getByRole('heading', { name: 'Emerging butterflies' }),
+    page.getByRole('heading', { name: 'Four stages of life' }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Companions for life' }),
   ).toBeVisible()
   await expect(
     page.getByRole('heading', { name: 'Seeds and host plants' }),
@@ -71,8 +160,7 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
   await expect(
     page.getByText(/marigold, your monarch garden guide enjoyed that gentle hello/i),
   ).toBeVisible()
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Today', exact: true })
     .click()
   await page.getByRole('button', { name: /bright/i }).click()
@@ -89,8 +177,7 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
     .fill('I noticed sunlight on the kitchen table.')
   await page.getByRole('button', { name: /keep this reflection/i }).click()
 
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
   await page.getByText('Butterflies welcomed').click()
@@ -110,15 +197,16 @@ test('supports plant selection and permanent local reset confirmation', async ({
   await enterGarden(page)
   await page.getByRole('button', { name: /plant a seed/i }).click()
   await page.getByRole('button', { name: /parsley/i }).click()
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Settings', exact: true })
     .click()
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
   await expect(
-    page.getByRole('heading', { name: 'How everything works' }),
+    page.getByRole('heading', { name: 'Backup and restore' }),
   ).toBeVisible()
-  await expect(page.getByText('Seeds and planting')).toBeVisible()
-  await expect(page.getByText(/first Sunlight you earn each local day/i)).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'This garden stays on this device' }),
+  ).toBeVisible()
   for (const [nameCodes, noteCodes] of profileNoteFixtures) {
     await page.getByLabel('Your name').fill(decodeFixture(nameCodes))
     await expect(
@@ -144,6 +232,7 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   await expect(
     page.getByRole('button', { name: 'Switch to sunlight mode' }),
   ).toBeVisible()
+  // Stars belong to the garden scene; the shell only takes on the night veil.
   const starLayers = await page.evaluate(() => ({
     shell: getComputedStyle(document.querySelector('.app-shell')!).backgroundImage,
     garden: getComputedStyle(
@@ -151,8 +240,8 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
       '::before',
     ).backgroundImage,
   }))
-  expect(starLayers.shell).not.toContain('radial-gradient')
   expect(starLayers.garden).toContain('radial-gradient')
+  expect(starLayers.shell).not.toContain('url(')
   const nightResults = await new AxeBuilder({ page }).analyze()
   expect(
     nightResults.violations.filter(
@@ -161,36 +250,15 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     ),
   ).toEqual([])
 
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const openRequest = indexedDB.open('butterfly-garden', 1)
-        openRequest.onerror = () => reject(openRequest.error)
-        openRequest.onsuccess = () => {
-          const db = openRequest.result
-          const transaction = db.transaction('state', 'readwrite')
-          const store = transaction.objectStore('state')
-          const getRequest = store.get('current')
-          getRequest.onsuccess = () => {
-            const state = getRequest.result
-            state.profile.createdAt = new Date(
-              Date.now() - 61 * 24 * 60 * 60 * 1000,
-            ).toISOString()
-            delete state.profile.selectedBackdropId
-            delete state.profile.unlockedBackdropIds
-            store.put(state, 'current')
-          }
-          transaction.oncomplete = () => {
-            db.close()
-            resolve()
-          }
-          transaction.onerror = () => reject(transaction.error)
-        }
-      }),
-  )
+  await editGardenRecord(page, (state) => {
+    state.profile.createdAt = new Date(
+      Date.now() - 61 * 24 * 60 * 60 * 1000,
+    ).toISOString()
+    delete state.profile.selectedBackdropId
+    delete state.profile.unlockedBackdropIds
+  })
   await page.reload()
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Settings', exact: true })
     .click()
 
@@ -198,8 +266,7 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     name: /Secret Conservatory.*Unlocked - select backdrop/i,
   })
   await conservatory.click()
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Garden', exact: true })
     .click()
   await expect(page.locator('.garden-hero')).toHaveClass(
@@ -207,20 +274,20 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   )
 })
 
-test('guide explains the three plant growth stages and their timing', async ({
-  page,
-}) => {
+test('guide explains how plants grow and when eggs appear', async ({ page }) => {
   await enterGarden(page)
-  await page.getByRole('button', { name: 'Settings' }).click()
-  await page
-    .getByText('Host plants, nectar plants, and growth')
+  await mainNav(page)
+    .getByRole('button', { name: 'Guide', exact: true })
     .click()
 
   await expect(
-    page.getByText(/first Sunlight produces a small sprout/i),
+    page.getByRole('heading', { name: 'How the garden works' }),
   ).toBeVisible()
   await expect(
-    page.getByText(/one Sunlight per day, a new plant takes about three days/i),
+    page.getByRole('heading', { name: 'Seeds, plants, and butterfly eggs' }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/seed, sprout, budding, full bloom/i),
   ).toBeVisible()
   await expect(
     page.getByText(/Missed days simply pause growth/i),
@@ -231,8 +298,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   page,
 }) => {
   await enterGarden(page)
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Today', exact: true })
     .click()
   await page.getByRole('button', { name: /bright/i }).click()
@@ -244,8 +310,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await page.getByRole('button', { name: /keep this reflection/i }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('9')
 
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Shop', exact: true })
     .click()
   await page.waitForTimeout(450)
@@ -256,36 +321,26 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
         violation.impact === 'serious' || violation.impact === 'critical',
     ),
   ).toEqual([])
+  // Flight patterns live behind their own tab; the shop opens on Supplies.
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Flight', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Buy Petal Hop' }).click()
   await expect(page.getByRole('button', { name: 'Owned' }).first()).toBeDisabled()
 
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('butterfly-garden', 1)
-        request.onerror = () => reject(request.error)
-        request.onsuccess = () => {
-          const db = request.result
-          const tx = db.transaction('state', 'readwrite')
-          const store = tx.objectStore('state')
-          const get = store.get('current')
-          get.onsuccess = () => {
-            const state = get.result
-            state.nectar = 126
-            store.put(state, 'current')
-          }
-          tx.oncomplete = () => {
-            db.close()
-            resolve()
-          }
-          tx.onerror = () => reject(tx.error)
-        }
-      }),
-  )
+  // Top up both currencies: the pricier patterns are bought with Stardust.
+  await editGardenRecord(page, (state) => {
+    state.nectar = 126
+    state.stardust = 20
+  })
   await page.reload()
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Shop', exact: true })
+    .click()
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Flight', exact: true })
     .click()
   for (const name of [
     'Figure Eight',
@@ -295,11 +350,12 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   ]) {
     await page.getByRole('button', { name: `Buy ${name}` }).click()
   }
-  await expect(page.getByTitle('Nectar balance')).toContainText('0')
+  // 126 - 18 - 27 Nectar, and 20 - 7 - 10 Stardust.
+  await expect(page.getByTitle('Nectar balance')).toContainText('81')
+  await expect(page.getByTitle('Stardust balance')).toContainText('3')
 
-  await page
-    .locator('nav:visible')
-    .getByRole('button', { name: 'Flight Patterns', exact: true })
+  await mainNav(page)
+    .getByRole('button', { name: 'Flight', exact: true })
     .click()
   await page.waitForTimeout(450)
   const patternsA11y = await new AxeBuilder({ page }).analyze()
@@ -310,24 +366,21 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
     ),
   ).toEqual([])
   await page.getByRole('button', { name: /Garden Waltz.*Owned - select pattern/i }).click()
-  await page.reload()
-  await page
-    .locator('nav:visible')
-    .getByRole('button', { name: 'Flight Patterns', exact: true })
+  await reloadAfterSave(page)
+  await mainNav(page)
+    .getByRole('button', { name: 'Flight', exact: true })
     .click()
   await expect(page.getByRole('button', { name: /Garden Waltz.*Selected/i })).toHaveAttribute(
     'aria-pressed',
     'true',
   )
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Garden', exact: true })
     .click()
   await expect(page.locator('.flying-butterfly').first()).toHaveClass(
     /pattern-garden-waltz/,
   )
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Settings', exact: true })
     .click()
   await page.getByLabel('Reduce garden motion').check()
@@ -339,33 +392,16 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   page,
 }) => {
   await enterGarden(page)
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('butterfly-garden', 1)
-        request.onerror = () => reject(request.error)
-        request.onsuccess = () => {
-          const db = request.result
-          const tx = db.transaction('state', 'readwrite')
-          const store = tx.objectStore('state')
-          const get = store.get('current')
-          get.onsuccess = () => {
-            const state = get.result
-            state.nectar = 18
-            store.put(state, 'current')
-          }
-          tx.oncomplete = () => {
-            db.close()
-            resolve()
-          }
-          tx.onerror = () => reject(tx.error)
-        }
-      }),
-  )
+  await editGardenRecord(page, (state) => {
+    state.nectar = 18
+  })
   await page.reload()
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Shop', exact: true })
+    .click()
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Jars', exact: true })
     .click()
   await expect(page.getByRole('heading', { name: 'Buy letters and numbers' })).toBeVisible()
 
@@ -375,8 +411,7 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   await page.getByRole('button', { name: 'Buy Yellow S jar' }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('6')
 
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Garden', exact: true })
     .click()
   await page.getByRole('button', { name: /View Milkweed/i }).click()
@@ -385,7 +420,7 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
     page.getByRole('button', { name: /View Milkweed.*Blue A jar/i }),
   ).toBeVisible()
 
-  await page.reload()
+  await reloadAfterSave(page)
   await expect(
     page.getByRole('button', { name: /View Milkweed.*Blue A jar/i }),
   ).toBeVisible()
@@ -416,37 +451,17 @@ test('shows plant details, protects active hosts, and frees a full garden space'
   page,
 }) => {
   await enterGarden(page)
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('butterfly-garden', 1)
-        request.onerror = () => reject(request.error)
-        request.onsuccess = () => {
-          const db = request.result
-          const tx = db.transaction('state', 'readwrite')
-          const store = tx.objectStore('state')
-          const get = store.get('current')
-          get.onsuccess = () => {
-            const state = get.result
-            state.creatures[0].sourcePlantId = state.plants[0].id
-            while (state.plants.length < 8) {
-              state.plants.push({
-                id: `extra-${state.plants.length}`,
-                plantId: 'zinnia',
-                growth: 0,
-                plantedAt: new Date().toISOString(),
-              })
-            }
-            store.put(state, 'current')
-          }
-          tx.oncomplete = () => {
-            db.close()
-            resolve()
-          }
-          tx.onerror = () => reject(tx.error)
-        }
-      }),
-  )
+  await editGardenRecord(page, (state) => {
+    state.creatures[0].sourcePlantId = state.plants[0].id
+    while (state.plants.length < 8) {
+      state.plants.push({
+        id: `extra-${state.plants.length}`,
+        plantId: 'zinnia',
+        growth: 0,
+        plantedAt: new Date().toISOString(),
+      })
+    }
+  })
   await page.reload()
   await expect(page.getByText(/all 8 plant spaces filled/i)).toBeVisible()
   await expect(page.getByRole('button', { name: /plant a seed/i })).toBeDisabled()
@@ -454,7 +469,7 @@ test('shows plant details, protects active hosts, and frees a full garden space'
   await page.getByRole('button', { name: /View Milkweed/i }).click()
   await expect(page.getByRole('heading', { name: 'Milkweed' })).toBeVisible()
   await expect(page.getByText('Asclepias spp.')).toBeVisible()
-  await expect(page.getByText(/chrysalis is still connected/i)).toBeVisible()
+  await expect(page.getByText(/is still growing on this host plant/i)).toBeVisible()
   await expect(page.getByRole('button', { name: /remove this plant/i })).toBeDisabled()
   const plantA11y = await new AxeBuilder({ page }).analyze()
   expect(
@@ -473,8 +488,7 @@ test('shows plant details, protects active hosts, and frees a full garden space'
 
 test('keeps butterfly field notes collapsed until requested', async ({ page }) => {
   await enterGarden(page)
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
   await expect(page.locator('.field-notes .species-grid')).toBeHidden()
@@ -484,38 +498,19 @@ test('keeps butterfly field notes collapsed until requested', async ({ page }) =
 
 test('persists emergence and selects the new butterfly as companion', async ({ page }) => {
   await enterGarden(page)
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const openRequest = indexedDB.open('butterfly-garden', 1)
-        openRequest.onerror = () => reject(openRequest.error)
-        openRequest.onsuccess = () => {
-          const db = openRequest.result
-          const transaction = db.transaction('state', 'readwrite')
-          const store = transaction.objectStore('state')
-          const getRequest = store.get('current')
-          getRequest.onsuccess = () => {
-            const state = getRequest.result
-            state.creatures[0].emergeAt = new Date(Date.now() - 1000).toISOString()
-            store.put(state, 'current')
-          }
-          transaction.oncomplete = () => {
-            db.close()
-            resolve()
-          }
-          transaction.onerror = () => reject(transaction.error)
-        }
-      }),
-  )
+  await editGardenRecord(page, (state) => {
+    // A legacy 1.x chrysalis carrying an emergence timer that has now passed.
+    state.creatures[0].stage = 'chrysalis'
+    state.creatures[0].emergeAt = new Date(Date.now() - 1000).toISOString()
+  })
   await page.reload()
   await expect(page.getByText('Exploring with you')).toBeVisible()
   await page.getByLabel('Name for Sol').fill('Luna')
   await page.getByRole('button', { name: 'Save name' }).click()
   await expect(page.getByText('Luna')).toBeVisible()
-  await page.reload()
+  await reloadAfterSave(page)
   await expect(page.getByLabel('Name for Luna')).toHaveValue('Luna')
-  await page
-    .locator('nav:visible')
+  await mainNav(page)
     .getByRole('button', { name: 'Journal', exact: true })
     .click()
   await page.getByText('Butterflies welcomed').click()
@@ -550,4 +545,48 @@ test('has no serious accessibility violations and relaunches offline', async ({
   } finally {
     await context.setOffline(false)
   }
+})
+
+test('has no serious accessibility violations on any view', async ({ page }) => {
+  await enterGarden(page)
+  const views = [
+    'Garden',
+    'Care',
+    'Today',
+    'Journal',
+    'Shop',
+    'Flight',
+    'Guide',
+    'Settings',
+  ]
+  const offenders: string[] = []
+  for (const view of views) {
+    await mainNav(page).getByRole('button', { name: view, exact: true }).click()
+    // Let entrance animations settle so axe sees final contrast and sizing.
+    await page.waitForTimeout(400)
+    const results = await new AxeBuilder({ page }).analyze()
+    for (const violation of results.violations) {
+      if (violation.impact === 'serious' || violation.impact === 'critical') {
+        offenders.push(`${view}: ${violation.id} (${violation.impact})`)
+      }
+    }
+  }
+  expect(offenders).toEqual([])
+})
+
+test('every shop tab is reachable and accessible', async ({ page }) => {
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  const offenders: string[] = []
+  for (const tab of ['Supplies', 'Boutique', 'Jars', 'Flight', 'Garden Pass']) {
+    await page.locator('.shop-tabs').getByRole('button', { name: tab, exact: true }).click()
+    await page.waitForTimeout(300)
+    const results = await new AxeBuilder({ page }).analyze()
+    for (const violation of results.violations) {
+      if (violation.impact === 'serious' || violation.impact === 'critical') {
+        offenders.push(`${tab}: ${violation.id} (${violation.impact})`)
+      }
+    }
+  }
+  expect(offenders).toEqual([])
 })

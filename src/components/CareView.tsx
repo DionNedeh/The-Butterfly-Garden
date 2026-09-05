@@ -14,7 +14,6 @@ import {
   STAGE_ORDER,
 } from '../lib/lifecycle'
 import { visibleOutfit } from '../lib/wardrobe'
-import { toLocalDate } from '../lib/date'
 import type { AppState, CreatureStage, OutfitSlot } from '../types'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { PettableCreature } from './PettableCreature'
@@ -32,6 +31,7 @@ const stageDescriptions: Record<CreatureStage, string> = {
 
 export function CareView({
   state,
+  today,
   onCare,
   onEquip,
   onUnequip,
@@ -39,6 +39,8 @@ export function CareView({
   onGoToShop,
 }: {
   state: AppState
+  /** Current local date, refreshed across midnight by the app shell. */
+  today: string
   onCare: (creatureId: string, actionId: string) => void
   onEquip: (creatureId: string, itemId: string) => void
   onUnequip: (creatureId: string, slot: OutfitSlot) => void
@@ -58,7 +60,6 @@ export function CareView({
   const [nameDraft, setNameDraft] = useState<string>()
   const selected =
     ordered.find((creature) => creature.id === selectedId) ?? ordered[0]
-  const today = toLocalDate()
 
   if (!selected) {
     return (
@@ -273,7 +274,7 @@ export function CareView({
                 onClick={() => onCare(selected.id, action.id)}
               >
                 <span className="care-action-icon">
-                  <Icon name={action.icon as Parameters<typeof Icon>[0]['name']} size={26} />
+                  <Icon name={action.icon} size={26} />
                 </span>
                 <strong>{action.name}</strong>
                 <small>{action.description}</small>
@@ -351,7 +352,7 @@ export function CareView({
                           }
                           aria-pressed={isEquipped}
                         >
-                          <Icon name={item.icon as Parameters<typeof Icon>[0]['name']} size={20} />
+                          <Icon name={item.icon} size={20} />
                           <span>{item.name}</span>
                           <small>{isEquipped ? 'Wearing — tap to remove' : 'Tap to wear'}</small>
                         </button>

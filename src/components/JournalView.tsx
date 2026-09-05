@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { reflectionPrompts, species } from '../data/content'
-import { formatJournalDate, toLocalDate } from '../lib/date'
+import { formatJournalDate } from '../lib/date'
+import { useLocalDate } from '../hooks/useLocalDate'
 import { calculateSunlightStreak } from '../lib/streak'
 import type { AppState, MoodEntry, ReflectionEntry } from '../types'
 import { Butterfly } from './Butterfly'
 import { Icon } from './Icons'
 
 const moodNames = ['Stormy', 'Rainy', 'Overcast', 'Bright', 'Radiant']
+
+/** The timeline grows for as long as the garden is kept, so it is paged. */
+const TIMELINE_PAGE_SIZE = 30
 
 export function JournalView({
   state,
@@ -23,32 +27,44 @@ export function JournalView({
 }) {
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
   const [editingMood, setEditingMood] = useState<MoodEntry>()
-  const [today, setToday] = useState(toLocalDate)
-  useEffect(() => {
-    const refreshDate = () => setToday(toLocalDate())
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') refreshDate()
-    }
-    const interval = window.setInterval(refreshDate, 60_000)
-    window.addEventListener('focus', refreshDate)
-    document.addEventListener('visibilitychange', refreshWhenVisible)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', refreshDate)
-      document.removeEventListener('visibilitychange', refreshWhenVisible)
-    }
-  }, [])
+  const [pendingDelete, setPendingDelete] = useState<string>()
+  const [visibleCount, setVisibleCount] = useState(TIMELINE_PAGE_SIZE)
+  const [fieldNotesOpen, setFieldNotesOpen] = useState(false)
+  const today = useLocalDate()
+
+  // Index once per data change; the timeline used to re-scan every entry for
+  // every row it drew, which is quadratic once a garden has a year of days.
+  const moodByDate = useMemo(
+    () => new Map(state.moods.map((entry) => [entry.localDate, entry])),
+    [state.moods],
+  )
+  const reflectionByDate = useMemo(
+    () => new Map(state.reflections.map((entry) => [entry.localDate, entry])),
+    [state.reflections],
+  )
+  const promptById = useMemo(
+    () => new Map(reflectionPrompts.map((prompt) => [prompt.id, prompt])),
+    [],
+  )
   const dates = useMemo(
     () =>
       Array.from(
-        new Set([
-          ...state.moods.map((entry) => entry.localDate),
-          ...state.reflections.map((entry) => entry.localDate),
-        ]),
+        new Set([...moodByDate.keys(), ...reflectionByDate.keys()]),
       ).sort((a, b) => b.localeCompare(a)),
-    [state.moods, state.reflections],
+    [moodByDate, reflectionByDate],
   )
-  const emerged = state.creatures.filter((creature) => creature.stage === 'butterfly')
+  const visibleDates = useMemo(
+    () => dates.slice(0, visibleCount),
+    [dates, visibleCount],
+  )
+  const emerged = useMemo(
+    () => state.creatures.filter((creature) => creature.stage === 'butterfly'),
+    [state.creatures],
+  )
+  const emergedBySpecies = useMemo(
+    () => new Map(emerged.map((creature) => [creature.speciesId, creature])),
+    [emerged],
+  )
   const streak = useMemo(
     () => calculateSunlightStreak(state.sunlight, today),
     [state.sunlight, today],
@@ -64,7 +80,11 @@ export function JournalView({
         </div>
       </header>
 
-      <details className="card field-notes">
+      <details
+        className="card field-notes"
+        open={fieldNotesOpen}
+        onToggle={(event) => setFieldNotesOpen(event.currentTarget.open)}
+      >
         <summary>
           <span>
             <span className="eyebrow">Field notes</span>
@@ -73,10 +93,8 @@ export function JournalView({
           <span className="count-badge">{emerged.length} / {species.length}</span>
         </summary>
         <div className="species-grid" aria-labelledby="species-journal-title">
-          {species.map((definition) => {
-            const creature = emerged.find(
-              (item) => item.speciesId === definition.id,
-            )
+          {fieldNotesOpen && species.map((definition) => {
+            const creature = emergedBySpecies.get(definition.id)
             return (
               <article
                 className={`species-card ${creature ? '' : 'undiscovered'}`}
@@ -144,14 +162,12 @@ export function JournalView({
           </div>
         ) : (
           <div className="timeline">
-            {dates.map((date) => {
-              const mood = state.moods.find((entry) => entry.localDate === date)
-              const reflection = state.reflections.find(
-                (entry) => entry.localDate === date,
-              )
-              const prompt = reflectionPrompts.find(
-                (item) => item.id === reflection?.promptId,
-              )
+            {visibleDates.map((date) => {
+              const mood = moodByDate.get(date)
+              const reflection = reflectionByDate.get(date)
+              const prompt = reflection
+                ? promptById.get(reflection.promptId)
+                : undefined
               return (
                 <article className="card timeline-entry" key={date}>
                   <time dateTime={date}>{formatJournalDate(date)}</time>
@@ -188,6 +204,7 @@ export function JournalView({
                               onChange={(event) =>
                                 setEditingMood({ ...editingMood, note: event.target.value })
                               }
+                              maxLength={280}
                             />
                           </label>
                           <div className="form-actions">
@@ -206,7 +223,35 @@ export function JournalView({
                           </div>
                           <div className="inline-actions">
                             <button className="text-button" onClick={() => setEditingMood(mood)}>Edit</button>
-                            <button className="text-button danger-text" onClick={() => onDeleteMood(mood.id)}>Delete</button>
+                            {pendingDelete === mood.id ? (
+                              <>
+                                <span className="delete-prompt" role="alert">
+                                  Delete this check-in for good?
+                                </span>
+                                <button
+                                  className="text-button danger-text"
+                                  onClick={() => {
+                                    onDeleteMood(mood.id)
+                                    setPendingDelete(undefined)
+                                  }}
+                                >
+                                  Yes, delete
+                                </button>
+                                <button
+                                  className="text-button"
+                                  onClick={() => setPendingDelete(undefined)}
+                                >
+                                  Keep
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="text-button danger-text"
+                                onClick={() => setPendingDelete(mood.id)}
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </>
                       )}
@@ -232,6 +277,7 @@ export function JournalView({
                                   body: event.target.value,
                                 })
                               }
+                              maxLength={4000}
                               rows={4}
                               required
                             />
@@ -251,7 +297,35 @@ export function JournalView({
                           </div>
                           <div className="inline-actions">
                             <button className="text-button" onClick={() => setEditingReflection(reflection)}>Edit</button>
-                            <button className="text-button danger-text" onClick={() => onDeleteReflection(reflection.id)}>Delete</button>
+                            {pendingDelete === reflection.id ? (
+                              <>
+                                <span className="delete-prompt" role="alert">
+                                  Delete this reflection for good?
+                                </span>
+                                <button
+                                  className="text-button danger-text"
+                                  onClick={() => {
+                                    onDeleteReflection(reflection.id)
+                                    setPendingDelete(undefined)
+                                  }}
+                                >
+                                  Yes, delete
+                                </button>
+                                <button
+                                  className="text-button"
+                                  onClick={() => setPendingDelete(undefined)}
+                                >
+                                  Keep
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="text-button danger-text"
+                                onClick={() => setPendingDelete(reflection.id)}
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </>
                       )}
@@ -260,6 +334,16 @@ export function JournalView({
                 </article>
               )
             })}
+            {visibleCount < dates.length && (
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  setVisibleCount((count) => count + TIMELINE_PAGE_SIZE)
+                }
+              >
+                Show earlier days ({dates.length - visibleCount} more)
+              </button>
+            )}
           </div>
         )}
       </section>

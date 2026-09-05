@@ -7,12 +7,12 @@ import {
   supplyItems,
 } from '../data/shopItems'
 import { stageLabels } from '../lib/lifecycle'
-import type { AppState, FlightPatternId, JarColorId } from '../types'
+import type { AppState, FlightPatternId, IconName, JarColorId } from '../types'
 import { Icon } from './Icons'
 
 type ShopTab = 'supplies' | 'boutique' | 'jars' | 'flight' | 'pass'
 
-const tabs: Array<{ id: ShopTab; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
+const tabs: Array<{ id: ShopTab; label: string; icon: IconName }> = [
   { id: 'supplies', label: 'Supplies', icon: 'leaf' },
   { id: 'boutique', label: 'Boutique', icon: 'bow' },
   { id: 'jars', label: 'Jars', icon: 'shop' },
@@ -56,7 +56,7 @@ export function ShopView({
         key={item.id}
       >
         <span className={`shop-item-icon ${item.currency === 'stardust' ? 'premium' : ''}`}>
-          <Icon name={item.icon as Parameters<typeof Icon>[0]['name']} size={30} />
+          <Icon name={item.icon} size={30} />
         </span>
         <h3>{item.name}</h3>
         <p>{item.description}</p>
@@ -148,7 +148,7 @@ export function ShopView({
               return (
                 <article className="card shop-item-card" key={item.id}>
                   <span className="shop-item-icon">
-                    <Icon name={item.icon as Parameters<typeof Icon>[0]['name']} size={30} />
+                    <Icon name={item.icon} size={30} />
                   </span>
                   <h3>{item.name}</h3>
                   <p>{item.description}</p>
@@ -385,7 +385,7 @@ export function ShopView({
             {premiumItems.map((item) => (
               <article className="card shop-item-card premium-item" key={item.id}>
                 <span className="shop-item-icon premium">
-                  <Icon name={item.icon as Parameters<typeof Icon>[0]['name']} size={30} />
+                  <Icon name={item.icon} size={30} />
                 </span>
                 <h3>{item.name}</h3>
                 <p>{item.description}</p>

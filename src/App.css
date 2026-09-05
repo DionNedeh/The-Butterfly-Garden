@@ -299,7 +299,7 @@
   padding: 1.2rem;
   background:
     linear-gradient(rgba(29, 62, 49, 0.22), rgba(29, 62, 49, 0.4)),
-    url('./assets/garden-background.jpg') center / cover;
+    url('./assets/garden-background.webp') center / cover;
 }
 
 .onboarding-card {
@@ -932,19 +932,19 @@
 .garden-hero.backdrop-sunlit-meadow {
   background-image:
     linear-gradient(90deg, rgba(28, 58, 46, 0.72), rgba(28, 58, 46, 0.06) 64%),
-    url('./assets/garden-background.jpg');
+    url('./assets/garden-background.webp');
 }
 
 .garden-hero.backdrop-woodland-brook {
   background-image:
     linear-gradient(90deg, rgba(20, 54, 45, 0.75), rgba(20, 54, 45, 0.04) 66%),
-    url('./assets/garden-woodland-brook.jpg');
+    url('./assets/garden-woodland-brook.webp');
 }
 
 .garden-hero.backdrop-secret-conservatory {
   background-image:
     linear-gradient(90deg, rgba(63, 43, 51, 0.72), rgba(63, 43, 51, 0.04) 65%),
-    url('./assets/garden-secret-conservatory.jpg');
+    url('./assets/garden-secret-conservatory.webp');
 }
 
 .garden-hero::before {
@@ -1006,6 +1006,20 @@
   will-change: transform;
   filter: drop-shadow(0 7px 6px rgba(20, 45, 36, 0.25));
   animation: garden-flight var(--flight-duration) ease-in-out var(--flight-delay) infinite;
+}
+
+/* A per-frame filter on a dozen continuously moving elements is the most
+   expensive thing in the scene on a phone; the shadow is decorative, so it
+   goes on small screens and whenever motion is dialled down. */
+@media (max-width: 900px) {
+  .flying-butterfly {
+    filter: none;
+  }
+}
+
+.reduce-motion .flying-butterfly {
+  filter: none;
+  will-change: auto;
 }
 
 .pattern-petal-hop {
@@ -2434,15 +2448,15 @@
 }
 
 .backdrop-preview-sunlit-meadow .backdrop-preview {
-  background-image: url('./assets/garden-background.jpg');
+  background-image: url('./assets/garden-background.webp');
 }
 
 .backdrop-preview-woodland-brook .backdrop-preview {
-  background-image: url('./assets/garden-woodland-brook.jpg');
+  background-image: url('./assets/garden-woodland-brook.webp');
 }
 
 .backdrop-preview-secret-conservatory .backdrop-preview {
-  background-image: url('./assets/garden-secret-conservatory.jpg');
+  background-image: url('./assets/garden-secret-conservatory.webp');
 }
 
 .backdrop-choice-copy {
@@ -4181,6 +4195,13 @@
 .theme-night .splash-title h1 { color: #eef7f1; text-shadow: none; }
 
 /* Reduced motion respects everything new */
+.page-hidden .flying-butterfly,
+.page-hidden .hero-petal,
+.page-hidden .butterfly-sprite.flapping .wing,
+.page-hidden .splash-flyer {
+  animation-play-state: paused;
+}
+
 .reduce-motion .view,
 .reduce-motion .hero-petal,
 .reduce-motion .splash-flyer {

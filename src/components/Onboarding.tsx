@@ -51,6 +51,7 @@ export function Onboarding({
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Gardener"
                 autoComplete="name"
+                maxLength={60}
               />
             </label>
             <label>
@@ -58,6 +59,7 @@ export function Onboarding({
               <input
                 value={gardenName}
                 onChange={(event) => setGardenName(event.target.value)}
+                maxLength={60}
                 required
               />
             </label>

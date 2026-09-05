@@ -10,6 +10,7 @@ import { progressAppearance } from './appearance'
 import { DEFAULT_FLIGHT_PATTERN_ID } from './flightPatterns'
 import { EMERGENCE_SEED_REWARD } from './lifecycle'
 import { PLANT_CAPACITY } from './plantManagement'
+import { createId } from './id'
 
 export { EMERGENCE_SEED_REWARD }
 
@@ -44,7 +45,11 @@ export function createEmptyState(): AppState {
 }
 
 export function sunlightForDate(state: AppState, localDate: string): number {
-  return state.sunlight.filter((award) => award.localDate === localDate).length
+  let count = 0
+  for (const award of state.sunlight) {
+    if (award.localDate === localDate) count += 1
+  }
+  return count
 }
 
 export function createInitialState(
@@ -68,13 +73,13 @@ export function createInitialState(
     },
     plants: [
       {
-        id: crypto.randomUUID(),
+        id: createId(),
         plantId: 'milkweed',
         growth: 2,
         plantedAt: nowIso,
       },
       {
-        id: crypto.randomUUID(),
+        id: createId(),
         plantId: 'aster',
         growth: 1,
         plantedAt: nowIso,
@@ -82,7 +87,7 @@ export function createInitialState(
     ],
     creatures: [
       {
-        id: crypto.randomUUID(),
+        id: createId(),
         speciesId: 'monarch',
         name: 'Sol',
         stage: 'caterpillar',
@@ -125,7 +130,7 @@ function discoverEgg(
   if (!speciesId) return undefined
   const count = state.creatures.length
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     speciesId,
     name: butterflyNames[count % butterflyNames.length],
     stage: 'egg',
@@ -200,7 +205,7 @@ export function awardSunlight(
   const firstSunlightToday = sunlightForDate(state, localDate) === 0
 
   const award: SunlightAward = {
-    id: crypto.randomUUID(),
+    id: createId(),
     localDate,
     source,
     awardedAt: now.toISOString(),
@@ -246,7 +251,7 @@ export function plantSeed(
     plants: [
       ...state.plants,
       {
-        id: crypto.randomUUID(),
+        id: createId(),
         plantId,
         growth: 0,
         plantedAt: now.toISOString(),

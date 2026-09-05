@@ -53,6 +53,7 @@ function wingMarkings(
   pattern: string,
   secondary: string,
   clip: string,
+  glow: string,
 ): ReactNode {
   switch (pattern) {
     case 'monarch-veins':
@@ -169,7 +170,7 @@ function wingMarkings(
     case 'morpho-shimmer':
       return (
         <g clipPath={clip}>
-          <path d="M58 46 C46 18 22 6 10 12 C2 18 6 36 18 46 C32 55 48 54 58 50 Z" fill="url(#morphoGlow)" opacity="0.55" />
+          <path d="M58 46 C46 18 22 6 10 12 C2 18 6 36 18 46 C32 55 48 54 58 50 Z" fill={glow} opacity="0.55" />
           <path
             d="M58 46 C46 18 22 6 10 12 C0 18 4 36 18 46 L22 40 C12 32 10 22 18 18 C30 14 46 28 54 48 Z"
             fill={secondary}
@@ -466,7 +467,12 @@ export function ButterflySprite({
   const secondary = definition?.wingColors[1] ?? '#27231f'
   const shape = wingShapes[definition?.wingShape ?? 'rounded']
   const pattern = definition?.visualPattern ?? ''
+  // Every id is scoped to this instance. A shared literal id would repeat
+  // across the dozen butterflies on screen, and url(#…) resolves to whichever
+  // copy comes first in the document.
   const clipId = `wingclip-${uid}`
+  const glowId = `morphoglow-${uid}`
+  const wingId = `wing-${uid}`
   const clip = `url(#${clipId})`
   const isClear = definition?.wingShape === 'clear'
 
@@ -484,50 +490,37 @@ export function ButterflySprite({
           <path d={shape.fore} />
           <path d={shape.hind} />
         </clipPath>
-        <radialGradient id="morphoGlow" cx="40%" cy="40%" r="70%">
+        <radialGradient id={glowId} cx="40%" cy="40%" r="70%">
           <stop offset="0%" stopColor="#9adcff" />
           <stop offset="100%" stopColor="#168bd2" />
         </radialGradient>
+        {/* The wing is described once and mirrored, rather than building the
+            whole marking layer twice for every butterfly on screen. */}
+        <g id={wingId}>
+          <path
+            d={shape.fore}
+            fill={primary}
+            stroke={secondary}
+            strokeWidth={isClear ? 2.2 : 1.2}
+            opacity={isClear ? 0.55 : 1}
+          />
+          <path
+            d={shape.hind}
+            fill={primary}
+            stroke={secondary}
+            strokeWidth={isClear ? 2.2 : 1.2}
+            opacity={isClear ? 0.5 : 0.96}
+          />
+          {wingMarkings(pattern, secondary, clip, `url(#${glowId})`)}
+        </g>
       </defs>
 
       {/* Left wing */}
-      <g className="wing wing-left">
-        <path
-          d={shape.fore}
-          fill={primary}
-          stroke={secondary}
-          strokeWidth={isClear ? 2.2 : 1.2}
-          opacity={isClear ? 0.55 : 1}
-        />
-        <path
-          d={shape.hind}
-          fill={primary}
-          stroke={secondary}
-          strokeWidth={isClear ? 2.2 : 1.2}
-          opacity={isClear ? 0.5 : 0.96}
-        />
-        {wingMarkings(pattern, secondary, clip)}
-      </g>
+      <use href={`#${wingId}`} className="wing wing-left" />
 
-      {/* Right wing (mirrored; the inner group carries the flap animation) */}
+      {/* Right wing (mirrored; the inner element carries the flap animation) */}
       <g transform="translate(120,0) scale(-1,1)">
-        <g className="wing wing-right">
-        <path
-          d={shape.fore}
-          fill={primary}
-          stroke={secondary}
-          strokeWidth={isClear ? 2.2 : 1.2}
-          opacity={isClear ? 0.55 : 1}
-        />
-        <path
-          d={shape.hind}
-          fill={primary}
-          stroke={secondary}
-          strokeWidth={isClear ? 2.2 : 1.2}
-          opacity={isClear ? 0.5 : 0.96}
-        />
-        {wingMarkings(pattern, secondary, clip)}
-        </g>
+        <use href={`#${wingId}`} className="wing wing-right" />
       </g>
 
       {/* Body */}
