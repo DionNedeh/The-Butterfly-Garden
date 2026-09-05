@@ -10,6 +10,7 @@ import { toLocalDate } from '../lib/date'
 import type { AppState, MoodEntry } from '../types'
 import {
   GARDEN_COLLECTIONS,
+  META_FIELDS,
   changedParts,
   classifyRecord,
   gardenRepository,
@@ -328,6 +329,18 @@ describe('garden repository', () => {
   })
 
 describe('detecting what a write actually changed', () => {
+  it('accounts for every field of the garden', () => {
+    // Storage is split by a hand-written list of collections and meta fields.
+    // A field added to AppState but to neither list would be silently dropped
+    // on save and absent on load, which no other test would notice.
+    const stored = new Set<string>([...META_FIELDS, ...GARDEN_COLLECTIONS])
+    const fields = new Set([
+      ...Object.keys(createEmptyState()),
+      ...Object.keys(createInitialState('Cover', 'Cover Garden')),
+    ])
+    expect([...fields].filter((field) => !stored.has(field))).toEqual([])
+  })
+
   it('treats collections with the same elements as unchanged', () => {
     const items = [{ id: 'a' }, { id: 'b' }]
     expect(sameCollection(items, items)).toBe(true)
