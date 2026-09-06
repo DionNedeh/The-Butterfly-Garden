@@ -14,7 +14,7 @@ import {
   MAX_PLANT_GROWTH,
   PLANT_SEED_COST,
 } from '../lib/progression'
-import type { AppState } from '../types'
+import type { AppState, OutfitSlot } from '../types'
 import {
   PLANT_CAPACITY,
   plantRemovalBlocker,
@@ -26,7 +26,7 @@ import {
   STAGE_CARE_DAYS,
   stageLabels,
 } from '../lib/lifecycle'
-import { visibleOutfit } from '../lib/wardrobe'
+import { visibleOutfits } from '../lib/wardrobe'
 import { Butterfly } from './Butterfly'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { FlowerSprite } from './sprites/FlowerSprite'
@@ -39,6 +39,10 @@ const speciesById = new Map(species.map((item) => [item.id, item]))
 const jarColorsById = new Map<string, (typeof jarColors)[number]>(
   jarColors.map((color) => [color.id, color]),
 )
+/** Built once; constructing an Intl formatter per render is not free. */
+const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+})
 
 function jarStyle(colorId: string): CSSProperties {
   const color = jarColorsById.get(colorId) ?? jarColors[0]
@@ -73,6 +77,16 @@ export function GardenView({
   const [selectedPlantId, setSelectedPlantId] = useState<string>()
   const [confirmPlantRemoval, setConfirmPlantRemoval] = useState(false)
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
+  /**
+   * Indexed once per change to the creatures, rather than recomputed for each
+   * sprite. Building it per creature scanned the whole list every time, and
+   * handed each sprite a fresh object that defeated its memo -- so typing a
+   * butterfly's name below re-rendered every butterfly and flower on screen.
+   */
+  const outfitByCreature = useMemo(
+    () => visibleOutfits(state.creatures),
+    [state.creatures],
+  )
   const emerged = state.creatures.filter(
     (creature) => creature.stage === 'butterfly',
   )
@@ -87,13 +101,14 @@ export function GardenView({
       id: 'marigold-guide',
       speciesId: 'monarch',
       label: 'Marigold, your monarch garden guide',
-      outfit: undefined as ReturnType<typeof visibleOutfit> | undefined,
+      // Marigold is the garden's guide, not a companion, so she wears nothing.
+      outfit: undefined as Partial<Record<OutfitSlot, string>> | undefined,
     },
     ...emerged.map((creature) => ({
       id: creature.id,
       speciesId: creature.speciesId,
       label: `${creature.name}, ${speciesById.get(creature.speciesId)?.commonName ?? 'butterfly'}`,
-      outfit: visibleOutfit(state, creature.id),
+      outfit: outfitByCreature.get(creature.id),
     })),
   ]
   // Keep the scene smooth on modest devices: at most 12 butterflies fly at
@@ -382,7 +397,9 @@ export function GardenView({
               </div>
               <div>
                 <dt>Planted</dt>
-                <dd>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(selectedPlant.plantedAt))}</dd>
+                <dd>
+                  {plantedDateFormat.format(new Date(selectedPlant.plantedAt))}
+                </dd>
               </div>
             </dl>
             <div className="jar-manager" aria-labelledby="jar-manager-title">
@@ -612,7 +629,7 @@ export function GardenView({
                       speciesId={creature.speciesId}
                       stage={creature.stage}
                       size={54}
-                      outfit={visibleOutfit(state, creature.id)}
+                      outfit={outfitByCreature.get(creature.id)}
                     />
                     <div>
                       <strong>{creature.name}</strong>
@@ -665,7 +682,7 @@ export function GardenView({
                       <Butterfly
                         speciesId={creature.speciesId}
                         label={definition?.commonName ?? 'Butterfly'}
-                        outfit={visibleOutfit(state, creature.id)}
+                        outfit={outfitByCreature.get(creature.id)}
                       />
                       <strong>{creature.name}</strong>
                       <small>{definition?.commonName}</small>

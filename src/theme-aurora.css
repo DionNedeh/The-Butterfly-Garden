@@ -302,27 +302,35 @@ h2 {
   background: var(--grad-stardust);
   border-color: rgba(255, 255, 255, 0.25);
 }
-/* A slow glint sweeping across each jewel */
+/* A slow glint sweeping across each jewel.
+   Driven by transform, not `left`. These three sit in the sticky header, so
+   they are on screen on every view for the whole session -- animating a
+   layout property there means recomputing layout sixty times a second,
+   forever. The sweep is 425% of the element's own width, which is the same
+   -40% -> 130% travel the old keyframe described in container terms. */
 .header-sunlight::after,
 .nectar-wallet::after,
 .stardust-wallet::after {
   content: '';
   position: absolute;
   top: -60%;
-  left: -30%;
+  left: -40%;
   width: 40%;
   height: 220%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
   transform: rotate(18deg);
+  will-change: transform, opacity;
   animation: jewel-glint 6.5s ease-in-out infinite;
 }
 .nectar-wallet::after { animation-delay: 2.2s; }
 .stardust-wallet::after { animation-delay: 4.4s; }
 
+/* Rotate before translate, so the sweep travels horizontally across the chip
+   rather than diagonally along its own tilted axis. */
 @keyframes jewel-glint {
-  0%, 62% { left: -40%; opacity: 0; }
+  0%, 62% { transform: translateX(0) rotate(18deg); opacity: 0; }
   70% { opacity: 0.9; }
-  86%, 100% { left: 130%; opacity: 0; }
+  86%, 100% { transform: translateX(425%) rotate(18deg); opacity: 0; }
 }
 
 /* Round toggles become soft glass pucks */
@@ -888,10 +896,19 @@ h2 {
   }
 }
 
-/* Nothing ambient needs to keep animating in a background tab. */
+/* Nothing ambient needs to keep animating in a background tab. The currency
+   glints and the button sheen belong here too: they sit in chrome that is
+   present on every view, so leaving them out meant they were the one thing
+   still animating behind a tab nobody was looking at. */
 .page-hidden .app-shell::before,
 .page-hidden .app-shell::after,
-.page-hidden .onboarding-shell::before {
+.page-hidden .onboarding-shell::before,
+.page-hidden .header-sunlight::after,
+.page-hidden .nectar-wallet::after,
+.page-hidden .stardust-wallet::after,
+.page-hidden .streak-icon,
+.page-hidden .garden-hero .hero-petals::after,
+.page-hidden .primary-button {
   animation-play-state: paused;
 }
 

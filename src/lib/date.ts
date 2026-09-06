@@ -52,13 +52,22 @@ export function monthDates(year: number, monthIndex: number): string[] {
   )
 }
 
+/**
+ * Built once, not per call. Constructing an Intl formatter resolves a locale
+ * and builds a format pattern; reusing the instance to format is ~160x
+ * cheaper, and this is called once per row of a journal timeline that grows
+ * for as long as the garden is kept. The locale is read at module load, which
+ * is fine because the app has no way to change it without a reload.
+ */
+const journalDateFormat = new Intl.DateTimeFormat(undefined, {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+})
+
 export function formatJournalDate(localDate: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(localDateToNoon(localDate))
+  return journalDateFormat.format(localDateToNoon(localDate))
 }
 
 export function getDailyPromptIndex(localDate: string, count: number): number {

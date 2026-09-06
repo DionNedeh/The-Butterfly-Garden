@@ -1,7 +1,7 @@
-import { useId, type ReactNode } from 'react'
+import { memo, useId, type ReactNode } from 'react'
 import { getSpecies } from '../../lib/progression'
 import type { ButterflyWingShape, OutfitSlot } from '../../types'
-import { OutfitOverlay } from './OutfitOverlay'
+import { OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
 
 /**
  * Detailed SVG butterfly, drawn in a spread (top-down) pose.
@@ -446,7 +446,24 @@ function wingMarkings(
   }
 }
 
-export function ButterflySprite({
+/** Fixed per sprite; a literal in the JSX would be a new object every render
+ *  and would defeat the memo on OutfitOverlay. */
+const BUTTERFLY_ANCHOR: OutfitAnchor = {
+  headX: 60,
+  headY: 31,
+  bodyX: 60,
+  bodyY: 52,
+  scale: 1,
+}
+
+/**
+ * Memoized. These sprites are large SVG trees -- a garden scene draws up to
+ * twelve butterflies, eight flowers and a row of creatures at once -- and the
+ * views around them re-render on every keystroke in a rename or plan field.
+ * Skipping the subtree needs stable props, which is why the outfit map is
+ * built once per view and the anchors are module constants.
+ */
+export const ButterflySprite = memo(function ButterflySprite({
   speciesId,
   label,
   size = 96,
@@ -541,8 +558,8 @@ export function ButterflySprite({
       </g>
 
       {outfit && (
-        <OutfitOverlay outfit={outfit} anchor={{ headX: 60, headY: 31, bodyX: 60, bodyY: 52, scale: 1 }} />
+        <OutfitOverlay outfit={outfit} anchor={BUTTERFLY_ANCHOR} />
       )}
     </svg>
   )
-}
+})
