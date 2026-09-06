@@ -708,14 +708,26 @@ h2 {
 .guide-card {
   overflow: hidden;
 }
+/* A warm glow in the top corner.
+   It used to sit in a narrow offset box -- right: -20%, width: 60% -- whose
+   left edge landed at exactly 60% of the card. A `circle` gradient with no
+   size is measured to the farthest corner, and in a box that tall and narrow
+   that radius is far wider than the box itself, so the gold was still near
+   full strength when the box ran out. It did not fade in; it began, as a hard
+   vertical seam down the middle of every guide card.
+   Anchored at the corner across the whole card instead, and faded out by 57%
+   of the width, so the only boundary it has is the card's own edge -- the same
+   shape as the auras on the reflection and streak cards. */
 .guide-card::after {
   content: '';
   position: absolute;
-  top: -40%;
-  right: -20%;
-  width: 60%;
-  height: 120%;
-  background: radial-gradient(circle, rgba(231, 173, 69, 0.12), transparent 70%);
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    70% 60% at 100% 0%,
+    rgba(231, 173, 69, 0.14),
+    transparent 62%
+  );
   pointer-events: none;
 }
 .toggle-row {
