@@ -102,9 +102,13 @@ export function useGardenState() {
     if (typeof BroadcastChannel === 'undefined') return
     const channel = new BroadcastChannel(SYNC_CHANNEL)
     channelRef.current = channel
-    channel.onmessage = (event: MessageEvent<{ type?: string }>) => {
+    channel.onmessage = (
+      event: MessageEvent<{ type?: string; parts?: unknown }>,
+    ) => {
       if (event.data?.type !== 'garden-saved' || readOnlyRef.current) return
-      void gardenRepository.load().then((result) => {
+      // The sender names what it wrote, so only those parts are read back.
+      // A message without them -- an older tab -- falls back to a full load.
+      void gardenRepository.adopt(event.data.parts).then((result) => {
         if (result.status === 'loaded') applyLoadResult(result)
       })
     }
@@ -116,12 +120,16 @@ export function useGardenState() {
 
   const persist = useCallback(async (next: AppState) => {
     try {
-      await gardenRepository.save(next)
+      const written = await gardenRepository.save(next)
       persistedRef.current = next
       setPersistence((current) =>
         current.writeError ? { ...current, writeError: undefined } : current,
       )
-      channelRef.current?.postMessage({ type: 'garden-saved' })
+      // Nothing changed on disk means nothing for another tab to pick up;
+      // announcing it anyway would make every other tab re-read for no reason.
+      if (written.length > 0) {
+        channelRef.current?.postMessage({ type: 'garden-saved', parts: written })
+      }
     } catch (error) {
       setPersistence((current) => ({
         ...current,

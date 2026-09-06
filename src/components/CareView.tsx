@@ -13,7 +13,7 @@ import {
   STAGE_CARE_DAYS,
   STAGE_ORDER,
 } from '../lib/lifecycle'
-import { visibleOutfit } from '../lib/wardrobe'
+import { visibleOutfits } from '../lib/wardrobe'
 import type { AppState, CreatureStage, OutfitSlot } from '../types'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { PettableCreature } from './PettableCreature'
@@ -56,6 +56,11 @@ export function CareView({
       ),
     [state.creatures],
   )
+  /** One pass over the creatures instead of a scan per chip in the picker. */
+  const outfitByCreature = useMemo(
+    () => visibleOutfits(state.creatures),
+    [state.creatures],
+  )
   const [selectedId, setSelectedId] = useState<string>()
   const [nameDraft, setNameDraft] = useState<string>()
   const selected =
@@ -82,7 +87,7 @@ export function CareView({
   const actions = careActionsForStage(selected.stage)
   const careDays = careDaysCompleted(selected)
   const caredToday = hasCaredToday(selected, today)
-  const outfit = visibleOutfit(state, selected.id)
+  const outfit = outfitByCreature.get(selected.id)
   const level = bondLevel(selected.bond)
   const progress = bondProgress(selected.bond)
   const isButterfly = selected.stage === 'butterfly'
@@ -118,7 +123,7 @@ export function CareView({
                 speciesId={creature.speciesId}
                 stage={creature.stage}
                 size={44}
-                outfit={visibleOutfit(state, creature.id)}
+                outfit={outfitByCreature.get(creature.id)}
               />
               <span>
                 <strong>{creature.name}</strong>

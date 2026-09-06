@@ -30,6 +30,9 @@ const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
   ],
 ]
 
+/** How long a backup's blob URL is kept alive so the download can read it. */
+const BACKUP_URL_LIFETIME_MS = 60_000
+
 function foldName(value: string): number {
   let hash = 2166136261
   for (const char of value) {
@@ -90,9 +93,23 @@ export function SettingsView({
       const link = document.createElement('a')
       link.href = url
       link.download = `butterfly-garden-${new Date().toISOString().slice(0, 10)}.json`
+      // In the document while it is clicked: a detached anchor works in current
+      // browsers, but this is the gardener's only copy of everything they have
+      // written and it is not worth the assumption.
+      document.body.append(link)
       link.click()
-      URL.revokeObjectURL(url)
-      setBackupNote('Backup downloaded. Keep it somewhere safe.')
+      link.remove()
+      // The download reads the blob asynchronously, so revoking on the next
+      // line can cancel it before it starts -- silently, since the click
+      // itself never reports failure. Hold the URL until the read is well
+      // past, then release it so nothing leaks.
+      window.setTimeout(() => URL.revokeObjectURL(url), BACKUP_URL_LIFETIME_MS)
+      // Deliberately not "downloaded": the browser owns the save dialog from
+      // here, and claiming success we cannot observe is how someone ends up
+      // trusting a backup that was never written.
+      setBackupNote(
+        'Backup started. Check your downloads and keep the file somewhere safe.',
+      )
     } catch {
       setBackupNote('This browser would not start the download.')
     }
@@ -310,9 +327,15 @@ export function SettingsView({
           your entries to a server, or analyze what you write.
         </p>
         <p>
-          The garden makes no network requests of its own once it has loaded —
-          even its lettering is bundled with the app rather than fetched from a
-          font service, so opening it tells no one that you did.
+          The garden never contacts a third party — even its lettering is
+          bundled with the app rather than fetched from a font service, so
+          opening it tells no one that you did.
+        </p>
+        <p>
+          The few things it does fetch after loading come from the app itself:
+          the backdrops that unlock later, and a handful of extra letterforms,
+          are left out of the install so a new gardener does not download half
+          a megabyte they cannot use yet.
         </p>
         <p>
           Clearing this site&apos;s browser storage, uninstalling without keeping

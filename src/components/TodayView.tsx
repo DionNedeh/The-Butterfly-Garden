@@ -13,6 +13,7 @@ import {
   DAILY_SUNLIGHT_CAP,
   sunlightForDate,
 } from '../lib/progression'
+import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import type { AppState, Goal, GoalSchedule, MoodEntry } from '../types'
 import { Icon } from './Icons'
 import { MonthPlanner } from './MonthPlanner'
@@ -59,14 +60,18 @@ export function TodayView({
   const existingReflection = state.reflections.find(
     (entry) => entry.localDate === today,
   )
-  const [mood, setMood] = useState<MoodEntry['level']>(
+  // Seeded from the stored entry, and kept in step with edits made in the
+  // journal or another tab -- but never at the cost of something half-typed.
+  const [mood, setMood] = useSyncedDraft<MoodEntry['level']>(
     existingMood?.level ?? 3,
   )
-  const [moodNote, setMoodNote] = useState(existingMood?.note ?? '')
+  const [moodNote, setMoodNote] = useSyncedDraft(existingMood?.note ?? '')
   const [goalTitle, setGoalTitle] = useState('')
   const [schedule, setSchedule] = useState<GoalSchedule>('daily')
   const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
-  const [reflection, setReflection] = useState(existingReflection?.body ?? '')
+  const [reflection, setReflection] = useSyncedDraft(
+    existingReflection?.body ?? '',
+  )
   const [editingGoal, setEditingGoal] = useState<Goal>()
   const prompt = reflectionPrompts[getDailyPromptIndex(today, reflectionPrompts.length)]
   // One pass over completions instead of a scan per goal per render.

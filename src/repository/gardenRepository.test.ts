@@ -621,3 +621,127 @@ describe('moving a pre-split garden across', () => {
     expect(await readStore('meta')).toMatchObject({ version: 5, seeds: 77 })
   })
 })
+
+describe('adopting another tab\'s change', () => {
+  async function readStore(name: string): Promise<unknown> {
+    const db = await openDB('butterfly-garden')
+    try {
+      return await db.get(name, 'current')
+    } finally {
+      db.close()
+    }
+  }
+
+  /** Write directly to one store, as another tab's save would. */
+  async function writeStore(name: string, value: unknown) {
+    const db = await openDB('butterfly-garden')
+    try {
+      await db.put(name, value, 'current')
+    } finally {
+      db.close()
+    }
+  }
+
+  it('reads back only the parts the other tab named', async () => {
+    const before = maturedGarden()
+    await gardenRepository.save(before)
+
+    // Another tab adds a mood: it writes the moods collection and the small
+    // meta record, exactly as save() would. Everything else is left alone --
+    // and the marker proves this read never touches those stores.
+    const after = checkInWithMood(before)
+    const meta = (await readStore('meta')) as Record<string, unknown>
+    await writeStore('moods', after.moods)
+    await writeStore('meta', { ...meta, nectar: after.nectar, seeds: after.seeds })
+    const marker = ['not-read-by-adopt']
+    await writeStore('completions', marker)
+
+    const result = await gardenRepository.adopt(['meta', 'moods'])
+    expect(result.status).toBe('loaded')
+    expect(result.state.moods).toHaveLength(after.moods.length)
+    expect(result.state.nectar).toBe(after.nectar)
+    // The unnamed collection is taken from the base, not from the sabotaged
+    // store, which is what proves it was never read.
+    expect(result.state.completions).toEqual(before.completions)
+    expect(await readStore('completions')).toEqual(marker)
+  })
+
+  it('falls back to a full load when the message names no parts', async () => {
+    const stored = { ...maturedGarden(), seeds: 31 }
+    await gardenRepository.save(stored)
+
+    // An older tab, posting the message shape that predates this.
+    await expect(gardenRepository.adopt(undefined)).resolves.toMatchObject({
+      status: 'loaded',
+      state: { seeds: 31 },
+    })
+  })
+
+  it('falls back to a full load for a part it does not recognise', async () => {
+    const stored = { ...maturedGarden(), seeds: 12 }
+    await gardenRepository.save(stored)
+
+    // A newer client naming a collection this build has never heard of.
+    await expect(
+      gardenRepository.adopt(['moods', 'constellations']),
+    ).resolves.toMatchObject({ status: 'loaded', state: { seeds: 12 } })
+  })
+
+  it('falls back to a full load when a named part has gone missing', async () => {
+    await gardenRepository.save(maturedGarden())
+
+    const db = await openDB('butterfly-garden')
+    try {
+      await db.delete('moods', 'current')
+    } finally {
+      db.close()
+    }
+
+    // A hole is not an empty collection, so this must not be merged in as one.
+    // The full load withholds the garden rather than guessing.
+    const result = await gardenRepository.adopt(['moods'])
+    expect(result.status).toBe('withheld')
+  })
+
+  it('falls back to a full load rather than merging something unreadable', async () => {
+    await gardenRepository.save(maturedGarden())
+    await writeStore('moods', 'not a collection')
+
+    const result = await gardenRepository.adopt(['moods'])
+    expect(result.status).toBe('withheld')
+    expect(result.reason).toBe('malformed')
+    // Quarantined by the ordinary load path rather than a second copy of it.
+    expect(await gardenRepository.quarantined()).toHaveLength(1)
+  })
+
+  it('still withholds a garden a newer client wrote', async () => {
+    await gardenRepository.save(maturedGarden())
+    const meta = (await readStore('meta')) as Record<string, unknown>
+    await writeStore('meta', { ...meta, version: 5 })
+
+    const result = await gardenRepository.adopt(['meta'])
+    expect(result.status).toBe('withheld')
+    expect(result.reason).toBe('incompatible')
+    // Untouched, exactly as the invariant requires.
+    expect(await readStore('meta')).toMatchObject({ version: 5 })
+  })
+})
+
+describe('reporting what a write touched', () => {
+  it('names the parts it wrote so other tabs can read only those', async () => {
+    const before = maturedGarden()
+    await expect(gardenRepository.save(before)).resolves.toEqual(
+      expect.arrayContaining(['meta', 'moods', 'plants']),
+    )
+
+    await expect(
+      gardenRepository.save(checkInWithMood(before)),
+    ).resolves.toEqual(['meta', 'moods', 'sunlight'])
+  })
+
+  it('reports nothing written when the garden did not change', async () => {
+    const state = maturedGarden()
+    await gardenRepository.save(state)
+    await expect(gardenRepository.save({ ...state })).resolves.toEqual([])
+  })
+})

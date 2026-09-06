@@ -3,7 +3,10 @@
   color: #243a32;
   background: #f7f3e8;
   font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  /* No text-rendering: optimizeLegibility. It forces kerning and ligature
+     processing over the whole document, which costs real layout time on long
+     journal entries, and the bundled variable faces already carry proper
+     metrics and optical sizing. */
   -webkit-font-smoothing: antialiased;
   --forest: #315c4b;
   --forest-dark: #224438;

@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { memo, useId, type ReactNode } from 'react'
 import type { OutfitSlot } from '../../types'
 
 export interface OutfitAnchor {
@@ -212,7 +212,7 @@ function aura(itemId: string, glow: string): ReactNode {
  * Renders equipped cosmetics on a creature sprite. The anchor tells the
  * overlay where the head and chest sit inside the parent SVG's viewBox.
  */
-export function OutfitOverlay({
+export const OutfitOverlay = memo(function OutfitOverlay({
   outfit,
   anchor,
   hideAccessory = false,
@@ -254,4 +254,4 @@ export function OutfitOverlay({
       )}
     </g>
   )
-}
+})

@@ -3597,7 +3597,13 @@
   padding: 0.5rem 1.05rem;
   font-weight: 700;
   color: var(--muted);
-  transition: all 160ms ease;
+  /* Named rather than `all`: transitioning every animatable property drags
+     layout properties into the animation for no visible gain. */
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .shop-tabs button:hover { border-color: var(--sage); color: var(--forest-dark); }
@@ -3770,7 +3776,9 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Cards get layered depth and a lift on hover */
+/* Cards get layered depth and a lift on hover. The transform half of this
+   transition is used by theme-aurora.css, which adds the hover translate;
+   both files have to move together if that lift ever changes. */
 .card {
   transition: transform 220ms var(--ease-spring), box-shadow 220ms ease;
 }

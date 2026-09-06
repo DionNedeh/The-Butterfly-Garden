@@ -1,4 +1,5 @@
 import { flightPatterns } from '../data/flightPatterns'
+import { balanceFor } from './currency'
 import type { AppState, FlightPatternId } from '../types'
 
 export const DEFAULT_FLIGHT_PATTERN_ID: FlightPatternId = 'gentle-drift'
@@ -10,9 +11,7 @@ export function purchaseFlightPattern(
   if (state.ownedFlightPatternIds.includes(patternId)) return state
   const pattern = flightPatterns.find((item) => item.id === patternId)
   if (!pattern || pattern.cost <= 0) return state
-  const balance =
-    (pattern.currency === 'stardust' ? state.stardust : state.nectar) ?? 0
-  if (balance < pattern.cost) return state
+  if (balanceFor(state, pattern.currency) < pattern.cost) return state
   const paid =
     pattern.currency === 'stardust'
       ? { stardust: state.stardust - pattern.cost }

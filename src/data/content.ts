@@ -258,7 +258,22 @@ export const species: SpeciesDefinition[] = [
   },
 ]
 
-export const plants: PlantDefinition[] = [
+/**
+ * Written as rows so the catalogue stays readable at a glance. The tuple is
+ * typed, so a row with its fields in the wrong order fails to compile --
+ * casting each field out of a loose array, as this used to, would not.
+ */
+type PlantRow = readonly [
+  id: string,
+  name: string,
+  scientificName: string,
+  kind: PlantDefinition['kind'],
+  speciesIds: string[],
+  color: string,
+  description: string,
+]
+
+const plantRows: readonly PlantRow[] = [
   ['milkweed', 'Milkweed', 'Asclepias spp.', 'host', ['monarch', 'queen'], '#c884a5', 'A vital nursery for monarch and queen caterpillars.'],
   ['parsley', 'Parsley', 'Petroselinum crispum', 'host', ['black-swallowtail'], '#6e9e57', 'Feathery leaves welcomed by black swallowtails.'],
   ['tulip-tree', 'Tulip Tree', 'Liriodendron tulipifera', 'host', ['tiger-swallowtail'], '#d5a83e', 'A stately native host for tiger swallowtails.'],
@@ -284,17 +299,21 @@ export const plants: PlantDefinition[] = [
   ['aster', 'Aster', 'Symphyotrichum spp.', 'nectar', [], '#7c70a8', 'Late-season nectar in lavender stars.'],
   ['coneflower', 'Purple Coneflower', 'Echinacea purpurea', 'nectar', [], '#b35f84', 'A broad landing place rich with nectar.'],
   ['zinnia', 'Zinnia', 'Zinnia elegans', 'nectar', [], '#cf654f', 'Cheerful blooms for many visiting butterflies.'],
-].map(([id, name, scientificName, kind, speciesIds, color, description]) => ({
-  id: id as string,
-  name: name as string,
-  scientificName: scientificName as string,
-  kind: kind as PlantDefinition['kind'],
-  speciesIds: speciesIds as string[],
-  color: color as string,
-  description: description as string,
-}))
+]
 
-export const reflectionPrompts: ReflectionPrompt[] = [
+export const plants: PlantDefinition[] = plantRows.map(
+  ([id, name, scientificName, kind, speciesIds, color, description]) => ({
+    id,
+    name,
+    scientificName,
+    kind,
+    speciesIds,
+    color,
+    description,
+  }),
+)
+
+const reflectionPromptRows: ReadonlyArray<readonly [id: string, text: string]> = [
   ['notice', 'What is one small thing you noticed today?'],
   ['kindness', 'What would kindness toward yourself look like right now?'],
   ['lighter', 'What made today feel a little lighter?'],
@@ -319,7 +338,11 @@ export const reflectionPrompts: ReflectionPrompt[] = [
   ['begin', 'What is one easy place to begin?'],
   ['protected', 'What deserves your attention, and what can wait?'],
   ['garden', 'What would you like to nurture in your inner garden?'],
-].map(([id, text]) => ({ id, text }))
+]
+
+export const reflectionPrompts: ReflectionPrompt[] = reflectionPromptRows.map(
+  ([id, text]) => ({ id, text }),
+)
 
 export const suggestedGoals = [
   'Drink a glass of water',

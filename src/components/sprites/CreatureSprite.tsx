@@ -1,7 +1,8 @@
+import { memo } from 'react'
 import { getSpecies } from '../../lib/progression'
 import type { CreatureStage, OutfitSlot } from '../../types'
 import { ButterflySprite } from './ButterflySprite'
-import { OutfitOverlay } from './OutfitOverlay'
+import { OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
 
 /**
  * Renders a creature at any life stage. Eggs rest on a leaf, caterpillars
@@ -9,7 +10,19 @@ import { OutfitOverlay } from './OutfitOverlay'
  * Species colors tint every stage so each companion feels like itself
  * from the very first day.
  */
-export function CreatureSprite({
+/** Fixed per life stage; literals in the JSX would be new objects each render. */
+const EGG_ANCHOR: OutfitAnchor = { headX: 60, headY: 30, bodyX: 60, bodyY: 50, scale: 1 }
+const CATERPILLAR_ANCHOR: OutfitAnchor = { headX: 99, headY: 50, bodyX: 63, bodyY: 58, scale: 1 }
+const CHRYSALIS_ANCHOR: OutfitAnchor = { headX: 60, headY: 24, bodyX: 60, bodyY: 56, scale: 1 }
+
+/**
+ * Memoized. These sprites are large SVG trees -- a garden scene draws up to
+ * twelve butterflies, eight flowers and a row of creatures at once -- and the
+ * views around them re-render on every keystroke in a rename or plan field.
+ * Skipping the subtree needs stable props, which is why the outfit map is
+ * built once per view and the anchors are module constants.
+ */
+export const CreatureSprite = memo(function CreatureSprite({
   speciesId,
   stage,
   label,
@@ -83,7 +96,7 @@ export function CreatureSprite({
           <ellipse cx="55" cy="39" rx="3.4" ry="5" fill="#fffdf4" opacity="0.8" />
           <circle cx="60" cy="47" r="2.6" fill={secondary} opacity="0.35" />
         </g>
-        <OutfitOverlay outfit={outfit} anchor={{ headX: 60, headY: 30, bodyX: 60, bodyY: 50, scale: 1 }} />
+        <OutfitOverlay outfit={outfit} anchor={EGG_ANCHOR} />
       </svg>
     )
   }
@@ -144,7 +157,7 @@ export function CreatureSprite({
         </g>
         {/* Caterpillars keep headwear + aura, but neck accessories don't
             suit the long low body, so they're hidden here. */}
-        <OutfitOverlay outfit={outfit} anchor={{ headX: 99, headY: 50, bodyX: 63, bodyY: 58, scale: 1 }} hideAccessory />
+        <OutfitOverlay outfit={outfit} anchor={CATERPILLAR_ANCHOR} hideAccessory />
       </svg>
     )
   }
@@ -188,7 +201,7 @@ export function CreatureSprite({
         ))}
         <ellipse cx="54" cy="50" rx="3" ry="9" fill="#fffdf4" opacity="0.35" />
       </g>
-      <OutfitOverlay outfit={outfit} anchor={{ headX: 60, headY: 24, bodyX: 60, bodyY: 56, scale: 1 }} />
+      <OutfitOverlay outfit={outfit} anchor={CHRYSALIS_ANCHOR} />
     </svg>
   )
-}
+})

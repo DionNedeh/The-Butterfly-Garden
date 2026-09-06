@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { memo, useId, type ReactNode } from 'react'
 import { plants } from '../../data/content'
 
 /**
@@ -507,7 +507,14 @@ function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
   }
 }
 
-export function FlowerSprite({
+/**
+ * Memoized. These sprites are large SVG trees -- a garden scene draws up to
+ * twelve butterflies, eight flowers and a row of creatures at once -- and the
+ * views around them re-render on every keystroke in a rename or plan field.
+ * Skipping the subtree needs stable props, which is why the outfit map is
+ * built once per view and the anchors are module constants.
+ */
+export const FlowerSprite = memo(function FlowerSprite({
   plantId,
   growth,
   size = 90,
@@ -607,4 +614,4 @@ export function FlowerSprite({
       )}
     </svg>
   )
-}
+})

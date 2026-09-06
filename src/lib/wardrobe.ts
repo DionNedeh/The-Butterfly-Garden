@@ -1,5 +1,6 @@
 import { getShopItem } from '../data/shopItems'
-import type { AppState, OutfitSlot } from '../types'
+import { balanceFor } from './currency'
+import type { AppState, CreatureInstance, OutfitSlot } from '../types'
 
 /**
  * Buy a shop item. Supplies stack in the inventory; cosmetics are one-time
@@ -13,9 +14,7 @@ export function purchaseShopItem(state: AppState, itemId: string): AppState {
     return state
   }
 
-  const balance =
-    (item.currency === 'stardust' ? state.stardust : state.nectar) ?? 0
-  if (balance < item.cost) return state
+  if (balanceFor(state, item.currency) < item.cost) return state
   const paid =
     item.currency === 'stardust'
       ? { stardust: state.stardust - item.cost }
@@ -83,12 +82,9 @@ export function unequipOutfitSlot(
 }
 
 /** Items equipped in slots that no longer fit the stage are hidden, not lost. */
-export function visibleOutfit(
-  state: AppState,
-  creatureId: string,
+export function visibleOutfitFor(
+  creature: CreatureInstance,
 ): Partial<Record<OutfitSlot, string>> {
-  const creature = state.creatures.find((entry) => entry.id === creatureId)
-  if (!creature) return {}
   const result: Partial<Record<OutfitSlot, string>> = {}
   for (const [slot, itemId] of Object.entries(creature.outfit)) {
     if (!itemId) continue
@@ -98,4 +94,30 @@ export function visibleOutfit(
     }
   }
   return result
+}
+
+export function visibleOutfit(
+  state: AppState,
+  creatureId: string,
+): Partial<Record<OutfitSlot, string>> {
+  const creature = state.creatures.find((entry) => entry.id === creatureId)
+  return creature ? visibleOutfitFor(creature) : {}
+}
+
+/**
+ * Every creature's visible outfit, built in one pass.
+ *
+ * Calling visibleOutfit once per creature is quadratic -- each call scans the
+ * whole list to find its creature -- and it hands back a fresh object every
+ * time, which defeats memoization on the sprite that receives it. Views that
+ * draw more than one creature should index once and look up from here.
+ */
+export function visibleOutfits(
+  creatures: readonly CreatureInstance[],
+): Map<string, Partial<Record<OutfitSlot, string>>> {
+  const outfits = new Map<string, Partial<Record<OutfitSlot, string>>>()
+  for (const creature of creatures) {
+    outfits.set(creature.id, visibleOutfitFor(creature))
+  }
+  return outfits
 }
