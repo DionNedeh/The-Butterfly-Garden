@@ -1,4 +1,5 @@
 import { flightPatterns } from '../data/flightPatterns'
+import { currencyLabel } from '../lib/currency'
 import type { AppState, FlightPatternId } from '../types'
 import { Icon } from './Icons'
 
@@ -40,7 +41,11 @@ export function FlightPatternsView({
                 <strong>{pattern.name}</strong>
                 <small>{pattern.description}</small>
                 <em>
-                  {selected ? 'Selected' : owned ? 'Owned - select pattern' : `Locked - ${pattern.cost} Nectar in Shop`}
+                  {selected
+                    ? 'Selected'
+                    : owned
+                      ? 'Owned - select pattern'
+                      : `Locked - ${pattern.cost} ${currencyLabel(pattern.currency)} in Shop`}
                 </em>
               </span>
               {selected && <Icon name="flight" />}

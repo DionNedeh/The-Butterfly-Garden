@@ -6,6 +6,7 @@ import {
   premiumItems,
   supplyItems,
 } from '../data/shopItems'
+import { balanceFor, currencyLabel } from '../lib/currency'
 import { stageLabels } from '../lib/lifecycle'
 import type { AppState, FlightPatternId, IconName, JarColorId } from '../types'
 import { Icon } from './Icons'
@@ -47,9 +48,7 @@ export function ShopView({
 
   const cosmeticCard = (item: (typeof cosmeticItems)[number]) => {
     const owned = state.ownedItemIds.includes(item.id)
-    const balance =
-      (item.currency === 'stardust' ? state.stardust : state.nectar) ?? 0
-    const affordable = balance >= item.cost
+    const affordable = balanceFor(state, item.currency) >= item.cost
     return (
       <article
         className={`card shop-item-card ${item.currency === 'stardust' ? 'stardust-item' : ''}`}
@@ -321,13 +320,9 @@ export function ShopView({
           <div className="shop-grid">
             {patterns.map((pattern) => {
               const owned = state.ownedFlightPatternIds.includes(pattern.id)
-              const balance =
-                (pattern.currency === 'stardust'
-                  ? state.stardust
-                  : state.nectar) ?? 0
-              const affordable = balance >= pattern.cost
-              const currencyLabel =
-                pattern.currency === 'stardust' ? 'Stardust' : 'Nectar'
+              const affordable =
+                balanceFor(state, pattern.currency) >= pattern.cost
+              const priceLabel = currencyLabel(pattern.currency)
               return (
                 <article className="card pattern-card" key={pattern.id}>
                   <div className={`pattern-preview ${pattern.animationClass}`} aria-hidden="true">
@@ -357,7 +352,7 @@ export function ShopView({
                         ? 'Owned'
                         : affordable
                           ? `Buy ${pattern.name}`
-                          : `Not enough ${currencyLabel}`}
+                          : `Not enough ${priceLabel}`}
                     </button>
                   </div>
                 </article>

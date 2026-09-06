@@ -84,7 +84,17 @@ function createEngine(): AmbientEngine | undefined {
       .webkitAudioContext
   if (!AudioContextClass) return undefined
 
-  const context = new AudioContextClass()
+  // Browsers cap how many audio contexts a page may hold open at once, and
+  // stopEngine closes the previous one on a short delay, so toggling sound or
+  // switching tracks quickly can hit that ceiling. The constructor throws
+  // there, and this runs inside an effect, where an uncaught throw takes the
+  // whole app down. Falling silent is the right failure.
+  let context: AudioContext
+  try {
+    context = new AudioContextClass()
+  } catch {
+    return undefined
+  }
   const master = context.createGain()
   master.gain.value = 0
   master.connect(context.destination)

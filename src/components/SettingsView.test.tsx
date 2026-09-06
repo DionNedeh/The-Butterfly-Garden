@@ -37,6 +37,8 @@ describe('SettingsView data management', () => {
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => undefined)
+    // Watched, not replaced: the clock keeps running so user-event still works.
+    const scheduleSpy = vi.spyOn(window, 'setTimeout')
 
     const { onExportGarden } = renderSettings()
     await user.click(screen.getByRole('button', { name: /download a backup/i }))
@@ -44,10 +46,24 @@ describe('SettingsView data management', () => {
     expect(onExportGarden).toHaveBeenCalledOnce()
     expect(createObjectURL).toHaveBeenCalledOnce()
     expect(click).toHaveBeenCalledOnce()
-    // Nothing is uploaded: the only URL created is a local blob.
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:garden')
-    expect(screen.getByText(/backup downloaded/i)).toBeInTheDocument()
+    expect(screen.getByText(/backup started/i)).toBeInTheDocument()
 
+    // The blob URL has to outlive the click. Revoking it in the same tick can
+    // cancel the download before the browser has read it, and the click itself
+    // never reports that failure -- the gardener would be told their only copy
+    // was saved when nothing was written.
+    expect(revokeObjectURL).not.toHaveBeenCalled()
+
+    // It is released later, so nothing leaks. Nothing is uploaded either: the
+    // only URL this creates is a local blob.
+    const release = scheduleSpy.mock.calls.find(
+      ([, delay]) => delay === 60_000,
+    )?.[0] as (() => void) | undefined
+    expect(release).toBeTypeOf('function')
+    release?.()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:garden')
+
+    scheduleSpy.mockRestore()
     click.mockRestore()
     vi.unstubAllGlobals()
   })
