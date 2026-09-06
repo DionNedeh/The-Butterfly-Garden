@@ -671,3 +671,45 @@ test('gradient headings leave room for their descenders', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Sunlit Sanctuary' })).toBeVisible()
   expect(await clipped()).toEqual([])
 })
+
+/**
+ * The guide cards carry a decorative warm glow. It used to sit in a narrow box
+ * offset inside the card -- right: -20%, width: 60% -- and because a circle
+ * gradient is measured to the farthest corner, in a box that tall and narrow
+ * the gold was still near full strength when the box ran out. So it did not
+ * fade in, it began: a hard vertical seam at 60% of every guide card.
+ *
+ * An overlay that covers the whole card cannot draw an edge inside it. If a
+ * future design wants a smaller overlay, its gradient has to reach transparent
+ * before its own box edge, and this expectation should move with it.
+ */
+test('the guide card glow has no edge inside the card', async ({ page }) => {
+  await page.getByRole('button', { name: /enter the garden/i }).click()
+  await page.getByLabel('Your name').fill('Gardener')
+  await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
+  await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: /plant my first seeds/i }).click()
+  await mainNav(page).getByRole('button', { name: 'Guide', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: /how the garden works/i }),
+  ).toBeVisible()
+
+  const overlays = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.guide-card')].map((card) => {
+      const glow = getComputedStyle(card, '::after')
+      return {
+        width: parseFloat(glow.width),
+        height: parseFloat(glow.height),
+        cardWidth: card.clientWidth,
+        cardHeight: card.clientHeight,
+      }
+    }),
+  )
+
+  expect(overlays.length).toBeGreaterThan(0)
+  for (const glow of overlays) {
+    // Sub-pixel slack only: the glow spans the card, not a band of it.
+    expect(glow.width).toBeGreaterThanOrEqual(glow.cardWidth - 1)
+    expect(glow.height).toBeGreaterThanOrEqual(glow.cardHeight - 1)
+  }
+})
