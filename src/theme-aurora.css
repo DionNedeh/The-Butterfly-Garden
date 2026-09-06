@@ -490,9 +490,15 @@ h2 {
   color: transparent;
 }
 .page-header h1,
-.splash-title h1 {
-  /* Fraunces descenders extend below a 1.03 line box. Android Chrome clips
-     that painted area when the glyph is also using background-clip: text. */
+.splash-title h1,
+.onboarding-card h1 {
+  /* Fraunces descenders extend below the 1.03 line box that index.css sets on
+     every h1. With background-clip: text the glyphs are painted only inside
+     the padding box, so a descender that leaves it is sliced flat rather than
+     merely overflowing -- every browser, not only Android.
+     Any gradient-text heading needs to be in this list. The onboarding titles
+     were not, which cut the tails off "your", "butterfly" and "garden" on the
+     first screen a gardener ever sees. */
   line-height: 1.14;
   padding-bottom: 0.1em;
 }
