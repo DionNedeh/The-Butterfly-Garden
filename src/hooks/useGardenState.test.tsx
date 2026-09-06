@@ -80,7 +80,7 @@ describe('useGardenState persistence', () => {
       status: 'loaded',
       state: stored,
     })
-    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue()
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
 
     render(<Harness />)
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
@@ -94,7 +94,7 @@ describe('useGardenState persistence', () => {
       status: 'loaded',
       state: createInitialState('Tester', 'Test Garden'),
     })
-    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue()
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
 
     render(<Harness />)
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))

@@ -211,6 +211,20 @@ let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
  */
 let persisted: AppState | undefined
 
+/**
+ * The write currently committing, if there is one. A read that merges onto
+ * `persisted` waits for this first, so it can never build on a base that is
+ * about to be replaced by a write already in flight.
+ */
+let pendingWrite: Promise<void> = Promise.resolve()
+
+/** Whether a value names parts of the garden this build knows how to read. */
+function knownParts(value: unknown): value is GardenPart[] {
+  if (!Array.isArray(value) || value.length === 0) return false
+  const known = new Set<string>(['meta', ...GARDEN_COLLECTIONS])
+  return value.every((part) => typeof part === 'string' && known.has(part))
+}
+
 /** Stores holding the split garden. The legacy record is deliberately not
  *  among them: it is read only when there is no split garden to read. */
 const PART_STORES: StoreNames<GardenDatabase>[] = [
@@ -458,6 +472,27 @@ async function readParts(
   return { meta, collections }
 }
 
+/** Read just the named parts, in one transaction. */
+async function readNamedParts(
+  db: IDBPDatabase<GardenDatabase>,
+  parts: GardenPart[],
+): Promise<Map<GardenPart, unknown>> {
+  const stores = parts.map((part) =>
+    part === 'meta' ? 'meta' : COLLECTION_STORES[part],
+  )
+  const tx = db.transaction(stores, 'readonly')
+  const requests = parts.map((part) =>
+    (
+      tx.objectStore(part === 'meta' ? 'meta' : COLLECTION_STORES[part]) as {
+        get: (key: 'current') => Promise<unknown>
+      }
+    ).get('current'),
+  )
+  const values = await Promise.all(requests)
+  await tx.done
+  return new Map(parts.map((part, index) => [part, values[index]]))
+}
+
 /** Write the whole garden across every part store, atomically. */
 async function writeAllParts(
   db: IDBPDatabase<GardenDatabase>,
@@ -652,31 +687,87 @@ export const gardenRepository = {
    * survive a partial write in which the plant is missing. Rejects on failure
    * so callers can tell the user.
    */
-  async save(state: AppState): Promise<void> {
+  async save(state: AppState): Promise<GardenPart[]> {
     const dirty = changedParts(persisted, state)
-    if (dirty.length === 0) return
+    if (dirty.length === 0) return []
 
     const stores: StoreNames<GardenDatabase>[] = dirty.map((part) =>
       part === 'meta' ? 'meta' : COLLECTION_STORES[part],
     )
 
     const db = await database()
-    const tx = db.transaction(stores, 'readwrite')
-    const writes: Promise<unknown>[] = []
-    for (const part of dirty) {
+    const write = (async () => {
+      const tx = db.transaction(stores, 'readwrite')
+      const writes: Promise<unknown>[] = []
+      for (const part of dirty) {
+        if (part === 'meta') {
+          writes.push(tx.objectStore('meta').put(metaOf(state), 'current'))
+          continue
+        }
+        // The store and the field it holds are paired by COLLECTION_STORES,
+        // but that correspondence is beyond what the index signature can
+        // express.
+        const store = tx.objectStore(COLLECTION_STORES[part]) as {
+          put: (value: unknown, key: 'current') => Promise<unknown>
+        }
+        writes.push(store.put(state[part], 'current'))
+      }
+      await Promise.all([...writes, tx.done])
+      persisted = state
+    })()
+    // Published before it is awaited so a sync arriving mid-write can wait for
+    // it; a rejection is handled by the caller, not by this handle.
+    pendingWrite = write.then(
+      () => undefined,
+      () => undefined,
+    )
+    await write
+    return dirty
+  },
+
+  /**
+   * Adopt a change another tab just wrote, reading only the parts it named.
+   *
+   * Before the garden was split there was one record, so any change meant
+   * re-reading all of it. Now a mood check-in in one tab made every other tab
+   * deserialise and re-validate the whole garden to learn about one entry.
+   *
+   * Anything unexpected falls back to a full load, which is always correct:
+   * an older tab that names no parts, a part this build does not know, no
+   * trustworthy base to merge onto, a store that has since emptied, or a merge
+   * that fails validation -- that last case goes back through load() so the
+   * quarantine path handles it rather than being reimplemented here.
+   */
+  async adopt(parts: unknown): Promise<LoadResult> {
+    if (!knownParts(parts)) return await gardenRepository.load()
+    await pendingWrite
+
+    let values: Map<GardenPart, unknown>
+    try {
+      values = await readNamedParts(await database(), parts)
+    } catch {
+      return await gardenRepository.load()
+    }
+
+    // Read after the awaits: a write that landed while this was reading has
+    // already updated the base, and merging onto the older one would undo it.
+    const base = persisted
+    if (!base) return await gardenRepository.load()
+
+    const candidate: Record<string, unknown> = { ...base }
+    for (const [part, value] of values) {
+      if (value === undefined) return await gardenRepository.load()
       if (part === 'meta') {
-        writes.push(tx.objectStore('meta').put(metaOf(state), 'current'))
+        Object.assign(candidate, value as Record<string, unknown>)
         continue
       }
-      // The store and the field it holds are paired by COLLECTION_STORES, but
-      // that correspondence is beyond what the index signature can express.
-      const store = tx.objectStore(COLLECTION_STORES[part]) as {
-        put: (value: unknown, key: 'current') => Promise<unknown>
-      }
-      writes.push(store.put(state[part], 'current'))
+      candidate[part] = value
     }
-    await Promise.all([...writes, tx.done])
-    persisted = state
+
+    const migrated = migrateState(candidate)
+    if (!migrated) return await gardenRepository.load()
+    persisted = migrated
+    return { status: 'loaded', state: migrated }
   },
 
   /** Records this build could not read, kept so they are never lost. */
