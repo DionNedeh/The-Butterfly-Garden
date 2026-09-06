@@ -622,3 +622,52 @@ test('every shop tab is reachable and accessible', async ({ page }) => {
   }
   expect(offenders).toEqual([])
 })
+
+/**
+ * Gradient headings paint only inside their padding box, so a descender that
+ * escapes a tight line box is sliced flat rather than merely overflowing. The
+ * onboarding titles were missing from the rule that leaves room for it, which
+ * cut the tails off the first words a gardener ever reads.
+ */
+test('gradient headings leave room for their descenders', async ({ page }) => {
+  const clipped = () =>
+    page.evaluate(() => {
+      const bad: string[] = []
+      for (const el of document.querySelectorAll<HTMLElement>('*')) {
+        const style = getComputedStyle(el)
+        const clip = style.webkitBackgroundClip || style.backgroundClip
+        // Only elements that paint their text through a gradient, and only
+        // where overflow is visible -- a clipped box has nothing to measure.
+        if (clip !== 'text' || style.overflow !== 'visible') continue
+        if (el.scrollHeight > el.clientHeight) {
+          const name = `${el.tagName.toLowerCase()}.${el.getAttribute('class') ?? ''}`
+          bad.push(`${name}: "${(el.textContent ?? '').trim().slice(0, 32)}"`)
+        }
+      }
+      return bad
+    })
+
+  await expect(
+    page.getByRole('heading', { name: /welcome to your butterfly garden/i }),
+  ).toBeVisible()
+  expect(await clipped()).toEqual([])
+
+  await page.getByRole('button', { name: /enter the garden/i }).click()
+  await expect(
+    page.getByRole('heading', { name: /what shall we call this place/i }),
+  ).toBeVisible()
+  expect(await clipped()).toEqual([])
+
+  await page.getByLabel('Your name').fill('Gardener')
+  await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
+  await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await expect(
+    page.getByRole('heading', { name: /here is how your sanctuary grows/i }),
+  ).toBeVisible()
+  expect(await clipped()).toEqual([])
+
+  // And once inside, where the garden title and page headers live.
+  await page.getByRole('button', { name: /plant my first seeds/i }).click()
+  await expect(page.getByRole('heading', { name: 'Sunlit Sanctuary' })).toBeVisible()
+  expect(await clipped()).toEqual([])
+})
