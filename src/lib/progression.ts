@@ -2,7 +2,9 @@ import { butterflyNames, plants as plantCatalog, species } from '../data/content
 import type {
   AppState,
   CreatureInstance,
+  MoonlightAward,
   PlantInstance,
+  RecapEntry,
   SunlightAward,
 } from '../types'
 import { toLocalDate } from './date'
@@ -21,14 +23,17 @@ export const STARTER_SEEDS = 2
 export const STARTER_NECTAR = 10
 export const DAILY_SEED_REWARD = 1
 export const PLANT_SEED_COST = 1
+export const MOONLIGHT_STARDUST_REWARD = 1
 
 export function createEmptyState(): AppState {
   return {
-    version: 4,
+    version: 5,
     goals: [],
     completions: [],
     moods: [],
     reflections: [],
+    recaps: [],
+    moonlight: [],
     plants: [],
     creatures: [],
     sunlight: [],
@@ -230,6 +235,83 @@ export function awardSunlight(
     sunlight: [...state.sunlight, award],
     nectar: state.nectar + NECTAR_PER_SUNLIGHT,
     seeds: state.seeds + (firstSunlightToday ? DAILY_SEED_REWARD : 0),
+  }
+}
+
+/** What the recap flow collected. Every answer is optional. */
+export interface RecapDraft {
+  level?: RecapEntry['level']
+  wentWell?: string
+  settingDown?: string
+  forTomorrow?: string
+  plannedGoalId?: string
+}
+
+/** The Moonlight already collected for a day, if any. */
+export function moonlightForDate(
+  state: AppState,
+  localDate: string,
+): MoonlightAward | undefined {
+  return state.moonlight.find((award) => award.localDate === localDate)
+}
+
+/** The recap written for a day, if any. */
+export function recapForDate(
+  state: AppState,
+  localDate: string,
+): RecapEntry | undefined {
+  return state.recaps.find((recap) => recap.localDate === localDate)
+}
+
+/**
+ * Closing Moonlight: one per local day, collected by rounding out the day.
+ *
+ * Deliberately not routed through `awardSunlight`. Moonlight pays in Stardust
+ * and touches nothing else -- no plant growth, because that is the engine of
+ * egg discovery and is paced by the Sunlight cap, and no Sunlight award,
+ * because the journal promises that a Sunlight streak means an act of care.
+ *
+ * The `moonlight` ledger is the dedupe key, not the recap. A gardener who
+ * deletes a recap and writes it again is not paid twice.
+ */
+export function awardMoonlight(
+  inputState: AppState,
+  localDate: string,
+  draft: RecapDraft = {},
+  now = new Date(),
+): AppState {
+  const state = progressGarden(inputState, now)
+  if (moonlightForDate(state, localDate)) return state
+
+  const nowIso = now.toISOString()
+  const recap: RecapEntry = {
+    id: createId(),
+    localDate,
+    ...(draft.level === undefined ? {} : { level: draft.level }),
+    wentWell: draft.wentWell?.trim() ?? '',
+    settingDown: draft.settingDown?.trim() ?? '',
+    forTomorrow: draft.forTomorrow?.trim() ?? '',
+    ...(draft.plannedGoalId ? { plannedGoalId: draft.plannedGoalId } : {}),
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  }
+  const award: MoonlightAward = {
+    id: createId(),
+    localDate,
+    awardedAt: nowIso,
+  }
+
+  return {
+    ...state,
+    // A recap already written for this day without a payout cannot happen
+    // through the UI, but replacing rather than appending keeps the
+    // one-per-day shape true whatever the stored garden held.
+    recaps: [
+      ...state.recaps.filter((entry) => entry.localDate !== localDate),
+      recap,
+    ],
+    moonlight: [...state.moonlight, award],
+    stardust: state.stardust + MOONLIGHT_STARDUST_REWARD,
   }
 }
 

@@ -27,6 +27,11 @@ const GuideView = lazy(() =>
 const JournalView = lazy(() =>
   import('./components/JournalView').then((m) => ({ default: m.JournalView })),
 )
+const MoonlightRecap = lazy(() =>
+  import('./components/MoonlightRecap').then((m) => ({
+    default: m.MoonlightRecap,
+  })),
+)
 const SettingsView = lazy(() =>
   import('./components/SettingsView').then((m) => ({ default: m.SettingsView })),
 )
@@ -40,7 +45,8 @@ import {
 import { useAmbientSound } from './hooks/useAmbientSound'
 import { useGardenState } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
-import { sunlightForDate } from './lib/progression'
+import { useRecapWindow } from './hooks/useRecapWindow'
+import { moonlightForDate, sunlightForDate } from './lib/progression'
 import type { AppView } from './types'
 
 interface InstallPromptEvent extends Event {
@@ -81,7 +87,10 @@ const navigation: Array<{
 function App() {
   const garden = useGardenState()
   const today = useLocalDate()
+  const recap = useRecapWindow()
   const [view, setView] = useState<AppView>('garden')
+  /** The day the recap was actually opened for, so it is never re-entered. */
+  const [recapOpenedFor, setRecapOpenedFor] = useState<string>()
   useAmbientSound(
     Boolean(garden.state?.profile?.ambientSound),
     garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
@@ -142,6 +151,29 @@ function App() {
   if (!profile) return <Onboarding onComplete={garden.onboard} />
   const sunlight = sunlightForDate(state, today)
   const activeTrackName = ambientTrackName(profile.ambientTrack)
+  const recapCollected = recap.targetDate
+    ? Boolean(moonlightForDate(state, recap.targetDate))
+    : false
+  // Withheld gardens cannot save, and a bonus that silently does not persist
+  // is worse than one that was never offered.
+  const offeredRecap = garden.persistence.readOnly ? undefined : recap
+  /** The day the recap would close, once it is actually on offer. */
+  const recapTarget =
+    offeredRecap?.open && !recapCollected ? offeredRecap.targetDate : undefined
+  /**
+   * The recap is the one view that can stop being available while the gardener
+   * is standing in it: four o'clock arrives, or another tab collects the night
+   * first. Falling back to Today is derived rather than corrected after the
+   * fact, so the flow is never briefly rendered against a day already closed.
+   *
+   * It is tied to the day it was opened for, not merely to the recap being
+   * available. Otherwise a tab left open overnight would fall back to Today at
+   * four in the morning while still holding 'recap', and then walk itself back
+   * into the flow the moment the next evening opened -- with nobody having
+   * asked for it.
+   */
+  const inRecap = view === 'recap' && recapOpenedFor === recapTarget
+  const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
 
   return (
     <div
@@ -170,9 +202,9 @@ function App() {
           {navigation.map((item) => (
             <button
               key={item.id}
-              className={view === item.id ? 'active' : ''}
+              className={activeView === item.id ? 'active' : ''}
               onClick={() => setView(item.id)}
-              aria-current={view === item.id ? 'page' : undefined}
+              aria-current={activeView === item.id ? 'page' : undefined}
             >
               <Icon name={item.icon} />
               {item.label}
@@ -278,7 +310,7 @@ function App() {
 
       <main id="main-content">
         <Suspense fallback={<p className="view-loading" role="status">Opening…</p>}>
-        {view === 'garden' && (
+        {activeView === 'garden' && (
           <GardenView
             state={state}
             onPlant={garden.plant}
@@ -290,7 +322,7 @@ function App() {
             onOpenCare={() => setView('care')}
           />
         )}
-        {view === 'care' && (
+        {activeView === 'care' && (
           <CareView
             state={state}
             today={today}
@@ -301,7 +333,7 @@ function App() {
             onGoToShop={() => setView('shop')}
           />
         )}
-        {view === 'shop' && (
+        {activeView === 'shop' && (
           <ShopView
             state={state}
             onPurchasePattern={garden.purchaseFlightPattern}
@@ -309,13 +341,13 @@ function App() {
             onPurchaseItem={garden.purchaseItem}
           />
         )}
-        {view === 'flight-patterns' && (
+        {activeView === 'flight-patterns' && (
           <FlightPatternsView
             state={state}
             onSelect={garden.selectFlightPattern}
           />
         )}
-        {view === 'today' && (
+        {activeView === 'today' && (
           <TodayView
             state={state}
             today={today}
@@ -330,19 +362,38 @@ function App() {
             onWakeGoal={garden.wakeGoal}
             onPlanGoal={garden.planGoal}
             onSetGoalArchived={garden.setGoalArchived}
+            recap={offeredRecap}
+            moonlightCollected={recapCollected}
+            onOpenRecap={() => {
+              setRecapOpenedFor(recapTarget)
+              setView('recap')
+            }}
           />
         )}
-        {view === 'guide' && <GuideView />}
-        {view === 'journal' && (
+        {inRecap && recapTarget && (
+          <MoonlightRecap
+            state={state}
+            targetDate={recapTarget}
+            today={today}
+            onCollect={(submission) =>
+              garden.collectMoonlight(recapTarget, submission)
+            }
+            onClose={() => setView('today')}
+          />
+        )}
+        {activeView === 'guide' && <GuideView />}
+        {activeView === 'journal' && (
           <JournalView
             state={state}
             onUpdateMood={garden.updateMood}
             onDeleteMood={garden.deleteMood}
             onUpdateReflection={garden.updateReflection}
             onDeleteReflection={garden.deleteReflection}
+            onUpdateRecap={garden.updateRecap}
+            onDeleteRecap={garden.deleteRecap}
           />
         )}
-        {view === 'settings' && (
+        {activeView === 'settings' && (
           <SettingsView
             state={state}
             persistence={garden.persistence}
@@ -361,9 +412,9 @@ function App() {
         {navigation.map((item) => (
           <button
             key={item.id}
-            className={view === item.id ? 'active' : ''}
+            className={activeView === item.id ? 'active' : ''}
             onClick={() => setView(item.id)}
-            aria-current={view === item.id ? 'page' : undefined}
+            aria-current={activeView === item.id ? 'page' : undefined}
           >
             <Icon name={item.icon} />
             <span>{item.label}</span>

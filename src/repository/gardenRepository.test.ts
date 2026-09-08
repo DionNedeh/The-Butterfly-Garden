@@ -9,6 +9,7 @@ import {
 import { toLocalDate } from '../lib/date'
 import type { AppState, MoodEntry } from '../types'
 import {
+  COLLECTION_STORES,
   GARDEN_COLLECTIONS,
   META_FIELDS,
   changedParts,
@@ -22,18 +23,16 @@ afterEach(async () => {
   await gardenRepository.clear().catch(() => undefined)
 })
 
-/** Stores that together hold a garden in the split layout. */
+/**
+ * Stores that together hold a garden in the split layout.
+ *
+ * Derived rather than listed. A hand-written copy silently stops clearing the
+ * stores a new collection adds, which leaves a "pre-split" garden with split
+ * parts still in it -- and the legacy path under test is then never reached.
+ */
 const PART_STORES = [
   'meta',
-  'goals',
-  'completions',
-  'moods',
-  'reflections',
-  'plants',
-  'creatures',
-  'sunlight',
-  'jars',
-  'placements',
+  ...GARDEN_COLLECTIONS.map((collection) => COLLECTION_STORES[collection]),
 ] as const
 
 /**
@@ -91,7 +90,7 @@ describe('garden repository', () => {
     await gardenRepository.save(state)
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
-      state: { version: 4, seeds: 4 },
+      state: { version: 5, seeds: 4 },
     })
   })
 
@@ -162,7 +161,7 @@ describe('garden repository', () => {
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
       state: {
-        version: 4,
+        version: 5,
         seeds: 7,
         nectar: 0,
         ownedFlightPatternIds: ['gentle-drift'],
@@ -196,7 +195,7 @@ describe('garden repository', () => {
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
       state: {
-        version: 4,
+        version: 5,
         nectar: 15,
         ownedFlightPatternIds: ['gentle-drift', 'petal-hop'],
         selectedFlightPatternId: 'petal-hop',
@@ -227,7 +226,7 @@ describe('garden repository', () => {
     it('withholds a garden written by a newer client instead of discarding it', async () => {
       const real = createInitialState('Future', 'Future Garden')
       await gardenRepository.save(real)
-      await writeRaw({ ...real, version: 5, seeds: 99 })
+      await writeRaw({ ...real, version: 6, seeds: 99 })
 
       const result = await gardenRepository.load()
       expect(result.status).toBe('withheld')
@@ -238,7 +237,7 @@ describe('garden repository', () => {
       const db = await openDB('butterfly-garden')
       try {
         const stored = (await db.get('state', 'current')) as Record<string, unknown>
-        expect(stored.version).toBe(5)
+        expect(stored.version).toBe(6)
         expect(stored.seeds).toBe(99)
       } finally {
         db.close()
@@ -247,10 +246,31 @@ describe('garden repository', () => {
 
     it('classifies records by why they could not be read', () => {
       expect(classifyRecord(createEmptyState())).toBe('readable')
-      expect(classifyRecord({ ...createEmptyState(), version: 5 })).toBe('incompatible')
+      expect(classifyRecord({ ...createEmptyState(), version: 6 })).toBe('incompatible')
       expect(classifyRecord({ broken: true })).toBe('malformed')
       expect(classifyRecord(undefined)).toBe('malformed')
     })
+  })
+
+  it('reports an upgrade blocked by an older tab instead of hanging', async () => {
+    // Raising DATABASE_VERSION makes the open an upgrade, and an upgrade waits
+    // for every older connection to close. The build being replaced does not
+    // let go on its own, so without a `blocked` handler this open never
+    // settles and the app sits on its splash screen forever.
+    await gardenRepository.clear().catch(() => undefined)
+    const older = await openDB('butterfly-garden', 3, {
+      upgrade(db) {
+        db.createObjectStore('meta')
+      },
+    })
+
+    try {
+      const result = await gardenRepository.load()
+      expect(result.status).toBe('withheld')
+      expect(result.reason).toBe('unavailable')
+    } finally {
+      older.close()
+    }
   })
 
   describe('backups', () => {
@@ -261,7 +281,7 @@ describe('garden repository', () => {
         exportedAt: '2026-01-01T00:00:00.000Z',
         garden: state,
       }
-      expect(readImportedState(envelope)).toMatchObject({ version: 4, seeds: 6 })
+      expect(readImportedState(envelope)).toMatchObject({ version: 5, seeds: 6 })
     })
 
     it('accepts a bare garden and rejects anything else', () => {
@@ -527,7 +547,7 @@ describe('moving a pre-split garden across', () => {
     const result = await gardenRepository.load()
     expect(result.status).toBe('loaded')
     expect(result.state).toMatchObject({
-      version: 4,
+      version: 5,
       seeds: 12,
       nectar: 34,
       moods: original.moods,
@@ -554,9 +574,9 @@ describe('moving a pre-split garden across', () => {
 
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
-      state: { version: 4, nectar: 15, jars: [], jarPlacements: [] },
+      state: { version: 5, nectar: 15, jars: [], jarPlacements: [] },
     })
-    expect(await readStore('meta')).toMatchObject({ version: 4, nectar: 15 })
+    expect(await readStore('meta')).toMatchObject({ version: 5, nectar: 15 })
     expect(await readStore('placements')).toEqual([])
   })
 
@@ -602,13 +622,103 @@ describe('moving a pre-split garden across', () => {
     expect(await gardenRepository.quarantined()).toHaveLength(1)
   })
 
+  it('loads a version-4 garden that predates the recap collections', async () => {
+    // The regression that protects every existing gardener. `recaps` and
+    // `moonlight` arrived at version 5, so a garden stored at 4 never wrote
+    // them. Their absence is a fact about that record, not a hole in it, and
+    // treating it as a hole would withhold every garden in the wild.
+    await gardenRepository.save(createInitialState('Before', 'Before Garden'))
+
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      const tx = db.transaction(['meta', 'recaps', 'moonlight'], 'readwrite')
+      await Promise.all([
+        tx.objectStore('meta').put({ ...meta, version: 4 }, 'current'),
+        tx.objectStore('recaps').delete('current'),
+        tx.objectStore('moonlight').delete('current'),
+        tx.done,
+      ])
+    } finally {
+      db.close()
+    }
+
+    const result = await gardenRepository.load()
+    expect(result.status).toBe('loaded')
+    expect(result.state).toMatchObject({
+      version: 5,
+      recaps: [],
+      moonlight: [],
+    })
+    // Nothing was treated as damaged, so nothing was quarantined.
+    expect(await gardenRepository.quarantined()).toHaveLength(0)
+
+    // Reading it also brought the stored layout up to date, so the record no
+    // longer relies on being read at the older version.
+    expect(await readStore('meta')).toMatchObject({ version: 5 })
+    expect(await readStore('recaps')).toEqual([])
+    expect(await readStore('moonlight')).toEqual([])
+  })
+
+  it('does not strand a migrated garden the next time meta alone changes', async () => {
+    // The stored version is what makes an absent collection provably empty.
+    // If a later write raised meta to 5 while leaving the collection unwritten
+    // -- earning a single Nectar would do it -- the garden would then be a
+    // version-5 record with a hole, and the next launch would withhold it.
+    await gardenRepository.save(createInitialState('Drift', 'Drift Garden'))
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      const tx = db.transaction(['meta', 'recaps', 'moonlight'], 'readwrite')
+      await Promise.all([
+        tx.objectStore('meta').put({ ...meta, version: 4 }, 'current'),
+        tx.objectStore('recaps').delete('current'),
+        tx.objectStore('moonlight').delete('current'),
+        tx.done,
+      ])
+    } finally {
+      db.close()
+    }
+
+    const migrated = await gardenRepository.load()
+    expect(migrated.status).toBe('loaded')
+
+    // Something that touches only meta, exactly as earning Nectar would.
+    await gardenRepository.save({ ...migrated.state, nectar: 99 })
+
+    await expect(gardenRepository.load()).resolves.toMatchObject({
+      status: 'loaded',
+      state: { nectar: 99 },
+    })
+    expect(await gardenRepository.quarantined()).toHaveLength(0)
+  })
+
+  it('still withholds a version-5 garden whose recaps are missing', async () => {
+    // The other half of the narrowing. Once this build has written a garden
+    // the collection is expected to be there, and its absence is damage --
+    // exactly as it was before recaps existed.
+    await gardenRepository.save(createInitialState('After', 'After Garden'))
+
+    const db = await openDB('butterfly-garden')
+    try {
+      await db.delete('recaps', 'current')
+    } finally {
+      db.close()
+    }
+
+    const result = await gardenRepository.load()
+    expect(result.status).toBe('withheld')
+    expect(result.reason).toBe('malformed')
+    expect(await gardenRepository.quarantined()).toHaveLength(1)
+  })
+
   it('withholds a split garden written by a newer client', async () => {
     await gardenRepository.save(createInitialState('Ahead', 'Ahead Garden'))
 
     const db = await openDB('butterfly-garden')
     try {
       const meta = (await db.get('meta', 'current')) as Record<string, unknown>
-      await db.put('meta', { ...meta, version: 5, seeds: 77 }, 'current')
+      await db.put('meta', { ...meta, version: 6, seeds: 77 }, 'current')
     } finally {
       db.close()
     }
@@ -618,7 +728,7 @@ describe('moving a pre-split garden across', () => {
     expect(result.reason).toBe('incompatible')
 
     // The newer garden must survive untouched.
-    expect(await readStore('meta')).toMatchObject({ version: 5, seeds: 77 })
+    expect(await readStore('meta')).toMatchObject({ version: 6, seeds: 77 })
   })
 })
 
@@ -717,13 +827,13 @@ describe('adopting another tab\'s change', () => {
   it('still withholds a garden a newer client wrote', async () => {
     await gardenRepository.save(maturedGarden())
     const meta = (await readStore('meta')) as Record<string, unknown>
-    await writeStore('meta', { ...meta, version: 5 })
+    await writeStore('meta', { ...meta, version: 6 })
 
     const result = await gardenRepository.adopt(['meta'])
     expect(result.status).toBe('withheld')
     expect(result.reason).toBe('incompatible')
     // Untouched, exactly as the invariant requires.
-    expect(await readStore('meta')).toMatchObject({ version: 5 })
+    expect(await readStore('meta')).toMatchObject({ version: 6 })
   })
 })
 

@@ -1,4 +1,5 @@
 import type {
+  MoodEntry,
   Observation,
   PlantDefinition,
   ReflectionPrompt,
@@ -343,6 +344,28 @@ const reflectionPromptRows: ReadonlyArray<readonly [id: string, text: string]> =
 export const reflectionPrompts: ReflectionPrompt[] = reflectionPromptRows.map(
   ([id, text]) => ({ id, text }),
 )
+
+/**
+ * The five inner-weather levels, named in one place.
+ *
+ * Today asks for one in the morning, the Moonlight recap asks again at the end
+ * of the day, and the journal renders both -- so the names have three readers
+ * and belong here rather than being spelled out in each of them.
+ */
+export const moodLevels: Array<{
+  level: MoodEntry['level']
+  name: string
+  weather: string
+}> = [
+  { level: 1, name: 'Stormy', weather: 'Heavy clouds' },
+  { level: 2, name: 'Rainy', weather: 'Gentle rain' },
+  { level: 3, name: 'Overcast', weather: 'Soft gray sky' },
+  { level: 4, name: 'Bright', weather: 'Sun through leaves' },
+  { level: 5, name: 'Radiant', weather: 'Clear warm light' },
+]
+
+/** Just the names, in level order, for places that only label a level. */
+export const moodNames = moodLevels.map((mood) => mood.name)
 
 export const suggestedGoals = [
   'Drink a glass of water',

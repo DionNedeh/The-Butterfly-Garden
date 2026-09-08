@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react'
-import { reflectionPrompts, species } from '../data/content'
+import { moodLevels, moodNames, reflectionPrompts, species } from '../data/content'
 import { formatJournalDate } from '../lib/date'
 import { useLocalDate } from '../hooks/useLocalDate'
 import { calculateSunlightStreak } from '../lib/streak'
-import type { AppState, MoodEntry, ReflectionEntry } from '../types'
+import type { AppState, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
 import { Butterfly } from './Butterfly'
 import { Icon } from './Icons'
 
-const moodNames = ['Stormy', 'Rainy', 'Overcast', 'Bright', 'Radiant']
 
 /** The timeline grows for as long as the garden is kept, so it is paged. */
 const TIMELINE_PAGE_SIZE = 30
@@ -18,13 +17,18 @@ export function JournalView({
   onDeleteMood,
   onUpdateReflection,
   onDeleteReflection,
+  onUpdateRecap,
+  onDeleteRecap,
 }: {
   state: AppState
   onUpdateMood: (entry: MoodEntry) => void
   onDeleteMood: (id: string) => void
   onUpdateReflection: (entry: ReflectionEntry) => void
   onDeleteReflection: (id: string) => void
+  onUpdateRecap: (entry: RecapEntry) => void
+  onDeleteRecap: (id: string) => void
 }) {
+  const [editingRecap, setEditingRecap] = useState<RecapEntry>()
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
   const [editingMood, setEditingMood] = useState<MoodEntry>()
   const [pendingDelete, setPendingDelete] = useState<string>()
@@ -42,16 +46,30 @@ export function JournalView({
     () => new Map(state.reflections.map((entry) => [entry.localDate, entry])),
     [state.reflections],
   )
+  const recapByDate = useMemo(
+    () => new Map(state.recaps.map((entry) => [entry.localDate, entry])),
+    [state.recaps],
+  )
   const promptById = useMemo(
     () => new Map(reflectionPrompts.map((prompt) => [prompt.id, prompt])),
     [],
   )
+  const goalTitleById = useMemo(
+    () => new Map(state.goals.map((goal) => [goal.id, goal.title])),
+    [state.goals],
+  )
   const dates = useMemo(
     () =>
       Array.from(
-        new Set([...moodByDate.keys(), ...reflectionByDate.keys()]),
+        new Set([
+          ...moodByDate.keys(),
+          ...reflectionByDate.keys(),
+          // A day closed out with nothing else recorded is still a day the
+          // gardener showed up for, and belongs in the timeline.
+          ...recapByDate.keys(),
+        ]),
       ).sort((a, b) => b.localeCompare(a)),
-    [moodByDate, reflectionByDate],
+    [moodByDate, reflectionByDate, recapByDate],
   )
   const visibleDates = useMemo(
     () => dates.slice(0, visibleCount),
@@ -165,6 +183,10 @@ export function JournalView({
             {visibleDates.map((date) => {
               const mood = moodByDate.get(date)
               const reflection = reflectionByDate.get(date)
+              const recap = recapByDate.get(date)
+              const plannedGoalTitle = recap?.plannedGoalId
+                ? goalTitleById.get(recap.plannedGoalId)
+                : undefined
               const prompt = reflection
                 ? promptById.get(reflection.promptId)
                 : undefined
@@ -322,6 +344,159 @@ export function JournalView({
                               <button
                                 className="text-button danger-text"
                                 onClick={() => setPendingDelete(reflection.id)}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {recap && (
+                    <div className="journal-block recap-entry">
+                      {editingRecap?.id === recap.id ? (
+                        <form
+                          onSubmit={(event) => {
+                            event.preventDefault()
+                            onUpdateRecap(editingRecap)
+                            setEditingRecap(undefined)
+                          }}
+                        >
+                          <label>
+                            How the day ended up
+                            <select
+                              value={editingRecap.level ?? ''}
+                              onChange={(event) =>
+                                setEditingRecap({
+                                  ...editingRecap,
+                                  level: event.target.value
+                                    ? (Number(
+                                        event.target.value,
+                                      ) as RecapEntry['level'])
+                                    : undefined,
+                                })
+                              }
+                            >
+                              <option value="">Not said</option>
+                              {moodLevels.map((item) => (
+                                <option key={item.level} value={item.level}>
+                                  {item.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            What went well
+                            <textarea
+                              value={editingRecap.wentWell}
+                              onChange={(event) =>
+                                setEditingRecap({
+                                  ...editingRecap,
+                                  wentWell: event.target.value,
+                                })
+                              }
+                              maxLength={400}
+                              rows={2}
+                            />
+                          </label>
+                          <label>
+                            Set down
+                            <textarea
+                              value={editingRecap.settingDown}
+                              onChange={(event) =>
+                                setEditingRecap({
+                                  ...editingRecap,
+                                  settingDown: event.target.value,
+                                })
+                              }
+                              maxLength={400}
+                              rows={2}
+                            />
+                          </label>
+                          <label>
+                            For tomorrow
+                            <textarea
+                              value={editingRecap.forTomorrow}
+                              onChange={(event) =>
+                                setEditingRecap({
+                                  ...editingRecap,
+                                  forTomorrow: event.target.value,
+                                })
+                              }
+                              maxLength={280}
+                              rows={2}
+                            />
+                          </label>
+                          <div className="form-actions">
+                            <button className="secondary-button" type="submit">Save</button>
+                            <button className="text-button" type="button" onClick={() => setEditingRecap(undefined)}>Cancel</button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          <div>
+                            <Icon name="moon" size={20} />
+                            <div>
+                              <strong>
+                                Rounded out the day
+                                {recap.level
+                                  ? ` — ${moodNames[recap.level - 1]}`
+                                  : ''}
+                              </strong>
+                              {recap.wentWell && (
+                                <p>
+                                  <small>What went well</small>
+                                  {recap.wentWell}
+                                </p>
+                              )}
+                              {recap.settingDown && (
+                                <p>
+                                  <small>Set down</small>
+                                  {recap.settingDown}
+                                </p>
+                              )}
+                              {recap.forTomorrow && (
+                                <p>
+                                  <small>For tomorrow</small>
+                                  {recap.forTomorrow}
+                                </p>
+                              )}
+                              {plannedGoalTitle && (
+                                <p className="recap-planned">
+                                  <Icon name="today" size={16} />
+                                  Became a goal: {plannedGoalTitle}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="inline-actions">
+                            <button className="text-button" onClick={() => setEditingRecap(recap)}>Edit</button>
+                            {pendingDelete === recap.id ? (
+                              <>
+                                <span className="delete-prompt" role="alert">
+                                  Delete this recap for good?
+                                </span>
+                                <button
+                                  className="text-button danger-text"
+                                  onClick={() => {
+                                    onDeleteRecap(recap.id)
+                                    setPendingDelete(undefined)
+                                  }}
+                                >
+                                  Yes, delete
+                                </button>
+                                <button
+                                  className="text-button"
+                                  onClick={() => setPendingDelete(undefined)}
+                                >
+                                  Keep
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="text-button danger-text"
+                                onClick={() => setPendingDelete(recap.id)}
                               >
                                 Delete
                               </button>

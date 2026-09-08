@@ -713,3 +713,74 @@ test('the guide card glow has no edge inside the card', async ({ page }) => {
     expect(glow.height).toBeGreaterThanOrEqual(glow.cardHeight - 1)
   }
 })
+
+/**
+ * The Moonlight window is gated on a local wall-clock hour, so this block
+ * pins both the zone and the instant. 01:00 UTC is 21:00 the evening before
+ * in New York, which is squarely inside the evening window.
+ */
+test.describe('rounding out the day', () => {
+  test.use({ timezoneId: 'America/New_York' })
+
+  test('collects Moonlight and keeps the recap in the journal', async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date('2026-09-09T01:00:00.000Z'))
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+
+    const stardust = page.locator('.stardust-wallet strong')
+    await expect(stardust).toHaveText('0')
+
+    await mainNav(page)
+      .getByRole('button', { name: 'Today', exact: true })
+      .click()
+    await expect(page.getByText('Round out your day')).toBeVisible()
+    await page.getByRole('button', { name: 'Begin' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Here is your day.' })).toBeVisible()
+
+    // The recap is a full view but is deliberately absent from the navigation,
+    // so the sweep over every nav destination never reaches it.
+    const recapAudit = await new AxeBuilder({ page }).analyze()
+    expect(
+      recapAudit.violations.filter(
+        (violation) =>
+          violation.impact === 'serious' || violation.impact === 'critical',
+      ),
+    ).toEqual([])
+
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('button', { name: /bright/i }).click()
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('textbox').fill('Walked to the river.')
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('textbox').fill('The unanswered email.')
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('textbox').fill('Book the appointment')
+    await page.getByRole('button', { name: /add to tomorrow/i }).click()
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('button', { name: 'Collect Moonlight' }).click()
+
+    // Back on Today, with the night collected and the bonus in the wallet.
+    await expect(page.getByText('The day is rounded out.')).toBeVisible()
+    await expect(stardust).toHaveText('1')
+
+    await mainNav(page)
+      .getByRole('button', { name: 'Journal', exact: true })
+      .click()
+    await expect(page.getByText('Walked to the river.')).toBeVisible()
+    await expect(page.getByText('The unanswered email.')).toBeVisible()
+    await expect(
+      page.getByText(/Became a goal: Book the appointment/),
+    ).toBeVisible()
+
+    // And it survives a reload: the recap is stored, not just rendered.
+    await reloadAfterSave(page)
+    await mainNav(page)
+      .getByRole('button', { name: 'Journal', exact: true })
+      .click()
+    await expect(page.getByText('Walked to the river.')).toBeVisible()
+  })
+})
+

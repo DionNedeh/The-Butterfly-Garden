@@ -8,6 +8,7 @@ import {
   isGoalSkipped,
   localDateToNoon,
   monthDates,
+  recapWindow,
   retiredOnceGoalIds,
   toLocalDate,
 } from './date'
@@ -96,5 +97,92 @@ describe('retiring one-time goals', () => {
 
   it('builds a stable key for a goal on a day', () => {
     expect(completionKey('tidy', '2026-09-05')).toBe('tidy:2026-09-05')
+  })
+})
+
+describe('the Moonlight recap window', () => {
+  // Every case is built from local calendar fields, and the suite pins TZ to a
+  // zone that observes daylight saving. An hour gate cannot be tested in UTC.
+  const at = (
+    year: number,
+    monthIndex: number,
+    day: number,
+    hour: number,
+    minute = 0,
+  ) => recapWindow(new Date(year, monthIndex, day, hour, minute))
+
+  it('stays shut before six in the evening', () => {
+    expect(at(2026, 8, 8, 17, 59)).toEqual({ open: false, state: 'waiting' })
+    expect(at(2026, 8, 8, 4)).toEqual({ open: false, state: 'waiting' })
+    expect(at(2026, 8, 8, 11)).toEqual({ open: false, state: 'waiting' })
+  })
+
+  it('opens at six on the day being closed', () => {
+    expect(at(2026, 8, 8, 18)).toEqual({
+      open: true,
+      targetDate: '2026-09-08',
+      state: 'evening',
+    })
+    expect(at(2026, 8, 8, 23, 59)).toEqual({
+      open: true,
+      targetDate: '2026-09-08',
+      state: 'evening',
+    })
+  })
+
+  it('closes out yesterday during the after-midnight grace window', () => {
+    // The point of the grace window: someone rounding out Tuesday at 1:15am is
+    // on Wednesday by the calendar, and would otherwise spend Wednesday's
+    // Moonlight on Tuesday and be able to collect again that evening.
+    expect(at(2026, 8, 9, 0)).toEqual({
+      open: true,
+      targetDate: '2026-09-08',
+      state: 'grace',
+    })
+    expect(at(2026, 8, 9, 1, 15)).toEqual({
+      open: true,
+      targetDate: '2026-09-08',
+      state: 'grace',
+    })
+    expect(at(2026, 8, 9, 3, 59)).toEqual({
+      open: true,
+      targetDate: '2026-09-08',
+      state: 'grace',
+    })
+  })
+
+  it('steps back across month and year boundaries', () => {
+    expect(at(2026, 2, 1, 0, 30).targetDate).toBe('2026-02-28')
+    expect(at(2026, 0, 1, 0, 30).targetDate).toBe('2025-12-31')
+    expect(at(2028, 2, 1, 0, 30).targetDate).toBe('2028-02-29')
+  })
+
+  it('survives both daylight-saving transitions', () => {
+    // Spring forward: 2am-3am never happens, so the grace window is simply
+    // shorter that night. The half of it that exists still closes yesterday.
+    expect(at(2026, 2, 8, 1, 30)).toEqual({
+      open: true,
+      targetDate: '2026-03-07',
+      state: 'grace',
+    })
+    expect(at(2026, 2, 8, 3, 30)).toEqual({
+      open: true,
+      targetDate: '2026-03-07',
+      state: 'grace',
+    })
+    expect(at(2026, 2, 8, 18).targetDate).toBe('2026-03-08')
+
+    // Fall back: 1am-2am happens twice. Both are inside the window and both
+    // resolve to the same day, so the ledger cannot be claimed twice.
+    expect(at(2026, 10, 1, 1, 30)).toEqual({
+      open: true,
+      targetDate: '2026-10-31',
+      state: 'grace',
+    })
+    expect(at(2026, 10, 1, 18).targetDate).toBe('2026-11-01')
+  })
+
+  it('reports no target day while it is shut', () => {
+    expect(at(2026, 8, 8, 12).targetDate).toBeUndefined()
   })
 })

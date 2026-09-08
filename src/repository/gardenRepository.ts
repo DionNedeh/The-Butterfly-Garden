@@ -8,8 +8,8 @@ import type { AmbientTrackId, AppState } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
-export const CURRENT_STATE_VERSION = 4
-const READABLE_STATE_VERSIONS = new Set([1, 2, 3, 4])
+export const CURRENT_STATE_VERSION = 5
+const READABLE_STATE_VERSIONS = new Set([1, 2, 3, 4, 5])
 
 export interface QuarantineRecord {
   id: string
@@ -28,6 +28,8 @@ export const COLLECTION_STORES = {
   completions: 'completions',
   moods: 'moods',
   reflections: 'reflections',
+  recaps: 'recaps',
+  moonlight: 'moonlight',
   plants: 'plants',
   creatures: 'creatures',
   sunlight: 'sunlight',
@@ -40,6 +42,40 @@ export type GardenCollection = keyof typeof COLLECTION_STORES
 export const GARDEN_COLLECTIONS = Object.keys(
   COLLECTION_STORES,
 ) as GardenCollection[]
+
+/**
+ * Collections introduced after a given state version, and the version that
+ * introduced each.
+ *
+ * A garden stored below that version could not have written the collection --
+ * no build that produced it knew the collection existed -- so its absence
+ * there is a fact about the record, not a guess about missing data.
+ *
+ * At or above that version a missing collection is still a hole and still
+ * withholds the whole garden. This narrows what counts as missing; it does not
+ * soften what happens when something is. See docs/handoff-p5-store-split.md
+ * section 3.
+ */
+const COLLECTION_SINCE_VERSION: Partial<Record<GardenCollection, number>> = {
+  recaps: 5,
+  moonlight: 5,
+}
+
+/**
+ * Whether an absent collection is explained by the version the garden was
+ * stored at, rather than being a hole in it.
+ */
+function absenceIsExpected(
+  collection: GardenCollection,
+  storedVersion: unknown,
+): boolean {
+  const since = COLLECTION_SINCE_VERSION[collection]
+  return (
+    since !== undefined &&
+    typeof storedVersion === 'number' &&
+    storedVersion < since
+  )
+}
 
 /**
  * Everything that is not a large collection. These are tiny and nearly always
@@ -151,6 +187,14 @@ interface GardenDatabase extends DBSchema {
     key: 'current'
     value: AppState['reflections']
   }
+  recaps: {
+    key: 'current'
+    value: AppState['recaps']
+  }
+  moonlight: {
+    key: 'current'
+    value: AppState['moonlight']
+  }
   plants: {
     key: 'current'
     value: AppState['plants']
@@ -185,6 +229,8 @@ const OBJECT_STORES = [
   'completions',
   'moods',
   'reflections',
+  'recaps',
+  'moonlight',
   'plants',
   'creatures',
   'sunlight',
@@ -196,11 +242,16 @@ const OBJECT_STORES = [
 const DATABASE_NAME = 'butterfly-garden'
 /**
  * Which object stores exist. Distinct from AppState.version, which describes
- * the shape of the document and is unchanged by the split: bumping that
- * instead would make every existing client treat its own data as written by a
- * newer build and refuse to write.
+ * the shape of the document. The store split moved only this one, precisely
+ * because bumping the other would have made every existing client treat its
+ * own data as written by a newer build and refuse to write.
+ *
+ * Moonlight moves both, and deliberately: it adds two stores (this number) and
+ * two fields to the document (AppState.version). The cost of the second bump
+ * is that an older build now withholds a version-5 garden, which is the
+ * quarantine contract working rather than a regression.
  */
-const DATABASE_VERSION = 3
+const DATABASE_VERSION = 4
 let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
 
 /**
@@ -246,8 +297,32 @@ function metaOf(state: AppState): GardenMeta {
   }
 }
 
+/**
+ * Open the database, refusing to wait forever on another tab.
+ *
+ * Raising DATABASE_VERSION makes the open an upgrade, and an upgrade cannot
+ * start while another tab still holds a connection at the old version. The
+ * open request then fires `blocked` and simply never settles -- which, since
+ * every read waits on this, leaves the app sitting on its splash screen with
+ * nothing to show and nothing to report.
+ *
+ * `blocked` turns that into an ordinary unavailable-storage failure, which the
+ * app already knows how to explain and recover from.
+ *
+ * `blocking` is the other side of the same problem and cannot help this
+ * upgrade: the build being replaced was shipped without it and will not let go
+ * on its own. It is here so the tab running *this* build steps aside for the
+ * next version rather than deadlocking it in turn.
+ */
 function database() {
-  databasePromise ??= openDB<GardenDatabase>(DATABASE_NAME, DATABASE_VERSION, {
+  if (databasePromise) return databasePromise
+
+  let reportBlocked: ((error: Error) => void) | undefined
+  const blocked = new Promise<never>((_, reject) => {
+    reportBlocked = reject
+  })
+
+  const opening = openDB<GardenDatabase>(DATABASE_NAME, DATABASE_VERSION, {
     upgrade(db) {
       // Creating stores is all that happens here. Data is moved lazily on the
       // first load instead, because a version-change transaction is an awkward
@@ -259,7 +334,32 @@ function database() {
         }
       }
     },
+    blocked() {
+      reportBlocked?.(
+        new Error(
+          'Another open tab of the garden is still using an older version. Close the other tabs and reopen the app.',
+        ),
+      )
+    },
+    blocking(_currentVersion, _blockedVersion, event) {
+      // Another tab wants to upgrade and this connection is in its way.
+      ;(event.target as IDBDatabase | null)?.close()
+      databasePromise = undefined
+    },
   })
+
+  // Whichever resolves first wins. A failure is not cached: the other tab may
+  // close a moment later, and the next attempt should get a real connection
+  // rather than the remembered refusal.
+  databasePromise = Promise.race([opening, blocked]).catch(
+    (error: unknown) => {
+      databasePromise = undefined
+      throw error
+    },
+  )
+  // The losing promise of the race keeps its rejection; claim it so it is not
+  // reported as unhandled.
+  blocked.catch(() => undefined)
   return databasePromise
 }
 
@@ -324,6 +424,85 @@ export function classifyRecord(
     return 'incompatible'
   }
   return migrateState(value) ? 'readable' : 'malformed'
+}
+
+/**
+ * Recaps that survive validation, at most one per local date.
+ *
+ * The text fields are coerced rather than required: a recap whose day and
+ * identity are intact is the gardener's writing and worth keeping even if one
+ * answer went missing. Identity and date are not coerced, because a recap
+ * without them cannot be placed in the journal or deduplicated.
+ */
+function migrateRecaps(value: unknown): AppState['recaps'] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const recaps: AppState['recaps'] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const item = entry as Record<string, unknown>
+    if (typeof item.id !== 'string' || typeof item.localDate !== 'string') {
+      continue
+    }
+    if (seen.has(item.localDate)) continue
+    seen.add(item.localDate)
+    const level =
+      typeof item.level === 'number' &&
+      Number.isInteger(item.level) &&
+      item.level >= 1 &&
+      item.level <= 5
+        ? (item.level as NonNullable<AppState['recaps'][number]['level']>)
+        : undefined
+    const text = (field: unknown) => (typeof field === 'string' ? field : '')
+    const stamp = (field: unknown) =>
+      typeof field === 'string' ? field : new Date(0).toISOString()
+    recaps.push({
+      id: item.id,
+      localDate: item.localDate,
+      ...(level === undefined ? {} : { level }),
+      wentWell: text(item.wentWell),
+      settingDown: text(item.settingDown),
+      forTomorrow: text(item.forTomorrow),
+      ...(typeof item.plannedGoalId === 'string'
+        ? { plannedGoalId: item.plannedGoalId }
+        : {}),
+      createdAt: stamp(item.createdAt),
+      updatedAt: stamp(item.updatedAt),
+    })
+  }
+  return recaps
+}
+
+/**
+ * Collected Moonlight, at most one award per local date.
+ *
+ * Stricter than recaps on purpose: this is the ledger that decides whether a
+ * night has already paid out, so a malformed award is dropped rather than
+ * repaired into one that might pay twice.
+ */
+function migrateMoonlight(value: unknown): AppState['moonlight'] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const awards: AppState['moonlight'] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const item = entry as Record<string, unknown>
+    if (
+      typeof item.id !== 'string' ||
+      typeof item.localDate !== 'string' ||
+      typeof item.awardedAt !== 'string' ||
+      seen.has(item.localDate)
+    ) {
+      continue
+    }
+    seen.add(item.localDate)
+    awards.push({
+      id: item.id,
+      localDate: item.localDate,
+      awardedAt: item.awardedAt,
+    })
+  }
+  return awards
 }
 
 function migrateState(value: unknown): AppState | undefined {
@@ -426,7 +605,7 @@ function migrateState(value: unknown): AppState | undefined {
       : DEFAULT_AMBIENT_TRACK_ID
   return {
     ...(candidate as unknown as AppState),
-    version: 4,
+    version: 5,
     profile: candidateProfile
       ? {
           ...(candidateProfile as unknown as NonNullable<AppState['profile']>),
@@ -434,6 +613,10 @@ function migrateState(value: unknown): AppState | undefined {
         }
       : undefined,
     creatures: migrateCreatures(candidate.creatures),
+    // Absent in every garden written before version 5, which is why these are
+    // tolerated rather than required the way `moods` is above.
+    recaps: migrateRecaps(candidate.recaps),
+    moonlight: migrateMoonlight(candidate.moonlight),
     nectar: typeof candidate.nectar === 'number' ? candidate.nectar : 0,
     stardust: typeof candidate.stardust === 'number' ? candidate.stardust : 0,
     inventory:
@@ -655,19 +838,57 @@ export const gardenRepository = {
     // never pays to deserialise the snapshot left behind by the migration.
     if (nothingStored) return await loadFromLegacyRecord(db)
 
+    const storedVersion = (meta as { version?: unknown } | undefined)?.version
+
     // A hole in an otherwise present garden cannot be filled in by guessing:
     // an absent collection is not an empty one. Withhold the whole garden
     // rather than hand back a half-read one.
+    //
+    // The exception is narrow and provable: a collection that did not exist at
+    // the version this garden was stored at was never written, so its absence
+    // is not a hole. A garden stored at or above that version is held to the
+    // original rule.
     const complete =
-      meta !== undefined && collections.every((part) => part !== undefined)
+      meta !== undefined &&
+      collections.every(
+        (part, index) =>
+          part !== undefined ||
+          absenceIsExpected(GARDEN_COLLECTIONS[index], storedVersion),
+      )
     const candidate = complete ? assembleGarden(meta, collections) : undefined
     const migrated = candidate ? migrateState(candidate) : undefined
     if (migrated) {
-      persisted = migrated
+      const behind =
+        typeof storedVersion === 'number' &&
+        storedVersion < CURRENT_STATE_VERSION
+      if (!behind) {
+        persisted = migrated
+        return { status: 'loaded', state: migrated }
+      }
+
+      // This garden was read by tolerating collections that did not exist at
+      // the version it was stored under. That tolerance is anchored to the
+      // stored version, so the whole garden has to be brought up to date in
+      // one transaction now.
+      //
+      // Writing only what changes is otherwise the rule, and it would break
+      // this: the next write to touch meta alone -- earning a single Nectar
+      // would do it -- raises the stored version to 5 while leaving those
+      // collections unwritten. The record then claims a version at which
+      // their absence is a hole rather than a fact, and the launch after that
+      // withholds the garden.
+      try {
+        await writeAllParts(db, migrated)
+        persisted = migrated
+      } catch {
+        // The stored record is untouched and still readable by the same rule,
+        // so the next launch tries again. Leaving the baseline unset means the
+        // next write covers every part rather than raising the version alone.
+        persisted = undefined
+      }
       return { status: 'loaded', state: migrated }
     }
 
-    const storedVersion = (meta as { version?: unknown } | undefined)?.version
     const reason =
       typeof storedVersion === 'number' && storedVersion > CURRENT_STATE_VERSION
         ? 'incompatible'

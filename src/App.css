@@ -4240,3 +4240,193 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* Moonlight: the evening card on Today, and the recap it opens */
+.moonlight-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-color: rgba(138, 123, 164, 0.24);
+  background:
+    linear-gradient(135deg, rgba(138, 123, 164, 0.09), rgba(49, 92, 75, 0.04)),
+    rgba(255, 253, 247, 0.94);
+}
+
+.moonlight-card > div {
+  flex: 1 1 16rem;
+}
+
+.moonlight-card h2 {
+  margin-bottom: 0.3rem;
+  font-size: 1.15rem;
+}
+
+.moonlight-card p:last-child {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.moonlight-card .eyebrow,
+.recap-header .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #5d4f78;
+}
+
+/* Waiting is a quieter state than open, but never a disabled-looking one:
+   the card is there from the first day so the evening rhythm is learnable. */
+.moonlight-card.waiting {
+  opacity: 0.82;
+}
+
+.recap-header {
+  align-items: flex-start;
+}
+
+.recap-progress {
+  margin: -0.6rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.recap-step {
+  min-height: 16rem;
+}
+
+.recap-step h2 {
+  font-size: clamp(1.3rem, 3.4vw, 1.75rem);
+  line-height: 1.25;
+}
+
+/* Focus lands here on every step change, so it must be visible but not look
+   like a control the reader is meant to press. */
+.recap-step h2:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 6px;
+  border-radius: 6px;
+}
+
+.recap-helper {
+  margin-top: 0.5rem;
+  color: var(--muted);
+}
+
+.recap-field {
+  display: block;
+  width: 100%;
+  margin-top: 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  padding: 0.85rem 1rem;
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.recap-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.8rem;
+  margin-top: 1.2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.recap-summary li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--paper);
+  padding: 0.85rem 1rem;
+}
+
+.recap-summary span {
+  display: grid;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.recap-summary strong {
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
+.recap-plan-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  padding: 0.5rem 0.95rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.recap-plan-toggle.selected {
+  border-color: var(--forest);
+  background: #e8efe6;
+  color: var(--forest-dark);
+}
+
+.recap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.recap-actions .primary-button {
+  margin-left: auto;
+}
+
+.theme-night .moonlight-card {
+  border-color: rgba(176, 207, 194, 0.22);
+  background:
+    linear-gradient(135deg, rgba(140, 201, 171, 0.12), rgba(16, 35, 50, 0.6)),
+    rgba(16, 35, 50, 0.94);
+}
+
+.theme-night .moonlight-card .eyebrow,
+.theme-night .recap-header .eyebrow {
+  color: #cbb9ef;
+}
+
+.theme-night .recap-plan-toggle.selected {
+  background: rgba(140, 201, 171, 0.16);
+  color: var(--forest-dark);
+}
+
+.recap-entry > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.recap-entry p {
+  margin-top: 0.5rem;
+}
+
+.recap-entry small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recap-planned {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
