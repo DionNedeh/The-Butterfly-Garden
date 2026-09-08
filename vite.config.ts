@@ -86,5 +86,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     include: ['src/**/*.test.{ts,tsx}'],
+    // Pinned so date and hour tests mean the same thing on every machine.
+    // Deliberately not UTC: the Moonlight window is gated on a local hour and
+    // has to be tested across a daylight-saving transition, which a zone
+    // without one would let pass while proving nothing.
+    env: { TZ: 'America/New_York' },
   },
 })

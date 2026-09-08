@@ -34,6 +34,8 @@ export type AppView =
   | 'flight-patterns'
   | 'guide'
   | 'settings'
+  /** The end-of-day recap. Reached from Today, deliberately not in the nav. */
+  | 'recap'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
@@ -128,6 +130,41 @@ export interface ReflectionEntry {
   updatedAt: string
 }
 
+/**
+ * An end-of-day recap: the gardener's writing, and theirs to edit or delete.
+ *
+ * Deliberately separate from the `moonlight` ledger that records the payout.
+ * Deleting a recap must not hand back the bonus, the same way deleting a mood
+ * does not refund the Sunlight it earned.
+ */
+export interface RecapEntry {
+  id: string
+  /** The day being closed out -- not necessarily the day it was written. */
+  localDate: string
+  /** Evening inner weather. Absent when the question was skipped. */
+  level?: 1 | 2 | 3 | 4 | 5
+  /** "What went well today?" */
+  wentWell: string
+  /** "What are you setting down?" */
+  settingDown: string
+  /** "Anything for tomorrow?" */
+  forTomorrow: string
+  /** Set when the tomorrow note was also planned as a goal. */
+  plannedGoalId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * A collected Moonlight bonus. Append-only: the UI never removes one, so a
+ * recap can be rewritten without paying out twice.
+ */
+export interface MoonlightAward {
+  id: string
+  localDate: string
+  awardedAt: string
+}
+
 export interface PlantInstance {
   id: string
   plantId: string
@@ -178,12 +215,14 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  version: 4
+  version: 5
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
   moods: MoodEntry[]
   reflections: ReflectionEntry[]
+  recaps: RecapEntry[]
+  moonlight: MoonlightAward[]
   plants: PlantInstance[]
   creatures: CreatureInstance[]
   sunlight: SunlightAward[]
