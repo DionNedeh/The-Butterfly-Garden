@@ -22,6 +22,27 @@ export interface QuarantineRecord {
  * The large collections, each of which becomes its own stored record. The
  * value is the object store that holds it; only `jarPlacements` differs from
  * its field name, because `placements` reads better as a store.
+ *
+ * ---
+ * ADDING A COLLECTION. Six steps, and the tests cover four of them:
+ *
+ *  1. Add the field to `AppState` and the empty value to `createEmptyState`.
+ *     -- pinned by "accounts for every field of the garden".
+ *  2. Add it here, and to the `GardenDatabase` interface below. `OBJECT_STORES`
+ *     is derived, so there is no third list to keep in step.
+ *  3. Raise `DATABASE_VERSION`, so the store is actually created.
+ *     -- pinned by "every part store exists in the database it opens".
+ *  4. Raise `CURRENT_STATE_VERSION`, add the old value to
+ *     `READABLE_STATE_VERSIONS`, and give the collection a
+ *     `COLLECTION_SINCE_VERSION` entry. Without that entry every garden in
+ *     the wild is read as damaged.
+ *     -- pinned by "loads a stored garden from before every new collection".
+ *  5. Default it in `migrateState`, the way `jars` and `recaps` are defaulted
+ *     rather than the way `moods` is required. A backup written before the
+ *     collection existed has no key for it.
+ *     -- pinned by "gives every collection a value when a backup predates it".
+ *  6. Decide whether it belongs in a backup. It does unless it is a cache;
+ *     export carries the whole document.
  */
 export const COLLECTION_STORES = {
   goals: 'goals',
@@ -56,7 +77,9 @@ export const GARDEN_COLLECTIONS = Object.keys(
  * soften what happens when something is. See docs/handoff-p5-store-split.md
  * section 3.
  */
-const COLLECTION_SINCE_VERSION: Partial<Record<GardenCollection, number>> = {
+export const COLLECTION_SINCE_VERSION: Partial<
+  Record<GardenCollection, number>
+> = {
   recaps: 5,
   moonlight: 5,
 }
@@ -221,23 +244,19 @@ interface GardenDatabase extends DBSchema {
   }
 }
 
-/** Every store this build expects to exist, created on upgrade if missing. */
-const OBJECT_STORES = [
+/**
+ * Every store this build expects to exist, created on upgrade if missing.
+ *
+ * Derived from the collection map rather than listed again: a hand-written
+ * copy stops naming the store a new collection needs, and the transaction that
+ * reads the garden then fails for everyone at once.
+ */
+const OBJECT_STORES: readonly StoreNames<GardenDatabase>[] = [
   'state',
   'meta',
-  'goals',
-  'completions',
-  'moods',
-  'reflections',
-  'recaps',
-  'moonlight',
-  'plants',
-  'creatures',
-  'sunlight',
-  'jars',
-  'placements',
+  ...GARDEN_COLLECTIONS.map((collection) => COLLECTION_STORES[collection]),
   'quarantine',
-] as const
+]
 
 const DATABASE_NAME = 'butterfly-garden'
 /**
@@ -251,7 +270,7 @@ const DATABASE_NAME = 'butterfly-garden'
  * is that an older build now withholds a version-5 garden, which is the
  * quarantine contract working rather than a regression.
  */
-const DATABASE_VERSION = 4
+export const DATABASE_VERSION = 4
 let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
 
 /**
@@ -944,6 +963,26 @@ export const gardenRepository = {
     )
     await write
     return dirty
+  },
+
+  /**
+   * Write a whole garden, replacing whatever was stored.
+   *
+   * `save` writes only what changed, which is right for an edit and wrong for
+   * a restore: a backup replaces the document rather than amending it, and two
+   * collections that happen to be empty on both sides would leave their stored
+   * records untouched -- including, for a collection the backup predates, a
+   * record that is not there at all. Writing every part keeps the stored
+   * layout matching the version the record now claims.
+   *
+   * Returns every part, so the caller can tell other tabs the whole garden
+   * moved rather than letting them keep editing the one it replaced.
+   */
+  async replace(state: AppState): Promise<GardenPart[]> {
+    const db = await database()
+    await writeAllParts(db, state)
+    persisted = state
+    return ['meta', ...GARDEN_COLLECTIONS]
   },
 
   /**

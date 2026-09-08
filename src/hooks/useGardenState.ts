@@ -28,6 +28,7 @@ import { removePlant } from '../lib/plantManagement'
 import {
   gardenRepository,
   readImportedState,
+  type GardenPart,
   type LoadResult,
 } from '../repository/gardenRepository'
 import { createId } from '../lib/id'
@@ -589,8 +590,12 @@ export function useGardenState() {
             'That backup could not be read. It may be from a newer version of the garden.',
         }
       }
+      let written: GardenPart[]
       try {
-        await gardenRepository.save(imported)
+        // Replaced rather than saved: a restore swaps the whole document, and
+        // writing only the difference from the garden being replaced can leave
+        // a collection's stored record behind.
+        written = await gardenRepository.replace(imported)
       } catch (error) {
         return { ok: false, message: errorMessage(error) }
       }
@@ -599,6 +604,10 @@ export function useGardenState() {
       setPersistence({ readOnly: false })
       setState(progressGarden(imported))
       setLoading(false)
+      // Every other tab is holding the garden this one just replaced. Without
+      // this they keep it, and the next edit made in one of them writes part
+      // of it back over the restored garden.
+      channelRef.current?.postMessage({ type: 'garden-saved', parts: written })
       return { ok: true, message: 'Your garden was restored from the backup.' }
     },
     deleteAll: async (): Promise<{ ok: boolean; message?: string }> => {

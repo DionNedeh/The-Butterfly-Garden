@@ -8,8 +8,12 @@ import {
 } from '../lib/progression'
 import { toLocalDate } from '../lib/date'
 import type { AppState, MoodEntry } from '../types'
+import type { GardenCollection } from './gardenRepository'
 import {
+  COLLECTION_SINCE_VERSION,
   COLLECTION_STORES,
+  CURRENT_STATE_VERSION,
+  DATABASE_VERSION,
   GARDEN_COLLECTIONS,
   META_FIELDS,
   changedParts,
@@ -51,6 +55,99 @@ async function writeRaw(record: unknown) {
     ])
   } finally {
     db.close()
+  }
+}
+
+/**
+ * A garden with something in every collection.
+ *
+ * Deliberately exhaustive: the backup tests below walk GARDEN_COLLECTIONS and
+ * require each one to be non-empty here, so adding a collection without
+ * deciding how it survives a backup fails loudly rather than quietly shipping
+ * a restore that drops it.
+ */
+function fullGarden(): AppState {
+  const seed = createInitialState('Whole', 'Whole Garden')
+  const plantId = seed.plants[0].id
+  return {
+    ...seed,
+    goals: [
+      {
+        id: 'goal-1',
+        title: 'Step outside',
+        schedule: 'daily',
+        weekdays: [],
+        createdDate: '2026-09-01',
+        archived: false,
+      },
+    ],
+    completions: [
+      {
+        id: 'completion-1',
+        goalId: 'goal-1',
+        localDate: '2026-09-08',
+        completedAt: '2026-09-08T10:00:00.000Z',
+      },
+    ],
+    moods: [mood('2026-09-08', 'A quiet day.')],
+    reflections: [
+      {
+        id: 'reflection-1',
+        localDate: '2026-09-08',
+        promptId: 'notice',
+        body: 'The light through the window.',
+        createdAt: '2026-09-08T21:00:00.000Z',
+        updatedAt: '2026-09-08T21:00:00.000Z',
+      },
+    ],
+    recaps: [
+      {
+        id: 'recap-1',
+        localDate: '2026-09-08',
+        level: 4,
+        wentWell: 'Walked to the river.',
+        settingDown: 'The unanswered email.',
+        forTomorrow: 'Book the appointment',
+        createdAt: '2026-09-08T22:00:00.000Z',
+        updatedAt: '2026-09-08T22:00:00.000Z',
+      },
+    ],
+    moonlight: [
+      {
+        id: 'moonlight-1',
+        localDate: '2026-09-08',
+        awardedAt: '2026-09-08T22:00:00.000Z',
+      },
+    ],
+    sunlight: [
+      {
+        id: 'sunlight-1',
+        localDate: '2026-09-08',
+        source: 'mood:2026-09-08',
+        awardedAt: '2026-09-08T10:00:00.000Z',
+      },
+    ],
+    jars: [
+      {
+        id: 'jar-1',
+        character: 'A',
+        colorId: 'blue',
+        purchasedAt: '2026-09-01T00:00:00.000Z',
+      },
+    ],
+    jarPlacements: [{ jarId: 'jar-1', plantId }],
+    stardust: 3,
+  }
+}
+
+function mood(localDate: string, note: string): MoodEntry {
+  return {
+    id: `mood-${localDate}`,
+    localDate,
+    level: 3,
+    note,
+    createdAt: `${localDate}T09:00:00.000Z`,
+    updatedAt: `${localDate}T09:00:00.000Z`,
   }
 }
 
@@ -325,6 +422,97 @@ describe('garden repository', () => {
     })
   })
 
+  describe('backups across versions', () => {
+    /** The oldest version at which some collection did not yet exist. */
+    const beforeNewestCollections =
+      Math.min(...Object.values(COLLECTION_SINCE_VERSION)) - 1
+
+    it('round-trips every collection through an exported backup', () => {
+      const garden = fullGarden()
+      const envelope = JSON.parse(
+        JSON.stringify({
+          format: 'the-butterfly-garden',
+          exportedAt: '2026-09-08T22:30:00.000Z',
+          garden,
+        }),
+      ) as unknown
+
+      const restored = readImportedState(envelope)
+      expect(restored).toBeDefined()
+      for (const collection of GARDEN_COLLECTIONS) {
+        // Non-empty here is the point: a collection nobody put in the fixture
+        // would round-trip trivially and prove nothing.
+        expect(garden[collection].length).toBeGreaterThan(0)
+        expect(restored?.[collection]).toEqual(garden[collection])
+      }
+      for (const field of META_FIELDS) {
+        expect(restored?.[field]).toEqual(garden[field])
+      }
+    })
+
+    it('gives every collection a value when a backup predates it', () => {
+      // A backup written before a collection existed has no key for it at all.
+      // Every reader treats collections as arrays, so migration has to supply
+      // one rather than letting undefined through.
+      const older = { ...fullGarden(), version: beforeNewestCollections } as
+        Record<string, unknown>
+      for (const collection of Object.keys(COLLECTION_SINCE_VERSION)) {
+        delete older[collection]
+      }
+
+      const restored = readImportedState(older)
+      expect(restored).toBeDefined()
+      for (const collection of GARDEN_COLLECTIONS) {
+        expect(Array.isArray(restored?.[collection])).toBe(true)
+      }
+      expect(restored?.version).toBe(CURRENT_STATE_VERSION)
+    })
+
+    it('refuses a backup from a newer build without touching the garden', () => {
+      const mine = fullGarden()
+      const theirs = {
+        format: 'the-butterfly-garden',
+        garden: { ...createEmptyState(), version: CURRENT_STATE_VERSION + 1 },
+      }
+
+      expect(readImportedState(theirs)).toBeUndefined()
+      // Rejection is the whole safety property: the caller keeps what it has.
+      expect(mine.recaps).toHaveLength(1)
+    })
+
+    it('refuses anything that is not a garden', () => {
+      expect(readImportedState({ format: 'the-butterfly-garden' })).toBeUndefined()
+      expect(readImportedState({ garden: { version: 5 } })).toBeUndefined()
+      expect(readImportedState([])).toBeUndefined()
+      expect(readImportedState(null)).toBeUndefined()
+    })
+
+    it('stores every part of a restored backup, not just what differed', async () => {
+      // Restoring replaces the document. Writing only the difference from the
+      // garden being replaced can leave a collection's record behind -- and
+      // for a collection the backup predates, there may be no record at all
+      // while the meta it writes claims a version that expects one.
+      await gardenRepository.save(createInitialState('Before', 'Before Garden'))
+
+      const backup = { ...fullGarden(), version: beforeNewestCollections } as
+        Record<string, unknown>
+      for (const collection of Object.keys(COLLECTION_SINCE_VERSION)) {
+        delete backup[collection]
+      }
+      const restored = readImportedState(backup)
+      expect(restored).toBeDefined()
+      await gardenRepository.replace(restored as AppState)
+
+      const reopened = await gardenRepository.load()
+      expect(reopened.status).toBe('loaded')
+      expect(reopened.state.moods).toEqual(restored?.moods)
+      for (const collection of GARDEN_COLLECTIONS) {
+        expect(Array.isArray(reopened.state[collection])).toBe(true)
+      }
+      expect(await gardenRepository.quarantined()).toHaveLength(0)
+    })
+  })
+
   describe('deletion', () => {
     it('deletes the local database', async () => {
       await gardenRepository.save({ ...createEmptyState(), seeds: 3 })
@@ -347,6 +535,37 @@ describe('garden repository', () => {
       }
     })
   })
+
+describe('adding a collection', () => {
+  it('raises the database version whenever the store list changes', () => {
+    // A deliberate canary rather than a clever check. Adding a collection but
+    // leaving DATABASE_VERSION alone means `upgrade` never runs on databases
+    // that already exist, the store is never created, and the transaction that
+    // reads the garden fails for everyone who already had the app -- a failure
+    // no other test can see, because a fresh database gets every store anyway.
+    //
+    // It is also the backstop for COLLECTION_SINCE_VERSION. The generic tests
+    // above are driven off that table, so a new collection missing from it is
+    // a collection they do not test -- this is what fires instead.
+    //
+    // If this fails you changed the collections. Work the checklist on
+    // COLLECTION_STORES in gardenRepository.ts, raise DATABASE_VERSION so
+    // installed databases gain the store, then update the numbers here.
+    expect(GARDEN_COLLECTIONS).toHaveLength(11)
+    expect(DATABASE_VERSION).toBe(4)
+  })
+
+  it('creates every part store when an older database is upgraded', () => {
+    // The other half: the upgrade has to actually create what is missing.
+    // Covered end to end by the pre-split migration tests, which start from a
+    // database holding only the legacy record and end with a garden split
+    // across every store.
+    expect(new Set(GARDEN_COLLECTIONS).size).toBe(GARDEN_COLLECTIONS.length)
+    expect(
+      new Set(GARDEN_COLLECTIONS.map((c) => COLLECTION_STORES[c])).size,
+    ).toBe(GARDEN_COLLECTIONS.length)
+  })
+})
 
 describe('detecting what a write actually changed', () => {
   it('accounts for every field of the garden', () => {
@@ -622,21 +841,29 @@ describe('moving a pre-split garden across', () => {
     expect(await gardenRepository.quarantined()).toHaveLength(1)
   })
 
-  it('loads a version-4 garden that predates the recap collections', async () => {
-    // The regression that protects every existing gardener. `recaps` and
-    // `moonlight` arrived at version 5, so a garden stored at 4 never wrote
-    // them. Their absence is a fact about that record, not a hole in it, and
-    // treating it as a hole would withhold every garden in the wild.
+  it('loads a stored garden from before every new collection', async () => {
+    // The regression that protects every existing gardener. A collection
+    // introduced at version N was never written by a garden stored below N,
+    // so its absence there is a fact about the record rather than a hole in
+    // it -- and treating it as a hole would withhold every garden in the wild.
+    //
+    // Driven off COLLECTION_SINCE_VERSION so the next collection to be added
+    // is covered by this without anyone remembering to come back here.
+    const newest = Object.entries(COLLECTION_SINCE_VERSION) as Array<
+      [GardenCollection, number]
+    >
+    const storedVersion = Math.min(...newest.map(([, since]) => since)) - 1
+    const stores = newest.map(([collection]) => COLLECTION_STORES[collection])
+
     await gardenRepository.save(createInitialState('Before', 'Before Garden'))
 
     const db = await openDB('butterfly-garden')
     try {
       const meta = (await db.get('meta', 'current')) as Record<string, unknown>
-      const tx = db.transaction(['meta', 'recaps', 'moonlight'], 'readwrite')
+      const tx = db.transaction(['meta', ...stores], 'readwrite')
       await Promise.all([
-        tx.objectStore('meta').put({ ...meta, version: 4 }, 'current'),
-        tx.objectStore('recaps').delete('current'),
-        tx.objectStore('moonlight').delete('current'),
+        tx.objectStore('meta').put({ ...meta, version: storedVersion }, 'current'),
+        ...stores.map((store) => tx.objectStore(store).delete('current')),
         tx.done,
       ])
     } finally {
@@ -645,19 +872,21 @@ describe('moving a pre-split garden across', () => {
 
     const result = await gardenRepository.load()
     expect(result.status).toBe('loaded')
-    expect(result.state).toMatchObject({
-      version: 5,
-      recaps: [],
-      moonlight: [],
-    })
+    expect(result.state.version).toBe(CURRENT_STATE_VERSION)
+    for (const [collection] of newest) {
+      expect(result.state[collection]).toEqual([])
+    }
     // Nothing was treated as damaged, so nothing was quarantined.
     expect(await gardenRepository.quarantined()).toHaveLength(0)
 
     // Reading it also brought the stored layout up to date, so the record no
     // longer relies on being read at the older version.
-    expect(await readStore('meta')).toMatchObject({ version: 5 })
-    expect(await readStore('recaps')).toEqual([])
-    expect(await readStore('moonlight')).toEqual([])
+    expect(await readStore('meta')).toMatchObject({
+      version: CURRENT_STATE_VERSION,
+    })
+    for (const store of stores) {
+      expect(await readStore(store)).toEqual([])
+    }
   })
 
   it('does not strand a migrated garden the next time meta alone changes', async () => {
