@@ -89,6 +89,8 @@ function App() {
   const today = useLocalDate()
   const recap = useRecapWindow()
   const [view, setView] = useState<AppView>('garden')
+  /** The day the recap was actually opened for, so it is never re-entered. */
+  const [recapOpenedFor, setRecapOpenedFor] = useState<string>()
   useAmbientSound(
     Boolean(garden.state?.profile?.ambientSound),
     garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
@@ -163,9 +165,15 @@ function App() {
    * is standing in it: four o'clock arrives, or another tab collects the night
    * first. Falling back to Today is derived rather than corrected after the
    * fact, so the flow is never briefly rendered against a day already closed.
+   *
+   * It is tied to the day it was opened for, not merely to the recap being
+   * available. Otherwise a tab left open overnight would fall back to Today at
+   * four in the morning while still holding 'recap', and then walk itself back
+   * into the flow the moment the next evening opened -- with nobody having
+   * asked for it.
    */
-  const activeView: AppView =
-    view === 'recap' && !recapTarget ? 'today' : view
+  const inRecap = view === 'recap' && recapOpenedFor === recapTarget
+  const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
 
   return (
     <div
@@ -356,10 +364,13 @@ function App() {
             onSetGoalArchived={garden.setGoalArchived}
             recap={offeredRecap}
             moonlightCollected={recapCollected}
-            onOpenRecap={() => setView('recap')}
+            onOpenRecap={() => {
+              setRecapOpenedFor(recapTarget)
+              setView('recap')
+            }}
           />
         )}
-        {activeView === 'recap' && recapTarget && (
+        {inRecap && recapTarget && (
           <MoonlightRecap
             state={state}
             targetDate={recapTarget}

@@ -99,6 +99,24 @@ export function MoonlightRecap({
   const back = () => setStep((value) => Math.max(0, value - 1))
   const next = () => setStep((value) => Math.min(last, value + 1))
 
+  /**
+   * Skipping withdraws the answer as well as moving on.
+   *
+   * Otherwise Skip and Continue do exactly the same thing, and something typed
+   * and then thought better of is kept anyway -- which is the opposite of what
+   * the button says, in the one place the app promises nothing is required.
+   */
+  const skip = () => {
+    if (step === 1) setLevel(undefined)
+    if (step === 2) setWentWell('')
+    if (step === 3) setSettingDown('')
+    if (step === 4) {
+      setForTomorrow('')
+      setPlanForTomorrow(false)
+    }
+    next()
+  }
+
   const collect = () => {
     onCollect({
       level,
@@ -260,7 +278,7 @@ export function MoonlightRecap({
           </button>
         )}
         {step > 0 && step < last && (
-          <button className="text-button" onClick={next}>
+          <button className="text-button" onClick={skip}>
             Skip this one
           </button>
         )}

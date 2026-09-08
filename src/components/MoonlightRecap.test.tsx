@@ -142,6 +142,75 @@ describe('the Moonlight recap', () => {
     )
   })
 
+  it('withdraws an answer that is skipped after being typed', async () => {
+    // Skip has to mean "do not keep this". If it only advanced, it would do
+    // exactly what Continue does and quietly store the thing being withdrawn.
+    const { onCollect } = renderRecap()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: /Bright/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+    await userEvent.type(screen.getByRole('textbox'), 'On second thoughts.')
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Collect Moonlight' }),
+    )
+
+    expect(onCollect).toHaveBeenCalledWith({
+      level: undefined,
+      wentWell: '',
+      settingDown: '',
+      forTomorrow: '',
+      planForTomorrow: false,
+    })
+  })
+
+  it('drops a planned goal when its note is skipped', async () => {
+    const { onCollect } = renderRecap()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    for (let step = 0; step < 3; step += 1) {
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Skip this one' }),
+      )
+    }
+    await userEvent.type(screen.getByRole('textbox'), 'Book the appointment')
+    await userEvent.click(
+      screen.getByRole('button', { name: /Add to tomorrow/ }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Collect Moonlight' }),
+    )
+
+    expect(onCollect).toHaveBeenCalledWith(
+      expect.objectContaining({ forTomorrow: '', planForTomorrow: false }),
+    )
+  })
+
+  it('keeps an answer that is passed with Continue', async () => {
+    // The other half of the contract: Continue must not discard anything.
+    const { onCollect } = renderRecap()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: /Bright/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    for (let step = 0; step < 3; step += 1) {
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Skip this one' }),
+      )
+    }
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Collect Moonlight' }),
+    )
+
+    expect(onCollect).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 4 }),
+    )
+  })
+
   it('names the day it is closing when that is not today', () => {
     renderRecap({ targetDate: YESTERDAY, today: TODAY })
     expect(screen.getByText('Rounding out Monday')).toBeInTheDocument()

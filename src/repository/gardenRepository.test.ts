@@ -252,6 +252,27 @@ describe('garden repository', () => {
     })
   })
 
+  it('reports an upgrade blocked by an older tab instead of hanging', async () => {
+    // Raising DATABASE_VERSION makes the open an upgrade, and an upgrade waits
+    // for every older connection to close. The build being replaced does not
+    // let go on its own, so without a `blocked` handler this open never
+    // settles and the app sits on its splash screen forever.
+    await gardenRepository.clear().catch(() => undefined)
+    const older = await openDB('butterfly-garden', 3, {
+      upgrade(db) {
+        db.createObjectStore('meta')
+      },
+    })
+
+    try {
+      const result = await gardenRepository.load()
+      expect(result.status).toBe('withheld')
+      expect(result.reason).toBe('unavailable')
+    } finally {
+      older.close()
+    }
+  })
+
   describe('backups', () => {
     it('reads a garden back out of an exported envelope', () => {
       const state = { ...createInitialState('Backup', 'Backup Garden'), seeds: 6 }

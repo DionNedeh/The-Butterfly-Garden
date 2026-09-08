@@ -297,8 +297,32 @@ function metaOf(state: AppState): GardenMeta {
   }
 }
 
+/**
+ * Open the database, refusing to wait forever on another tab.
+ *
+ * Raising DATABASE_VERSION makes the open an upgrade, and an upgrade cannot
+ * start while another tab still holds a connection at the old version. The
+ * open request then fires `blocked` and simply never settles -- which, since
+ * every read waits on this, leaves the app sitting on its splash screen with
+ * nothing to show and nothing to report.
+ *
+ * `blocked` turns that into an ordinary unavailable-storage failure, which the
+ * app already knows how to explain and recover from.
+ *
+ * `blocking` is the other side of the same problem and cannot help this
+ * upgrade: the build being replaced was shipped without it and will not let go
+ * on its own. It is here so the tab running *this* build steps aside for the
+ * next version rather than deadlocking it in turn.
+ */
 function database() {
-  databasePromise ??= openDB<GardenDatabase>(DATABASE_NAME, DATABASE_VERSION, {
+  if (databasePromise) return databasePromise
+
+  let reportBlocked: ((error: Error) => void) | undefined
+  const blocked = new Promise<never>((_, reject) => {
+    reportBlocked = reject
+  })
+
+  const opening = openDB<GardenDatabase>(DATABASE_NAME, DATABASE_VERSION, {
     upgrade(db) {
       // Creating stores is all that happens here. Data is moved lazily on the
       // first load instead, because a version-change transaction is an awkward
@@ -310,7 +334,32 @@ function database() {
         }
       }
     },
+    blocked() {
+      reportBlocked?.(
+        new Error(
+          'Another open tab of the garden is still using an older version. Close the other tabs and reopen the app.',
+        ),
+      )
+    },
+    blocking(_currentVersion, _blockedVersion, event) {
+      // Another tab wants to upgrade and this connection is in its way.
+      ;(event.target as IDBDatabase | null)?.close()
+      databasePromise = undefined
+    },
   })
+
+  // Whichever resolves first wins. A failure is not cached: the other tab may
+  // close a moment later, and the next attempt should get a real connection
+  // rather than the remembered refusal.
+  databasePromise = Promise.race([opening, blocked]).catch(
+    (error: unknown) => {
+      databasePromise = undefined
+      throw error
+    },
+  )
+  // The losing promise of the race keeps its rejection; claim it so it is not
+  // reported as unhandled.
+  blocked.catch(() => undefined)
   return databasePromise
 }
 
