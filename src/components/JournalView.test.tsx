@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createInitialState } from '../lib/progression'
-import type { AppState, MoodEntry, ReflectionEntry } from '../types'
+import type { AppState, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
 import { JournalView } from './JournalView'
 
 function mood(localDate: string, note: string): MoodEntry {
@@ -27,6 +27,20 @@ function reflection(localDate: string, body: string): ReflectionEntry {
   }
 }
 
+function recap(localDate: string, overrides: Partial<RecapEntry> = {}): RecapEntry {
+  return {
+    id: `recap-${localDate}`,
+    localDate,
+    level: 2,
+    wentWell: 'Walked to the river.',
+    settingDown: 'The unanswered email.',
+    forTomorrow: 'Book the appointment',
+    createdAt: `${localDate}T22:00:00.000Z`,
+    updatedAt: `${localDate}T22:00:00.000Z`,
+    ...overrides,
+  }
+}
+
 /** A garden with `days` consecutive days of entries, newest last. */
 function gardenWithDays(days: number): AppState {
   const moods: MoodEntry[] = []
@@ -48,6 +62,8 @@ function renderJournal(state: AppState, overrides: Record<string, unknown> = {})
     onDeleteMood: vi.fn(),
     onUpdateReflection: vi.fn(),
     onDeleteReflection: vi.fn(),
+    onUpdateRecap: vi.fn(),
+    onDeleteRecap: vi.fn(),
     ...overrides,
   }
   render(<JournalView state={state} {...handlers} />)
@@ -119,3 +135,93 @@ describe('JournalView', () => {
     ).toBeGreaterThan(0)
   })
 })
+
+describe('recaps in the journal', () => {
+  const DAY = '2026-01-01'
+  const base = () => createInitialState('Tester', 'Test Garden')
+
+  it('renders the answers that were given', () => {
+    renderJournal({ ...base(), recaps: [recap(DAY)] })
+
+    expect(screen.getByText(/Rounded out the day/)).toBeInTheDocument()
+    expect(screen.getByText('Walked to the river.')).toBeInTheDocument()
+    expect(screen.getByText('The unanswered email.')).toBeInTheDocument()
+  })
+
+  it('shows a day whose only entry is a recap', () => {
+    // The timeline is built from moods and reflections; a day someone only
+    // closed out is still a day they showed up for.
+    renderJournal({ ...base(), recaps: [recap(DAY, { wentWell: 'Got here.' })] })
+
+    expect(screen.getByText('Got here.')).toBeInTheDocument()
+  })
+
+  it('leaves out the questions that were skipped', () => {
+    renderJournal({
+      ...base(),
+      recaps: [
+        recap(DAY, {
+          level: undefined,
+          wentWell: '',
+          settingDown: 'Only this.',
+          forTomorrow: '',
+        }),
+      ],
+    })
+
+    expect(screen.getByText('Only this.')).toBeInTheDocument()
+    expect(screen.queryByText('What went well')).not.toBeInTheDocument()
+    expect(screen.queryByText('For tomorrow')).not.toBeInTheDocument()
+  })
+
+  it('notes when the tomorrow note became a goal', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [
+        ...state.goals,
+        {
+          id: 'planned-goal',
+          title: 'Book the appointment',
+          schedule: 'once' as const,
+          weekdays: [],
+          createdDate: DAY,
+          archived: false,
+          scheduledDate: '2026-01-02',
+        },
+      ],
+      recaps: [recap(DAY, { plannedGoalId: 'planned-goal' })],
+    })
+
+    expect(
+      screen.getByText(/Became a goal: Book the appointment/),
+    ).toBeInTheDocument()
+  })
+
+  it('asks before deleting a recap, and does nothing until confirmed', async () => {
+    const handlers = renderJournal({ ...base(), recaps: [recap(DAY)] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(handlers.onDeleteRecap).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, delete' }))
+    expect(handlers.onDeleteRecap).toHaveBeenCalledWith(`recap-${DAY}`)
+  })
+
+  it('edits a recap in place', async () => {
+    const handlers = renderJournal({ ...base(), recaps: [recap(DAY)] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const wentWell = screen.getByLabelText('What went well')
+    await userEvent.clear(wentWell)
+    await userEvent.type(wentWell, 'Sat in the sun.')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(handlers.onUpdateRecap).toHaveBeenCalledWith(
+      expect.objectContaining({ wentWell: 'Sat in the sun.' }),
+    )
+  })
+})
+

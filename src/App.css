@@ -4403,3 +4403,30 @@
   background: rgba(140, 201, 171, 0.16);
   color: var(--forest-dark);
 }
+
+.recap-entry > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.recap-entry p {
+  margin-top: 0.5rem;
+}
+
+.recap-entry small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recap-planned {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
