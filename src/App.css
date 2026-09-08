@@ -1046,6 +1046,43 @@
   animation-duration: calc(var(--flight-duration) * 1.2);
 }
 
+/* The six patterns added in 3.0. Durations mirror `baseDurationMs` in
+   src/lib/flightMotion.ts relative to Gentle Drift's 19s, so the CSS engine and
+   the generated tracks cannot disagree about pace.
+
+   These keyframes are a transitional projection of that motion table into the
+   current route-variable engine. The generator in flightMotion.ts is the real
+   definition; this block is replaced when it is wired into the scene. */
+.pattern-clover-meander {
+  animation-name: clover-meander;
+  animation-duration: calc(var(--flight-duration) * 1.16);
+}
+
+.pattern-breeze-glide {
+  animation-name: breeze-glide;
+  animation-duration: calc(var(--flight-duration) * 1.26);
+}
+
+.pattern-blossom-bounce {
+  animation-name: blossom-bounce;
+  animation-duration: calc(var(--flight-duration) * 0.76);
+}
+
+.pattern-ribbon-loop {
+  animation-name: ribbon-loop;
+  animation-duration: calc(var(--flight-duration) * 1.08);
+}
+
+.pattern-moonbeam-float {
+  animation-name: moonbeam-float;
+  animation-duration: calc(var(--flight-duration) * 1.37);
+}
+
+.pattern-canopy-dance {
+  animation-name: canopy-dance;
+  animation-duration: calc(var(--flight-duration) * 1.21);
+}
+
 @keyframes garden-flight {
   0% { transform: translate(var(--route-x0), var(--route-y0)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-3deg); }
   18% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
@@ -1102,6 +1139,69 @@
   70%, 79% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
   90% { transform: translate(var(--route-x1), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
   100% { transform: translate(var(--route-x0), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+}
+
+/* Low wandering arcs; the holds are deliberately uneven so it reads as
+   aimless rather than metronomic. */
+@keyframes clover-meander {
+  0%, 8% { transform: translate(var(--route-x0), 74cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  21% { transform: translate(var(--route-x1), 62cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
+  33%, 47% { transform: translate(var(--route-x2), 78cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  59% { transform: translate(var(--route-x3), 66cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-4deg); }
+  71%, 74% { transform: translate(var(--route-x4), 80cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  88% { transform: translate(var(--route-x1), 70cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), 74cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+}
+
+/* Long shallow crossings with very little banking. */
+@keyframes breeze-glide {
+  0% { transform: translate(var(--route-x0), 42cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  38% { transform: translate(var(--route-x2), 36cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(2deg); }
+  50%, 58% { transform: translate(var(--route-x4), 46cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  88% { transform: translate(var(--route-x1), 38cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-2deg); }
+  100% { transform: translate(var(--route-x0), 42cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+}
+
+/* Short arcs that settle at flower height between each one. */
+@keyframes blossom-bounce {
+  0%, 11% { transform: translate(var(--route-x0), 72cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  22% { transform: translate(var(--route-x1), 54cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
+  33%, 44% { transform: translate(var(--route-x2), 74cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  55% { transform: translate(var(--route-x3), 56cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-5deg); }
+  66%, 78% { transform: translate(var(--route-x4), 73cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  89% { transform: translate(var(--route-x1), 58cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), 72cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+}
+
+/* Wide loops whose crossing point moves each time around. */
+@keyframes ribbon-loop {
+  0% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  17% { transform: translate(var(--route-x3), 28cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(6deg); }
+  34%, 40% { transform: translate(var(--route-x4), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  55% { transform: translate(var(--route-x2), 64cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-6deg); }
+  72% { transform: translate(var(--route-x1), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  86%, 91% { transform: translate(var(--route-x3), 40cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+}
+
+/* Slow vertical waves rising into one long hover. */
+@keyframes moonbeam-float {
+  0% { transform: translate(var(--route-x0), 58cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  18%, 34% { transform: translate(var(--route-x1), 16cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  48% { transform: translate(var(--route-x2), 50cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(3deg); }
+  63% { transform: translate(var(--route-x3), 22cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  80% { transform: translate(var(--route-x4), 56cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-3deg); }
+  100% { transform: translate(var(--route-x0), 58cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+}
+
+/* Broad arcs up near the canopy, easing down to lower rests. */
+@keyframes canopy-dance {
+  0% { transform: translate(var(--route-x0), 20cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  24% { transform: translate(var(--route-x2), 14cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
+  41%, 52% { transform: translate(var(--route-x4), 60cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
+  68% { transform: translate(var(--route-x3), 18cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-5deg); }
+  84%, 90% { transform: translate(var(--route-x1), 64cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
+  100% { transform: translate(var(--route-x0), 20cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
 }
 
 .garden-plants {
@@ -1958,6 +2058,48 @@
 .pattern-preview.pattern-sunbeam-swoop .preview-flight-dot { animation-name: preview-swoop; }
 .pattern-preview.pattern-spiral-rise .preview-flight-dot { animation-name: preview-spiral; }
 .pattern-preview.pattern-garden-waltz .preview-flight-dot { animation-name: preview-waltz; }
+.pattern-preview.pattern-clover-meander .preview-flight-dot { animation-name: preview-meander; }
+.pattern-preview.pattern-breeze-glide .preview-flight-dot { animation-name: preview-glide; }
+.pattern-preview.pattern-blossom-bounce .preview-flight-dot { animation-name: preview-bounce; }
+.pattern-preview.pattern-ribbon-loop .preview-flight-dot { animation-name: preview-ribbon; }
+.pattern-preview.pattern-moonbeam-float .preview-flight-dot { animation-name: preview-moonbeam; }
+.pattern-preview.pattern-canopy-dance .preview-flight-dot { animation-name: preview-canopy; }
+
+@keyframes preview-meander {
+  0%, 10% { translate: 0 26px; }
+  30%, 38% { translate: 92px 34px; }
+  58% { translate: 168px 20px; }
+  74%, 80% { translate: 236px 32px; }
+}
+@keyframes preview-glide {
+  0%, 100% { translate: 0 14px; }
+  46%, 56% { translate: 258px 22px; }
+}
+@keyframes preview-bounce {
+  0%, 12% { translate: 0 34px; }
+  26% { translate: 74px 6px; }
+  40%, 50% { translate: 142px 34px; }
+  64% { translate: 208px 8px; }
+  80%, 90% { translate: 256px 32px; }
+}
+@keyframes preview-ribbon {
+  0% { translate: 0 20px; }
+  25% { translate: 118px -6px; }
+  50% { translate: 244px 24px; }
+  75% { translate: 126px 44px; }
+}
+@keyframes preview-moonbeam {
+  0% { translate: 0 30px; }
+  22%, 40% { translate: 96px -10px; }
+  62% { translate: 186px 30px; }
+  82% { translate: 250px 2px; }
+}
+@keyframes preview-canopy {
+  0% { translate: 0 0; }
+  28% { translate: 104px -12px; }
+  48%, 56% { translate: 190px 38px; }
+  78% { translate: 252px -4px; }
+}
 
 @keyframes preview-drift {
   0%, 100% { translate: 0 0; }

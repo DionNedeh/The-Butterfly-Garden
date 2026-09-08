@@ -48,6 +48,12 @@ export type FlightPatternId =
   | 'sunbeam-swoop'
   | 'spiral-rise'
   | 'garden-waltz'
+  | 'clover-meander'
+  | 'breeze-glide'
+  | 'blossom-bounce'
+  | 'ribbon-loop'
+  | 'moonbeam-float'
+  | 'canopy-dance'
 export type GardenBackdropId =
   | 'sunlit-meadow'
   | 'woodland-brook'

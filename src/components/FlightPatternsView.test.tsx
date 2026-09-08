@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { flightPatterns } from '../data/flightPatterns'
@@ -50,9 +50,23 @@ describe('FlightPatternsView', () => {
     for (const pattern of flightPatterns) {
       if (pattern.cost <= 0) continue
       const wrong = pattern.currency === 'stardust' ? 'Nectar' : 'Stardust'
+      // Scoped to this pattern's own card. Two patterns may share a price
+      // across currencies -- 12 Nectar and 12 Stardust both exist -- so a
+      // document-wide search would find the other card's correct label and
+      // report it as this card's wrong one.
+      const card = screen.getByRole('button', {
+        name: new RegExp(pattern.name),
+      })
       expect(
-        screen.queryByText(`Locked - ${pattern.cost} ${wrong} in Shop`),
+        within(card).queryByText(`Locked - ${pattern.cost} ${wrong} in Shop`),
       ).not.toBeInTheDocument()
+      expect(
+        within(card).getByText(
+          new RegExp(`(Selected|Owned|Locked - ${pattern.cost} ${
+            pattern.currency === 'stardust' ? 'Stardust' : 'Nectar'
+          } in Shop)`),
+        ),
+      ).toBeInTheDocument()
     }
   })
 

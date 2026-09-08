@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FlightPatternId } from '../types'
 import { createEmptyState } from './progression'
+import { flightPatterns } from '../data/flightPatterns'
 import { purchaseFlightPattern, selectFlightPattern } from './flightPatterns'
 
 describe('flight pattern ownership', () => {
@@ -48,3 +49,63 @@ describe('flight pattern ownership', () => {
     )
   })
 })
+
+describe('the patterns added in 3.0', () => {
+  const added: FlightPatternId[] = [
+    'clover-meander',
+    'breeze-glide',
+    'blossom-bounce',
+    'ribbon-loop',
+    'moonbeam-float',
+    'canopy-dance',
+  ]
+
+  it('buys each one with the currency it is priced in', () => {
+    for (const id of added) {
+      const pattern = flightPatterns.find((item) => item.id === id)
+      expect(pattern).toBeDefined()
+      const wallet =
+        pattern?.currency === 'stardust'
+          ? { stardust: pattern.cost, nectar: 0 }
+          : { nectar: pattern?.cost ?? 0, stardust: 0 }
+      const state = { ...createEmptyState(), ...wallet }
+      const bought = purchaseFlightPattern(state, id)
+      expect(bought.ownedFlightPatternIds).toContain(id)
+      expect(bought.nectar + bought.stardust).toBe(0)
+      // Buying never equips: the gardener chooses when to change.
+      expect(bought.selectedFlightPatternId).toBe('gentle-drift')
+    }
+  })
+
+  it('refuses each one a penny short', () => {
+    for (const id of added) {
+      const pattern = flightPatterns.find((item) => item.id === id)
+      const short = Math.max(0, (pattern?.cost ?? 1) - 1)
+      const wallet =
+        pattern?.currency === 'stardust'
+          ? { stardust: short, nectar: 999 }
+          : { nectar: short, stardust: 999 }
+      const state = { ...createEmptyState(), ...wallet }
+      expect(purchaseFlightPattern(state, id)).toBe(state)
+    }
+  })
+
+  it('selects and keeps each one', () => {
+    for (const id of added) {
+      const owned = {
+        ...createEmptyState(),
+        ownedFlightPatternIds: ['gentle-drift', id] as FlightPatternId[],
+      }
+      expect(selectFlightPattern(owned, id).selectedFlightPatternId).toBe(id)
+    }
+  })
+
+  it('gives every pattern an animation class matching its id', () => {
+    // The scene applies `animationClass` verbatim; a mismatch silently leaves
+    // the butterfly on the default path while the shop claims otherwise.
+    for (const pattern of flightPatterns) {
+      expect(pattern.animationClass).toBe(`pattern-${pattern.id}`)
+    }
+  })
+})
+

@@ -6,6 +6,7 @@ import {
   createEmptyState,
   createInitialState,
 } from '../lib/progression'
+import { flightPatterns } from '../data/flightPatterns'
 import { toLocalDate } from '../lib/date'
 import type { AppState, MoodEntry } from '../types'
 import type { GardenCollection } from './gardenRepository'
@@ -478,6 +479,36 @@ describe('garden repository', () => {
       expect(readImportedState(theirs)).toBeUndefined()
       // Rejection is the whole safety property: the caller keeps what it has.
       expect(mine.recaps).toHaveLength(1)
+    })
+
+    it('keeps every flight pattern in the catalog through a backup', () => {
+      // The repository filters unknown pattern ids out of a restored garden.
+      // It derives the known set from the catalog, so a pattern added without
+      // updating that filter would be silently stripped from someone's
+      // ownership on the next restore.
+      const owned = flightPatterns.map((pattern) => pattern.id)
+      const garden = {
+        ...createEmptyState(),
+        ownedFlightPatternIds: owned,
+        selectedFlightPatternId: owned[owned.length - 1],
+      }
+
+      const restored = readImportedState({ garden })
+      expect(restored?.ownedFlightPatternIds).toEqual(owned)
+      expect(restored?.selectedFlightPatternId).toBe(owned[owned.length - 1])
+    })
+
+    it('drops a pattern id this build does not know, keeping the rest', () => {
+      const garden = {
+        ...createEmptyState(),
+        ownedFlightPatternIds: ['gentle-drift', 'retired-pattern', 'ribbon-loop'],
+        selectedFlightPatternId: 'retired-pattern',
+      }
+
+      const restored = readImportedState({ garden })
+      expect(restored?.ownedFlightPatternIds).toEqual(['gentle-drift', 'ribbon-loop'])
+      // A selection this build cannot render falls back rather than sticking.
+      expect(restored?.selectedFlightPatternId).toBe('gentle-drift')
     })
 
     it('refuses anything that is not a garden', () => {
