@@ -132,3 +132,30 @@ describe('GardenView plant protection', () => {
     expect(handlers.onRemovePlant).toHaveBeenCalledWith(spare.id)
   })
 })
+
+describe('the species welcomed figure', () => {
+  it('counts distinct species, not butterflies', () => {
+    // Three butterflies, two species. Counting creatures reported three, which
+    // is not what "species welcomed" says.
+    renderGarden({
+      creatures: [
+        butterfly('monarch', 0),
+        butterfly('monarch', 1),
+        butterfly('queen', 2),
+      ],
+    })
+
+    expect(screen.getByText(`2 / ${species.length}`)).toBeInTheDocument()
+  })
+
+  it('leaves out species still growing', () => {
+    const growing = {
+      ...butterfly('queen', 1),
+      stage: 'chrysalis' as const,
+    }
+    renderGarden({ creatures: [butterfly('monarch', 0), growing] })
+
+    expect(screen.getByText(`1 / ${species.length}`)).toBeInTheDocument()
+  })
+})
+

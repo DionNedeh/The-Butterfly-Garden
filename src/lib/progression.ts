@@ -12,6 +12,7 @@ import { progressAppearance } from './appearance'
 import { DEFAULT_FLIGHT_PATTERN_ID } from './flightPatterns'
 import { EMERGENCE_SEED_REWARD } from './lifecycle'
 import { PLANT_CAPACITY } from './plantManagement'
+import { selectDiscoveryCandidate } from './speciesAcquisition'
 import { createId } from './id'
 
 export { EMERGENCE_SEED_REWARD }
@@ -120,18 +121,10 @@ function discoverEgg(
   now: Date,
 ): CreatureInstance | undefined {
   const definition = plantCatalog.find((plant) => plant.id === maturePlant.plantId)
-  const speciesId =
-    definition?.speciesIds.find(
-      (candidateId) =>
-        !state.creatures.some((creature) => creature.speciesId === candidateId),
-    ) ??
-    definition?.speciesIds.find(
-      (candidateId) =>
-        !state.creatures.some(
-          (creature) =>
-            creature.speciesId === candidateId && creature.stage !== 'butterfly',
-        ),
-    )
+  if (!definition) return undefined
+  // Shared with the species directory, so what the guide predicts and what the
+  // garden actually reveals can never drift apart.
+  const speciesId = selectDiscoveryCandidate(state.creatures, definition.speciesIds)
   if (!speciesId) return undefined
   const count = state.creatures.length
   return {

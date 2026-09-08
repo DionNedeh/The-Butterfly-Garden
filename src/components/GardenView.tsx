@@ -3,6 +3,7 @@ import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarColors } from '../data/jars'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
+import { distinctSpeciesRaised } from '../lib/speciesAcquisition'
 import { flightRouteStyleFor } from '../lib/flightRoutes'
 import {
   availableJars,
@@ -294,7 +295,9 @@ export function GardenView({
         </div>
         <div>
           <Icon name="leaf" />
-          <strong>{emerged.length} / {species.length}</strong>
+          {/* Distinct species, not creatures: two Monarchs are one species
+              welcomed, which is what the label has always claimed. */}
+          <strong>{distinctSpeciesRaised(state)} / {species.length}</strong>
           <span>species welcomed</span>
         </div>
         <button
