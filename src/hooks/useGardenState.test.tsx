@@ -1,6 +1,9 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { gardenRepository } from '../repository/gardenRepository'
+import {
+  GARDEN_COLLECTIONS,
+  gardenRepository,
+} from '../repository/gardenRepository'
 import { createEmptyState, createInitialState } from '../lib/progression'
 import { useGardenState } from './useGardenState'
 
@@ -16,6 +19,21 @@ function Harness() {
       <span data-testid="seeds">{garden.state?.seeds ?? ''}</span>
       <button onClick={() => garden.onboard('Tester', 'Test Garden')}>Onboard</button>
       <button onClick={() => garden.plant('aster')}>Plant</button>
+      <button
+        onClick={() => {
+          void garden.importGarden(
+            JSON.stringify({
+              format: 'the-butterfly-garden',
+              garden: {
+                ...createInitialState('Restored', 'Restored Garden'),
+                seeds: 42,
+              },
+            }),
+          )
+        }}
+      >
+        Restore
+      </button>
     </div>
   )
 }
@@ -109,3 +127,51 @@ describe('useGardenState persistence', () => {
     expect(screen.getByTestId('write-error')).toHaveTextContent('')
   })
 })
+
+describe('restoring a backup', () => {
+  it('replaces the whole garden and tells the other tabs', async () => {
+    // A restore swaps the document rather than amending it. Writing only the
+    // difference can leave a collection's record behind, and staying quiet
+    // leaves every other tab holding the garden that was just replaced --
+    // free to write part of it back over the restored one.
+    const replace = vi.spyOn(gardenRepository, 'replace')
+    // A save that touched nothing never announces, so the only announcement
+    // this test can see is the one the restore itself makes. Without that the
+    // ordinary write following the restore would post its own message and mask
+    // a restore that stayed silent.
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const posted: Array<{ type?: string; parts?: unknown }> = []
+    vi.spyOn(BroadcastChannel.prototype, 'postMessage').mockImplementation(
+      (message) => {
+        posted.push(message as { type?: string; parts?: unknown })
+      },
+    )
+
+    render(<Harness />)
+    await waitFor(() =>
+      expect(screen.getByTestId('loading')).toHaveTextContent('false'),
+    )
+    act(() => {
+      screen.getByText('Onboard').click()
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId('seeds')).not.toHaveTextContent(''),
+    )
+    // Anything the onboarding write announced is not what this test is about.
+    posted.length = 0
+
+    act(() => {
+      screen.getByText('Restore').click()
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('seeds')).toHaveTextContent('42'),
+    )
+    expect(replace).toHaveBeenCalled()
+
+    const announcement = posted.find((message) => message.type === 'garden-saved')
+    expect(announcement).toBeDefined()
+    expect(announcement?.parts).toEqual(['meta', ...GARDEN_COLLECTIONS])
+  })
+})
+
