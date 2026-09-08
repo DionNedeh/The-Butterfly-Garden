@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { awardMoonlight, createInitialState } from './progression'
 import { calculateSunlightStreak } from './streak'
 
 describe('daily Sunlight streak', () => {
@@ -45,5 +46,23 @@ describe('daily Sunlight streak', () => {
         '2026-03-09',
       ),
     ).toEqual({ days: 3, completedToday: true })
+  })
+
+  it('is not advanced by collecting Moonlight', () => {
+    // The journal tells gardeners that one Sunlight keeps the streak growing.
+    // If closing the day counted, a streak could be kept alive without ever
+    // performing an act of care, and that sentence would stop being true.
+    const state = awardMoonlight(
+      createInitialState('Streaky', 'Streaky Garden'),
+      '2026-03-09',
+      {},
+      new Date(2026, 2, 9, 21),
+    )
+
+    expect(state.moonlight).toHaveLength(1)
+    expect(calculateSunlightStreak(state.sunlight, '2026-03-09')).toEqual({
+      days: 0,
+      completedToday: false,
+    })
   })
 })

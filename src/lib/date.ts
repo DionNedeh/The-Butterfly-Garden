@@ -44,6 +44,51 @@ export function addDaysToLocalDate(localDate: string, days: number): string {
   return toLocalDate(noon)
 }
 
+/** The hour the Moonlight recap becomes available, in local time. */
+export const RECAP_OPENS_HOUR = 18
+
+/**
+ * The hour the after-midnight grace window closes, in local time.
+ *
+ * Someone rounding out Tuesday at 1:15am is on Wednesday as far as the
+ * calendar is concerned. Without this they would spend Wednesday's Moonlight
+ * closing Tuesday, then collect again twenty hours later -- a double claim
+ * through no fault of their own.
+ */
+export const RECAP_GRACE_ENDS_HOUR = 4
+
+export type RecapWindowState = 'evening' | 'grace' | 'waiting'
+
+export interface RecapWindow {
+  open: boolean
+  /** The day this recap would close out. Only set while open. */
+  targetDate?: string
+  state: RecapWindowState
+}
+
+/**
+ * Whether the day can be rounded out right now, and which day that would be.
+ *
+ * Local wall-clock throughout, deliberately. The device's own clock and zone
+ * are the only thing that tracks where the gardener actually is, and this app
+ * has nothing else to ask -- so an evening is whatever the device calls one,
+ * including after a flight.
+ */
+export function recapWindow(now = new Date()): RecapWindow {
+  const hour = now.getHours()
+  if (hour >= RECAP_OPENS_HOUR) {
+    return { open: true, targetDate: toLocalDate(now), state: 'evening' }
+  }
+  if (hour < RECAP_GRACE_ENDS_HOUR) {
+    return {
+      open: true,
+      targetDate: addDaysToLocalDate(toLocalDate(now), -1),
+      state: 'grace',
+    }
+  }
+  return { open: false, state: 'waiting' }
+}
+
 /** Every local date in the given month (0-indexed monthIndex). */
 export function monthDates(year: number, monthIndex: number): string[] {
   const count = new Date(year, monthIndex + 1, 0).getDate()

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import {
+  awardMoonlight,
   awardSunlight,
   createEmptyState,
   createInitialState,
@@ -11,7 +12,10 @@ import {
   plantSeed,
   progressGarden,
   STARTER_SEEDS,
+  MOONLIGHT_STARDUST_REWARD,
+  moonlightForDate,
   NECTAR_PER_SUNLIGHT,
+  recapForDate,
 } from './progression'
 
 beforeEach(() => {
@@ -176,5 +180,143 @@ describe('garden progression', () => {
     expect(clockMovedBack.creatures[0].stage).toBe('butterfly')
     expect(clockMovedBack.seeds).toBe(EMERGENCE_SEED_REWARD)
     expect(clockMovedBack.profile?.activeCompanionId).toBe('creature-1')
+  })
+})
+
+describe('collecting Moonlight', () => {
+  const evening = new Date(2026, 8, 8, 21, 30)
+
+  it('pays Stardust once and records the recap', () => {
+    const state = awardMoonlight(
+      createInitialState('Dusk', 'Dusk Garden'),
+      '2026-09-08',
+      {
+        level: 4,
+        wentWell: '  Walked to the river.  ',
+        settingDown: 'The unanswered email.',
+        forTomorrow: '',
+      },
+      evening,
+    )
+
+    expect(state.stardust).toBe(MOONLIGHT_STARDUST_REWARD)
+    expect(moonlightForDate(state, '2026-09-08')).toMatchObject({
+      localDate: '2026-09-08',
+      awardedAt: evening.toISOString(),
+    })
+    expect(recapForDate(state, '2026-09-08')).toMatchObject({
+      level: 4,
+      wentWell: 'Walked to the river.',
+      settingDown: 'The unanswered email.',
+      forTomorrow: '',
+    })
+  })
+
+  it('pays for a recap with every question skipped', () => {
+    // The reward is for closing the day, not for filling anything in. Gating
+    // it on typing would turn self-care into a form.
+    const state = awardMoonlight(
+      createInitialState('Quiet', 'Quiet Garden'),
+      '2026-09-08',
+      {},
+      evening,
+    )
+
+    expect(state.stardust).toBe(MOONLIGHT_STARDUST_REWARD)
+    expect(recapForDate(state, '2026-09-08')).toMatchObject({
+      wentWell: '',
+      settingDown: '',
+      forTomorrow: '',
+    })
+    expect(recapForDate(state, '2026-09-08')?.level).toBeUndefined()
+  })
+
+  it('pays a day on which no Sunlight was earned', () => {
+    const state = awardMoonlight(
+      createInitialState('Hard', 'Hard Garden'),
+      '2026-09-08',
+      {},
+      evening,
+    )
+
+    expect(state.sunlight).toHaveLength(0)
+    expect(state.stardust).toBe(MOONLIGHT_STARDUST_REWARD)
+  })
+
+  it('refuses a second collection for the same day', () => {
+    const once = awardMoonlight(
+      createInitialState('Twice', 'Twice Garden'),
+      '2026-09-08',
+      { wentWell: 'A first attempt.' },
+      evening,
+    )
+    const twice = awardMoonlight(
+      once,
+      '2026-09-08',
+      { wentWell: 'A second attempt.' },
+      new Date(2026, 8, 8, 22),
+    )
+
+    expect(twice.stardust).toBe(MOONLIGHT_STARDUST_REWARD)
+    expect(twice.moonlight).toHaveLength(1)
+    expect(twice.recaps).toHaveLength(1)
+    expect(recapForDate(twice, '2026-09-08')?.wentWell).toBe('A first attempt.')
+  })
+
+  it('does not pay again after the recap is deleted', () => {
+    // The ledger, not the recap, decides whether a night has paid out. A
+    // gardener who dislikes what they wrote can rewrite it for nothing.
+    const collected = awardMoonlight(
+      createInitialState('Redo', 'Redo Garden'),
+      '2026-09-08',
+      { wentWell: 'Something I would rather not keep.' },
+      evening,
+    )
+    const deleted = { ...collected, recaps: [] }
+    const again = awardMoonlight(deleted, '2026-09-08', {}, evening)
+
+    expect(again.stardust).toBe(MOONLIGHT_STARDUST_REWARD)
+    expect(again.recaps).toHaveLength(0)
+  })
+
+  it('leaves the Sunlight economy exactly as it found it', () => {
+    // Moonlight must not grow a plant: plant growth is what reveals eggs, and
+    // it is paced by the daily Sunlight cap. Nor may it award Sunlight, or the
+    // journal's promise that a streak means an act of care becomes false.
+    const before = createInitialState('Apart', 'Apart Garden')
+    const after = awardMoonlight(before, '2026-09-08', {}, evening)
+
+    expect(after.sunlight).toEqual(before.sunlight)
+    expect(after.plants).toEqual(before.plants)
+    expect(after.creatures).toEqual(before.creatures)
+    expect(after.nectar).toBe(before.nectar)
+    expect(after.seeds).toBe(before.seeds)
+  })
+
+  it('collects alongside a full day of Sunlight', () => {
+    let state: AppState = createInitialState('Both', 'Both Garden')
+    for (let index = 0; index < DAILY_SUNLIGHT_CAP; index += 1) {
+      state = awardSunlight(state, `activity-${index}`, evening)
+    }
+    const sunlitStardust = state.stardust
+    const collected = awardMoonlight(state, '2026-09-08', {}, evening)
+
+    expect(collected.sunlight).toHaveLength(DAILY_SUNLIGHT_CAP)
+    expect(collected.stardust).toBe(sunlitStardust + MOONLIGHT_STARDUST_REWARD)
+  })
+
+  it('closes yesterday when the grace window says so', () => {
+    // The day being closed is not always the day it is written on.
+    const afterMidnight = new Date(2026, 8, 9, 1, 15)
+    const state = awardMoonlight(
+      createInitialState('Late', 'Late Garden'),
+      '2026-09-08',
+      {},
+      afterMidnight,
+    )
+
+    expect(recapForDate(state, '2026-09-08')).toBeDefined()
+    expect(recapForDate(state, '2026-09-09')).toBeUndefined()
+    expect(state.recaps[0].createdAt).toBe(afterMidnight.toISOString())
   })
 })

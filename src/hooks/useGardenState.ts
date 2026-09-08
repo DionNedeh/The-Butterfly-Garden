@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addDaysToLocalDate, toLocalDate } from '../lib/date'
 import {
+  awardMoonlight,
   awardSunlight,
   createInitialState,
+  moonlightForDate,
   plantSeed,
   progressGarden,
+  type RecapDraft,
 } from '../lib/progression'
 import {
   purchaseFlightPattern,
@@ -38,6 +41,7 @@ import type {
   JarColorId,
   MoodEntry,
   OutfitSlot,
+  RecapEntry,
   ReflectionEntry,
 } from '../types'
 
@@ -388,6 +392,69 @@ export function useGardenState() {
       update((current) => ({
         ...current,
         reflections: current.reflections.filter((item) => item.id !== id),
+      }))
+    },
+    /**
+     * Round out a day and collect its Moonlight.
+     *
+     * `localDate` is the day being closed, which is not always today: inside
+     * the after-midnight grace window it is yesterday, and the goal planned
+     * from the tomorrow note is relative to that day rather than to the
+     * clock. Closing Tuesday at 1:15am plans for Wednesday -- the day the
+     * gardener is standing in -- not Thursday.
+     */
+    collectMoonlight: (
+      localDate: string,
+      draft: RecapDraft & { planForTomorrow?: boolean } = {},
+    ) => {
+      const now = new Date()
+      update((current) => {
+        if (moonlightForDate(current, localDate)) return current
+
+        const title = draft.forTomorrow?.trim() ?? ''
+        const plannedGoal: Goal | undefined =
+          draft.planForTomorrow && title
+            ? {
+                id: createId(),
+                title,
+                schedule: 'once',
+                weekdays: [],
+                createdDate: toLocalDate(now),
+                archived: false,
+                scheduledDate: addDaysToLocalDate(localDate, 1),
+              }
+            : undefined
+
+        const collected = awardMoonlight(
+          current,
+          localDate,
+          { ...draft, plannedGoalId: plannedGoal?.id },
+          now,
+        )
+        return plannedGoal
+          ? { ...collected, goals: [...collected.goals, plannedGoal] }
+          : collected
+      })
+    },
+    updateRecap: (entry: RecapEntry) => {
+      update((current) => ({
+        ...current,
+        recaps: current.recaps.map((item) =>
+          item.id === entry.id
+            ? { ...entry, updatedAt: new Date().toISOString() }
+            : item,
+        ),
+      }))
+    },
+    /**
+     * Delete a recap. The `moonlight` ledger is deliberately untouched: the
+     * night has been collected, and rewriting what was said about it must not
+     * pay out again.
+     */
+    deleteRecap: (id: string) => {
+      update((current) => ({
+        ...current,
+        recaps: current.recaps.filter((item) => item.id !== id),
       }))
     },
     plant: (plantId: string) => {
