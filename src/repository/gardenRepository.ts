@@ -809,7 +809,34 @@ export const gardenRepository = {
     const candidate = complete ? assembleGarden(meta, collections) : undefined
     const migrated = candidate ? migrateState(candidate) : undefined
     if (migrated) {
-      persisted = migrated
+      const behind =
+        typeof storedVersion === 'number' &&
+        storedVersion < CURRENT_STATE_VERSION
+      if (!behind) {
+        persisted = migrated
+        return { status: 'loaded', state: migrated }
+      }
+
+      // This garden was read by tolerating collections that did not exist at
+      // the version it was stored under. That tolerance is anchored to the
+      // stored version, so the whole garden has to be brought up to date in
+      // one transaction now.
+      //
+      // Writing only what changes is otherwise the rule, and it would break
+      // this: the next write to touch meta alone -- earning a single Nectar
+      // would do it -- raises the stored version to 5 while leaving those
+      // collections unwritten. The record then claims a version at which
+      // their absence is a hole rather than a fact, and the launch after that
+      // withholds the garden.
+      try {
+        await writeAllParts(db, migrated)
+        persisted = migrated
+      } catch {
+        // The stored record is untouched and still readable by the same rule,
+        // so the next launch tries again. Leaving the baseline unset means the
+        // next write covers every part rather than raising the version alone.
+        persisted = undefined
+      }
       return { status: 'loaded', state: migrated }
     }
 

@@ -631,6 +631,45 @@ describe('moving a pre-split garden across', () => {
     })
     // Nothing was treated as damaged, so nothing was quarantined.
     expect(await gardenRepository.quarantined()).toHaveLength(0)
+
+    // Reading it also brought the stored layout up to date, so the record no
+    // longer relies on being read at the older version.
+    expect(await readStore('meta')).toMatchObject({ version: 5 })
+    expect(await readStore('recaps')).toEqual([])
+    expect(await readStore('moonlight')).toEqual([])
+  })
+
+  it('does not strand a migrated garden the next time meta alone changes', async () => {
+    // The stored version is what makes an absent collection provably empty.
+    // If a later write raised meta to 5 while leaving the collection unwritten
+    // -- earning a single Nectar would do it -- the garden would then be a
+    // version-5 record with a hole, and the next launch would withhold it.
+    await gardenRepository.save(createInitialState('Drift', 'Drift Garden'))
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      const tx = db.transaction(['meta', 'recaps', 'moonlight'], 'readwrite')
+      await Promise.all([
+        tx.objectStore('meta').put({ ...meta, version: 4 }, 'current'),
+        tx.objectStore('recaps').delete('current'),
+        tx.objectStore('moonlight').delete('current'),
+        tx.done,
+      ])
+    } finally {
+      db.close()
+    }
+
+    const migrated = await gardenRepository.load()
+    expect(migrated.status).toBe('loaded')
+
+    // Something that touches only meta, exactly as earning Nectar would.
+    await gardenRepository.save({ ...migrated.state, nectar: 99 })
+
+    await expect(gardenRepository.load()).resolves.toMatchObject({
+      status: 'loaded',
+      state: { nectar: 99 },
+    })
+    expect(await gardenRepository.quarantined()).toHaveLength(0)
   })
 
   it('still withholds a version-5 garden whose recaps are missing', async () => {
