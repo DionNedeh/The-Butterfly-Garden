@@ -18,6 +18,7 @@ import {
   purchaseJar,
   removeJarPlacement,
 } from '../lib/jars'
+import { availableBackdropIds } from '../lib/appearance'
 import { performCare } from '../lib/lifecycle'
 import {
   equipOutfitItem,
@@ -513,7 +514,11 @@ export function useGardenState() {
       update((current) => {
         const progressed = progressGarden(current)
         const profile = progressed.profile
-        if (!profile?.unlockedBackdropIds?.includes(backdropId)) return progressed
+        // Availability, not stored unlocks: a pass scene is choosable while
+        // access holds without ever being written into the permanent list.
+        if (!profile || !availableBackdropIds(profile).includes(backdropId)) {
+          return progressed
+        }
         return {
           ...progressed,
           profile: { ...profile, selectedBackdropId: backdropId },

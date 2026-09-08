@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import {
+  backdropUnlockDays,
   daysUntilBackdrop,
   gardenBackdrops,
   unlockedBackdropIds,
@@ -234,7 +235,7 @@ export function SettingsView({
               (profile?.selectedBackdropId ?? 'sunlit-meadow') === backdrop.id
             const remaining = profile
               ? daysUntilBackdrop(profile, backdrop.id)
-              : backdrop.unlockDays
+              : backdropUnlockDays(backdrop)
             return (
               <button
                 className={`backdrop-choice backdrop-preview-${backdrop.id} ${selected ? 'selected' : ''}`}
