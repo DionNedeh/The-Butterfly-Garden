@@ -1,11 +1,20 @@
 import { getShopItem } from '../data/shopItems'
 import { balanceFor } from './currency'
+import {
+  canWearItem,
+  hasGardenPassFeature,
+  type GardenPassProvider,
+} from './gardenPass'
 import type { AppState, CreatureInstance, OutfitSlot } from '../types'
 
 /**
  * Buy a shop item. Supplies stack in the inventory; cosmetics are one-time
- * purchases added to the shared closet. Garden Pass exclusives cannot be
- * bought yet.
+ * purchases added to the shared closet.
+ *
+ * Pass items are still rejected here, and deliberately so: they are reached
+ * through pass access, not bought for nothing. Routing a zero-cost pass item
+ * through this function would add it to `ownedItemIds` and turn a grant that
+ * should end with the pass into permanent ownership.
  */
 export function purchaseShopItem(state: AppState, itemId: string): AppState {
   const item = getShopItem(itemId)
@@ -37,11 +46,17 @@ export function purchaseShopItem(state: AppState, itemId: string): AppState {
   }
 }
 
-/** Equip an owned cosmetic on a creature, if the item fits its stage. */
+/**
+ * Equip a cosmetic on a creature, if it fits the stage and is available.
+ *
+ * "Available" means owned outright for ordinary items, or covered by pass
+ * access for pass items -- the same question the shop and the sprite ask.
+ */
 export function equipOutfitItem(
   state: AppState,
   creatureId: string,
   itemId: string,
+  provider?: GardenPassProvider | null,
 ): AppState {
   const item = getShopItem(itemId)
   const creature = state.creatures.find((entry) => entry.id === creatureId)
@@ -50,7 +65,7 @@ export function equipOutfitItem(
     !creature ||
     item.kind !== 'cosmetic' ||
     !item.slot ||
-    !state.ownedItemIds.includes(itemId) ||
+    !canWearItem(state.ownedItemIds, item, provider) ||
     !(item.stages ?? []).includes(creature.stage)
   ) {
     return state
@@ -81,14 +96,24 @@ export function unequipOutfitSlot(
   }
 }
 
-/** Items equipped in slots that no longer fit the stage are hidden, not lost. */
+/**
+ * What a creature is actually wearing right now.
+ *
+ * Items that no longer fit the stage are hidden, not lost, and pass items are
+ * hidden the same way when access is unavailable. In both cases the saved slot
+ * is untouched: losing access must not quietly undress a companion and throw
+ * away a choice the gardener made, and restoring access brings the outfit
+ * straight back.
+ */
 export function visibleOutfitFor(
   creature: CreatureInstance,
+  passCosmeticsAllowed = hasGardenPassFeature('pass-cosmetics'),
 ): Partial<Record<OutfitSlot, string>> {
   const result: Partial<Record<OutfitSlot, string>> = {}
   for (const [slot, itemId] of Object.entries(creature.outfit)) {
     if (!itemId) continue
     const item = getShopItem(itemId)
+    if (item?.premium && !passCosmeticsAllowed) continue
     if (item?.stages?.includes(creature.stage)) {
       result[slot as OutfitSlot] = itemId
     }
@@ -99,9 +124,10 @@ export function visibleOutfitFor(
 export function visibleOutfit(
   state: AppState,
   creatureId: string,
+  passCosmeticsAllowed?: boolean,
 ): Partial<Record<OutfitSlot, string>> {
   const creature = state.creatures.find((entry) => entry.id === creatureId)
-  return creature ? visibleOutfitFor(creature) : {}
+  return creature ? visibleOutfitFor(creature, passCosmeticsAllowed) : {}
 }
 
 /**
@@ -114,10 +140,11 @@ export function visibleOutfit(
  */
 export function visibleOutfits(
   creatures: readonly CreatureInstance[],
+  passCosmeticsAllowed = hasGardenPassFeature('pass-cosmetics'),
 ): Map<string, Partial<Record<OutfitSlot, string>>> {
   const outfits = new Map<string, Partial<Record<OutfitSlot, string>>>()
   for (const creature of creatures) {
-    outfits.set(creature.id, visibleOutfitFor(creature))
+    outfits.set(creature.id, visibleOutfitFor(creature, passCosmeticsAllowed))
   }
   return outfits
 }

@@ -86,7 +86,10 @@ describe('content catalogs', () => {
     expect(broken.map((item) => item.id)).toEqual([])
   })
 
-  it('keeps Garden Pass exclusives out of reach and everything else buyable', () => {
+  it('prices ordinary items and leaves Garden Pass content unpriced', () => {
+    // Pass content is reached through pass access, never bought, so giving it
+    // a price would imply a purchase that does not exist. Ordinary items must
+    // cost something, or they are not really shop items.
     for (const item of shopItems) {
       if (item.premium) {
         expect(`${item.id}: ${item.cost}`).toBe(`${item.id}: 0`)
