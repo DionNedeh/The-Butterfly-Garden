@@ -68,6 +68,30 @@ describe('flight motion generation', () => {
     }
   })
 
+  it('closes heading and bank too, for every creature', () => {
+    // Matching x and y is not enough. The last keyframe is the first one
+    // again, so a heading that disagrees is a mirror flip and an inverted
+    // bank on every lap -- which happened on about one track in forty before
+    // the heading was settled ahead of emitting.
+    let checked = 0
+    for (let index = 0; index < 60; index += 1) {
+      for (const pattern of flightPatterns) {
+        const generated = track({
+          creatureId: `creature-${index}`,
+          patternId: pattern.id,
+        })
+        const first = generated.keyframes[0]
+        const last = generated.keyframes[generated.keyframes.length - 1]
+        expect(`${pattern.id}/${index}: ${last.facing}`).toBe(
+          `${pattern.id}/${index}: ${first.facing}`,
+        )
+        expect(last.bank).toBe(first.bank)
+        checked += 1
+      }
+    }
+    expect(checked).toBe(60 * flightPatterns.length)
+  })
+
   it('advances offsets without repeating or exceeding the loop', () => {
     const generated = track({ patternId: 'clover-meander' })
     const offsets = generated.keyframes.map((frame) => frame.offset)

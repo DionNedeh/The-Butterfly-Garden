@@ -394,8 +394,30 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
   const scenePoints = raw.map(toScene)
   const offsets = hoverOffsets(motion, samples)
 
-  const keyframes: FlightKeyframe[] = []
+  const facingAt = (index: number) => {
+    const point = scenePoints[index % samples]
+    const next = scenePoints[(index + 1) % samples]
+    return next.x - point.x
+  }
+
+  // Settle the heading before emitting anything.
+  //
+  // Facing carries over between keyframes so a sprite hovering near a turn
+  // does not flicker, which means the value at any point depends on where the
+  // walk started. Starting from a seed left the first and last keyframes
+  // disagreeing on roughly one track in forty -- and since the last keyframe
+  // is the first one again, that is a mirror flip and an inverted bank on
+  // every lap. One warm-up pass reaches the steady state the loop settles
+  // into, so the emitted walk begins where it will end.
   let facing: 1 | -1 = drawFacing < 0.5 ? 1 : -1
+  for (let index = 0; index < samples; index += 1) {
+    const dx = facingAt(index)
+    if (Math.abs(dx) > FACING_HYSTERESIS * usableWidth) {
+      facing = dx >= 0 ? 1 : -1
+    }
+  }
+
+  const keyframes: FlightKeyframe[] = []
   for (let index = 0; index <= samples; index += 1) {
     // The final keyframe repeats the first, which is what closes the loop.
     const point = scenePoints[index % samples]

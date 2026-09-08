@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import {
+  availableBackdropIds,
   backdropUnlockDays,
   daysUntilBackdrop,
   gardenBackdrops,
-  unlockedBackdropIds,
 } from '../lib/appearance'
 import {
   ambientTracks,
@@ -122,7 +122,9 @@ export function SettingsView({
     if (result.ok) setRestoreStep(false)
   }
   const profile = state.profile
-  const unlockedBackdrops = profile ? unlockedBackdropIds(profile) : []
+  // Availability rather than earned unlocks: a Garden Pass scene is choosable
+  // while access holds, and is never recorded as permanently earned.
+  const unlockedBackdrops = profile ? availableBackdropIds(profile) : []
   const nameNote = noteForName(name)
 
   return (

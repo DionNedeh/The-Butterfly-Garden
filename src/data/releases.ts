@@ -42,26 +42,18 @@ export const releases: ReleaseNote[] = [
         title: 'Flight',
         items: [
           'Six more flight patterns to choose between: Clover Meander, Breeze Glide, Blossom Bounce, Ribbon Loop, Moonbeam Float and Canopy Dance.',
-          'Flight paths are generated from a shared motion description, so every butterfly keeps to a smooth closed loop and no longer flattens as it turns.',
-        ],
-      },
-      {
-        title: 'Your garden, your image',
-        items: [
-          'Keep up to three of your own photographs as garden backdrops, framed how you like.',
-          'Images stay on your device and are included in your backup along with everything else.',
         ],
       },
       {
         title: 'Garden Pass preview',
         items: [
-          'Garden Pass features are included free in this release so you can try them. No subscription or payment is active.',
+          'Garden Pass outfits are included free in this release so you can try them. No subscription or payment is active.',
         ],
       },
       {
         title: 'Smaller things',
         items: [
-          'The garden now counts species welcomed rather than butterflies, so two of the same species read as one.',
+          'The garden counts species welcomed rather than butterflies, so two of the same species read as one.',
         ],
       },
     ],

@@ -290,6 +290,22 @@ export function isValidCustomBackdropCollection(value: unknown): boolean {
   return ids.size === value.length
 }
 
+/**
+ * Why a record cannot be saved, if it cannot.
+ *
+ * `putCustomBackdrop` returns the state untouched when a record is invalid,
+ * which is indistinguishable from a save that worked. Callers that need to
+ * tell a gardener what went wrong should ask here first rather than inferring
+ * failure from a state that did not change.
+ */
+export function checkCustomBackdropRecord(
+  record: unknown,
+): CustomBackdropCheck {
+  return isValidCustomBackdrop(record)
+    ? OK
+    : reject('invalid', 'That image could not be saved. Try choosing it again.')
+}
+
 export function canAddCustomBackdrop(
   state: Pick<AppState, 'customBackdrops'>,
 ): CustomBackdropCheck {

@@ -2070,6 +2070,7 @@
   30%, 38% { translate: 92px 34px; }
   58% { translate: 168px 20px; }
   74%, 80% { translate: 236px 32px; }
+  100% { translate: 0 26px; }
 }
 @keyframes preview-glide {
   0%, 100% { translate: 0 14px; }
@@ -2081,21 +2082,22 @@
   40%, 50% { translate: 142px 34px; }
   64% { translate: 208px 8px; }
   80%, 90% { translate: 256px 32px; }
+  100% { translate: 0 34px; }
 }
 @keyframes preview-ribbon {
-  0% { translate: 0 20px; }
+  0%, 100% { translate: 0 20px; }
   25% { translate: 118px -6px; }
   50% { translate: 244px 24px; }
   75% { translate: 126px 44px; }
 }
 @keyframes preview-moonbeam {
-  0% { translate: 0 30px; }
+  0%, 100% { translate: 0 30px; }
   22%, 40% { translate: 96px -10px; }
   62% { translate: 186px 30px; }
   82% { translate: 250px 2px; }
 }
 @keyframes preview-canopy {
-  0% { translate: 0 0; }
+  0%, 100% { translate: 0 0; }
   28% { translate: 104px -12px; }
   48%, 56% { translate: 190px 38px; }
   78% { translate: 252px -4px; }

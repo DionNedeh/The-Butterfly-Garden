@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { shopItems } from '../data/shopItems'
 import { createInitialState } from '../lib/progression'
 import type { AppState } from '../types'
 import { CareView } from './CareView'
@@ -92,3 +93,50 @@ describe('CareView', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('Garden Pass outfits in the wardrobe', () => {
+  const passItem = shopItems.find(
+    (item) => item.premium && item.kind === 'cosmetic' && item.slot === 'headwear',
+  )
+
+  it('offers a pass outfit that was never bought', () => {
+    // Pass cosmetics are deliberately never written into ownedItemIds, so a
+    // wardrobe filtered on ownership alone made them permanently unreachable
+    // while the preview notice said they were included.
+    if (!passItem) throw new Error('Expected a pass headwear item')
+    const base = createInitialState('Tester', 'Test Garden')
+    const stage = passItem.stages?.[0] ?? 'butterfly'
+    const state: AppState = {
+      ...base,
+      ownedItemIds: [],
+      creatures: [{ ...base.creatures[0], stage }],
+      profile: { ...base.profile!, activeCompanionId: base.creatures[0].id },
+    }
+
+    renderCare(state)
+    expect(
+      screen.getByRole('button', { name: new RegExp(passItem.name, 'i') }),
+    ).toBeInTheDocument()
+  })
+
+  it('still hides an ordinary cosmetic nobody owns', () => {
+    const ordinary = shopItems.find(
+      (item) => !item.premium && item.kind === 'cosmetic' && item.slot === 'headwear',
+    )
+    if (!ordinary) throw new Error('Expected an ordinary headwear item')
+    const base = createInitialState('Tester', 'Test Garden')
+    const stage = ordinary.stages?.[0] ?? 'butterfly'
+    const state: AppState = {
+      ...base,
+      ownedItemIds: [],
+      creatures: [{ ...base.creatures[0], stage }],
+      profile: { ...base.profile!, activeCompanionId: base.creatures[0].id },
+    }
+
+    renderCare(state)
+    expect(
+      screen.queryByRole('button', { name: new RegExp(ordinary.name, 'i') }),
+    ).not.toBeInTheDocument()
+  })
+})
+

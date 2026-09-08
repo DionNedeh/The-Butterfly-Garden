@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { careActionsForStage } from '../data/careActions'
 import { getShopItem, outfitSlots, shopItems } from '../data/shopItems'
+import { canWearItem } from '../lib/gardenPass'
 import { species } from '../data/content'
 import {
   actionDoneToday,
@@ -330,8 +331,11 @@ export function CareView({
               (item) =>
                 item.kind === 'cosmetic' &&
                 item.slot === slot.id &&
-                !item.premium &&
-                state.ownedItemIds.includes(item.id) &&
+                // Ordinary items need ownership; Garden Pass items need
+                // access. Filtering on ownership alone made pass cosmetics
+                // permanently unreachable, since they are deliberately never
+                // written into ownedItemIds.
+                canWearItem(state.ownedItemIds, item) &&
                 (item.stages ?? []).includes(selected.stage),
             )
             return (

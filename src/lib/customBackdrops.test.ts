@@ -4,6 +4,7 @@ import {
   CUSTOM_BACKDROP_SLOTS,
   activeCustomBackdrop,
   canAddCustomBackdrop,
+  checkCustomBackdropRecord,
   checkDecodedSize,
   checkSourceFile,
   clampCrop,
@@ -285,6 +286,16 @@ describe('keeping images and the selection together', () => {
     // Access withheld: the record stays, but nothing custom is drawn.
     expect(activeCustomBackdrop(saved, false)).toBeUndefined()
     expect(saved.customBackdrops).toHaveLength(1)
+  })
+
+  it('says why a record cannot be saved', () => {
+    // Saving returns the state untouched when a record is invalid, which on
+    // its own is indistinguishable from a save that worked.
+    expect(checkCustomBackdropRecord(image()).ok).toBe(true)
+    const bad = checkCustomBackdropRecord(image({ imageData: 'not base64!' }))
+    expect(bad.ok).toBe(false)
+    expect(bad.reason).toBe('invalid')
+    expect(bad.message).toBeTruthy()
   })
 
   it('resolves nothing for a dangling reference', () => {
