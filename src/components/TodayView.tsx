@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
-import { reflectionPrompts, suggestedGoals } from '../data/content'
+import { moodLevels, reflectionPrompts, suggestedGoals } from '../data/content'
 import {
   completionKey,
   formatJournalDate,
+  formatWeekday,
   getDailyPromptIndex,
   isGoalDue,
   isGoalSkipped,
   retiredOnceGoalIds,
+  type RecapWindow,
 } from '../lib/date'
 import {
   DAILY_SEED_REWARD,
@@ -17,14 +19,6 @@ import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import type { AppState, Goal, GoalSchedule, MoodEntry } from '../types'
 import { Icon } from './Icons'
 import { MonthPlanner } from './MonthPlanner'
-
-const moods: Array<{ level: MoodEntry['level']; name: string; weather: string }> = [
-  { level: 1, name: 'Stormy', weather: 'Heavy clouds' },
-  { level: 2, name: 'Rainy', weather: 'Gentle rain' },
-  { level: 3, name: 'Overcast', weather: 'Soft gray sky' },
-  { level: 4, name: 'Bright', weather: 'Sun through leaves' },
-  { level: 5, name: 'Radiant', weather: 'Clear warm light' },
-]
 
 export function TodayView({
   state,
@@ -40,6 +34,9 @@ export function TodayView({
   onWakeGoal,
   onPlanGoal,
   onSetGoalArchived,
+  recap,
+  moonlightCollected,
+  onOpenRecap,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -55,6 +52,10 @@ export function TodayView({
   onWakeGoal: (goalId: string) => void
   onPlanGoal: (title: string, scheduledDate: string) => void
   onSetGoalArchived: (goalId: string, archived: boolean) => void
+  /** Undefined when the recap is not on offer at all, as in a read-only garden. */
+  recap?: RecapWindow
+  moonlightCollected: boolean
+  onOpenRecap: () => void
 }) {
   const existingMood = state.moods.find((entry) => entry.localDate === today)
   const existingReflection = state.reflections.find(
@@ -135,11 +136,46 @@ export function TodayView({
           : `Your first Sunlight today also adds ${DAILY_SEED_REWARD} seed to your tray.`}
       </p>
 
+      {recap && (
+        <section
+          className={`card moonlight-card ${recap.open ? 'open' : 'waiting'}`}
+          aria-labelledby="moonlight-title"
+        >
+          <div>
+            <p className="eyebrow">
+              <Icon name="moon" size={18} />
+              Moonlight
+            </p>
+            <h2 id="moonlight-title">
+              {moonlightCollected
+                ? 'The day is rounded out.'
+                : !recap.open
+                  ? 'Moonlight opens this evening.'
+                  : recap.state === 'grace' && recap.targetDate
+                    ? `Round out ${formatWeekday(recap.targetDate)}`
+                    : 'Round out your day'}
+            </h2>
+            <p>
+              {moonlightCollected
+                ? 'Your recap is kept in the journal.'
+                : !recap.open
+                  ? 'After six, you can look back on the day and collect a Moonlight bonus.'
+                  : 'A few questions, all of them skippable, and a Moonlight bonus for closing the day.'}
+            </p>
+          </div>
+          {recap.open && !moonlightCollected && (
+            <button className="primary-button" onClick={onOpenRecap}>
+              Begin
+            </button>
+          )}
+        </section>
+      )}
+
       <section className="card" aria-labelledby="mood-title">
         <p className="eyebrow">No right answer</p>
         <h2 id="mood-title">What is your inner weather?</h2>
         <div className="mood-grid">
-          {moods.map((item) => (
+          {moodLevels.map((item) => (
             <button
               key={item.level}
               className={`mood-button ${mood === item.level ? 'selected' : ''}`}

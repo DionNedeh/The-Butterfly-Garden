@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { reflectionPrompts, species } from '../data/content'
+import { moodNames, reflectionPrompts, species } from '../data/content'
 import { formatJournalDate } from '../lib/date'
 import { useLocalDate } from '../hooks/useLocalDate'
 import { calculateSunlightStreak } from '../lib/streak'
@@ -7,7 +7,6 @@ import type { AppState, MoodEntry, ReflectionEntry } from '../types'
 import { Butterfly } from './Butterfly'
 import { Icon } from './Icons'
 
-const moodNames = ['Stormy', 'Rainy', 'Overcast', 'Bright', 'Radiant']
 
 /** The timeline grows for as long as the garden is kept, so it is paged. */
 const TIMELINE_PAGE_SIZE = 30

@@ -31,6 +31,8 @@ function renderToday(state: AppState, overrides: Record<string, unknown> = {}) {
     onWakeGoal: vi.fn(),
     onPlanGoal: vi.fn(),
     onSetGoalArchived: vi.fn(),
+    onOpenRecap: vi.fn(),
+    moonlightCollected: false,
     ...overrides,
   }
   render(<TodayView state={state} today={TODAY} {...handlers} />)
@@ -144,3 +146,58 @@ describe('TodayView goals', () => {
     expect(todayCell?.querySelector('.calendar-day-number')?.textContent).toBe('5')
   })
 })
+
+describe('the Moonlight card on Today', () => {
+  const state = () => createInitialState('Tester', 'Test Garden')
+
+  it('waits quietly before the evening rather than hiding', () => {
+    // Visible from the first day so the rhythm is learnable. A feature that
+    // does not exist until six o'clock is a feature nobody discovers.
+    renderToday(state(), { recap: { open: false, state: 'waiting' } })
+
+    expect(screen.getByText('Moonlight opens this evening.')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Begin' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers the recap once the evening arrives', async () => {
+    const handlers = renderToday(state(), {
+      recap: { open: true, targetDate: TODAY, state: 'evening' },
+    })
+
+    expect(screen.getByText('Round out your day')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Begin' }))
+    expect(handlers.onOpenRecap).toHaveBeenCalled()
+  })
+
+  it('names the day it would close inside the grace window', () => {
+    // 2026-09-04 is a Friday. After midnight the card has to say which day it
+    // is rounding out, or collecting feels like it landed on the wrong one.
+    renderToday(state(), {
+      recap: { open: true, targetDate: YESTERDAY, state: 'grace' },
+    })
+
+    expect(screen.getByText('Round out Friday')).toBeInTheDocument()
+  })
+
+  it('stops offering once the night has been collected', () => {
+    renderToday(state(), {
+      recap: { open: true, targetDate: TODAY, state: 'evening' },
+      moonlightCollected: true,
+    })
+
+    expect(screen.getByText('The day is rounded out.')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Begin' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('says nothing at all when the garden cannot be saved', () => {
+    // A bonus that silently fails to persist is worse than one never offered.
+    renderToday(state(), { recap: undefined })
+
+    expect(screen.queryByText('Moonlight')).not.toBeInTheDocument()
+  })
+})
+

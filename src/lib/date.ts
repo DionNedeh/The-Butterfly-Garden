@@ -115,6 +115,13 @@ export function formatJournalDate(localDate: string): string {
   return journalDateFormat.format(localDateToNoon(localDate))
 }
 
+const weekdayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long' })
+
+/** Just the weekday, for naming the day a recap is closing out. */
+export function formatWeekday(localDate: string): string {
+  return weekdayFormat.format(localDateToNoon(localDate))
+}
+
 export function getDailyPromptIndex(localDate: string, count: number): number {
   const [year, month, day] = localDate.split('-').map(Number)
   const stableDay = Math.floor(Date.UTC(year, month - 1, day) / 86_400_000)
