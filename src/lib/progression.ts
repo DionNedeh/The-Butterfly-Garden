@@ -28,13 +28,14 @@ export const MOONLIGHT_STARDUST_REWARD = 1
 
 export function createEmptyState(): AppState {
   return {
-    version: 5,
+    version: 6,
     goals: [],
     completions: [],
     moods: [],
     reflections: [],
     recaps: [],
     moonlight: [],
+    customBackdrops: [],
     plants: [],
     creatures: [],
     sunlight: [],

@@ -19,6 +19,11 @@ import {
   removeJarPlacement,
 } from '../lib/jars'
 import { availableBackdropIds } from '../lib/appearance'
+import {
+  putCustomBackdrop,
+  removeCustomBackdrop,
+  selectCustomBackdrop as selectCustomBackdropIn,
+} from '../lib/customBackdrops'
 import { performCare } from '../lib/lifecycle'
 import {
   equipOutfitItem,
@@ -36,6 +41,7 @@ import { createId } from '../lib/id'
 import type {
   AmbientTrackId,
   AppState,
+  CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
   Goal,
@@ -521,7 +527,42 @@ export function useGardenState() {
         }
         return {
           ...progressed,
-          profile: { ...profile, selectedBackdropId: backdropId },
+          profile: {
+            ...profile,
+            selectedBackdropId: backdropId,
+            // Choosing a built-in scene is a choice to stop showing the
+            // gardener's own image. The image itself is kept.
+            selectedCustomBackdropId: undefined,
+          },
+        }
+      })
+    },
+    /**
+     * Save one of the gardener's own images and show it.
+     *
+     * The record and the reference to it move in a single update, so the
+     * garden is never observed pointing at an image that is not there. It goes
+     * through the hook's ordinary update path rather than writing to the
+     * repository directly, which would race the save effect that owns
+     * persistence.
+     */
+    saveCustomBackdrop: (record: CustomBackdrop) => {
+      update((current) => putCustomBackdrop(current, record))
+    },
+    deleteCustomBackdrop: (id: string) => {
+      update((current) => removeCustomBackdrop(current, id))
+    },
+    selectCustomBackdrop: (id: string | undefined) => {
+      update((current) => selectCustomBackdropIn(current, id))
+    },
+    /** Remember which release notes have been read. */
+    markReleaseSeen: (releaseId: string) => {
+      update((current) => {
+        if (!current.profile) return current
+        if (current.profile.lastSeenReleaseId === releaseId) return current
+        return {
+          ...current,
+          profile: { ...current.profile, lastSeenReleaseId: releaseId },
         }
       })
     },

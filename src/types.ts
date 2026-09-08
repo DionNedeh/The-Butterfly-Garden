@@ -94,6 +94,57 @@ export interface Profile {
   theme?: AppearanceTheme
   selectedBackdropId?: GardenBackdropId
   unlockedBackdropIds?: GardenBackdropId[]
+  /**
+   * A gardener's own image, when one is chosen. Takes precedence over
+   * `selectedBackdropId` while the record exists and access allows it; the
+   * built-in selection stays underneath as the fallback.
+   */
+  selectedCustomBackdropId?: string
+  /** The newest release notes this gardener has already seen. */
+  lastSeenReleaseId?: string
+}
+
+/** Image formats a garden image may be stored as. */
+export type CustomBackdropMimeType = 'image/jpeg' | 'image/png' | 'image/webp'
+
+/**
+ * How a stored image is framed, as normalised focal coordinates.
+ *
+ * Kept instead of a cropped copy so the cover framing can be recalculated for
+ * a phone and a desktop from the same picture. Cropping destructively would
+ * mean one of the two shapes always looked wrong.
+ */
+export interface CustomBackdropCrop {
+  /** Focal point across the image, 0..1. */
+  x: number
+  /** Focal point down the image, 0..1. */
+  y: number
+  /** 1 fits the frame; up to 3 magnifies about the focal point. */
+  zoom: number
+}
+
+/**
+ * One of a small number of images a gardener has added from their device.
+ *
+ * The processed image is stored, not the original file: it is resized, has its
+ * metadata stripped by re-encoding, and is bounded in bytes. A backup carries
+ * exactly this, which is why the interface must not claim to keep the original.
+ */
+export interface CustomBackdrop {
+  id: string
+  /** Plain text, entered by the gardener. */
+  name: string
+  createdAt: string
+  updatedAt: string
+  mimeType: CustomBackdropMimeType
+  /** Pixel dimensions of the stored image, after resizing. */
+  width: number
+  height: number
+  /** Decoded size of `imageData`, so a quota check needs no decode. */
+  byteLength: number
+  /** Base64, without a data-URL prefix. */
+  imageData: string
+  crop: CustomBackdropCrop
 }
 
 export interface Goal {
@@ -221,7 +272,7 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  version: 5
+  version: 6
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -229,6 +280,8 @@ export interface AppState {
   reflections: ReflectionEntry[]
   recaps: RecapEntry[]
   moonlight: MoonlightAward[]
+  /** At most CUSTOM_BACKDROP_SLOTS images the gardener added themselves. */
+  customBackdrops: CustomBackdrop[]
   plants: PlantInstance[]
   creatures: CreatureInstance[]
   sunlight: SunlightAward[]

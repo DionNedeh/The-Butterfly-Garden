@@ -4,12 +4,13 @@ import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarCharacters, jarColors } from '../data/jars'
 import { DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
+import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import type { AmbientTrackId, AppState } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
-export const CURRENT_STATE_VERSION = 5
-const READABLE_STATE_VERSIONS = new Set([1, 2, 3, 4, 5])
+export const CURRENT_STATE_VERSION = 6
+const READABLE_STATE_VERSIONS = new Set([1, 2, 3, 4, 5, 6])
 
 export interface QuarantineRecord {
   id: string
@@ -51,6 +52,7 @@ export const COLLECTION_STORES = {
   reflections: 'reflections',
   recaps: 'recaps',
   moonlight: 'moonlight',
+  customBackdrops: 'customBackdrops',
   plants: 'plants',
   creatures: 'creatures',
   sunlight: 'sunlight',
@@ -82,6 +84,7 @@ export const COLLECTION_SINCE_VERSION: Partial<
 > = {
   recaps: 5,
   moonlight: 5,
+  customBackdrops: 6,
 }
 
 /**
@@ -218,6 +221,10 @@ interface GardenDatabase extends DBSchema {
     key: 'current'
     value: AppState['moonlight']
   }
+  customBackdrops: {
+    key: 'current'
+    value: AppState['customBackdrops']
+  }
   plants: {
     key: 'current'
     value: AppState['plants']
@@ -270,7 +277,7 @@ const DATABASE_NAME = 'butterfly-garden'
  * is that an older build now withholds a version-5 garden, which is the
  * quarantine contract working rather than a regression.
  */
-export const DATABASE_VERSION = 4
+export const DATABASE_VERSION = 5
 let databasePromise: Promise<IDBPDatabase<GardenDatabase>> | undefined
 
 /**
@@ -613,6 +620,25 @@ function migrateState(value: unknown): AppState | undefined {
         },
       )
     : []
+  /**
+   * Images are refused outright when malformed, rather than filtered like the
+   * other collections.
+   *
+   * Everything else here can be re-earned or re-written. A gardener's own
+   * photographs cannot, and this build is the only thing standing between a
+   * damaged file and a restore that reports success while having quietly
+   * dropped them. Refusing sends it down the withheld path instead, which
+   * leaves the stored garden untouched and says so.
+   */
+  const storedCustomBackdrops = candidate.customBackdrops
+  if (
+    storedCustomBackdrops !== undefined &&
+    !isValidCustomBackdropCollection(storedCustomBackdrops)
+  ) {
+    return undefined
+  }
+  const customBackdrops = (storedCustomBackdrops ??
+    []) as AppState['customBackdrops']
   const candidateProfile =
     candidate.profile && typeof candidate.profile === 'object'
       ? (candidate.profile as Record<string, unknown>)
@@ -624,7 +650,7 @@ function migrateState(value: unknown): AppState | undefined {
       : DEFAULT_AMBIENT_TRACK_ID
   return {
     ...(candidate as unknown as AppState),
-    version: 5,
+    version: 6,
     profile: candidateProfile
       ? {
           ...(candidateProfile as unknown as NonNullable<AppState['profile']>),
@@ -636,6 +662,7 @@ function migrateState(value: unknown): AppState | undefined {
     // tolerated rather than required the way `moods` is above.
     recaps: migrateRecaps(candidate.recaps),
     moonlight: migrateMoonlight(candidate.moonlight),
+    customBackdrops,
     nectar: typeof candidate.nectar === 'number' ? candidate.nectar : 0,
     stardust: typeof candidate.stardust === 'number' ? candidate.stardust : 0,
     inventory:
