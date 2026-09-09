@@ -1020,8 +1020,18 @@
   cursor: pointer;
 }
 
+/* Plants overlap, and the slot is narrower than the sprite, so a ring drawn
+   on the slot would sit inside the flower and behind the next plant. Draw it
+   on the sprite and lift the whole plant above its neighbours. */
 .garden-plant:focus-visible,
 .garden-plant[aria-pressed='true'] {
+  outline: none;
+  box-shadow: none;
+  z-index: 1;
+}
+
+.garden-plant:focus-visible .flower-sprite,
+.garden-plant[aria-pressed='true'] .flower-sprite {
   outline: 3px solid #fff4a8;
   outline-offset: 4px;
   border-radius: 999px 999px 8px 8px;
@@ -1036,6 +1046,11 @@
   width: auto;
   height: auto;
   line-height: 0;
+  /* The slot can be narrower than the sprite (see the narrow-screen rules),
+     so centre the sprite on it rather than letting it hang off one side. */
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
 }
 
 /* The sprite communicates growth itself; scale adds gentle emphasis. */
@@ -1086,12 +1101,8 @@
   position: absolute;
   z-index: 6;
   bottom: 2px;
-  /* Centred on the plant sprite, not on the button. Small screens pin the
-     button narrower than the sprite so the row still fits, which leaves the
-     sprite overflowing to the right of the button's own 50%. The sprite
-     starts at the button's left edge either way, so half its width is the
-     plant's true centre. */
-  left: calc(var(--plant-sprite-size, 84px) / 2);
+  /* The sprite is centred on its slot, so the slot's centre is the plant's. */
+  left: 50%;
   transform: translateX(-50%) scale(0.72);
   transform-origin: bottom center;
 }
@@ -2685,10 +2696,32 @@
 
   .garden-plants {
     height: 150px;
+    /* Eight 84px sprites cannot fit side by side here, so they overlap. Span
+       the whole card and reserve half a sprite at each end, so the row's own
+       content edges land where the outer plants' centres must sit for them to
+       stay inside the card. With space-between the eight slot centres then
+       spread evenly between those points at any width.
+
+       The reservation also covers the selection ring, which is drawn outside
+       the sprite and would otherwise be clipped on the outer two plants.
+
+       The slot is narrow enough that eight always fit the row (down to a
+       280px viewport), so they never overflow and the spacing stays even.
+       Only the reservation sets the spacing; the slot width does not. */
+    --plant-slot-size: 22px;
+    --plant-ring-room: 8px;
+    left: 0;
+    right: 0;
+    padding-inline: calc(
+      (var(--plant-sprite-size, 84px) - var(--plant-slot-size)) / 2 +
+        var(--plant-ring-room)
+    );
+    justify-content: space-between;
   }
 
+  /* The sprite is centred on this slot and simply overhangs it. */
   .garden-plant {
-    width: 46px;
+    width: var(--plant-slot-size);
   }
 
   .garden-stats {

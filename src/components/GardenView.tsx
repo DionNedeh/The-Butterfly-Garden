@@ -49,11 +49,13 @@ const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
 })
 
 /**
- * Rendered width of a plant sprite in the scene. Narrow viewports pin the
- * plant button to a width smaller than this so eight plants still fit the
- * row, which leaves the sprite overflowing its button. The button's centre is
- * therefore not the plant's centre, so the jar is positioned from this width
- * instead; `--plant-sprite-size` carries it to the stylesheet.
+ * Rendered width of a plant sprite in the scene.
+ *
+ * Narrow viewports give each plant a slot far narrower than this so all eight
+ * fit the row; the sprites then overlap like a dense bed, and the row reserves
+ * half a sprite at each end so the outer two are not clipped by the card.
+ * `--plant-sprite-size` carries the width to the stylesheet, which needs it
+ * for that reservation.
  */
 const PLANT_SPRITE_SIZE = 84
 
@@ -293,7 +295,13 @@ export function GardenView({
           ))}
         </div>
 
-        <div className="garden-plants" aria-label="Plants in your garden">
+        <div
+          className="garden-plants"
+          aria-label="Plants in your garden"
+          style={
+            { '--plant-sprite-size': `${PLANT_SPRITE_SIZE}px` } as CSSProperties
+          }
+        >
           {visiblePlants.map((plant, index) => {
             const definition = plantsById.get(plant.plantId)
             const placedJar = jarForPlant(state, plant.id)
@@ -312,7 +320,6 @@ export function GardenView({
                   {
                     '--plant-color': definition?.color,
                     '--plant-delay': `${index * -0.7}s`,
-                    '--plant-sprite-size': `${PLANT_SPRITE_SIZE}px`,
                   } as CSSProperties
                 }
                 key={plant.id}
