@@ -301,7 +301,8 @@ function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
     case 'violet':
       return (
         <g>
-          {/* heart-shaped basal leaves */}
+          {/* stalks rising from the soil, then the heart-shaped basal leaves */}
+          <path d="M50 82 C50 78 49 75 48 72 M50 82 C50 78 51.5 75 53 71" stroke={foliageDark} strokeWidth="1.6" fill="none" />
           <path d="M50 72 C36 66 28 56 32 48 C36 42 46 44 50 52 C54 44 64 42 68 48 C72 56 64 66 50 72 Z" fill={foliage} stroke={foliageDark} strokeWidth="1.4" />
           {[
             { cx: 40, cy: 34, s: 1 },
@@ -323,8 +324,9 @@ function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
     case 'dogwood':
       return (
         <g>
-          {/* branching twigs */}
-          <path d="M50 74 C48 58 42 48 32 40 M50 74 C52 56 58 46 70 38 M50 74 L50 46" stroke="#7c5a30" strokeWidth="2.2" fill="none" />
+          {/* trunk into the soil, then branching twigs from the fork */}
+          <path d="M48.6 102 C48.6 92 49 84 50 76 C51 84 51.4 92 51.4 102 Z" fill="#7c5a30" />
+          <path d="M50 78 C48 60 42 48 32 40 M50 78 C52 58 58 46 70 38 M50 102 L50 46" stroke="#7c5a30" strokeWidth="2.2" fill="none" />
           {[
             { cx: 30, cy: 34, s: 1 },
             { cx: 70, cy: 32, s: 1.05 },
@@ -384,7 +386,7 @@ function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
     case 'tree':
       return (
         <g>
-          <path d="M47 96 C47 66 46 50 44 40 L56 40 C54 52 53 68 53 96 Z" fill="#8a6238" />
+          <path d="M47 102 C47 66 46 50 44 40 L56 40 C54 52 53 68 53 102 Z" fill="#8a6238" />
           <path d="M46 62 C38 56 32 50 30 44 M54 60 C62 54 68 48 70 42" stroke="#8a6238" strokeWidth="3" fill="none" />
           <circle cx="50" cy="30" r="22" fill={foliage} />
           <circle cx="32" cy="40" r="13" fill={foliageDark} opacity="0.85" />
@@ -421,7 +423,7 @@ function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
     case 'willow':
       return (
         <g>
-          <path d="M47 96 C47 66 46 52 44 42 L56 42 C54 54 53 68 53 96 Z" fill="#8a6238" />
+          <path d="M47 102 C47 66 46 52 44 42 L56 42 C54 54 53 68 53 102 Z" fill="#8a6238" />
           <circle cx="50" cy="30" r="18" fill={foliage} opacity="0.9" />
           {/* weeping strands */}
           {[-20, -13, -6, 0, 6, 13, 20].map((dx) => (
@@ -474,7 +476,7 @@ function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
       return (
         <g>
           {/* winding vine on a stake */}
-          <path d="M50 96 L50 24" stroke="#8a6238" strokeWidth="2.6" />
+          <path d="M50 102 L50 24" stroke="#8a6238" strokeWidth="2.6" />
           <path d="M50 92 C38 84 62 74 50 66 C38 58 62 48 50 40 C42 34 54 28 50 24" stroke={foliageDark} strokeWidth="2.2" fill="none" />
           {[
             [40, 80, -20],
