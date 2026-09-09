@@ -283,9 +283,10 @@ textarea:focus {
   border: 0;
   box-shadow: none;
 }
+/* Only the height is themed here; the horizontal anchor stays with the base
+   rule so the two files cannot drift out of alignment again. */
 .jar-display.plant-jar {
   bottom: -5px;
-  left: calc(50% + 12px);
 }
 .jar-display.small .jar-sprite {
   width: 32px;

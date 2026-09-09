@@ -1086,7 +1086,12 @@
   position: absolute;
   z-index: 6;
   bottom: 2px;
-  left: calc(50% + 20px);
+  /* Centred on the plant sprite, not on the button. Small screens pin the
+     button narrower than the sprite so the row still fits, which leaves the
+     sprite overflowing to the right of the button's own 50%. The sprite
+     starts at the button's left edge either way, so half its width is the
+     plant's true centre. */
+  left: calc(var(--plant-sprite-size, 84px) / 2);
   transform: translateX(-50%) scale(0.72);
   transform-origin: bottom center;
 }
