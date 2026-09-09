@@ -197,7 +197,9 @@ test('onboards, completes care, and writes a private journal entry', async ({
     name: /pet marigold, your monarch garden guide/i,
   })
   await marigold.focus()
-  await marigold.click()
+  // Butterflies never stop flying, so Playwright's stability check can never
+  // pass here; the click still lands on the element's live position.
+  await marigold.click({ force: true })
   await expect(
     page.getByText(
       /marigold, your monarch garden guide enjoyed that gentle hello/i,
@@ -1013,4 +1015,54 @@ test('flight stays full-sized through turns and respects reduced motion', async 
   const before = await traveller.getAttribute('style')
   await page.waitForTimeout(150)
   expect(await traveller.getAttribute('style')).toBe(before)
+})
+
+test('butterflies keep flying while hovered, tapped, and holding focus', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  const flyer = page.locator('.garden-flight-space .flight-traveller').first()
+  await expect
+    .poll(() => flyer.evaluate((el) => el.getAnimations().length))
+    .toBe(1)
+
+  /** Travel, facing and the CSS wing flap, for one butterfly. */
+  const flightState = () =>
+    flyer.evaluate((el) => {
+      const wing = el.querySelector('.wing')
+      return {
+        travel: el.getAnimations().map((a) => a.playState),
+        heading: (
+          el.querySelector('.flight-heading')?.getAnimations() ?? []
+        ).map((a) => a.playState),
+        wing: wing ? getComputedStyle(wing).animationPlayState : 'none',
+        paused: el.classList.contains('flight-paused'),
+      }
+    })
+
+  const stillFlying = async (moment: string) => {
+    const state = await flightState()
+    expect(state.travel, `${moment}: travel`).not.toContain('paused')
+    expect(state.heading, `${moment}: heading`).not.toContain('paused')
+    expect(state.wing, `${moment}: wing flap`).not.toBe('paused')
+    expect(state.paused, `${moment}: flight-paused class`).toBe(false)
+  }
+
+  const marigold = flyer.locator('.butterfly')
+  await stillFlying('at rest')
+
+  await marigold.hover({ force: true })
+  await stillFlying('while hovered')
+
+  // A tap pets the butterfly and leaves focus on it; neither may stop flight.
+  await marigold.click({ force: true })
+  await stillFlying('after a tap')
+
+  await page.mouse.move(4, 4)
+  await page.waitForTimeout(200)
+  await stillFlying('pointer away, still focused')
+
+  // Work nobody can see still stops: scrolling the scene out of view pauses it.
+  await mainNav(page).getByRole('button', { name: 'Guide', exact: true }).click()
+  await expect.poll(async () => (await flightState()).paused).toBe(true)
 })

@@ -27,11 +27,13 @@ export function useFlightMotion(
     const preference = matchMedia('(prefers-reduced-motion: reduce)')
     let animations: Animation[] = []
     let visible = true
-    let focused = false
-    let hovered = false
     let previousSize = ''
     const sync = () => {
-      const paused = document.hidden || !visible || focused || hovered
+      // Only stop for work nobody can see. Pointer and focus deliberately do
+      // not pause: a butterfly froze under the cursor, and a tap left it
+      // frozen until something else took focus. Motion is switched off
+      // through the reduced-motion setting, not by touching a butterfly.
+      const paused = document.hidden || !visible
       element.classList.toggle('flight-paused', paused)
       animations.forEach((animation) => {
         if (paused) animation.pause()
@@ -91,30 +93,10 @@ export function useFlightMotion(
       visible = entry.isIntersecting
       sync()
     })
-    const focus = () => {
-      focused = true
-      sync()
-    }
-    const blur = () => {
-      focused = false
-      sync()
-    }
-    const enter = () => {
-      hovered = true
-      sync()
-    }
-    const leave = () => {
-      hovered = false
-      sync()
-    }
     resize.observe(frame)
     observer.observe(frame)
     document.addEventListener('visibilitychange', sync)
     preference.addEventListener('change', create)
-    element.addEventListener('pointerenter', enter)
-    element.addEventListener('pointerleave', leave)
-    element.addEventListener('focusin', focus)
-    element.addEventListener('focusout', blur)
     create()
     return () => {
       animations.forEach((animation) => animation.cancel())
@@ -122,10 +104,6 @@ export function useFlightMotion(
       observer.disconnect()
       document.removeEventListener('visibilitychange', sync)
       preference.removeEventListener('change', create)
-      element.removeEventListener('pointerenter', enter)
-      element.removeEventListener('pointerleave', leave)
-      element.removeEventListener('focusin', focus)
-      element.removeEventListener('focusout', blur)
     }
   }, [id, pattern, index, size, reduced, preview])
   return { travel, heading }
