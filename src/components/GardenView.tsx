@@ -48,6 +48,15 @@ const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
 })
 
+/**
+ * Rendered width of a plant sprite in the scene. Narrow viewports pin the
+ * plant button to a width smaller than this so eight plants still fit the
+ * row, which leaves the sprite overflowing its button. The button's centre is
+ * therefore not the plant's centre, so the jar is positioned from this width
+ * instead; `--plant-sprite-size` carries it to the stylesheet.
+ */
+const PLANT_SPRITE_SIZE = 84
+
 function jarStyle(colorId: string): CSSProperties {
   const color = jarColorsById.get(colorId) ?? jarColors[0]
   return {
@@ -303,6 +312,7 @@ export function GardenView({
                   {
                     '--plant-color': definition?.color,
                     '--plant-delay': `${index * -0.7}s`,
+                    '--plant-sprite-size': `${PLANT_SPRITE_SIZE}px`,
                   } as CSSProperties
                 }
                 key={plant.id}
@@ -317,7 +327,7 @@ export function GardenView({
                 <FlowerSprite
                   plantId={plant.plantId}
                   growth={plant.growth}
-                  size={84}
+                  size={PLANT_SPRITE_SIZE}
                   swayDelay={index * -0.7}
                 />
                 {placedJar && (
