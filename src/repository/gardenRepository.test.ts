@@ -148,7 +148,7 @@ function fullGarden(): AppState {
         height: 900,
         // Synthetic, but structurally what a stored image looks like: valid
         // base64 whose decoded length matches the declared byteLength.
-        byteLength: 24,
+        byteLength: 23,
         imageData: 'QUJDREVGR0hJSktMTU5PUFFSU1RVVlc=',
         crop: { x: 0.5, y: 0.4, zoom: 1.2 },
       },
@@ -287,7 +287,9 @@ describe('garden repository', () => {
           gardenName: 'Remembered Garden',
           ambientTrack: 'garden-chimes',
         }),
-        plants: [expect.objectContaining({ id: 'remembered-plant', growth: 2 })],
+        plants: [
+          expect.objectContaining({ id: 'remembered-plant', growth: 2 }),
+        ],
       },
     })
   })
@@ -350,7 +352,10 @@ describe('garden repository', () => {
       // so a later read still finds it exactly as the newer client left it.
       const db = await openDB('butterfly-garden')
       try {
-        const stored = (await db.get('state', 'current')) as Record<string, unknown>
+        const stored = (await db.get('state', 'current')) as Record<
+          string,
+          unknown
+        >
         expect(stored.version).toBe(7)
         expect(stored.seeds).toBe(99)
       } finally {
@@ -360,7 +365,9 @@ describe('garden repository', () => {
 
     it('classifies records by why they could not be read', () => {
       expect(classifyRecord(createEmptyState())).toBe('readable')
-      expect(classifyRecord({ ...createEmptyState(), version: 7 })).toBe('incompatible')
+      expect(classifyRecord({ ...createEmptyState(), version: 7 })).toBe(
+        'incompatible',
+      )
       expect(classifyRecord({ broken: true })).toBe('malformed')
       expect(classifyRecord(undefined)).toBe('malformed')
     })
@@ -389,13 +396,19 @@ describe('garden repository', () => {
 
   describe('backups', () => {
     it('reads a garden back out of an exported envelope', () => {
-      const state = { ...createInitialState('Backup', 'Backup Garden'), seeds: 6 }
+      const state = {
+        ...createInitialState('Backup', 'Backup Garden'),
+        seeds: 6,
+      }
       const envelope = {
         format: 'the-butterfly-garden',
         exportedAt: '2026-01-01T00:00:00.000Z',
         garden: state,
       }
-      expect(readImportedState(envelope)).toMatchObject({ version: 6, seeds: 6 })
+      expect(readImportedState(envelope)).toMatchObject({
+        version: 6,
+        seeds: 6,
+      })
     })
 
     it('accepts a bare garden and rejects anything else', () => {
@@ -471,8 +484,10 @@ describe('garden repository', () => {
       // A backup written before a collection existed has no key for it at all.
       // Every reader treats collections as arrays, so migration has to supply
       // one rather than letting undefined through.
-      const older = { ...fullGarden(), version: beforeNewestCollections } as
-        Record<string, unknown>
+      const older = {
+        ...fullGarden(),
+        version: beforeNewestCollections,
+      } as Record<string, unknown>
       for (const collection of Object.keys(COLLECTION_SINCE_VERSION)) {
         delete older[collection]
       }
@@ -517,18 +532,27 @@ describe('garden repository', () => {
     it('drops a pattern id this build does not know, keeping the rest', () => {
       const garden = {
         ...createEmptyState(),
-        ownedFlightPatternIds: ['gentle-drift', 'retired-pattern', 'ribbon-loop'],
+        ownedFlightPatternIds: [
+          'gentle-drift',
+          'retired-pattern',
+          'ribbon-loop',
+        ],
         selectedFlightPatternId: 'retired-pattern',
       }
 
       const restored = readImportedState({ garden })
-      expect(restored?.ownedFlightPatternIds).toEqual(['gentle-drift', 'ribbon-loop'])
+      expect(restored?.ownedFlightPatternIds).toEqual([
+        'gentle-drift',
+        'ribbon-loop',
+      ])
       // A selection this build cannot render falls back rather than sticking.
       expect(restored?.selectedFlightPatternId).toBe('gentle-drift')
     })
 
     it('refuses anything that is not a garden', () => {
-      expect(readImportedState({ format: 'the-butterfly-garden' })).toBeUndefined()
+      expect(
+        readImportedState({ format: 'the-butterfly-garden' }),
+      ).toBeUndefined()
       expect(readImportedState({ garden: { version: 5 } })).toBeUndefined()
       expect(readImportedState([])).toBeUndefined()
       expect(readImportedState(null)).toBeUndefined()
@@ -541,8 +565,10 @@ describe('garden repository', () => {
       // while the meta it writes claims a version that expects one.
       await gardenRepository.save(createInitialState('Before', 'Before Garden'))
 
-      const backup = { ...fullGarden(), version: beforeNewestCollections } as
-        Record<string, unknown>
+      const backup = {
+        ...fullGarden(),
+        version: beforeNewestCollections,
+      } as Record<string, unknown>
       for (const collection of Object.keys(COLLECTION_SINCE_VERSION)) {
         delete backup[collection]
       }
@@ -570,7 +596,10 @@ describe('garden repository', () => {
       await gardenRepository.save(createInitialState('Before', 'Before Garden'))
       const db = await openDB('butterfly-garden')
       try {
-        const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+        const meta = (await db.get('meta', 'current')) as Record<
+          string,
+          unknown
+        >
         const tx = db.transaction(['meta', 'customBackdrops'], 'readwrite')
         await Promise.all([
           tx.objectStore('meta').put({ ...meta, version: 5 }, 'current'),
@@ -613,7 +642,9 @@ describe('garden repository', () => {
         'not a collection',
       ]) {
         expect(
-          readImportedState({ garden: { ...fullGarden(), customBackdrops: broken } }),
+          readImportedState({
+            garden: { ...fullGarden(), customBackdrops: broken },
+          }),
         ).toBeUndefined()
       }
     })
@@ -671,7 +702,9 @@ describe('garden repository', () => {
       await gardenRepository.save(createInitialState('Held', 'Held Garden'))
       const otherTab = await openDB('butterfly-garden')
       try {
-        await expect(gardenRepository.clear()).rejects.toThrow(/another open tab/i)
+        await expect(gardenRepository.clear()).rejects.toThrow(
+          /another open tab/i,
+        )
         // The garden is still there, exactly as it should be.
         const stored = await otherTab.get('meta', 'current')
         expect(stored).toBeTruthy()
@@ -681,111 +714,111 @@ describe('garden repository', () => {
     })
   })
 
-describe('adding a collection', () => {
-  it('raises the database version whenever the store list changes', () => {
-    // A deliberate canary rather than a clever check. Adding a collection but
-    // leaving DATABASE_VERSION alone means `upgrade` never runs on databases
-    // that already exist, the store is never created, and the transaction that
-    // reads the garden fails for everyone who already had the app -- a failure
-    // no other test can see, because a fresh database gets every store anyway.
-    //
-    // It is also the backstop for COLLECTION_SINCE_VERSION. The generic tests
-    // above are driven off that table, so a new collection missing from it is
-    // a collection they do not test -- this is what fires instead.
-    //
-    // If this fails you changed the collections. Work the checklist on
-    // COLLECTION_STORES in gardenRepository.ts, raise DATABASE_VERSION so
-    // installed databases gain the store, then update the numbers here.
-    expect(GARDEN_COLLECTIONS).toHaveLength(12)
-    expect(DATABASE_VERSION).toBe(5)
+  describe('adding a collection', () => {
+    it('raises the database version whenever the store list changes', () => {
+      // A deliberate canary rather than a clever check. Adding a collection but
+      // leaving DATABASE_VERSION alone means `upgrade` never runs on databases
+      // that already exist, the store is never created, and the transaction that
+      // reads the garden fails for everyone who already had the app -- a failure
+      // no other test can see, because a fresh database gets every store anyway.
+      //
+      // It is also the backstop for COLLECTION_SINCE_VERSION. The generic tests
+      // above are driven off that table, so a new collection missing from it is
+      // a collection they do not test -- this is what fires instead.
+      //
+      // If this fails you changed the collections. Work the checklist on
+      // COLLECTION_STORES in gardenRepository.ts, raise DATABASE_VERSION so
+      // installed databases gain the store, then update the numbers here.
+      expect(GARDEN_COLLECTIONS).toHaveLength(12)
+      expect(DATABASE_VERSION).toBe(5)
+    })
+
+    it('creates every part store when an older database is upgraded', () => {
+      // The other half: the upgrade has to actually create what is missing.
+      // Covered end to end by the pre-split migration tests, which start from a
+      // database holding only the legacy record and end with a garden split
+      // across every store.
+      expect(new Set(GARDEN_COLLECTIONS).size).toBe(GARDEN_COLLECTIONS.length)
+      expect(
+        new Set(GARDEN_COLLECTIONS.map((c) => COLLECTION_STORES[c])).size,
+      ).toBe(GARDEN_COLLECTIONS.length)
+    })
   })
 
-  it('creates every part store when an older database is upgraded', () => {
-    // The other half: the upgrade has to actually create what is missing.
-    // Covered end to end by the pre-split migration tests, which start from a
-    // database holding only the legacy record and end with a garden split
-    // across every store.
-    expect(new Set(GARDEN_COLLECTIONS).size).toBe(GARDEN_COLLECTIONS.length)
-    expect(
-      new Set(GARDEN_COLLECTIONS.map((c) => COLLECTION_STORES[c])).size,
-    ).toBe(GARDEN_COLLECTIONS.length)
+  describe('detecting what a write actually changed', () => {
+    it('accounts for every field of the garden', () => {
+      // Storage is split by a hand-written list of collections and meta fields.
+      // A field added to AppState but to neither list would be silently dropped
+      // on save and absent on load, which no other test would notice.
+      const stored = new Set<string>([...META_FIELDS, ...GARDEN_COLLECTIONS])
+      const fields = new Set([
+        ...Object.keys(createEmptyState()),
+        ...Object.keys(createInitialState('Cover', 'Cover Garden')),
+      ])
+      expect([...fields].filter((field) => !stored.has(field))).toEqual([])
+    })
+
+    it('treats collections with the same elements as unchanged', () => {
+      const items = [{ id: 'a' }, { id: 'b' }]
+      expect(sameCollection(items, items)).toBe(true)
+      expect(sameCollection(items, [...items])).toBe(true)
+      expect(sameCollection(items, items.slice(0, 1))).toBe(false)
+      expect(sameCollection(items, [{ id: 'a' }, { id: 'b' }])).toBe(false)
+    })
+
+    it('treats a mood check-in as touching only moods, sunlight and meta', () => {
+      const before = maturedGarden()
+      const after = checkInWithMood(before)
+
+      // The trap: awardSunlight maps over plants unconditionally, so `plants`
+      // arrives with a new array identity even though no plant grew. A plain
+      // reference check would call it dirty on every single check-in.
+      expect(after.plants).not.toBe(before.plants)
+
+      expect(changedParts(before, after).sort()).toEqual(
+        ['meta', 'moods', 'sunlight'].sort(),
+      )
+    })
+
+    it('reports nothing dirty when the state did not change', () => {
+      const state = maturedGarden()
+      expect(changedParts(state, state)).toEqual([])
+      expect(changedParts(state, { ...state })).toEqual([])
+    })
+
+    it('reports every part dirty when nothing is known to be stored', () => {
+      const state = maturedGarden()
+      expect(changedParts(undefined, state).sort()).toEqual(
+        ['meta', ...GARDEN_COLLECTIONS].sort(),
+      )
+    })
+
+    it('notices a change confined to one collection', () => {
+      const before = maturedGarden()
+      const after = {
+        ...before,
+        goals: [
+          ...before.goals,
+          {
+            id: 'extra',
+            title: 'Water the ferns',
+            schedule: 'daily' as const,
+            weekdays: [0, 1, 2, 3, 4, 5, 6],
+            createdDate: '2026-09-05',
+            archived: false,
+          },
+        ],
+      }
+      expect(changedParts(before, after)).toEqual(['goals'])
+    })
+
+    it('notices a change confined to a meta field', () => {
+      const before = maturedGarden()
+      expect(
+        changedParts(before, { ...before, nectar: before.nectar + 1 }),
+      ).toEqual(['meta'])
+    })
   })
-})
-
-describe('detecting what a write actually changed', () => {
-  it('accounts for every field of the garden', () => {
-    // Storage is split by a hand-written list of collections and meta fields.
-    // A field added to AppState but to neither list would be silently dropped
-    // on save and absent on load, which no other test would notice.
-    const stored = new Set<string>([...META_FIELDS, ...GARDEN_COLLECTIONS])
-    const fields = new Set([
-      ...Object.keys(createEmptyState()),
-      ...Object.keys(createInitialState('Cover', 'Cover Garden')),
-    ])
-    expect([...fields].filter((field) => !stored.has(field))).toEqual([])
-  })
-
-  it('treats collections with the same elements as unchanged', () => {
-    const items = [{ id: 'a' }, { id: 'b' }]
-    expect(sameCollection(items, items)).toBe(true)
-    expect(sameCollection(items, [...items])).toBe(true)
-    expect(sameCollection(items, items.slice(0, 1))).toBe(false)
-    expect(sameCollection(items, [{ id: 'a' }, { id: 'b' }])).toBe(false)
-  })
-
-  it('treats a mood check-in as touching only moods, sunlight and meta', () => {
-    const before = maturedGarden()
-    const after = checkInWithMood(before)
-
-    // The trap: awardSunlight maps over plants unconditionally, so `plants`
-    // arrives with a new array identity even though no plant grew. A plain
-    // reference check would call it dirty on every single check-in.
-    expect(after.plants).not.toBe(before.plants)
-
-    expect(changedParts(before, after).sort()).toEqual(
-      ['meta', 'moods', 'sunlight'].sort(),
-    )
-  })
-
-  it('reports nothing dirty when the state did not change', () => {
-    const state = maturedGarden()
-    expect(changedParts(state, state)).toEqual([])
-    expect(changedParts(state, { ...state })).toEqual([])
-  })
-
-  it('reports every part dirty when nothing is known to be stored', () => {
-    const state = maturedGarden()
-    expect(changedParts(undefined, state).sort()).toEqual(
-      ['meta', ...GARDEN_COLLECTIONS].sort(),
-    )
-  })
-
-  it('notices a change confined to one collection', () => {
-    const before = maturedGarden()
-    const after = {
-      ...before,
-      goals: [
-        ...before.goals,
-        {
-          id: 'extra',
-          title: 'Water the ferns',
-          schedule: 'daily' as const,
-          weekdays: [0, 1, 2, 3, 4, 5, 6],
-          createdDate: '2026-09-05',
-          archived: false,
-        },
-      ],
-    }
-    expect(changedParts(before, after)).toEqual(['goals'])
-  })
-
-  it('notices a change confined to a meta field', () => {
-    const before = maturedGarden()
-    expect(changedParts(before, { ...before, nectar: before.nectar + 1 })).toEqual([
-      'meta',
-    ])
-  })
-})
 })
 
 describe('writing only what changed', () => {
@@ -1007,7 +1040,9 @@ describe('moving a pre-split garden across', () => {
       const meta = (await db.get('meta', 'current')) as Record<string, unknown>
       const tx = db.transaction(['meta', ...stores], 'readwrite')
       await Promise.all([
-        tx.objectStore('meta').put({ ...meta, version: storedVersion }, 'current'),
+        tx
+          .objectStore('meta')
+          .put({ ...meta, version: storedVersion }, 'current'),
         ...stores.map((store) => tx.objectStore(store).delete('current')),
         tx.done,
       ])
@@ -1106,7 +1141,7 @@ describe('moving a pre-split garden across', () => {
   })
 })
 
-describe('adopting another tab\'s change', () => {
+describe("adopting another tab's change", () => {
   async function readStore(name: string): Promise<unknown> {
     const db = await openDB('butterfly-garden')
     try {
@@ -1136,7 +1171,11 @@ describe('adopting another tab\'s change', () => {
     const after = checkInWithMood(before)
     const meta = (await readStore('meta')) as Record<string, unknown>
     await writeStore('moods', after.moods)
-    await writeStore('meta', { ...meta, nectar: after.nectar, seeds: after.seeds })
+    await writeStore('meta', {
+      ...meta,
+      nectar: after.nectar,
+      seeds: after.seeds,
+    })
     const marker = ['not-read-by-adopt']
     await writeStore('completions', marker)
 

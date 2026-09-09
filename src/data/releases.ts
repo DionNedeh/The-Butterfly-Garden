@@ -39,6 +39,33 @@ export const releases: ReleaseNote[] = [
     title: 'A livelier garden',
     sections: [
       {
+        title: 'A garden made personal',
+        items: [
+          'Four new illustrated scenes, plus your own images with local cropping and media-inclusive garden backups.',
+          'Garden Pass is a free PWA preview. No subscription or payment is active.',
+        ],
+      },
+      {
+        title: 'Little treasures',
+        items: [
+          'Twelve new cosmetics, coloured glass letter jars, and a boutique with search, filters and try-on previews.',
+          'Headwear and accessories now move with their companion, including caterpillar accessories.',
+        ],
+      },
+      {
+        title: 'From seed to wings',
+        items: [
+          'A complete 25-species directory shows which host to plant and what your current garden can welcome next.',
+          'Smooth generated flight tracks are shared by the garden and its miniature previews.',
+        ],
+      },
+      {
+        title: 'A softer place to return to',
+        items: [
+          'Refined botanical surfaces, clearer navigation and solid journal timeline dots.',
+        ],
+      },
+      {
         title: 'Flight',
         items: [
           'Six more flight patterns to choose between: Clover Meander, Breeze Glide, Blossom Bounce, Ribbon Loop, Moonbeam Float and Canopy Dance.',
@@ -70,7 +97,9 @@ export const currentRelease = releases[0]
  * build, and hiding the current notes because of a value this build cannot
  * place would leave someone with no way to read them.
  */
-export function hasUnseenRelease(lastSeenReleaseId: string | undefined): boolean {
+export function hasUnseenRelease(
+  lastSeenReleaseId: string | undefined,
+): boolean {
   if (!lastSeenReleaseId) return true
   return lastSeenReleaseId !== currentRelease.id
 }

@@ -13,17 +13,16 @@ import {
   purchaseFlightPattern,
   selectFlightPattern,
 } from '../lib/flightPatterns'
-import {
-  placeJar,
-  purchaseJar,
-  removeJarPlacement,
-} from '../lib/jars'
+import { placeJar, purchaseJar, removeJarPlacement } from '../lib/jars'
 import { availableBackdropIds } from '../lib/appearance'
 import {
   putCustomBackdrop,
+  checkCustomBackdropRecord,
+  canAddCustomBackdrop,
   removeCustomBackdrop,
   selectCustomBackdrop as selectCustomBackdropIn,
 } from '../lib/customBackdrops'
+import { hasGardenPassFeature } from '../lib/gardenPass'
 import { performCare } from '../lib/lifecycle'
 import {
   equipOutfitItem,
@@ -81,10 +80,23 @@ export function useGardenState() {
   })
   /** The exact object last known to be on disk; never re-saved as-is. */
   const persistedRef = useRef<AppState>(undefined)
+  const mediaWaiters = useRef(
+    new Map<
+      CustomBackdrop,
+      (result: { ok: boolean; message?: string }) => void
+    >(),
+  )
   const readOnlyRef = useRef(false)
   const channelRef = useRef<BroadcastChannel>(undefined)
 
   const applyLoadResult = useCallback((result: LoadResult) => {
+    for (const resolve of mediaWaiters.current.values())
+      resolve({
+        ok: false,
+        message:
+          'The garden changed in another tab. Please try saving your image again.',
+      })
+    mediaWaiters.current.clear()
     persistedRef.current = result.state
     readOnlyRef.current = result.status === 'withheld'
     setPersistence((current) => ({
@@ -104,8 +116,12 @@ export function useGardenState() {
       applyLoadResult(result)
       setLoading(false)
     })
+    const waiters = mediaWaiters.current
     return () => {
       active = false
+      for (const resolve of waiters.values())
+        resolve({ ok: false, message: 'Image saving was interrupted.' })
+      waiters.clear()
     }
   }, [applyLoadResult])
 
@@ -134,15 +150,38 @@ export function useGardenState() {
     try {
       const written = await gardenRepository.save(next)
       persistedRef.current = next
+      for (const [record, resolve] of mediaWaiters.current) {
+        if (next.customBackdrops.includes(record)) {
+          resolve({ ok: true })
+          mediaWaiters.current.delete(record)
+        }
+      }
       setPersistence((current) =>
         current.writeError ? { ...current, writeError: undefined } : current,
       )
       // Nothing changed on disk means nothing for another tab to pick up;
       // announcing it anyway would make every other tab re-read for no reason.
       if (written.length > 0) {
-        channelRef.current?.postMessage({ type: 'garden-saved', parts: written })
+        channelRef.current?.postMessage({
+          type: 'garden-saved',
+          parts: written,
+        })
       }
     } catch (error) {
+      for (const [record, resolve] of mediaWaiters.current) {
+        if (next.customBackdrops.includes(record)) {
+          const previous = persistedRef.current
+          // Keep the old scene active on quota/decode write failure. The editor
+          // still owns the unsaved draft; unrelated in-memory edits survive.
+          if (previous) setState((current) => current?.customBackdrops.includes(record) ? {
+            ...current,
+            customBackdrops: previous.customBackdrops,
+            profile: current.profile ? { ...current.profile, selectedCustomBackdropId: previous.profile?.selectedCustomBackdropId } : undefined,
+          } : current)
+          resolve({ ok: false, message: errorMessage(error) })
+          mediaWaiters.current.delete(record)
+        }
+      }
       setPersistence((current) => ({
         ...current,
         writeError: errorMessage(error),
@@ -195,481 +234,536 @@ export function useGardenState() {
    * Every action keeps a stable identity so memoized views (the month
    * planner in particular) are not re-rendered by the app shell.
    */
-  const actions = useMemo(() => ({
-    onboard: (name: string, gardenName: string) => {
-      setState(createInitialState(name, gardenName))
-    },
-    addGoal: (
-      title: string,
-      schedule: GoalSchedule,
-      weekdays: number[] = [],
-    ) => {
-      update((current) => ({
-        ...current,
-        goals: [
-          ...current.goals,
-          {
-            id: createId(),
-            title: title.trim(),
-            schedule,
-            weekdays,
-            createdDate: toLocalDate(),
-            archived: false,
-          },
-        ],
-      }))
-    },
-    updateGoal: (goal: Goal) => {
-      update((current) => ({
-        ...current,
-        goals: current.goals.map((item) => (item.id === goal.id ? goal : item)),
-      }))
-    },
-    /** Retire a goal without discarding the days it was completed. */
-    setGoalArchived: (goalId: string, archived: boolean) => {
-      update((current) => ({
-        ...current,
-        goals: current.goals.map((goal) =>
-          goal.id === goalId ? { ...goal, archived } : goal,
-        ),
-      }))
-    },
-    planGoal: (title: string, scheduledDate: string) => {
-      const trimmed = title.trim()
-      if (!trimmed) return
-      update((current) => ({
-        ...current,
-        goals: [
-          ...current.goals,
-          {
-            id: createId(),
-            title: trimmed,
-            schedule: 'once' as const,
-            weekdays: [],
-            createdDate: toLocalDate(),
-            archived: false,
-            scheduledDate,
-          },
-        ],
-      }))
-    },
-    skipGoal: (goalId: string) => {
-      const localDate = toLocalDate()
-      update((current) => ({
-        ...current,
-        goals: current.goals.map((goal) => {
-          if (goal.id !== goalId) return goal
-          const skipped = goal.skippedDates ?? []
-          return {
-            ...goal,
-            skippedDates: skipped.includes(localDate)
-              ? skipped.filter((date) => date !== localDate)
-              : [...skipped, localDate],
-          }
-        }),
-      }))
-    },
-    snoozeGoal: (goalId: string, days: number) => {
-      const until = addDaysToLocalDate(toLocalDate(), Math.max(1, days))
-      update((current) => ({
-        ...current,
-        goals: current.goals.map((goal) => {
-          if (goal.id !== goalId) return goal
-          return {
-            ...goal,
-            snoozedUntil: until,
-            // A snoozed planned goal moves to its new day.
-            scheduledDate:
-              goal.schedule === 'once' && goal.scheduledDate
-                ? until
-                : goal.scheduledDate,
-          }
-        }),
-      }))
-    },
-    wakeGoal: (goalId: string) => {
-      update((current) => ({
-        ...current,
-        goals: current.goals.map((goal) =>
-          goal.id === goalId ? { ...goal, snoozedUntil: undefined } : goal,
-        ),
-      }))
-    },
-    deleteGoal: (goalId: string) => {
-      update((current) => ({
-        ...current,
-        goals: current.goals.filter((goal) => goal.id !== goalId),
-        completions: current.completions.filter(
-          (completion) => completion.goalId !== goalId,
-        ),
-      }))
-    },
-    completeGoal: (goalId: string) => {
-      const now = new Date()
-      const localDate = toLocalDate(now)
-      update((current) => {
-        const id = `${goalId}:${localDate}`
-        if (current.completions.some((item) => item.id === id)) return current
-        const completed = {
+  const actions = useMemo(
+    () => ({
+      onboard: (name: string, gardenName: string) => {
+        setState(createInitialState(name, gardenName))
+      },
+      addGoal: (
+        title: string,
+        schedule: GoalSchedule,
+        weekdays: number[] = [],
+      ) => {
+        update((current) => ({
           ...current,
-          completions: [
-            ...current.completions,
-            { id, goalId, localDate, completedAt: now.toISOString() },
+          goals: [
+            ...current.goals,
+            {
+              id: createId(),
+              title: title.trim(),
+              schedule,
+              weekdays,
+              createdDate: toLocalDate(),
+              archived: false,
+            },
           ],
-        }
-        return awardSunlight(completed, `goal:${id}`, now)
-      })
-    },
-    saveMood: (level: MoodEntry['level'], note: string) => {
-      const now = new Date()
-      const localDate = toLocalDate(now)
-      update((current) => {
-        const existing = current.moods.find((item) => item.localDate === localDate)
-        const entry: MoodEntry = {
-          id: existing?.id ?? createId(),
-          localDate,
-          level,
-          note: note.trim(),
-          createdAt: existing?.createdAt ?? now.toISOString(),
-          updatedAt: now.toISOString(),
-        }
-        const moods = existing
-          ? current.moods.map((item) => (item.id === existing.id ? entry : item))
-          : [...current.moods, entry]
-        return awardSunlight(
-          { ...current, moods },
-          `mood:${localDate}`,
-          now,
-        )
-      })
-    },
-    deleteMood: (id: string) => {
-      update((current) => ({
-        ...current,
-        moods: current.moods.filter((item) => item.id !== id),
-      }))
-    },
-    updateMood: (entry: MoodEntry) => {
-      update((current) => ({
-        ...current,
-        moods: current.moods.map((item) =>
-          item.id === entry.id
-            ? { ...entry, updatedAt: new Date().toISOString() }
-            : item,
-        ),
-      }))
-    },
-    saveReflection: (promptId: string, body: string) => {
-      const now = new Date()
-      const localDate = toLocalDate(now)
-      update((current) => {
-        const existing = current.reflections.find(
-          (item) => item.localDate === localDate,
-        )
-        const entry: ReflectionEntry = {
-          id: existing?.id ?? createId(),
-          localDate,
-          promptId,
-          body: body.trim(),
-          createdAt: existing?.createdAt ?? now.toISOString(),
-          updatedAt: now.toISOString(),
-        }
-        const reflections = existing
-          ? current.reflections.map((item) =>
-              item.id === existing.id ? entry : item,
-            )
-          : [...current.reflections, entry]
-        return awardSunlight(
-          { ...current, reflections },
-          `reflection:${localDate}`,
-          now,
-        )
-      })
-    },
-    updateReflection: (entry: ReflectionEntry) => {
-      update((current) => ({
-        ...current,
-        reflections: current.reflections.map((item) =>
-          item.id === entry.id
-            ? { ...entry, updatedAt: new Date().toISOString() }
-            : item,
-        ),
-      }))
-    },
-    deleteReflection: (id: string) => {
-      update((current) => ({
-        ...current,
-        reflections: current.reflections.filter((item) => item.id !== id),
-      }))
-    },
-    /**
-     * Round out a day and collect its Moonlight.
-     *
-     * `localDate` is the day being closed, which is not always today: inside
-     * the after-midnight grace window it is yesterday, and the goal planned
-     * from the tomorrow note is relative to that day rather than to the
-     * clock. Closing Tuesday at 1:15am plans for Wednesday -- the day the
-     * gardener is standing in -- not Thursday.
-     */
-    collectMoonlight: (
-      localDate: string,
-      draft: RecapDraft & { planForTomorrow?: boolean } = {},
-    ) => {
-      const now = new Date()
-      update((current) => {
-        if (moonlightForDate(current, localDate)) return current
-
-        const title = draft.forTomorrow?.trim() ?? ''
-        const plannedGoal: Goal | undefined =
-          draft.planForTomorrow && title
-            ? {
-                id: createId(),
-                title,
-                schedule: 'once',
-                weekdays: [],
-                createdDate: toLocalDate(now),
-                archived: false,
-                scheduledDate: addDaysToLocalDate(localDate, 1),
-              }
-            : undefined
-
-        const collected = awardMoonlight(
-          current,
-          localDate,
-          { ...draft, plannedGoalId: plannedGoal?.id },
-          now,
-        )
-        return plannedGoal
-          ? { ...collected, goals: [...collected.goals, plannedGoal] }
-          : collected
-      })
-    },
-    updateRecap: (entry: RecapEntry) => {
-      update((current) => ({
-        ...current,
-        recaps: current.recaps.map((item) =>
-          item.id === entry.id
-            ? { ...entry, updatedAt: new Date().toISOString() }
-            : item,
-        ),
-      }))
-    },
-    /**
-     * Delete a recap. The `moonlight` ledger is deliberately untouched: the
-     * night has been collected, and rewriting what was said about it must not
-     * pay out again.
-     */
-    deleteRecap: (id: string) => {
-      update((current) => ({
-        ...current,
-        recaps: current.recaps.filter((item) => item.id !== id),
-      }))
-    },
-    plant: (plantId: string) => {
-      update((current) => plantSeed(current, plantId))
-    },
-    careForCreature: (creatureId: string, actionId: string) => {
-      update((current) => performCare(current, creatureId, actionId).state)
-    },
-    purchaseItem: (itemId: string) => {
-      update((current) => purchaseShopItem(current, itemId))
-    },
-    equipItem: (creatureId: string, itemId: string) => {
-      update((current) => equipOutfitItem(current, creatureId, itemId))
-    },
-    unequipSlot: (creatureId: string, slot: OutfitSlot) => {
-      update((current) => unequipOutfitSlot(current, creatureId, slot))
-    },
-    removePlant: (plantId: string) => {
-      update((current) => removePlant(current, plantId))
-    },
-    purchaseFlightPattern: (patternId: FlightPatternId) => {
-      update((current) => purchaseFlightPattern(current, patternId))
-    },
-    selectFlightPattern: (patternId: FlightPatternId) => {
-      update((current) => selectFlightPattern(current, patternId))
-    },
-    purchaseJar: (character: string, colorId: JarColorId) => {
-      update((current) => purchaseJar(current, character, colorId))
-    },
-    placeJar: (jarId: string, plantId: string) => {
-      update((current) => placeJar(current, jarId, plantId))
-    },
-    removeJarPlacement: (plantId: string) => {
-      update((current) => removeJarPlacement(current, plantId))
-    },
-    selectCompanion: (creatureId: string) => {
-      update((current) => ({
-        ...current,
-        profile: current.profile
-          ? { ...current.profile, activeCompanionId: creatureId }
-          : undefined,
-      }))
-    },
-    renameCreature: (creatureId: string, name: string) => {
-      const trimmed = name.trim()
-      if (!trimmed) return
-      update((current) => ({
-        ...current,
-        creatures: current.creatures.map((creature) =>
-          creature.id === creatureId ? { ...creature, name: trimmed } : creature,
-        ),
-      }))
-    },
-    selectBackdrop: (backdropId: GardenBackdropId) => {
-      update((current) => {
-        const progressed = progressGarden(current)
-        const profile = progressed.profile
-        // Availability, not stored unlocks: a pass scene is choosable while
-        // access holds without ever being written into the permanent list.
-        if (!profile || !availableBackdropIds(profile).includes(backdropId)) {
-          return progressed
-        }
-        return {
-          ...progressed,
-          profile: {
-            ...profile,
-            selectedBackdropId: backdropId,
-            // Choosing a built-in scene is a choice to stop showing the
-            // gardener's own image. The image itself is kept.
-            selectedCustomBackdropId: undefined,
-          },
-        }
-      })
-    },
-    /**
-     * Save one of the gardener's own images and show it.
-     *
-     * The record and the reference to it move in a single update, so the
-     * garden is never observed pointing at an image that is not there. It goes
-     * through the hook's ordinary update path rather than writing to the
-     * repository directly, which would race the save effect that owns
-     * persistence.
-     */
-    saveCustomBackdrop: (record: CustomBackdrop) => {
-      update((current) => putCustomBackdrop(current, record))
-    },
-    deleteCustomBackdrop: (id: string) => {
-      update((current) => removeCustomBackdrop(current, id))
-    },
-    selectCustomBackdrop: (id: string | undefined) => {
-      update((current) => selectCustomBackdropIn(current, id))
-    },
-    /** Remember which release notes have been read. */
-    markReleaseSeen: (releaseId: string) => {
-      update((current) => {
-        if (!current.profile) return current
-        if (current.profile.lastSeenReleaseId === releaseId) return current
-        return {
+        }))
+      },
+      updateGoal: (goal: Goal) => {
+        update((current) => ({
           ...current,
-          profile: { ...current.profile, lastSeenReleaseId: releaseId },
+          goals: current.goals.map((item) =>
+            item.id === goal.id ? goal : item,
+          ),
+        }))
+      },
+      /** Retire a goal without discarding the days it was completed. */
+      setGoalArchived: (goalId: string, archived: boolean) => {
+        update((current) => ({
+          ...current,
+          goals: current.goals.map((goal) =>
+            goal.id === goalId ? { ...goal, archived } : goal,
+          ),
+        }))
+      },
+      planGoal: (title: string, scheduledDate: string) => {
+        const trimmed = title.trim()
+        if (!trimmed) return
+        update((current) => ({
+          ...current,
+          goals: [
+            ...current.goals,
+            {
+              id: createId(),
+              title: trimmed,
+              schedule: 'once' as const,
+              weekdays: [],
+              createdDate: toLocalDate(),
+              archived: false,
+              scheduledDate,
+            },
+          ],
+        }))
+      },
+      skipGoal: (goalId: string) => {
+        const localDate = toLocalDate()
+        update((current) => ({
+          ...current,
+          goals: current.goals.map((goal) => {
+            if (goal.id !== goalId) return goal
+            const skipped = goal.skippedDates ?? []
+            return {
+              ...goal,
+              skippedDates: skipped.includes(localDate)
+                ? skipped.filter((date) => date !== localDate)
+                : [...skipped, localDate],
+            }
+          }),
+        }))
+      },
+      snoozeGoal: (goalId: string, days: number) => {
+        const until = addDaysToLocalDate(toLocalDate(), Math.max(1, days))
+        update((current) => ({
+          ...current,
+          goals: current.goals.map((goal) => {
+            if (goal.id !== goalId) return goal
+            return {
+              ...goal,
+              snoozedUntil: until,
+              // A snoozed planned goal moves to its new day.
+              scheduledDate:
+                goal.schedule === 'once' && goal.scheduledDate
+                  ? until
+                  : goal.scheduledDate,
+            }
+          }),
+        }))
+      },
+      wakeGoal: (goalId: string) => {
+        update((current) => ({
+          ...current,
+          goals: current.goals.map((goal) =>
+            goal.id === goalId ? { ...goal, snoozedUntil: undefined } : goal,
+          ),
+        }))
+      },
+      deleteGoal: (goalId: string) => {
+        update((current) => ({
+          ...current,
+          goals: current.goals.filter((goal) => goal.id !== goalId),
+          completions: current.completions.filter(
+            (completion) => completion.goalId !== goalId,
+          ),
+        }))
+      },
+      completeGoal: (goalId: string) => {
+        const now = new Date()
+        const localDate = toLocalDate(now)
+        update((current) => {
+          const id = `${goalId}:${localDate}`
+          if (current.completions.some((item) => item.id === id)) return current
+          const completed = {
+            ...current,
+            completions: [
+              ...current.completions,
+              { id, goalId, localDate, completedAt: now.toISOString() },
+            ],
+          }
+          return awardSunlight(completed, `goal:${id}`, now)
+        })
+      },
+      saveMood: (level: MoodEntry['level'], note: string) => {
+        const now = new Date()
+        const localDate = toLocalDate(now)
+        update((current) => {
+          const existing = current.moods.find(
+            (item) => item.localDate === localDate,
+          )
+          const entry: MoodEntry = {
+            id: existing?.id ?? createId(),
+            localDate,
+            level,
+            note: note.trim(),
+            createdAt: existing?.createdAt ?? now.toISOString(),
+            updatedAt: now.toISOString(),
+          }
+          const moods = existing
+            ? current.moods.map((item) =>
+                item.id === existing.id ? entry : item,
+              )
+            : [...current.moods, entry]
+          return awardSunlight({ ...current, moods }, `mood:${localDate}`, now)
+        })
+      },
+      deleteMood: (id: string) => {
+        update((current) => ({
+          ...current,
+          moods: current.moods.filter((item) => item.id !== id),
+        }))
+      },
+      updateMood: (entry: MoodEntry) => {
+        update((current) => ({
+          ...current,
+          moods: current.moods.map((item) =>
+            item.id === entry.id
+              ? { ...entry, updatedAt: new Date().toISOString() }
+              : item,
+          ),
+        }))
+      },
+      saveReflection: (promptId: string, body: string) => {
+        const now = new Date()
+        const localDate = toLocalDate(now)
+        update((current) => {
+          const existing = current.reflections.find(
+            (item) => item.localDate === localDate,
+          )
+          const entry: ReflectionEntry = {
+            id: existing?.id ?? createId(),
+            localDate,
+            promptId,
+            body: body.trim(),
+            createdAt: existing?.createdAt ?? now.toISOString(),
+            updatedAt: now.toISOString(),
+          }
+          const reflections = existing
+            ? current.reflections.map((item) =>
+                item.id === existing.id ? entry : item,
+              )
+            : [...current.reflections, entry]
+          return awardSunlight(
+            { ...current, reflections },
+            `reflection:${localDate}`,
+            now,
+          )
+        })
+      },
+      updateReflection: (entry: ReflectionEntry) => {
+        update((current) => ({
+          ...current,
+          reflections: current.reflections.map((item) =>
+            item.id === entry.id
+              ? { ...entry, updatedAt: new Date().toISOString() }
+              : item,
+          ),
+        }))
+      },
+      deleteReflection: (id: string) => {
+        update((current) => ({
+          ...current,
+          reflections: current.reflections.filter((item) => item.id !== id),
+        }))
+      },
+      /**
+       * Round out a day and collect its Moonlight.
+       *
+       * `localDate` is the day being closed, which is not always today: inside
+       * the after-midnight grace window it is yesterday, and the goal planned
+       * from the tomorrow note is relative to that day rather than to the
+       * clock. Closing Tuesday at 1:15am plans for Wednesday -- the day the
+       * gardener is standing in -- not Thursday.
+       */
+      collectMoonlight: (
+        localDate: string,
+        draft: RecapDraft & { planForTomorrow?: boolean } = {},
+      ) => {
+        const now = new Date()
+        update((current) => {
+          if (moonlightForDate(current, localDate)) return current
+
+          const title = draft.forTomorrow?.trim() ?? ''
+          const plannedGoal: Goal | undefined =
+            draft.planForTomorrow && title
+              ? {
+                  id: createId(),
+                  title,
+                  schedule: 'once',
+                  weekdays: [],
+                  createdDate: toLocalDate(now),
+                  archived: false,
+                  scheduledDate: addDaysToLocalDate(localDate, 1),
+                }
+              : undefined
+
+          const collected = awardMoonlight(
+            current,
+            localDate,
+            { ...draft, plannedGoalId: plannedGoal?.id },
+            now,
+          )
+          return plannedGoal
+            ? { ...collected, goals: [...collected.goals, plannedGoal] }
+            : collected
+        })
+      },
+      updateRecap: (entry: RecapEntry) => {
+        update((current) => ({
+          ...current,
+          recaps: current.recaps.map((item) =>
+            item.id === entry.id
+              ? { ...entry, updatedAt: new Date().toISOString() }
+              : item,
+          ),
+        }))
+      },
+      /**
+       * Delete a recap. The `moonlight` ledger is deliberately untouched: the
+       * night has been collected, and rewriting what was said about it must not
+       * pay out again.
+       */
+      deleteRecap: (id: string) => {
+        update((current) => ({
+          ...current,
+          recaps: current.recaps.filter((item) => item.id !== id),
+        }))
+      },
+      plant: (plantId: string) => {
+        update((current) => plantSeed(current, plantId))
+      },
+      careForCreature: (creatureId: string, actionId: string) => {
+        update((current) => performCare(current, creatureId, actionId).state)
+      },
+      purchaseItem: (itemId: string) => {
+        update((current) => purchaseShopItem(current, itemId))
+      },
+      equipItem: (creatureId: string, itemId: string) => {
+        update((current) => equipOutfitItem(current, creatureId, itemId))
+      },
+      unequipSlot: (creatureId: string, slot: OutfitSlot) => {
+        update((current) => unequipOutfitSlot(current, creatureId, slot))
+      },
+      removePlant: (plantId: string) => {
+        update((current) => removePlant(current, plantId))
+      },
+      purchaseFlightPattern: (patternId: FlightPatternId) => {
+        update((current) => purchaseFlightPattern(current, patternId))
+      },
+      selectFlightPattern: (patternId: FlightPatternId) => {
+        update((current) => selectFlightPattern(current, patternId))
+      },
+      purchaseJar: (character: string, colorId: JarColorId) => {
+        update((current) => purchaseJar(current, character, colorId))
+      },
+      placeJar: (jarId: string, plantId: string) => {
+        update((current) => placeJar(current, jarId, plantId))
+      },
+      removeJarPlacement: (plantId: string) => {
+        update((current) => removeJarPlacement(current, plantId))
+      },
+      selectCompanion: (creatureId: string) => {
+        update((current) => ({
+          ...current,
+          profile: current.profile
+            ? { ...current.profile, activeCompanionId: creatureId }
+            : undefined,
+        }))
+      },
+      renameCreature: (creatureId: string, name: string) => {
+        const trimmed = name.trim()
+        if (!trimmed) return
+        update((current) => ({
+          ...current,
+          creatures: current.creatures.map((creature) =>
+            creature.id === creatureId
+              ? { ...creature, name: trimmed }
+              : creature,
+          ),
+        }))
+      },
+      selectBackdrop: (backdropId: GardenBackdropId) => {
+        update((current) => {
+          const progressed = progressGarden(current)
+          const profile = progressed.profile
+          // Availability, not stored unlocks: a pass scene is choosable while
+          // access holds without ever being written into the permanent list.
+          if (!profile || !availableBackdropIds(profile).includes(backdropId)) {
+            return progressed
+          }
+          return {
+            ...progressed,
+            profile: {
+              ...profile,
+              selectedBackdropId: backdropId,
+              // Choosing a built-in scene is a choice to stop showing the
+              // gardener's own image. The image itself is kept.
+              selectedCustomBackdropId: undefined,
+            },
+          }
+        })
+      },
+      /**
+       * Save one of the gardener's own images and show it.
+       *
+       * The record and the reference to it move in a single update, so the
+       * garden is never observed pointing at an image that is not there. It goes
+       * through the hook's ordinary update path rather than writing to the
+       * repository directly, which would race the save effect that owns
+       * persistence.
+       */
+      saveCustomBackdrop: async (
+        record: CustomBackdrop,
+      ): Promise<{ ok: boolean; message?: string }> => {
+        if (readOnlyRef.current)
+          return {
+            ok: false,
+            message: 'This garden is read-only. Restore a valid backup first.',
+          }
+        if (mediaWaiters.current.size)
+          return {
+            ok: false,
+            message: 'Another image is still saving. Please wait a moment.',
+          }
+        if (!hasGardenPassFeature('custom-backdrops'))
+          return {
+            ok: false,
+            message: 'Custom backdrops are not available in this release.',
+          }
+        const current = stateRef.current
+        if (!current) return { ok: false, message: 'Open your garden first.' }
+        const check = checkCustomBackdropRecord(record)
+        if (!check.ok) return check
+        if (!current.customBackdrops.some((entry) => entry.id === record.id)) {
+          const capacity = canAddCustomBackdrop(current)
+          if (!capacity.ok) return capacity
         }
-      })
-    },
-    toggleAmbientSound: () => {
-      update((current) => ({
-        ...current,
-        profile: current.profile
-          ? { ...current.profile, ambientSound: !current.profile.ambientSound }
-          : undefined,
-      }))
-    },
-    selectAmbientTrack: (ambientTrack: AmbientTrackId) => {
-      update((current) => ({
-        ...current,
-        profile: current.profile
-          ? { ...current.profile, ambientTrack }
-          : undefined,
-      }))
-    },
-    toggleTheme: () => {
-      update((current) => ({
-        ...current,
-        profile: current.profile
-          ? {
-              ...current.profile,
-              theme: current.profile.theme === 'night' ? 'sunlight' : 'night',
-            }
-          : undefined,
-      }))
-    },
-    updateProfile: (name: string, gardenName: string, reducedMotion: boolean) => {
-      update((current) => ({
-        ...current,
-        profile: current.profile
-          ? {
-              ...current.profile,
-              name: name.trim() || current.profile.name,
-              gardenName: gardenName.trim() || current.profile.gardenName,
-              reducedMotion,
-            }
-          : undefined,
-      }))
-    },
-    /** A portable copy of the whole garden, for the gardener to keep. */
-    exportGarden: (): string => {
-      return JSON.stringify(
-        {
-          format: 'the-butterfly-garden',
-          exportedAt: new Date().toISOString(),
-          garden: stateRef.current,
-        },
-        null,
-        2,
-      )
-    },
-    /** Replace the garden with a previously exported backup. */
-    importGarden: async (
-      text: string,
-    ): Promise<{ ok: boolean; message: string }> => {
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(text)
-      } catch {
-        return { ok: false, message: 'That file is not a garden backup.' }
-      }
-      const imported = readImportedState(parsed)
-      if (!imported) {
+        // The normal save effect owns the transaction. Resolve only after that
+        // exact image reaches disk, keeping quota failures visible in the editor.
+        return new Promise((resolve) => {
+          mediaWaiters.current.set(record, resolve)
+          update((state) => putCustomBackdrop(state, record))
+        })
+      },
+      deleteCustomBackdrop: (id: string) => {
+        update((current) => removeCustomBackdrop(current, id))
+      },
+      selectCustomBackdrop: (id: string | undefined) => {
+        if (id === undefined || hasGardenPassFeature('custom-backdrops'))
+          update((current) => selectCustomBackdropIn(current, id))
+      },
+      /** Remember which release notes have been read. */
+      markReleaseSeen: (releaseId: string) => {
+        update((current) => {
+          if (!current.profile) return current
+          if (current.profile.lastSeenReleaseId === releaseId) return current
+          return {
+            ...current,
+            profile: { ...current.profile, lastSeenReleaseId: releaseId },
+          }
+        })
+      },
+      toggleAmbientSound: () => {
+        update((current) => ({
+          ...current,
+          profile: current.profile
+            ? {
+                ...current.profile,
+                ambientSound: !current.profile.ambientSound,
+              }
+            : undefined,
+        }))
+      },
+      selectAmbientTrack: (ambientTrack: AmbientTrackId) => {
+        update((current) => ({
+          ...current,
+          profile: current.profile
+            ? { ...current.profile, ambientTrack }
+            : undefined,
+        }))
+      },
+      toggleTheme: () => {
+        update((current) => ({
+          ...current,
+          profile: current.profile
+            ? {
+                ...current.profile,
+                theme: current.profile.theme === 'night' ? 'sunlight' : 'night',
+              }
+            : undefined,
+        }))
+      },
+      updateProfile: (
+        name: string,
+        gardenName: string,
+        reducedMotion: boolean,
+      ) => {
+        update((current) => ({
+          ...current,
+          profile: current.profile
+            ? {
+                ...current.profile,
+                name: name.trim() || current.profile.name,
+                gardenName: gardenName.trim() || current.profile.gardenName,
+                reducedMotion,
+              }
+            : undefined,
+        }))
+      },
+      /** A portable copy of the whole garden, for the gardener to keep. */
+      exportGarden: (): string => {
+        return JSON.stringify(
+          {
+            format: 'the-butterfly-garden',
+            exportedAt: new Date().toISOString(),
+            garden: stateRef.current,
+          },
+          null,
+          2,
+        )
+      },
+      /** Replace the garden with a previously exported backup. */
+      importGarden: async (
+        text: string,
+      ): Promise<{ ok: boolean; message: string }> => {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(text)
+        } catch {
+          return { ok: false, message: 'That file is not a garden backup.' }
+        }
+        const imported = readImportedState(parsed)
+        if (!imported) {
+          return {
+            ok: false,
+            message:
+              'That backup could not be read. It may be from a newer version of the garden.',
+          }
+        }
+        let written: GardenPart[]
+        try {
+          if (imported.customBackdrops.length) {
+            const { verifyBackdropImages } = await import('../lib/imageImport')
+            await verifyBackdropImages(imported.customBackdrops)
+          }
+          // Replaced rather than saved: a restore swaps the whole document, and
+          // writing only the difference from the garden being replaced can leave
+          // a collection's stored record behind.
+          written = await gardenRepository.replace(imported)
+        } catch (error) {
+          return { ok: false, message: errorMessage(error) }
+        }
+        persistedRef.current = imported
+        readOnlyRef.current = false
+        setPersistence({ readOnly: false })
+        setState(progressGarden(imported))
+        setLoading(false)
+        // Every other tab is holding the garden this one just replaced. Without
+        // this they keep it, and the next edit made in one of them writes part
+        // of it back over the restored garden.
+        channelRef.current?.postMessage({
+          type: 'garden-saved',
+          parts: written,
+        })
         return {
-          ok: false,
-          message:
-            'That backup could not be read. It may be from a newer version of the garden.',
+          ok: true,
+          message: 'Your garden was restored from the backup.',
         }
-      }
-      let written: GardenPart[]
-      try {
-        // Replaced rather than saved: a restore swaps the whole document, and
-        // writing only the difference from the garden being replaced can leave
-        // a collection's stored record behind.
-        written = await gardenRepository.replace(imported)
-      } catch (error) {
-        return { ok: false, message: errorMessage(error) }
-      }
-      persistedRef.current = imported
-      readOnlyRef.current = false
-      setPersistence({ readOnly: false })
-      setState(progressGarden(imported))
-      setLoading(false)
-      // Every other tab is holding the garden this one just replaced. Without
-      // this they keep it, and the next edit made in one of them writes part
-      // of it back over the restored garden.
-      channelRef.current?.postMessage({ type: 'garden-saved', parts: written })
-      return { ok: true, message: 'Your garden was restored from the backup.' }
-    },
-    deleteAll: async (): Promise<{ ok: boolean; message?: string }> => {
-      try {
-        await gardenRepository.clear()
-      } catch (error) {
-        return { ok: false, message: errorMessage(error) }
-      }
-      persistedRef.current = undefined
-      readOnlyRef.current = false
-      setPersistence({ readOnly: false })
-      setState(undefined)
-      setLoading(false)
-      return { ok: true }
-    },
-  }), [update])
+      },
+      deleteAll: async (): Promise<{ ok: boolean; message?: string }> => {
+        try {
+          await gardenRepository.clear()
+        } catch (error) {
+          return { ok: false, message: errorMessage(error) }
+        }
+        persistedRef.current = undefined
+        readOnlyRef.current = false
+        setPersistence({ readOnly: false })
+        setState(undefined)
+        setLoading(false)
+        return { ok: true }
+      },
+    }),
+    [update],
+  )
 
   return { state, loading, persistence, ...actions }
 }

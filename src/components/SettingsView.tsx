@@ -1,14 +1,6 @@
+import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { useRef, useState } from 'react'
-import {
-  availableBackdropIds,
-  backdropUnlockDays,
-  daysUntilBackdrop,
-  gardenBackdrops,
-} from '../lib/appearance'
-import {
-  ambientTracks,
-  DEFAULT_AMBIENT_TRACK_ID,
-} from '../data/ambientTracks'
+import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
 
@@ -62,6 +54,10 @@ export function SettingsView({
   onExportGarden,
   onImportGarden,
   onDeleteAll,
+  onOpenWhatsNew,
+  onSaveCustomBackdrop,
+  onDeleteCustomBackdrop,
+  onSelectCustomBackdrop,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -75,6 +71,10 @@ export function SettingsView({
   onExportGarden: () => string
   onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
   onDeleteAll: () => Promise<{ ok: boolean; message?: string }>
+  onOpenWhatsNew?: () => void
+  onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
+  onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
+  onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -124,7 +124,6 @@ export function SettingsView({
   const profile = state.profile
   // Availability rather than earned unlocks: a Garden Pass scene is choosable
   // while access holds, and is never recorded as permanently earned.
-  const unlockedBackdrops = profile ? availableBackdropIds(profile) : []
   const nameNote = noteForName(name)
 
   return (
@@ -133,7 +132,9 @@ export function SettingsView({
         <div>
           <p className="eyebrow">Your space, your choices</p>
           <h1>Settings</h1>
-          <p>Change how the garden feels and understand where your data lives.</p>
+          <p>
+            Change how the garden feels and understand where your data lives.
+          </p>
         </div>
       </header>
 
@@ -175,7 +176,9 @@ export function SettingsView({
               onChange={(event) => setReducedMotion(event.target.checked)}
             />
           </label>
-          <button className="primary-button" type="submit">Save settings</button>
+          <button className="primary-button" type="submit">
+            Save settings
+          </button>
         </form>
       </section>
 
@@ -223,45 +226,27 @@ export function SettingsView({
         </fieldset>
       </section>
 
-      <section className="card backdrop-card" aria-labelledby="backdrop-title">
-        <p className="eyebrow">Garden scenery</p>
-        <h2 id="backdrop-title">Choose your backdrop</h2>
-        <p className="section-explainer">
-          Your original meadow is always available. New scenery unlocks after
-          30 and 60 elapsed days, then remains yours to revisit.
+      {onSaveCustomBackdrop &&
+        onDeleteCustomBackdrop &&
+        onSelectCustomBackdrop && (
+          <BackdropGallery
+            state={state}
+            onSelectBackdrop={onSelectBackdrop}
+            onSaveCustomBackdrop={onSaveCustomBackdrop}
+            onDeleteCustomBackdrop={onDeleteCustomBackdrop}
+            onSelectCustomBackdrop={onSelectCustomBackdrop}
+          />
+        )}
+      <section className="card">
+        <p className="eyebrow">Growing together</p>
+        <h2>The garden, version 3.0</h2>
+        <p>
+          Discover the little things that make this release feel more like
+          yours.
         </p>
-        <div className="backdrop-grid">
-          {gardenBackdrops.map((backdrop) => {
-            const unlocked = unlockedBackdrops.includes(backdrop.id)
-            const selected =
-              (profile?.selectedBackdropId ?? 'sunlit-meadow') === backdrop.id
-            const remaining = profile
-              ? daysUntilBackdrop(profile, backdrop.id)
-              : backdropUnlockDays(backdrop)
-            return (
-              <button
-                className={`backdrop-choice backdrop-preview-${backdrop.id} ${selected ? 'selected' : ''}`}
-                key={backdrop.id}
-                disabled={!unlocked}
-                onClick={() => onSelectBackdrop(backdrop.id)}
-                aria-pressed={selected}
-              >
-                <span className="backdrop-preview" aria-hidden="true" />
-                <span className="backdrop-choice-copy">
-                  <strong>{backdrop.name}</strong>
-                  <small>{backdrop.description}</small>
-                  <em>
-                    {selected
-                      ? 'Selected'
-                      : unlocked
-                        ? 'Unlocked - select backdrop'
-                        : `Locked - ${remaining} day${remaining === 1 ? '' : 's'} remaining`}
-                  </em>
-                </span>
-              </button>
-            )
-          })}
-        </div>
+        <button className="secondary-button" onClick={onOpenWhatsNew}>
+          What's new
+        </button>
       </section>
 
       <section className="card backup-card" aria-labelledby="backup-title">
@@ -288,7 +273,10 @@ export function SettingsView({
               Restore from a backup
             </button>
           ) : (
-            <button className="text-button" onClick={() => setRestoreStep(false)}>
+            <button
+              className="text-button"
+              onClick={() => setRestoreStep(false)}
+            >
               Cancel restore
             </button>
           )}
@@ -337,14 +325,14 @@ export function SettingsView({
         <p>
           The few things it does fetch after loading come from the app itself:
           the backdrops that unlock later, and a handful of extra letterforms,
-          are left out of the install so a new gardener does not download half
-          a megabyte they cannot use yet.
+          are left out of the install so a new gardener does not download half a
+          megabyte they cannot use yet.
         </p>
         <p>
-          Clearing this site&apos;s browser storage, uninstalling without keeping
-          site data, or using another device can remove your garden. Cross-device
-          sync is not part of this release, so keep a backup above if the garden
-          matters to you.
+          Clearing this site&apos;s browser storage, uninstalling without
+          keeping site data, or using another device can remove your garden.
+          Cross-device sync is not part of this release, so keep a backup above
+          if the garden matters to you.
         </p>
       </section>
 
@@ -374,11 +362,16 @@ export function SettingsView({
               >
                 Yes, delete everything
               </button>
-              <button className="secondary-button" onClick={() => setDeleteStep(false)}>
+              <button
+                className="secondary-button"
+                onClick={() => setDeleteStep(false)}
+              >
                 Keep my garden
               </button>
             </div>
-            {deleteError && <p className="settings-note error">{deleteError}</p>}
+            {deleteError && (
+              <p className="settings-note error">{deleteError}</p>
+            )}
           </div>
         )}
       </section>

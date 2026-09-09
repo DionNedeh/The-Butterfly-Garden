@@ -36,6 +36,7 @@ export type AppView =
   | 'settings'
   /** The end-of-day recap. Reached from Today, deliberately not in the nav. */
   | 'recap'
+  | 'whats-new'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
@@ -58,6 +59,10 @@ export type GardenBackdropId =
   | 'sunlit-meadow'
   | 'woodland-brook'
   | 'secret-conservatory'
+  | 'cottage-bloom'
+  | 'rain-kissed-pond'
+  | 'twilight-orchard'
+  | 'cloud-garden'
 export type ButterflyWingShape =
   | 'rounded'
   | 'swallowtail'

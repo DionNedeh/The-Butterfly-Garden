@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import type { AppState } from '../src/types'
 import { expect, test } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
@@ -54,7 +56,11 @@ interface GardenRecord {
     growth: number
     plantedAt: string
   }>
-  creatures: Array<{ stage?: string; sourcePlantId?: string; emergeAt?: string }>
+  creatures: Array<{
+    stage?: string
+    sourcePlantId?: string
+    emergeAt?: string
+  }>
 }
 
 /**
@@ -160,7 +166,9 @@ async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
 }
 
-test('onboards, completes care, and writes a private journal entry', async ({ page }) => {
+test('onboards, completes care, and writes a private journal entry', async ({
+  page,
+}) => {
   await expect(
     page.getByRole('heading', { name: /welcome to your butterfly garden/i }),
   ).toBeVisible()
@@ -188,9 +196,12 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
   const marigold = page.getByRole('button', {
     name: /pet marigold, your monarch garden guide/i,
   })
+  await marigold.focus()
   await marigold.click()
   await expect(
-    page.getByText(/marigold, your monarch garden guide enjoyed that gentle hello/i),
+    page.getByText(
+      /marigold, your monarch garden guide enjoyed that gentle hello/i,
+    ),
   ).toBeVisible()
   await mainNav(page)
     .getByRole('button', { name: 'Today', exact: true })
@@ -201,9 +212,7 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
 
   await page.getByLabel('Add a goal').fill('Drink some water')
   await page.getByRole('button', { name: 'Add goal' }).click()
-  await page
-    .getByRole('button', { name: /complete drink some water/i })
-    .click()
+  await page.getByRole('button', { name: /complete drink some water/i }).click()
   await page
     .locator('#daily-reflection')
     .fill('I noticed sunlight on the kitchen table.')
@@ -225,7 +234,9 @@ test('onboards, completes care, and writes a private journal entry', async ({ pa
   ).toBeVisible()
 })
 
-test('supports plant selection and permanent local reset confirmation', async ({ page }) => {
+test('supports plant selection and permanent local reset confirmation', async ({
+  page,
+}) => {
   await enterGarden(page)
   await page.getByRole('button', { name: /plant a seed/i }).click()
   await page.getByRole('button', { name: /parsley/i }).click()
@@ -266,7 +277,8 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   ).toBeVisible()
   // Stars belong to the garden scene; the shell only takes on the night veil.
   const starLayers = await page.evaluate(() => ({
-    shell: getComputedStyle(document.querySelector('.app-shell')!).backgroundImage,
+    shell: getComputedStyle(document.querySelector('.app-shell')!)
+      .backgroundImage,
     garden: getComputedStyle(
       document.querySelector('.garden-hero')!,
       '::before',
@@ -294,10 +306,17 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     .getByRole('button', { name: 'Settings', exact: true })
     .click()
 
-  const conservatory = page.getByRole('button', {
-    name: /Secret Conservatory.*Unlocked - select backdrop/i,
-  })
+  const conservatory = page
+    .locator('.scene-card')
+    .filter({
+      has: page.getByRole('heading', {
+        name: 'Secret Conservatory',
+        exact: true,
+      }),
+    })
+    .getByRole('button')
   await conservatory.click()
+  await expect(conservatory).toHaveText('In your garden')
   await mainNav(page)
     .getByRole('button', { name: 'Garden', exact: true })
     .click()
@@ -306,7 +325,9 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   )
 })
 
-test('guide explains how plants grow and when eggs appear', async ({ page }) => {
+test('guide explains how plants grow and when eggs appear', async ({
+  page,
+}) => {
   await enterGarden(page)
   await mainNav(page)
     .getByRole('button', { name: 'Guide', exact: true })
@@ -321,9 +342,7 @@ test('guide explains how plants grow and when eggs appear', async ({ page }) => 
   await expect(
     page.getByText(/seed, sprout, budding, full bloom/i),
   ).toBeVisible()
-  await expect(
-    page.getByText(/Missed days simply pause growth/i),
-  ).toBeVisible()
+  await expect(page.getByText(/Missed days simply pause growth/i)).toBeVisible()
 })
 
 test('earns Nectar, purchases every tier, and persists a selected flight pattern', async ({
@@ -342,9 +361,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await page.getByRole('button', { name: /keep this reflection/i }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('9')
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Shop', exact: true })
-    .click()
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   await page.waitForTimeout(450)
   const shopA11y = await new AxeBuilder({ page }).analyze()
   expect(
@@ -359,7 +376,9 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
     .getByRole('button', { name: 'Flight', exact: true })
     .click()
   await page.getByRole('button', { name: 'Buy Petal Hop' }).click()
-  await expect(page.getByRole('button', { name: 'Owned' }).first()).toBeDisabled()
+  await expect(
+    page.getByRole('button', { name: 'Owned' }).first(),
+  ).toBeDisabled()
 
   // Top up both currencies: the pricier patterns are bought with Stardust.
   await editGardenRecord(page, (state) => {
@@ -367,9 +386,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
     state.stardust = 20
   })
   await page.reload()
-  await mainNav(page)
-    .getByRole('button', { name: 'Shop', exact: true })
-    .click()
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   await page
     .locator('.shop-tabs')
     .getByRole('button', { name: 'Flight', exact: true })
@@ -397,20 +414,22 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
         violation.impact === 'serious' || violation.impact === 'critical',
     ),
   ).toEqual([])
-  await page.getByRole('button', { name: /Garden Waltz.*Owned - select pattern/i }).click()
+  await page
+    .getByRole('button', { name: /Garden Waltz.*Owned - select pattern/i })
+    .click()
   await reloadAfterSave(page)
   await mainNav(page)
     .getByRole('button', { name: 'Flight', exact: true })
     .click()
-  await expect(page.getByRole('button', { name: /Garden Waltz.*Selected/i })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await expect(
+    page.getByRole('button', { name: /Garden Waltz.*Selected/i }),
+  ).toHaveAttribute('aria-pressed', 'true')
   await mainNav(page)
     .getByRole('button', { name: 'Garden', exact: true })
     .click()
-  await expect(page.locator('.flying-butterfly').first()).toHaveClass(
-    /pattern-garden-waltz/,
+  await expect(page.locator('.flight-traveller').first()).toHaveAttribute(
+    'data-pattern',
+    'garden-waltz',
   )
   await mainNav(page)
     .getByRole('button', { name: 'Settings', exact: true })
@@ -428,14 +447,14 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
     state.nectar = 18
   })
   await page.reload()
-  await mainNav(page)
-    .getByRole('button', { name: 'Shop', exact: true })
-    .click()
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   await page
     .locator('.shop-tabs')
     .getByRole('button', { name: 'Jars', exact: true })
     .click()
-  await expect(page.getByRole('heading', { name: 'Buy letters and numbers' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Buy letters and numbers' }),
+  ).toBeVisible()
 
   await page.getByRole('button', { name: 'Buy Blue A jar' }).click()
   await page.getByRole('button', { name: 'S', exact: true }).click()
@@ -447,7 +466,9 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
     .getByRole('button', { name: 'Garden', exact: true })
     .click()
   await page.getByRole('button', { name: /View Milkweed/i }).click()
-  await page.getByRole('button', { name: /Place Blue A jar on Milkweed/i }).click()
+  await page
+    .getByRole('button', { name: /Place Blue A jar on Milkweed/i })
+    .click()
   await expect(
     page.getByRole('button', { name: /View Milkweed.*Blue A jar/i }),
   ).toBeVisible()
@@ -465,7 +486,9 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   ).toBeVisible()
 
   await page.getByRole('button', { name: /View Milkweed/i }).click()
-  await page.getByRole('button', { name: /Place Yellow S jar on Milkweed/i }).click()
+  await page
+    .getByRole('button', { name: /Place Yellow S jar on Milkweed/i })
+    .click()
   await page
     .getByRole('button', { name: /Move from Aster Blue A jar on Milkweed/i })
     .click()
@@ -496,13 +519,19 @@ test('shows plant details, protects active hosts, and frees a full garden space'
   })
   await page.reload()
   await expect(page.getByText(/all 8 plant spaces filled/i)).toBeVisible()
-  await expect(page.getByRole('button', { name: /plant a seed/i })).toBeDisabled()
+  await expect(
+    page.getByRole('button', { name: /plant a seed/i }),
+  ).toBeDisabled()
 
   await page.getByRole('button', { name: /View Milkweed/i }).click()
   await expect(page.getByRole('heading', { name: 'Milkweed' })).toBeVisible()
   await expect(page.getByText('Asclepias spp.')).toBeVisible()
-  await expect(page.getByText(/is still growing on this host plant/i)).toBeVisible()
-  await expect(page.getByRole('button', { name: /remove this plant/i })).toBeDisabled()
+  await expect(
+    page.getByText(/is still growing on this host plant/i),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /remove this plant/i }),
+  ).toBeDisabled()
   const plantA11y = await new AxeBuilder({ page }).analyze()
   expect(
     plantA11y.violations.filter(
@@ -515,10 +544,14 @@ test('shows plant details, protects active hosts, and frees a full garden space'
   await page.getByRole('button', { name: /remove this plant/i }).click()
   await page.getByRole('button', { name: /yes, remove plant/i }).click()
   await expect(page.getByText('7 / 8')).toBeVisible()
-  await expect(page.getByRole('button', { name: /plant a seed/i })).toBeEnabled()
+  await expect(
+    page.getByRole('button', { name: /plant a seed/i }),
+  ).toBeEnabled()
 })
 
-test('keeps butterfly field notes collapsed until requested', async ({ page }) => {
+test('keeps butterfly field notes collapsed until requested', async ({
+  page,
+}) => {
   await enterGarden(page)
   await mainNav(page)
     .getByRole('button', { name: 'Journal', exact: true })
@@ -528,7 +561,9 @@ test('keeps butterfly field notes collapsed until requested', async ({ page }) =
   await expect(page.locator('.field-notes .species-grid')).toBeVisible()
 })
 
-test('persists emergence and selects the new butterfly as companion', async ({ page }) => {
+test('persists emergence and selects the new butterfly as companion', async ({
+  page,
+}) => {
   await enterGarden(page)
   await editGardenRecord(page, (state) => {
     // A legacy 1.x chrysalis carrying an emergence timer that has now passed.
@@ -579,7 +614,9 @@ test('has no serious accessibility violations and relaunches offline', async ({
   }
 })
 
-test('has no serious accessibility violations on any view', async ({ page }) => {
+test('has no serious accessibility violations on any view', async ({
+  page,
+}) => {
   await enterGarden(page)
   const views = [
     'Garden',
@@ -610,8 +647,18 @@ test('every shop tab is reachable and accessible', async ({ page }) => {
   await enterGarden(page)
   await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   const offenders: string[] = []
-  for (const tab of ['Supplies', 'Boutique', 'Jars', 'Flight', 'Garden Pass']) {
-    await page.locator('.shop-tabs').getByRole('button', { name: tab, exact: true }).click()
+  for (const tab of [
+    'Supplies',
+    'Boutique',
+    'Jars',
+    'Flight',
+    'Backdrops',
+    'Garden Pass',
+  ]) {
+    await page
+      .locator('.shop-tabs')
+      .getByRole('button', { name: tab, exact: true })
+      .click()
     await page.waitForTimeout(300)
     const results = await new AxeBuilder({ page }).analyze()
     for (const violation of results.violations) {
@@ -668,7 +715,9 @@ test('gradient headings leave room for their descenders', async ({ page }) => {
 
   // And once inside, where the garden title and page headers live.
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
-  await expect(page.getByRole('heading', { name: 'Sunlit Sanctuary' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Sunlit Sanctuary' }),
+  ).toBeVisible()
   expect(await clipped()).toEqual([])
 })
 
@@ -689,7 +738,9 @@ test('the guide card glow has no edge inside the card', async ({ page }) => {
   await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
-  await mainNav(page).getByRole('button', { name: 'Guide', exact: true }).click()
+  await mainNav(page)
+    .getByRole('button', { name: 'Guide', exact: true })
+    .click()
   await expect(
     page.getByRole('heading', { name: /how the garden works/i }),
   ).toBeVisible()
@@ -738,7 +789,9 @@ test.describe('rounding out the day', () => {
     await expect(page.getByText('Round out your day')).toBeVisible()
     await page.getByRole('button', { name: 'Begin' }).click()
 
-    await expect(page.getByRole('heading', { name: 'Here is your day.' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Here is your day.' }),
+    ).toBeVisible()
 
     // The recap is a full view but is deliberately absent from the navigation,
     // so the sweep over every nav destination never reaches it.
@@ -784,3 +837,180 @@ test.describe('rounding out the day', () => {
   })
 })
 
+test('personal backdrop crops, survives reload and backup restore, and rejects corrupt media', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(60_000)
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await page.getByRole('button', { name: 'Backdrops', exact: true }).click()
+  await page.getByRole('button', { name: /Add your own backdrop/ }).click()
+  const editor = page.getByRole('dialog')
+  await editor
+    .locator('input[type=file]')
+    .setInputFiles({
+      name: 'broken.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('not an image'),
+    })
+  await expect(editor.getByRole('alert')).toContainText('not a readable')
+  await editor
+    .locator('input[type=file]')
+    .setInputFiles('src/assets/garden-cottage-bloom.webp')
+  await editor.getByLabel('Image name').fill('My quiet corner')
+  await editor.getByLabel('Zoom', { exact: true }).fill('1.5')
+  await editor.getByRole('button', { name: 'Phone preview' }).click()
+  await expect(editor.locator('.custom-scene-image')).toBeVisible()
+  const accessibility = await new AxeBuilder({ page }).analyze()
+  expect(
+    accessibility.violations.filter(
+      (v) => v.impact === 'serious' || v.impact === 'critical',
+    ),
+  ).toEqual([])
+  await editor.getByRole('button', { name: 'Save & use backdrop' }).click()
+  await expect(editor).not.toBeVisible()
+  await page.reload()
+  await expect(page.locator('.custom-scene-layer img')).toBeVisible()
+  await expect(page.locator('.custom-scene-layer img')).toHaveJSProperty(
+    'naturalWidth',
+    1600,
+  )
+  await mainNav(page)
+    .getByRole('button', { name: 'Settings', exact: true })
+    .click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download a backup' }).click()
+  const download = await downloadPromise
+  const path = await download.path()
+  const text = await readFile(path!, 'utf8')
+  const backup = JSON.parse(text) as { garden: AppState }
+  const image = backup.garden.customBackdrops[0]
+  expect(image.name).toBe('My quiet corner')
+  expect(image.crop.zoom).toBe(1.5)
+  expect(image.byteLength).toBe(Buffer.from(image.imageData, 'base64').length)
+  expect(image.byteLength).toBeLessThanOrEqual(1024 * 1024)
+  const corrupted = structuredClone(backup)
+  corrupted.garden.profile!.gardenName = 'Must not replace the garden'
+  corrupted.garden.customBackdrops[0].imageData = Buffer.alloc(
+    image.byteLength,
+  ).toString('base64')
+  await page.getByRole('button', { name: 'Restore from a backup' }).click()
+  await page
+    .getByLabel('Backup file')
+    .setInputFiles({
+      name: 'damaged.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(corrupted)),
+    })
+  await expect(page.getByText(/not a readable JPEG/)).toBeVisible()
+  await expect(page.getByLabel('Garden name', { exact: true })).not.toHaveValue(
+    'Must not replace the garden',
+  )
+  await page
+    .getByLabel('Backup file')
+    .setInputFiles({
+      name: 'garden.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(text),
+    })
+  await expect(page.getByText(/restored/i).last()).toBeVisible()
+  await mainNav(page)
+    .getByRole('button', { name: 'Garden', exact: true })
+    .click()
+  await expect(page.locator('.custom-scene-layer img')).toHaveAttribute(
+    'src',
+    `data:${image.mimeType};base64,${image.imageData}`,
+  )
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await context.setOffline(true)
+  await page.reload()
+  await expect(page.locator('.custom-scene-layer img')).toBeVisible()
+  await expect(page.locator('.custom-scene-layer img')).toHaveJSProperty(
+    'complete',
+    true,
+  )
+})
+
+test('boutique filters and try-on leave balances and outfits unchanged', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await page.getByRole('button', { name: 'Boutique', exact: true }).click()
+  await page.getByRole('searchbox').fill('Daisy Bonnet')
+  await expect(page.locator('.boutique-card')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('10')
+  await page.getByRole('button', { name: 'Clear filters' }).click()
+  await page.getByRole('combobox', { name: /^Type/ }).selectOption('aura')
+  await expect(page.locator('.boutique-card')).toHaveCount(7)
+  await page.getByRole('searchbox').fill('no such treasure')
+  await expect(
+    page.getByRole('heading', { name: 'Nothing in this little corner yet' }),
+  ).toBeVisible()
+})
+
+test('species seed guidance opens the right seed without planting it', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await mainNav(page)
+    .getByRole('button', { name: 'Guide', exact: true })
+    .click()
+  await page.getByRole('searchbox').fill('Queen')
+  await expect(page.locator('.species-card')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Show Milkweed seed' }).click()
+  await expect(page.locator('.seed-highlight')).toContainText('Milkweed')
+  await expect(page.locator('.seed-highlight')).toBeInViewport()
+  await expect(page.locator('.garden-plant')).toHaveCount(2)
+})
+
+test('flight stays full-sized through turns and respects reduced motion', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  const traveller = page.locator('.flight-traveller').first()
+  await expect
+    .poll(() => traveller.evaluate((el) => el.getAnimations().length))
+    .toBe(1)
+  const determinants = await page
+    .locator('.flight-heading')
+    .first()
+    .evaluate((el) => {
+      const animation = el.getAnimations()[0]
+      animation.pause()
+      const values: number[] = []
+      for (let time = 0; time <= 20000; time += 137) {
+        animation.currentTime = time
+        const matrix = new DOMMatrix(getComputedStyle(el).transform)
+        values.push(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c))
+      }
+      return values
+    })
+  expect(Math.min(...determinants)).toBeGreaterThan(0.2)
+  const clipped = await page.locator('.garden-flight-space').evaluate(frame => {
+    const traveller = frame.querySelector('.flight-traveller')!
+    const heading = frame.querySelector('.flight-heading')!
+    const bounds = frame.getBoundingClientRect()
+    const animations = [...traveller.getAnimations(), ...heading.getAnimations()]
+    animations.forEach(animation => animation.pause())
+    for (let time = 0; time <= 25000; time += 191) {
+      animations.forEach(animation => { animation.currentTime = time })
+      const rect = heading.getBoundingClientRect()
+      if (rect.left < bounds.left || rect.right > bounds.right || rect.top < bounds.top || rect.bottom > bounds.bottom) return true
+    }
+    return false
+  })
+  expect(clipped).toBe(false)
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await expect
+    .poll(() => traveller.evaluate((el) => el.getAnimations().length))
+    .toBe(0)
+  const before = await traveller.getAttribute('style')
+  await page.waitForTimeout(150)
+  expect(await traveller.getAttribute('style')).toBe(before)
+})

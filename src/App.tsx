@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import './App.css'
 import './theme-aurora.css'
+import './garden-3.css'
+import { currentRelease, hasUnseenRelease } from './data/releases'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { Onboarding } from './components/Onboarding'
@@ -13,6 +15,11 @@ import { UpdatePrompt } from './components/UpdatePrompt'
  * when the gardener first walks into it, so the initial download does not
  * carry the shop catalogue, the guide, and every journal view at once.
  */
+const WhatsNewView = lazy(() =>
+  import('./components/WhatsNewView').then((m) => ({
+    default: m.WhatsNewView,
+  })),
+)
 const CareView = lazy(() =>
   import('./components/CareView').then((m) => ({ default: m.CareView })),
 )
@@ -33,7 +40,9 @@ const MoonlightRecap = lazy(() =>
   })),
 )
 const SettingsView = lazy(() =>
-  import('./components/SettingsView').then((m) => ({ default: m.SettingsView })),
+  import('./components/SettingsView').then((m) => ({
+    default: m.SettingsView,
+  })),
 )
 const ShopView = lazy(() =>
   import('./components/ShopView').then((m) => ({ default: m.ShopView })),
@@ -88,7 +97,16 @@ function App() {
   const garden = useGardenState()
   const today = useLocalDate()
   const recap = useRecapWindow()
-  const [view, setView] = useState<AppView>('garden')
+  const [view, changeView] = useState<AppView>('garden')
+  const setView = (next: AppView) => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+    changeView(next)
+  }
+  const finishOnboarding = (name: string, gardenName: string) => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+    garden.onboard(name, gardenName)
+  }
+  const [seedFocus, setSeedFocus] = useState<string>()
   /** The day the recap was actually opened for, so it is never re-entered. */
   const [recapOpenedFor, setRecapOpenedFor] = useState<string>()
   useAmbientSound(
@@ -100,7 +118,10 @@ function App() {
   const [splashDone, setSplashDone] = useState(false)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setSplashDone(true), SPLASH_MINIMUM_MS)
+    const timer = window.setTimeout(
+      () => setSplashDone(true),
+      SPLASH_MINIMUM_MS,
+    )
     return () => window.clearTimeout(timer)
   }, [])
 
@@ -143,12 +164,12 @@ function App() {
   }
 
   if (!garden.state?.profile) {
-    return <Onboarding onComplete={garden.onboard} />
+    return <Onboarding onComplete={finishOnboarding} />
   }
 
   const state = garden.state
   const profile = state.profile
-  if (!profile) return <Onboarding onComplete={garden.onboard} />
+  if (!profile) return <Onboarding onComplete={finishOnboarding} />
   const sunlight = sunlightForDate(state, today)
   const activeTrackName = ambientTrackName(profile.ambientTrack)
   const recapCollected = recap.targetDate
@@ -293,7 +314,9 @@ function App() {
                 ? 'This browser would not open its local storage. Your garden is still on this device; try reopening the app.'
                 : 'The stored garden could not be read, so a copy has been set aside untouched. Restore a backup from Settings, or start fresh.'}
           </span>
-          <span>Saving is paused so nothing already stored is overwritten.</span>
+          <span>
+            Saving is paused so nothing already stored is overwritten.
+          </span>
         </div>
       )}
 
@@ -309,102 +332,158 @@ function App() {
       )}
 
       <main id="main-content">
-        <Suspense fallback={<p className="view-loading" role="status">Opening…</p>}>
-        {activeView === 'garden' && (
-          <GardenView
-            state={state}
-            onPlant={garden.plant}
-            onRemovePlant={garden.removePlant}
-            onPlaceJar={garden.placeJar}
-            onRemoveJarPlacement={garden.removeJarPlacement}
-            onSelectCompanion={garden.selectCompanion}
-            onRenameCreature={garden.renameCreature}
-            onOpenCare={() => setView('care')}
-          />
-        )}
-        {activeView === 'care' && (
-          <CareView
-            state={state}
-            today={today}
-            onCare={garden.careForCreature}
-            onEquip={garden.equipItem}
-            onUnequip={garden.unequipSlot}
-            onRenameCreature={garden.renameCreature}
-            onGoToShop={() => setView('shop')}
-          />
-        )}
-        {activeView === 'shop' && (
-          <ShopView
-            state={state}
-            onPurchasePattern={garden.purchaseFlightPattern}
-            onPurchaseJar={garden.purchaseJar}
-            onPurchaseItem={garden.purchaseItem}
-          />
-        )}
-        {activeView === 'flight-patterns' && (
-          <FlightPatternsView
-            state={state}
-            onSelect={garden.selectFlightPattern}
-          />
-        )}
-        {activeView === 'today' && (
-          <TodayView
-            state={state}
-            today={today}
-            onSaveMood={garden.saveMood}
-            onSaveReflection={garden.saveReflection}
-            onAddGoal={garden.addGoal}
-            onUpdateGoal={garden.updateGoal}
-            onDeleteGoal={garden.deleteGoal}
-            onCompleteGoal={garden.completeGoal}
-            onSkipGoal={garden.skipGoal}
-            onSnoozeGoal={garden.snoozeGoal}
-            onWakeGoal={garden.wakeGoal}
-            onPlanGoal={garden.planGoal}
-            onSetGoalArchived={garden.setGoalArchived}
-            recap={offeredRecap}
-            moonlightCollected={recapCollected}
-            onOpenRecap={() => {
-              setRecapOpenedFor(recapTarget)
-              setView('recap')
-            }}
-          />
-        )}
-        {inRecap && recapTarget && (
-          <MoonlightRecap
-            state={state}
-            targetDate={recapTarget}
-            today={today}
-            onCollect={(submission) =>
-              garden.collectMoonlight(recapTarget, submission)
-            }
-            onClose={() => setView('today')}
-          />
-        )}
-        {activeView === 'guide' && <GuideView />}
-        {activeView === 'journal' && (
-          <JournalView
-            state={state}
-            onUpdateMood={garden.updateMood}
-            onDeleteMood={garden.deleteMood}
-            onUpdateReflection={garden.updateReflection}
-            onDeleteReflection={garden.deleteReflection}
-            onUpdateRecap={garden.updateRecap}
-            onDeleteRecap={garden.deleteRecap}
-          />
-        )}
-        {activeView === 'settings' && (
-          <SettingsView
-            state={state}
-            persistence={garden.persistence}
-            onUpdateProfile={garden.updateProfile}
-            onSelectAmbientTrack={garden.selectAmbientTrack}
-            onSelectBackdrop={garden.selectBackdrop}
-            onExportGarden={garden.exportGarden}
-            onImportGarden={garden.importGarden}
-            onDeleteAll={garden.deleteAll}
-          />
-        )}
+        {activeView === 'garden' &&
+          hasUnseenRelease(state.profile?.lastSeenReleaseId) && (
+            <aside className="release-notice">
+              <div>
+                <span className="eyebrow">A little more wonder · 3.0</span>
+                <strong>Your garden has grown.</strong>
+              </div>
+              <button
+                className="text-button"
+                onClick={() => {
+                  garden.markReleaseSeen(currentRelease.id)
+                  setView('whats-new')
+                }}
+              >
+                See what's new →
+              </button>
+              <button
+                className="notice-dismiss"
+                aria-label="Dismiss update notice"
+                onClick={() => garden.markReleaseSeen(currentRelease.id)}
+              >
+                ×
+              </button>
+            </aside>
+          )}
+
+        <Suspense
+          fallback={
+            <p className="view-loading" role="status">
+              Opening…
+            </p>
+          }
+        >
+          {activeView === 'garden' && (
+            <GardenView
+              state={state}
+              onPlant={garden.plant}
+              onRemovePlant={garden.removePlant}
+              onPlaceJar={garden.placeJar}
+              onRemoveJarPlacement={garden.removeJarPlacement}
+              onSelectCompanion={garden.selectCompanion}
+              onRenameCreature={garden.renameCreature}
+              onOpenCare={() => setView('care')}
+              seedFocus={seedFocus}
+              onOpenGuide={() => setView('guide')}
+            />
+          )}
+          {activeView === 'care' && (
+            <CareView
+              state={state}
+              today={today}
+              onCare={garden.careForCreature}
+              onEquip={garden.equipItem}
+              onUnequip={garden.unequipSlot}
+              onRenameCreature={garden.renameCreature}
+              onGoToShop={() => setView('shop')}
+            />
+          )}
+          {activeView === 'shop' && (
+            <ShopView
+              state={state}
+              onPurchasePattern={garden.purchaseFlightPattern}
+              onPurchaseJar={garden.purchaseJar}
+              onPurchaseItem={garden.purchaseItem}
+              onOpenCare={() => setView('care')}
+              onOpenFlight={() => setView('flight-patterns')}
+              onSelectBackdrop={garden.selectBackdrop}
+              onSaveCustomBackdrop={garden.saveCustomBackdrop}
+              onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
+              onSelectCustomBackdrop={garden.selectCustomBackdrop}
+            />
+          )}
+          {activeView === 'flight-patterns' && (
+            <FlightPatternsView
+              state={state}
+              onSelect={garden.selectFlightPattern}
+            />
+          )}
+          {activeView === 'today' && (
+            <TodayView
+              state={state}
+              today={today}
+              onSaveMood={garden.saveMood}
+              onSaveReflection={garden.saveReflection}
+              onAddGoal={garden.addGoal}
+              onUpdateGoal={garden.updateGoal}
+              onDeleteGoal={garden.deleteGoal}
+              onCompleteGoal={garden.completeGoal}
+              onSkipGoal={garden.skipGoal}
+              onSnoozeGoal={garden.snoozeGoal}
+              onWakeGoal={garden.wakeGoal}
+              onPlanGoal={garden.planGoal}
+              onSetGoalArchived={garden.setGoalArchived}
+              recap={offeredRecap}
+              moonlightCollected={recapCollected}
+              onOpenRecap={() => {
+                setRecapOpenedFor(recapTarget)
+                setView('recap')
+              }}
+            />
+          )}
+          {inRecap && recapTarget && (
+            <MoonlightRecap
+              state={state}
+              targetDate={recapTarget}
+              today={today}
+              onCollect={(submission) =>
+                garden.collectMoonlight(recapTarget, submission)
+              }
+              onClose={() => setView('today')}
+            />
+          )}
+          {activeView === 'guide' && (
+            <GuideView
+              state={state}
+              onShowSeed={(id) => {
+                setSeedFocus(id)
+                setView('garden')
+              }}
+            />
+          )}
+          {activeView === 'whats-new' && <WhatsNewView />}
+          {activeView === 'journal' && (
+            <JournalView
+              state={state}
+              onUpdateMood={garden.updateMood}
+              onDeleteMood={garden.deleteMood}
+              onUpdateReflection={garden.updateReflection}
+              onDeleteReflection={garden.deleteReflection}
+              onUpdateRecap={garden.updateRecap}
+              onDeleteRecap={garden.deleteRecap}
+            />
+          )}
+          {activeView === 'settings' && (
+            <SettingsView
+              state={state}
+              persistence={garden.persistence}
+              onUpdateProfile={garden.updateProfile}
+              onSelectAmbientTrack={garden.selectAmbientTrack}
+              onSelectBackdrop={garden.selectBackdrop}
+              onExportGarden={garden.exportGarden}
+              onImportGarden={garden.importGarden}
+              onDeleteAll={garden.deleteAll}
+              onOpenWhatsNew={() => {
+                garden.markReleaseSeen(currentRelease.id)
+                setView('whats-new')
+              }}
+              onSaveCustomBackdrop={garden.saveCustomBackdrop}
+              onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
+              onSelectCustomBackdrop={garden.selectCustomBackdrop}
+            />
+          )}
         </Suspense>
       </main>
 

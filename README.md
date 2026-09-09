@@ -14,18 +14,22 @@ account, no server, no analytics, and no third-party request of any kind.
 - Host and nectar plants with visible growth across four stages
 - Egg, caterpillar, chrysalis and butterfly stages, advanced by days of care
 - Per-stage care activities, a bond meter, and a shared cosmetics wardrobe
-- A shop of supplies, outfits, lettered jars, and flight patterns
-- 25 real butterfly species with field notes, and selectable companions
+- A searchable shop with outfit previews, coloured glass jars, and twelve flight patterns
+- 25 real butterfly species with field notes, seed guidance, and selectable companions
+- Seven illustrated backdrops and up to three personal images with crop and zoom
+- A free Garden Pass PWA preview; no payment or subscription is active
 - Three soundscapes synthesised on device — no audio files are downloaded
-- Backup and restore to a JSON file you keep
+- Backup and restore to a JSON file including your personal backdrop images
 - IndexedDB persistence with no account, analytics, or cloud transfer
 - Installable offline PWA and GitHub Pages deployment
 - Reduced-motion, night mode, and responsive mobile support
 
 ## Development
 
+Use Node 24 and npm 11, matching CI.
+
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -62,10 +66,10 @@ IndexedDB storage. Nothing is uploaded, and nothing is ever requested from a
 third party — typefaces are bundled rather than fetched from a font CDN, so
 opening the garden does not tell anyone that you did.
 
-The few requests made after launch all go to the app's own origin. The two
-backdrops that unlock later, and the extended-latin typefaces, are deliberately
-left out of the install and fetched the first time they are actually needed, so
-a new gardener does not download half a megabyte they cannot use yet.
+The few requests made after launch all go to the app's own origin. Optional
+full-size backdrops and extended-latin typefaces are left out of the initial
+install and cached when needed. Scene thumbnails are available offline.
+Personal images are resized and re-encoded locally; the original file is unchanged.
 
 Clearing site data removes the garden, so **Settings → Backup and restore**
 writes a copy straight to your device. That file contains everything you have
@@ -74,6 +78,17 @@ written; keep it somewhere you would keep a diary.
 If the app ever finds a saved garden it cannot read — one written by a newer
 version, for instance — it will not overwrite it. Saving pauses, the record is
 set aside untouched, and a banner explains what happened.
+
+## 3.0 review and future app work
+
+See [the local 3.0 review](docs/3.0-LOCAL-REVIEW.md) for implementation coverage,
+verification, and remaining physical-device checks. Version 3.0 remains a PWA.
+`src/lib/gardenPass.ts` separates release preview access from a future verified
+provider; backups do not confer paid access. Native packaging, billing,
+server-side purchase verification, and Google Play submission remain later work.
+
+Schema 6 / IndexedDB version 5 includes personal image data. Older app builds
+cannot read a garden after this upgrade; keep an exported backup before updates.
 
 ## Deployment
 

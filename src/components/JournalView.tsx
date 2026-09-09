@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react'
-import { moodLevels, moodNames, reflectionPrompts, species } from '../data/content'
+import {
+  moodLevels,
+  moodNames,
+  reflectionPrompts,
+  species,
+} from '../data/content'
 import { formatJournalDate } from '../lib/date'
 import { useLocalDate } from '../hooks/useLocalDate'
 import { calculateSunlightStreak } from '../lib/streak'
 import type { AppState, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
 import { Butterfly } from './Butterfly'
 import { Icon } from './Icons'
-
 
 /** The timeline grows for as long as the garden is kept, so it is paged. */
 const TIMELINE_PAGE_SIZE = 30
@@ -94,7 +98,9 @@ export function JournalView({
         <div>
           <p className="eyebrow">Private to this device</p>
           <h1>Journal</h1>
-          <p>Your words are kept as you wrote them, without scores or analysis.</p>
+          <p>
+            Your words are kept as you wrote them, without scores or analysis.
+          </p>
         </div>
       </header>
 
@@ -108,37 +114,47 @@ export function JournalView({
             <span className="eyebrow">Field notes</span>
             <strong id="species-journal-title">Butterflies welcomed</strong>
           </span>
-          <span className="count-badge">{emerged.length} / {species.length}</span>
+          <span className="count-badge">
+            {emerged.length} / {species.length}
+          </span>
         </summary>
         <div className="species-grid" aria-labelledby="species-journal-title">
-          {fieldNotesOpen && species.map((definition) => {
-            const creature = emergedBySpecies.get(definition.id)
-            return (
-              <article
-                className={`species-card ${creature ? '' : 'undiscovered'}`}
-                key={definition.id}
-              >
-                {creature ? (
-                  <Butterfly
-                    speciesId={definition.id}
-                    label={definition.commonName}
-                  />
-                ) : (
-                  <div className="unknown-butterfly" aria-label="Not yet discovered">
-                    <span className="unknown-wing unknown-wing-left" />
-                    <span className="unknown-wing unknown-wing-right" />
-                    <span className="unknown-body" />
+          {fieldNotesOpen &&
+            species.map((definition) => {
+              const creature = emergedBySpecies.get(definition.id)
+              return (
+                <article
+                  className={`species-card ${creature ? '' : 'undiscovered'}`}
+                  key={definition.id}
+                >
+                  {creature ? (
+                    <Butterfly
+                      speciesId={definition.id}
+                      label={definition.commonName}
+                    />
+                  ) : (
+                    <div
+                      className="unknown-butterfly"
+                      aria-label="Not yet discovered"
+                    >
+                      <span className="unknown-wing unknown-wing-left" />
+                      <span className="unknown-wing unknown-wing-right" />
+                      <span className="unknown-body" />
+                    </div>
+                  )}
+                  <div>
+                    <strong>{definition.commonName}</strong>
+                    <em>
+                      {creature
+                        ? definition.scientificName
+                        : 'Not yet welcomed'}
+                    </em>
+                    {creature && <small>Welcomed as {creature.name}</small>}
+                    {creature && <p>{definition.fact}</p>}
                   </div>
-                )}
-                <div>
-                  <strong>{definition.commonName}</strong>
-                  <em>{creature ? definition.scientificName : 'Not yet welcomed'}</em>
-                  {creature && <small>Welcomed as {creature.name}</small>}
-                  {creature && <p>{definition.fact}</p>}
-                </div>
-              </article>
-            )
-          })}
+                </article>
+              )
+            })}
         </div>
       </details>
 
@@ -192,6 +208,7 @@ export function JournalView({
                 : undefined
               return (
                 <article className="card timeline-entry" key={date}>
+                  <span className="timeline-dot" aria-hidden="true" />
                   <time dateTime={date}>{formatJournalDate(date)}</time>
                   {mood && (
                     <div className="journal-block">
@@ -210,12 +227,16 @@ export function JournalView({
                               onChange={(event) =>
                                 setEditingMood({
                                   ...editingMood,
-                                  level: Number(event.target.value) as MoodEntry['level'],
+                                  level: Number(
+                                    event.target.value,
+                                  ) as MoodEntry['level'],
                                 })
                               }
                             >
                               {moodNames.map((name, index) => (
-                                <option key={name} value={index + 1}>{name}</option>
+                                <option key={name} value={index + 1}>
+                                  {name}
+                                </option>
                               ))}
                             </select>
                           </label>
@@ -224,27 +245,46 @@ export function JournalView({
                             <input
                               value={editingMood.note}
                               onChange={(event) =>
-                                setEditingMood({ ...editingMood, note: event.target.value })
+                                setEditingMood({
+                                  ...editingMood,
+                                  note: event.target.value,
+                                })
                               }
                               maxLength={280}
                             />
                           </label>
                           <div className="form-actions">
-                            <button className="secondary-button" type="submit">Save</button>
-                            <button className="text-button" type="button" onClick={() => setEditingMood(undefined)}>Cancel</button>
+                            <button className="secondary-button" type="submit">
+                              Save
+                            </button>
+                            <button
+                              className="text-button"
+                              type="button"
+                              onClick={() => setEditingMood(undefined)}
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </form>
                       ) : (
                         <>
                           <div>
-                            <span className={`weather small weather-${mood.level}`} aria-hidden="true" />
+                            <span
+                              className={`weather small weather-${mood.level}`}
+                              aria-hidden="true"
+                            />
                             <div>
                               <strong>{moodNames[mood.level - 1]}</strong>
                               {mood.note && <p>{mood.note}</p>}
                             </div>
                           </div>
                           <div className="inline-actions">
-                            <button className="text-button" onClick={() => setEditingMood(mood)}>Edit</button>
+                            <button
+                              className="text-button"
+                              onClick={() => setEditingMood(mood)}
+                            >
+                              Edit
+                            </button>
                             {pendingDelete === mood.id ? (
                               <>
                                 <span className="delete-prompt" role="alert">
@@ -305,8 +345,16 @@ export function JournalView({
                             />
                           </label>
                           <div className="form-actions">
-                            <button className="secondary-button" type="submit">Save</button>
-                            <button className="text-button" type="button" onClick={() => setEditingReflection(undefined)}>Cancel</button>
+                            <button className="secondary-button" type="submit">
+                              Save
+                            </button>
+                            <button
+                              className="text-button"
+                              type="button"
+                              onClick={() => setEditingReflection(undefined)}
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </form>
                       ) : (
@@ -318,7 +366,12 @@ export function JournalView({
                             </div>
                           </div>
                           <div className="inline-actions">
-                            <button className="text-button" onClick={() => setEditingReflection(reflection)}>Edit</button>
+                            <button
+                              className="text-button"
+                              onClick={() => setEditingReflection(reflection)}
+                            >
+                              Edit
+                            </button>
                             {pendingDelete === reflection.id ? (
                               <>
                                 <span className="delete-prompt" role="alert">
@@ -429,8 +482,16 @@ export function JournalView({
                             />
                           </label>
                           <div className="form-actions">
-                            <button className="secondary-button" type="submit">Save</button>
-                            <button className="text-button" type="button" onClick={() => setEditingRecap(undefined)}>Cancel</button>
+                            <button className="secondary-button" type="submit">
+                              Save
+                            </button>
+                            <button
+                              className="text-button"
+                              type="button"
+                              onClick={() => setEditingRecap(undefined)}
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </form>
                       ) : (
@@ -471,7 +532,12 @@ export function JournalView({
                             </div>
                           </div>
                           <div className="inline-actions">
-                            <button className="text-button" onClick={() => setEditingRecap(recap)}>Edit</button>
+                            <button
+                              className="text-button"
+                              onClick={() => setEditingRecap(recap)}
+                            >
+                              Edit
+                            </button>
                             {pendingDelete === recap.id ? (
                               <>
                                 <span className="delete-prompt" role="alert">

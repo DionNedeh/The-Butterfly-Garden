@@ -1,6 +1,7 @@
 import { flightPatterns } from '../data/flightPatterns'
 import { currencyLabel } from '../lib/currency'
 import type { AppState, FlightPatternId } from '../types'
+import { FlightPreview } from './FlyingButterfly'
 import { Icon } from './Icons'
 
 export function FlightPatternsView({
@@ -17,8 +18,8 @@ export function FlightPatternsView({
           <p className="eyebrow">Garden movement</p>
           <h1>Flight Patterns</h1>
           <p>
-            Choose one owned pattern for every butterfly in the garden.
-            Their timing remains gently staggered.
+            Choose one owned pattern for every butterfly in the garden. Their
+            timing remains gently staggered.
           </p>
         </div>
       </header>
@@ -34,9 +35,10 @@ export function FlightPatternsView({
               onClick={() => onSelect(pattern.id)}
               aria-pressed={selected}
             >
-              <span className={`pattern-preview ${pattern.animationClass}`} aria-hidden="true">
-                <span className="preview-flight-dot" />
-              </span>
+              <FlightPreview
+                pattern={pattern.id}
+                reduced={state.profile?.reducedMotion}
+              />
               <span className="pattern-select-copy">
                 <strong>{pattern.name}</strong>
                 <small>{pattern.description}</small>

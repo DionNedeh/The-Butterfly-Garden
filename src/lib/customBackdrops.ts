@@ -84,7 +84,11 @@ export function checkSourceFile(file: {
       'Choose a JPEG, PNG or WebP image from your device.',
     )
   }
-  if (file.size > CUSTOM_BACKDROP_LIMITS.maxSourceBytes) {
+  if (
+    !Number.isInteger(file.size) ||
+    file.size <= 0 ||
+    file.size > CUSTOM_BACKDROP_LIMITS.maxSourceBytes
+  ) {
     return reject(
       'too-large',
       'That image is larger than 10 MB. Try a smaller copy.',
@@ -99,8 +103,8 @@ export function checkDecodedSize(
   height: number,
 ): CustomBackdropCheck {
   if (
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
     width <= 0 ||
     height <= 0
   ) {
@@ -135,7 +139,9 @@ export function fitWithinMaxEdge(width: number, height: number) {
 export const DEFAULT_CROP: CustomBackdropCrop = { x: 0.5, y: 0.5, zoom: 1 }
 
 /** Bring any crop back inside its allowed range, replacing nonsense values. */
-export function clampCrop(crop: Partial<CustomBackdropCrop> | undefined): CustomBackdropCrop {
+export function clampCrop(
+  crop: Partial<CustomBackdropCrop> | undefined,
+): CustomBackdropCrop {
   const clamp = (value: unknown, min: number, max: number, fallback: number) =>
     typeof value === 'number' && Number.isFinite(value)
       ? Math.min(max, Math.max(min, value))
@@ -189,9 +195,15 @@ export function coverGeometry(
   // `+ 0` normalises -0, which Object.is treats as a different value and which
   // would otherwise leak into any comparison a caller makes against zero.
   const left =
-    Math.min(0, Math.max(frame.width - width, -(width - frame.width) * safe.x)) + 0
+    Math.min(
+      0,
+      Math.max(frame.width - width, -(width - frame.width) * safe.x),
+    ) + 0
   const top =
-    Math.min(0, Math.max(frame.height - height, -(height - frame.height) * safe.y)) + 0
+    Math.min(
+      0,
+      Math.max(frame.height - height, -(height - frame.height) * safe.y),
+    ) + 0
   return { width, height, left, top }
 }
 
@@ -235,8 +247,8 @@ export function isValidCustomBackdrop(value: unknown): value is CustomBackdrop {
   if (
     typeof width !== 'number' ||
     typeof height !== 'number' ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
     width <= 0 ||
     height <= 0 ||
     width > CUSTOM_BACKDROP_LIMITS.maxEdge ||
@@ -254,7 +266,7 @@ export function isValidCustomBackdrop(value: unknown): value is CustomBackdrop {
   }
   // The declared size has to match the data, or a quota decision made from it
   // would be based on a number the file simply asserted.
-  if (Math.abs(decodedByteLength(record.imageData) - byteLength) > 3) return false
+  if (decodedByteLength(record.imageData) !== byteLength) return false
 
   const crop = record.crop as Record<string, unknown> | undefined
   if (!crop || typeof crop !== 'object') return false
@@ -379,7 +391,10 @@ export function selectCustomBackdrop(
   id: string | undefined,
 ): AppState {
   if (!state.profile) return state
-  if (id !== undefined && !state.customBackdrops.some((entry) => entry.id === id)) {
+  if (
+    id !== undefined &&
+    !state.customBackdrops.some((entry) => entry.id === id)
+  ) {
     return state
   }
   if (state.profile.selectedCustomBackdropId === id) return state

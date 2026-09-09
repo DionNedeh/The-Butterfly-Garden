@@ -997,213 +997,6 @@
   pointer-events: none;
 }
 
-.flying-butterfly {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: auto;
-  transform: translate(var(--route-x0), var(--route-y0)) scale(var(--flight-size));
-  will-change: transform;
-  filter: drop-shadow(0 7px 6px rgba(20, 45, 36, 0.25));
-  animation: garden-flight var(--flight-duration) ease-in-out var(--flight-delay) infinite;
-}
-
-/* A per-frame filter on a dozen continuously moving elements is the most
-   expensive thing in the scene on a phone; the shadow is decorative, so it
-   goes on small screens and whenever motion is dialled down. */
-@media (max-width: 900px) {
-  .flying-butterfly {
-    filter: none;
-  }
-}
-
-.reduce-motion .flying-butterfly {
-  filter: none;
-  will-change: auto;
-}
-
-.pattern-petal-hop {
-  animation-name: petal-hop;
-  animation-duration: calc(var(--flight-duration) * 0.85);
-}
-
-.pattern-figure-eight {
-  animation-name: figure-eight;
-  animation-duration: calc(var(--flight-duration) * 1.05);
-}
-
-.pattern-sunbeam-swoop {
-  animation-name: sunbeam-swoop;
-}
-
-.pattern-spiral-rise {
-  animation-name: spiral-rise;
-  animation-duration: calc(var(--flight-duration) * 1.1);
-}
-
-.pattern-garden-waltz {
-  animation-name: garden-waltz;
-  animation-duration: calc(var(--flight-duration) * 1.2);
-}
-
-/* The six patterns added in 3.0. Durations mirror `baseDurationMs` in
-   src/lib/flightMotion.ts relative to Gentle Drift's 19s, so the CSS engine and
-   the generated tracks cannot disagree about pace.
-
-   These keyframes are a transitional projection of that motion table into the
-   current route-variable engine. The generator in flightMotion.ts is the real
-   definition; this block is replaced when it is wired into the scene. */
-.pattern-clover-meander {
-  animation-name: clover-meander;
-  animation-duration: calc(var(--flight-duration) * 1.16);
-}
-
-.pattern-breeze-glide {
-  animation-name: breeze-glide;
-  animation-duration: calc(var(--flight-duration) * 1.26);
-}
-
-.pattern-blossom-bounce {
-  animation-name: blossom-bounce;
-  animation-duration: calc(var(--flight-duration) * 0.76);
-}
-
-.pattern-ribbon-loop {
-  animation-name: ribbon-loop;
-  animation-duration: calc(var(--flight-duration) * 1.08);
-}
-
-.pattern-moonbeam-float {
-  animation-name: moonbeam-float;
-  animation-duration: calc(var(--flight-duration) * 1.37);
-}
-
-.pattern-canopy-dance {
-  animation-name: canopy-dance;
-  animation-duration: calc(var(--flight-duration) * 1.21);
-}
-
-@keyframes garden-flight {
-  0% { transform: translate(var(--route-x0), var(--route-y0)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-3deg); }
-  18% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
-  34%, 43% { transform: translate(var(--route-x2), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(1deg); }
-  51% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-3deg); }
-  68% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(4deg); }
-  82%, 90% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), var(--route-y0)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-3deg); }
-}
-
-@keyframes petal-hop {
-  0%, 12% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  25% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  31%, 43% { transform: translate(var(--route-x2), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  57% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-5deg); }
-  64%, 76% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  83% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-@keyframes figure-eight {
-  0% { transform: translate(var(--route-x0), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  20% { transform: translate(var(--route-x3), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  42%, 50% { transform: translate(var(--route-x4), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  70% { transform: translate(var(--route-x3), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-5deg); }
-  92% { transform: translate(var(--route-x0), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-@keyframes sunbeam-swoop {
-  0% { transform: translate(var(--route-x0), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
-  25% { transform: translate(var(--route-x1), 10cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  48% { transform: translate(var(--route-x4), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-7deg); }
-  52%, 64% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  82% { transform: translate(var(--route-x3), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(5deg); }
-  100% { transform: translate(var(--route-x0), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-@keyframes spiral-rise {
-  0%, 10% { transform: translate(var(--route-x2), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  25% { transform: translate(var(--route-x1), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(-5deg); }
-  42% { transform: translate(var(--route-x2), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  58% { transform: translate(var(--route-x3), 14cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(5deg); }
-  72% { transform: translate(var(--route-x4), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  88% { transform: translate(var(--route-x3), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x2), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-@keyframes garden-waltz {
-  0%, 9% { transform: translate(var(--route-x0), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  22% { transform: translate(var(--route-x1), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  35%, 44% { transform: translate(var(--route-x2), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  57% { transform: translate(var(--route-x4), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-4deg); }
-  70%, 79% { transform: translate(var(--route-x4), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  90% { transform: translate(var(--route-x1), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), var(--route-y4)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-/* Low wandering arcs; the holds are deliberately uneven so it reads as
-   aimless rather than metronomic. */
-@keyframes clover-meander {
-  0%, 8% { transform: translate(var(--route-x0), 74cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  21% { transform: translate(var(--route-x1), 62cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(4deg); }
-  33%, 47% { transform: translate(var(--route-x2), 78cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  59% { transform: translate(var(--route-x3), 66cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-4deg); }
-  71%, 74% { transform: translate(var(--route-x4), 80cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  88% { transform: translate(var(--route-x1), 70cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), 74cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-/* Long shallow crossings with very little banking. */
-@keyframes breeze-glide {
-  0% { transform: translate(var(--route-x0), 42cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  38% { transform: translate(var(--route-x2), 36cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(2deg); }
-  50%, 58% { transform: translate(var(--route-x4), 46cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  88% { transform: translate(var(--route-x1), 38cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-2deg); }
-  100% { transform: translate(var(--route-x0), 42cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-/* Short arcs that settle at flower height between each one. */
-@keyframes blossom-bounce {
-  0%, 11% { transform: translate(var(--route-x0), 72cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  22% { transform: translate(var(--route-x1), 54cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  33%, 44% { transform: translate(var(--route-x2), 74cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  55% { transform: translate(var(--route-x3), 56cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-5deg); }
-  66%, 78% { transform: translate(var(--route-x4), 73cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  89% { transform: translate(var(--route-x1), 58cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), 72cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-/* Wide loops whose crossing point moves each time around. */
-@keyframes ribbon-loop {
-  0% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  17% { transform: translate(var(--route-x3), 28cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(6deg); }
-  34%, 40% { transform: translate(var(--route-x4), var(--route-y1)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  55% { transform: translate(var(--route-x2), 64cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-6deg); }
-  72% { transform: translate(var(--route-x1), var(--route-y3)) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  86%, 91% { transform: translate(var(--route-x3), 40cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), var(--route-y2)) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-/* Slow vertical waves rising into one long hover. */
-@keyframes moonbeam-float {
-  0% { transform: translate(var(--route-x0), 58cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  18%, 34% { transform: translate(var(--route-x1), 16cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  48% { transform: translate(var(--route-x2), 50cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(3deg); }
-  63% { transform: translate(var(--route-x3), 22cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  80% { transform: translate(var(--route-x4), 56cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-3deg); }
-  100% { transform: translate(var(--route-x0), 58cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
-/* Broad arcs up near the canopy, easing down to lower rests. */
-@keyframes canopy-dance {
-  0% { transform: translate(var(--route-x0), 20cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  24% { transform: translate(var(--route-x2), 14cqh) scale(var(--flight-size)) scaleX(var(--flip-a)) rotate(5deg); }
-  41%, 52% { transform: translate(var(--route-x4), 60cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-  68% { transform: translate(var(--route-x3), 18cqh) scale(var(--flight-size)) scaleX(var(--flip-b)) rotate(-5deg); }
-  84%, 90% { transform: translate(var(--route-x1), 64cqh) scale(var(--flight-size)) scaleX(var(--flip-b)); }
-  100% { transform: translate(var(--route-x0), 20cqh) scale(var(--flight-size)) scaleX(var(--flip-a)); }
-}
-
 .garden-plants {
   position: absolute;
   z-index: 3;
@@ -1287,75 +1080,6 @@
 .growth-0 .flower,
 .growth-1 .flower {
   display: none;
-}
-
-.decorative-jar {
-  position: relative;
-  display: inline-grid;
-  width: 42px;
-  height: 38px;
-  place-items: center;
-  border: 3px solid var(--jar-border);
-  border-radius: 13px 13px 11px 11px;
-  background:
-    linear-gradient(135deg, var(--jar-highlight) 0 16%, transparent 17%),
-    linear-gradient(145deg, var(--jar-fill), var(--jar-fill) 62%, var(--jar-border));
-  box-shadow:
-    inset -5px -4px 0 rgba(0, 0, 0, 0.12),
-    0 7px 12px rgba(27, 42, 33, 0.22);
-  color: var(--jar-text);
-  font-weight: 900;
-  line-height: 1;
-}
-
-.decorative-jar::before {
-  content: '';
-  position: absolute;
-  top: -9px;
-  left: 50%;
-  width: 30px;
-  height: 11px;
-  border: 3px solid var(--jar-border);
-  border-bottom: 0;
-  border-radius: 10px 10px 4px 4px;
-  background: linear-gradient(var(--jar-highlight), var(--jar-fill));
-  transform: translateX(-50%);
-}
-
-.decorative-jar span {
-  position: relative;
-  z-index: 1;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-}
-
-.decorative-jar.large {
-  width: 72px;
-  height: 66px;
-  border-width: 4px;
-  border-radius: 20px 20px 16px 16px;
-  font-size: 1.8rem;
-}
-
-.decorative-jar.large::before {
-  top: -13px;
-  width: 48px;
-  height: 15px;
-  border-width: 4px;
-}
-
-.decorative-jar.small {
-  width: 28px;
-  height: 25px;
-  border-width: 2px;
-  border-radius: 9px 9px 7px 7px;
-  font-size: 0.78rem;
-}
-
-.decorative-jar.small::before {
-  top: -6px;
-  width: 20px;
-  height: 7px;
-  border-width: 2px;
 }
 
 .plant-jar {
@@ -2028,114 +1752,6 @@
   flex-direction: column;
 }
 
-.pattern-preview {
-  position: relative;
-  display: block;
-  height: 115px;
-  overflow: hidden;
-  margin-bottom: 1rem;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 20% 80%, #e6a8b9 0 5px, transparent 6px),
-    radial-gradient(circle at 75% 76%, #e0bc55 0 6px, transparent 7px),
-    linear-gradient(#dbeedc, #f7efc8);
-}
-
-.preview-flight-dot {
-  position: absolute;
-  top: 48%;
-  left: 12%;
-  width: 22px;
-  height: 13px;
-  border-radius: 80% 20% 80% 20%;
-  background: #5f3e8c;
-  box-shadow: 8px 0 #cb7346;
-  animation: preview-drift 5s ease-in-out infinite;
-}
-
-.pattern-preview.pattern-petal-hop .preview-flight-dot { animation-name: preview-hop; }
-.pattern-preview.pattern-figure-eight .preview-flight-dot { animation-name: preview-eight; }
-.pattern-preview.pattern-sunbeam-swoop .preview-flight-dot { animation-name: preview-swoop; }
-.pattern-preview.pattern-spiral-rise .preview-flight-dot { animation-name: preview-spiral; }
-.pattern-preview.pattern-garden-waltz .preview-flight-dot { animation-name: preview-waltz; }
-.pattern-preview.pattern-clover-meander .preview-flight-dot { animation-name: preview-meander; }
-.pattern-preview.pattern-breeze-glide .preview-flight-dot { animation-name: preview-glide; }
-.pattern-preview.pattern-blossom-bounce .preview-flight-dot { animation-name: preview-bounce; }
-.pattern-preview.pattern-ribbon-loop .preview-flight-dot { animation-name: preview-ribbon; }
-.pattern-preview.pattern-moonbeam-float .preview-flight-dot { animation-name: preview-moonbeam; }
-.pattern-preview.pattern-canopy-dance .preview-flight-dot { animation-name: preview-canopy; }
-
-@keyframes preview-meander {
-  0%, 10% { translate: 0 26px; }
-  30%, 38% { translate: 92px 34px; }
-  58% { translate: 168px 20px; }
-  74%, 80% { translate: 236px 32px; }
-  100% { translate: 0 26px; }
-}
-@keyframes preview-glide {
-  0%, 100% { translate: 0 14px; }
-  46%, 56% { translate: 258px 22px; }
-}
-@keyframes preview-bounce {
-  0%, 12% { translate: 0 34px; }
-  26% { translate: 74px 6px; }
-  40%, 50% { translate: 142px 34px; }
-  64% { translate: 208px 8px; }
-  80%, 90% { translate: 256px 32px; }
-  100% { translate: 0 34px; }
-}
-@keyframes preview-ribbon {
-  0%, 100% { translate: 0 20px; }
-  25% { translate: 118px -6px; }
-  50% { translate: 244px 24px; }
-  75% { translate: 126px 44px; }
-}
-@keyframes preview-moonbeam {
-  0%, 100% { translate: 0 30px; }
-  22%, 40% { translate: 96px -10px; }
-  62% { translate: 186px 30px; }
-  82% { translate: 250px 2px; }
-}
-@keyframes preview-canopy {
-  0%, 100% { translate: 0 0; }
-  28% { translate: 104px -12px; }
-  48%, 56% { translate: 190px 38px; }
-  78% { translate: 252px -4px; }
-}
-
-@keyframes preview-drift {
-  0%, 100% { translate: 0 0; }
-  45% { translate: 260px -35px; }
-  60% { translate: 225px 22px; }
-}
-@keyframes preview-hop {
-  0%, 15%, 100% { translate: 0 30px; }
-  32%, 43% { translate: 100px 10px; }
-  65%, 78% { translate: 250px 28px; }
-}
-@keyframes preview-eight {
-  0%, 100% { translate: 0 0; }
-  25% { translate: 125px -35px; }
-  50% { translate: 250px 0; }
-  75% { translate: 125px 35px; }
-}
-@keyframes preview-swoop {
-  0%, 100% { translate: 0 -30px; }
-  45%, 60% { translate: 250px 35px; }
-}
-@keyframes preview-spiral {
-  0%, 100% { translate: 120px 38px; }
-  30% { translate: 55px 0; }
-  60% { translate: 150px -35px; }
-  80% { translate: 235px 5px; }
-}
-@keyframes preview-waltz {
-  0%, 12%, 100% { translate: 0 30px; }
-  30% { translate: 90px -30px; }
-  48%, 58% { translate: 160px 28px; }
-  78% { translate: 250px -28px; }
-}
-
 .pattern-card-footer {
   display: flex;
   align-items: center;
@@ -2162,11 +1778,6 @@
   margin: 0;
   color: var(--ink);
   text-align: left;
-}
-
-.pattern-select-card .pattern-preview {
-  height: 95px;
-  margin: 0;
 }
 
 .pattern-select-card.selected {
@@ -3066,9 +2677,6 @@
     text-align: left;
   }
 
-  .flying-butterfly {
-    --flight-size: 0.72 !important;
-  }
 
   .garden-plants {
     height: 150px;
@@ -3291,7 +2899,7 @@
   50% { transform: scaleX(0.58) rotate(-2deg); }
 }
 
-.flying-butterfly .butterfly-sprite.flapping .wing {
+.flight-traveller .butterfly-sprite.flapping .wing {
   animation-duration: 520ms;
 }
 
@@ -4347,7 +3955,7 @@
 .theme-night .splash-title h1 { color: #eef7f1; text-shadow: none; }
 
 /* Reduced motion respects everything new */
-.page-hidden .flying-butterfly,
+.page-hidden .flight-traveller,
 .page-hidden .hero-petal,
 .page-hidden .butterfly-sprite.flapping .wing,
 .page-hidden .splash-flyer {

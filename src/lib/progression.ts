@@ -1,4 +1,8 @@
-import { butterflyNames, plants as plantCatalog, species } from '../data/content'
+import {
+  butterflyNames,
+  plants as plantCatalog,
+  species,
+} from '../data/content'
 import type {
   AppState,
   CreatureInstance,
@@ -14,6 +18,7 @@ import { EMERGENCE_SEED_REWARD } from './lifecycle'
 import { PLANT_CAPACITY } from './plantManagement'
 import { selectDiscoveryCandidate } from './speciesAcquisition'
 import { createId } from './id'
+import { currentRelease } from '../data/releases'
 
 export { EMERGENCE_SEED_REWARD }
 
@@ -76,7 +81,8 @@ export function createInitialState(
       ambientTrack: 'garden-chimes',
       theme: 'sunlight',
       selectedBackdropId: 'sunlit-meadow',
-      unlockedBackdropIds: ['sunlit-meadow'],
+      unlockedBackdropIds: ['sunlit-meadow', 'cottage-bloom'],
+      lastSeenReleaseId: currentRelease.id,
     },
     plants: [
       {
@@ -121,11 +127,16 @@ function discoverEgg(
   maturePlant: PlantInstance,
   now: Date,
 ): CreatureInstance | undefined {
-  const definition = plantCatalog.find((plant) => plant.id === maturePlant.plantId)
+  const definition = plantCatalog.find(
+    (plant) => plant.id === maturePlant.plantId,
+  )
   if (!definition) return undefined
   // Shared with the species directory, so what the guide predicts and what the
   // garden actually reveals can never drift apart.
-  const speciesId = selectDiscoveryCandidate(state.creatures, definition.speciesIds)
+  const speciesId = selectDiscoveryCandidate(
+    state.creatures,
+    definition.speciesIds,
+  )
   if (!speciesId) return undefined
   const count = state.creatures.length
   return {

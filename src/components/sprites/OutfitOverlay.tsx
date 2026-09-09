@@ -11,18 +11,86 @@ export interface OutfitAnchor {
 
 function headwear(itemId: string): ReactNode {
   switch (itemId) {
+    case 'daisy-bonnet':
+      return (
+        <g>
+          <path
+            d="M-10 1Q-9-13 0-12Q9-13 10 1Z"
+            fill="#f6e8c5"
+            stroke="#bda977"
+          />
+          {[-7, 0, 7].map((x) => (
+            <g key={x} transform={`translate(${x} -3)`}>
+              <circle r="3" fill="#fffaf0" />
+              <circle r="1.3" fill="#d5ac45" />
+            </g>
+          ))}
+        </g>
+      )
+    case 'mushroom-cap':
+      return (
+        <g>
+          <path d="M-12 0Q0-22 12 0Z" fill="#b95452" stroke="#743b35" />
+          <ellipse cy="0" rx="12" ry="2" fill="#eedab6" />
+          {[-6, 0, 5].map((x, i) => (
+            <circle
+              key={x}
+              cx={x}
+              cy={-4 - (i % 2) * 3}
+              r="1.8"
+              fill="#fff3d7"
+            />
+          ))}
+        </g>
+      )
+    case 'fern-tiara':
+      return (
+        <g stroke="#487b55" fill="#8ba767">
+          {[-7, -3, 2, 6].map((x, i) => (
+            <path key={x} d={`M${x} 1q-5-8 ${i % 2 ? 3 : -2}-12q6 7-1 10Z`} />
+          ))}
+        </g>
+      )
+    case 'dewdrop-circlet':
+      return (
+        <g>
+          <path d="M-9 0Q0-5 9 0" stroke="#b7ad83" fill="none" />
+          {[-7, 0, 7].map((x) => (
+            <path
+              key={x}
+              d={`M${x} -8q-5 7 0 7q5 0 0-7`}
+              fill="#b9e0eb"
+              stroke="#6d9aab"
+              strokeWidth=".6"
+            />
+          ))}
+        </g>
+      )
     case 'sprout-cap':
       return (
         <g>
-          <path d="M-7 0 A7 5 0 0 1 7 0 L6 2 L-6 2 Z" fill="#5f9860" stroke="#376238" strokeWidth="0.8" />
+          <path
+            d="M-7 0 A7 5 0 0 1 7 0 L6 2 L-6 2 Z"
+            fill="#5f9860"
+            stroke="#376238"
+            strokeWidth="0.8"
+          />
           <path d="M0 -4 C0 -8 3 -10 5 -10 C5 -7 3 -5 1 -4 Z" fill="#7db97a" />
-          <path d="M0 -4 C0 -8 -3 -10 -5 -10 C-5 -7 -3 -5 -1 -4 Z" fill="#8fca8b" />
+          <path
+            d="M0 -4 C0 -8 -3 -10 -5 -10 C-5 -7 -3 -5 -1 -4 Z"
+            fill="#8fca8b"
+          />
         </g>
       )
     case 'flower-crown':
       return (
         <g>
-          <path d="M-8 0 A8 4 0 0 1 8 0" stroke="#5f8a4f" strokeWidth="1.6" fill="none" />
+          <path
+            d="M-8 0 A8 4 0 0 1 8 0"
+            stroke="#5f8a4f"
+            strokeWidth="1.6"
+            fill="none"
+          />
           {[-7, -3.5, 0, 3.5, 7].map((x, index) => (
             <g key={x} transform={`translate(${x} ${index % 2 ? -2.6 : -1.4})`}>
               {[0, 72, 144, 216, 288].map((angle) => (
@@ -45,36 +113,80 @@ function headwear(itemId: string): ReactNode {
       return (
         <g>
           <rect x="-7" y="-1" width="14" height="2.4" rx="1.2" fill="#2d2a33" />
-          <rect x="-4.5" y="-9" width="9" height="8.4" rx="1.2" fill="#3a3644" />
+          <rect
+            x="-4.5"
+            y="-9"
+            width="9"
+            height="8.4"
+            rx="1.2"
+            fill="#3a3644"
+          />
           <rect x="-4.5" y="-3.4" width="9" height="2.2" fill="#8a5db0" />
         </g>
       )
     case 'acorn-beret':
       return (
         <g>
-          <path d="M-6.5 0 C-6.5 -6 6.5 -6 6.5 0 L5.6 1 L-5.6 1 Z" fill="#8a6238" stroke="#5f4023" strokeWidth="0.8" />
+          <path
+            d="M-6.5 0 C-6.5 -6 6.5 -6 6.5 0 L5.6 1 L-5.6 1 Z"
+            fill="#8a6238"
+            stroke="#5f4023"
+            strokeWidth="0.8"
+          />
           <path d="M0 -5 L1.4 -8" stroke="#5f4023" strokeWidth="1.4" />
         </g>
       )
     case 'star-diadem':
       return (
         <g>
-          <path d="M-7 1 A7 4 0 0 1 7 1" stroke="#e8d48a" strokeWidth="1.4" fill="none" />
-          <path d="M0 -6 L1.3 -2.6 L4.8 -2.6 L2 -0.5 L3 3 L0 0.9 L-3 3 L-2 -0.5 L-4.8 -2.6 L-1.3 -2.6 Z" fill="#f5e4a3" stroke="#d4b358" strokeWidth="0.5" />
+          <path
+            d="M-7 1 A7 4 0 0 1 7 1"
+            stroke="#e8d48a"
+            strokeWidth="1.4"
+            fill="none"
+          />
+          <path
+            d="M0 -6 L1.3 -2.6 L4.8 -2.6 L2 -0.5 L3 3 L0 0.9 L-3 3 L-2 -0.5 L-4.8 -2.6 L-1.3 -2.6 Z"
+            fill="#f5e4a3"
+            stroke="#d4b358"
+            strokeWidth="0.5"
+          />
         </g>
       )
     case 'moonlit-halo':
       return (
         <g>
-          <ellipse cx="0" cy="-8" rx="8.5" ry="2.6" fill="none" stroke="#e8e2b8" strokeWidth="1.8" opacity="0.95" />
-          <ellipse cx="0" cy="-8" rx="8.5" ry="2.6" fill="none" stroke="#fdfaf0" strokeWidth="0.7" />
+          <ellipse
+            cx="0"
+            cy="-8"
+            rx="8.5"
+            ry="2.6"
+            fill="none"
+            stroke="#e8e2b8"
+            strokeWidth="1.8"
+            opacity="0.95"
+          />
+          <ellipse
+            cx="0"
+            cy="-8"
+            rx="8.5"
+            ry="2.6"
+            fill="none"
+            stroke="#fdfaf0"
+            strokeWidth="0.7"
+          />
           <circle cx="6.4" cy="-9.2" r="0.8" fill="#fdfaf0" />
         </g>
       )
     case 'royal-crown':
       return (
         <g>
-          <path d="M-7 2 L-7 -5 L-3.5 -1.5 L0 -7 L3.5 -1.5 L7 -5 L7 2 Z" fill="#e7b445" stroke="#a87716" strokeWidth="0.9" />
+          <path
+            d="M-7 2 L-7 -5 L-3.5 -1.5 L0 -7 L3.5 -1.5 L7 -5 L7 2 Z"
+            fill="#e7b445"
+            stroke="#a87716"
+            strokeWidth="0.9"
+          />
           <circle cx="0" cy="-1" r="1.3" fill="#c94f6d" />
         </g>
       )
@@ -85,64 +197,191 @@ function headwear(itemId: string): ReactNode {
 
 function accessory(itemId: string): ReactNode {
   switch (itemId) {
+    case 'pollen-pouch':
+      return (
+        <g>
+          <path d="M-6-3L7 9" stroke="#9b784a" />
+          <path d="M3 3h9v9q-4 5-9 0Z" fill="#d9ac58" stroke="#917440" />
+          <circle cx="7.5" cy="7" r="1.4" fill="#f4d99b" />
+        </g>
+      )
+    case 'petal-collar':
+      return (
+        <g>
+          {[-7, -3, 2, 6].map((x) => (
+            <ellipse
+              key={x}
+              cx={x}
+              cy="2"
+              rx="3"
+              ry="5"
+              fill="#dfa5ad"
+              stroke="#af7584"
+              strokeWidth=".5"
+              transform={`rotate(${-x * 5} ${x} 2)`}
+            />
+          ))}
+        </g>
+      )
+    case 'acorn-locket':
+      return (
+        <g>
+          <path d="M-7-2Q0 7 7-2" fill="none" stroke="#b79a56" />
+          <ellipse cy="7" rx="3.5" ry="4" fill="#b48a54" />
+          <path d="M-4 5Q0 0 4 5Z" fill="#756344" />
+        </g>
+      )
+    case 'starlace-ribbon':
+      return (
+        <g fill="#aaa6ce" stroke="#716b99" strokeWidth=".6">
+          <path d="M0 0L-8-5L-7 5Z M0 0L8-5L7 5Z M-1 1L-4 13L0 11L3 13L2 1Z" />
+          <circle r="2" fill="#f0dc9d" />
+        </g>
+      )
     case 'silk-bow':
       return (
         <g>
-          <path d="M0 0 L-6 -3.6 L-6 3.6 Z" fill="#d96f9f" stroke="#8f3c63" strokeWidth="0.7" />
-          <path d="M0 0 L6 -3.6 L6 3.6 Z" fill="#d96f9f" stroke="#8f3c63" strokeWidth="0.7" />
+          <path
+            d="M0 0 L-6 -3.6 L-6 3.6 Z"
+            fill="#d96f9f"
+            stroke="#8f3c63"
+            strokeWidth="0.7"
+          />
+          <path
+            d="M0 0 L6 -3.6 L6 3.6 Z"
+            fill="#d96f9f"
+            stroke="#8f3c63"
+            strokeWidth="0.7"
+          />
           <circle r="1.7" fill="#b34e7d" />
         </g>
       )
     case 'leaf-scarf':
       return (
         <g>
-          <path d="M-6 0 A6 3.4 0 0 0 6 0 A6 5 0 0 1 -6 0 Z" fill="#6f9d5c" stroke="#42663a" strokeWidth="0.7" />
-          <path d="M3 2 C4.4 5 4 8 3 10 L1 9 C2 7 2.4 4.6 1.8 2.6 Z" fill="#7fae6a" />
+          <path
+            d="M-6 0 A6 3.4 0 0 0 6 0 A6 5 0 0 1 -6 0 Z"
+            fill="#6f9d5c"
+            stroke="#42663a"
+            strokeWidth="0.7"
+          />
+          <path
+            d="M3 2 C4.4 5 4 8 3 10 L1 9 C2 7 2.4 4.6 1.8 2.6 Z"
+            fill="#7fae6a"
+          />
         </g>
       )
     case 'dew-pendant':
       return (
         <g>
-          <path d="M-5 -1 A5 3 0 0 0 5 -1" stroke="#8ba372" strokeWidth="0.9" fill="none" />
-          <path d="M0 2 C-2.2 4.4 -2.2 6.6 0 7.8 C2.2 6.6 2.2 4.4 0 2 Z" fill="#a8d8ef" stroke="#5f9dc0" strokeWidth="0.7" />
+          <path
+            d="M-5 -1 A5 3 0 0 0 5 -1"
+            stroke="#8ba372"
+            strokeWidth="0.9"
+            fill="none"
+          />
+          <path
+            d="M0 2 C-2.2 4.4 -2.2 6.6 0 7.8 C2.2 6.6 2.2 4.4 0 2 Z"
+            fill="#a8d8ef"
+            stroke="#5f9dc0"
+            strokeWidth="0.7"
+          />
           <circle cx="-0.7" cy="4.6" r="0.7" fill="#eaf7fd" />
         </g>
       )
     case 'seed-satchel':
       return (
         <g>
-          <path d="M-6 -2 C-2 1 2 1 6 -2" stroke="#8a6238" strokeWidth="1" fill="none" />
-          <rect x="3" y="-2" width="6" height="6.5" rx="1.6" fill="#b98c53" stroke="#7c5a30" strokeWidth="0.8" />
+          <path
+            d="M-6 -2 C-2 1 2 1 6 -2"
+            stroke="#8a6238"
+            strokeWidth="1"
+            fill="none"
+          />
+          <rect
+            x="3"
+            y="-2"
+            width="6"
+            height="6.5"
+            rx="1.6"
+            fill="#b98c53"
+            stroke="#7c5a30"
+            strokeWidth="0.8"
+          />
           <path d="M3 0.4 L9 0.4" stroke="#7c5a30" strokeWidth="0.7" />
         </g>
       )
     case 'moonstone-charm':
       return (
         <g>
-          <path d="M-4.5 -1 A4.5 2.6 0 0 0 4.5 -1" stroke="#9a94b8" strokeWidth="0.8" fill="none" />
-          <circle cx="0" cy="3.4" r="2.6" fill="#dcd9f2" stroke="#8f88bb" strokeWidth="0.8" />
-          <path d="M1 2 A2 2 0 0 0 -1 4.8 A2.6 2.6 0 0 1 1 2 Z" fill="#b4aede" />
+          <path
+            d="M-4.5 -1 A4.5 2.6 0 0 0 4.5 -1"
+            stroke="#9a94b8"
+            strokeWidth="0.8"
+            fill="none"
+          />
+          <circle
+            cx="0"
+            cy="3.4"
+            r="2.6"
+            fill="#dcd9f2"
+            stroke="#8f88bb"
+            strokeWidth="0.8"
+          />
+          <path
+            d="M1 2 A2 2 0 0 0 -1 4.8 A2.6 2.6 0 0 1 1 2 Z"
+            fill="#b4aede"
+          />
         </g>
       )
     case 'comet-brooch':
       return (
         <g>
-          <path d="M1.5 2 L2.6 4.6 L5.4 4.9 L3.4 6.8 L4 9.5 L1.5 8.1 L-1 9.5 L-0.4 6.8 L-2.4 4.9 L0.4 4.6 Z" fill="#f2e18f" stroke="#c9ab4e" strokeWidth="0.5" />
-          <path d="M-2 3.6 C-4.4 2.4 -6.4 0.8 -7.6 -1" stroke="#e8dcb0" strokeWidth="1.1" strokeLinecap="round" opacity="0.85" />
-          <path d="M-1 5.4 C-3.6 4.8 -5.8 3.6 -7.4 2" stroke="#e8dcb0" strokeWidth="0.8" strokeLinecap="round" opacity="0.6" />
+          <path
+            d="M1.5 2 L2.6 4.6 L5.4 4.9 L3.4 6.8 L4 9.5 L1.5 8.1 L-1 9.5 L-0.4 6.8 L-2.4 4.9 L0.4 4.6 Z"
+            fill="#f2e18f"
+            stroke="#c9ab4e"
+            strokeWidth="0.5"
+          />
+          <path
+            d="M-2 3.6 C-4.4 2.4 -6.4 0.8 -7.6 -1"
+            stroke="#e8dcb0"
+            strokeWidth="1.1"
+            strokeLinecap="round"
+            opacity="0.85"
+          />
+          <path
+            d="M-1 5.4 C-3.6 4.8 -5.8 3.6 -7.4 2"
+            stroke="#e8dcb0"
+            strokeWidth="0.8"
+            strokeLinecap="round"
+            opacity="0.6"
+          />
         </g>
       )
     case 'celestial-cape':
       return (
         <g>
-          <path d="M-6 -1 C-9 6 -7 14 -3 18 L3 18 C7 14 9 6 6 -1 C2 2 -2 2 -6 -1 Z" fill="#2c2a52" stroke="#1c1a38" strokeWidth="0.8" opacity="0.92" />
+          <path
+            d="M-6 -1 C-9 6 -7 14 -3 18 L3 18 C7 14 9 6 6 -1 C2 2 -2 2 -6 -1 Z"
+            fill="#2c2a52"
+            stroke="#1c1a38"
+            strokeWidth="0.8"
+            opacity="0.92"
+          />
           {[
             [-3, 6],
             [2, 10],
             [-1, 14],
             [4, 4],
           ].map(([cx, cy]) => (
-            <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="0.75" fill="#e8e2a8" />
+            <circle
+              key={`${cx}-${cy}`}
+              cx={cx}
+              cy={cy}
+              r="0.75"
+              fill="#e8e2a8"
+            />
           ))}
         </g>
       )
@@ -153,6 +392,62 @@ function accessory(itemId: string): ReactNode {
 
 function aura(itemId: string, glow: string): ReactNode {
   switch (itemId) {
+    case 'clover-motes':
+      return (
+        <g className="aura aura-petals">
+          {[0, 90, 180, 270].map((angle) => (
+            <g
+              key={angle}
+              transform={`rotate(${angle}) translate(0 -39)`}
+              fill="#8db785"
+            >
+              <circle cx="-2" cy="-2" r="2.5" />
+              <circle cx="2" cy="-2" r="2.5" />
+              <circle cx="-2" cy="2" r="2.5" />
+              <circle cx="2" cy="2" r="2.5" />
+            </g>
+          ))}
+        </g>
+      )
+    case 'dandelion-drift':
+      return (
+        <g className="aura aura-petals" stroke="#bdb492" fill="none">
+          {[30, 140, 250].map((angle) => (
+            <g key={angle} transform={`rotate(${angle}) translate(0 -42)`}>
+              <path d="M0 5V-5M-4-3L0 0L4-3M-3-5L0 0L3-5" />
+            </g>
+          ))}
+        </g>
+      )
+    case 'dew-orbit':
+      return (
+        <g className="aura aura-fireflies">
+          {[0, 120, 240].map((angle) => (
+            <path
+              key={angle}
+              transform={`rotate(${angle}) translate(0 -40)`}
+              d="M0-5Q-7 3 0 4Q7 3 0-5"
+              fill="#b8e0df"
+              stroke="#75aaa5"
+            />
+          ))}
+        </g>
+      )
+    case 'sun-pollen':
+      return (
+        <g className="aura aura-sparkle">
+          {[0, 50, 130, 190, 260, 310].map((angle, i) => (
+            <circle
+              key={angle}
+              transform={`rotate(${angle})`}
+              cx="0"
+              cy={-35 - (i % 3) * 4}
+              r={1.5 + (i % 2)}
+              fill="#dfb65a"
+            />
+          ))}
+        </g>
+      )
     case 'sparkle-aura':
       return (
         <g className="aura aura-sparkle">
@@ -196,11 +491,32 @@ function aura(itemId: string, glow: string): ReactNode {
           ))}
         </g>
       )
-    case 'aurora-aura':
     case 'rainbow-trail':
       return (
+        <g className="aura aura-rainbow">
+          {['#dd7590', '#efb864', '#8fbfa3', '#80b1d3'].map((color, i) => (
+            <path
+              key={color}
+              d={`M-5 ${8 + i * 3} C-25 ${-6 + i * 3} -28 ${24 + i * 3} -52 ${17 + i * 3}`}
+              fill="none"
+              stroke={color}
+              strokeWidth="2.8"
+              strokeLinecap="round"
+              opacity={0.8 - i * 0.12}
+            />
+          ))}
+        </g>
+      )
+    case 'aurora-aura':
+      return (
         <g className="aura aura-aurora">
-          <circle r="46" fill="none" stroke={glow} strokeWidth="3" opacity="0.5" />
+          <circle
+            r="46"
+            fill="none"
+            stroke={glow}
+            strokeWidth="3"
+            opacity="0.5"
+          />
         </g>
       )
     default:
@@ -215,19 +531,18 @@ function aura(itemId: string, glow: string): ReactNode {
 export const OutfitOverlay = memo(function OutfitOverlay({
   outfit,
   anchor,
-  hideAccessory = false,
+  layer = 'all',
 }: {
   outfit: Partial<Record<OutfitSlot, string>>
   anchor: OutfitAnchor
-  /** Suppress neck/chest accessories (e.g. caterpillars, where they don't fit). */
-  hideAccessory?: boolean
+  layer?: 'all' | 'attached' | 'ambient'
 }) {
   const { headX, headY, bodyX, bodyY, scale } = anchor
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   const glowId = `auraglow-${uid}`
   return (
     <g className="outfit-overlay" aria-hidden="true">
-      {outfit.aura && (
+      {layer !== 'attached' && outfit.aura && (
         <>
           {/* Defined here so the aura works on every life stage, not only
               inside the butterfly sprite that used to own this gradient. */}
@@ -242,12 +557,12 @@ export const OutfitOverlay = memo(function OutfitOverlay({
           </g>
         </>
       )}
-      {!hideAccessory && outfit.accessory && (
+      {layer !== 'ambient' && outfit.accessory && (
         <g transform={`translate(${bodyX} ${bodyY}) scale(${scale})`}>
           {accessory(outfit.accessory)}
         </g>
       )}
-      {outfit.headwear && (
+      {layer !== 'ambient' && outfit.headwear && (
         <g transform={`translate(${headX} ${headY - 4}) scale(${scale})`}>
           {headwear(outfit.headwear)}
         </g>

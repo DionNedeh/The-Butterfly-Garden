@@ -348,3 +348,13 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
+
+
+## Garden 3.0 original scene illustrations
+
+Cottage Bloom, Rain-kissed Pond, Twilight Orchard and Cloud Garden were generated
+for this project using OpenAI image generation on 8 September 2026. Prompts
+specified original botanical watercolour/gouache scenes; no external source
+images were supplied. Optimised WebP images and their thumbnails are in
+`src/assets/garden-{scene}.webp` and `src/assets/thumb-{scene}.webp`.
+These are AI-generated illustrations, not photographs of real locations.

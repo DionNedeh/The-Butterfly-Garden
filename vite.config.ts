@@ -4,6 +4,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/The-Butterfly-Garden/',
+  // Scan only the application, not local review HTML or archived checkouts.
+  optimizeDeps: {
+    entries: ['index.html'],
+  },
   plugins: [
     react(),
     VitePWA({
@@ -45,13 +49,15 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,jpg,webp,svg,woff2}'],
-        // The woodland and conservatory backdrops stay locked for the first
-        // 30 and 60 days, so shipping them in the install would make every new
-        // gardener download half a megabyte they cannot use yet. They are
-        // fetched and kept the first time one is actually selected.
+        // Keep full optional scenes out of the install. Thumbnails are small
+        // and precached; full scenes are fetched and cached when selected.
         globIgnores: [
           '**/garden-woodland-brook-*',
           '**/garden-secret-conservatory-*',
+          '**/garden-cottage-bloom-*',
+          '**/garden-rain-kissed-pond-*',
+          '**/garden-twilight-orchard-*',
+          '**/garden-cloud-garden-*',
           // Extended-latin faces are only requested when a glyph outside
           // basic latin is used, which the English interface never does. The
           // browser fetches them if a gardener types an accented character.
@@ -60,11 +66,12 @@ export default defineConfig({
         navigateFallback: 'index.html',
         runtimeCaching: [
           {
-            urlPattern: /\/assets\/garden-(woodland-brook|secret-conservatory)-[^/]+$/,
+            urlPattern:
+              /\/assets\/garden-(woodland-brook|secret-conservatory|cottage-bloom|rain-kissed-pond|twilight-orchard|cloud-garden)-[^/]+$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'garden-backdrops',
-              expiration: { maxEntries: 4 },
+              expiration: { maxEntries: 12 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

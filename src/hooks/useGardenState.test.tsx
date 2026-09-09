@@ -1,4 +1,10 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GARDEN_COLLECTIONS,
@@ -15,9 +21,13 @@ function Harness() {
       <span data-testid="loading">{String(garden.loading)}</span>
       <span data-testid="read-only">{String(garden.persistence.readOnly)}</span>
       <span data-testid="reason">{garden.persistence.reason ?? ''}</span>
-      <span data-testid="write-error">{garden.persistence.writeError ?? ''}</span>
+      <span data-testid="write-error">
+        {garden.persistence.writeError ?? ''}
+      </span>
       <span data-testid="seeds">{garden.state?.seeds ?? ''}</span>
-      <button onClick={() => garden.onboard('Tester', 'Test Garden')}>Onboard</button>
+      <button onClick={() => garden.onboard('Tester', 'Test Garden')}>
+        Onboard
+      </button>
       <button onClick={() => garden.plant('aster')}>Plant</button>
       <button
         onClick={() => {
@@ -56,7 +66,9 @@ describe('useGardenState persistence', () => {
     const save = vi.spyOn(gardenRepository, 'save')
 
     render(<Harness />)
-    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    await waitFor(() =>
+      expect(screen.getByTestId('loading')).toHaveTextContent('false'),
+    )
 
     expect(screen.getByTestId('read-only')).toHaveTextContent('true')
     expect(screen.getByTestId('reason')).toHaveTextContent('incompatible')
@@ -71,10 +83,14 @@ describe('useGardenState persistence', () => {
     })
     const save = vi
       .spyOn(gardenRepository, 'save')
-      .mockRejectedValue(new Error('The garden could not be saved to this device.'))
+      .mockRejectedValue(
+        new Error('The garden could not be saved to this device.'),
+      )
 
     render(<Harness />)
-    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    await waitFor(() =>
+      expect(screen.getByTestId('loading')).toHaveTextContent('false'),
+    )
 
     act(() => {
       screen.getByRole('button', { name: 'Plant' }).click()
@@ -101,7 +117,9 @@ describe('useGardenState persistence', () => {
     const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
 
     render(<Harness />)
-    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    await waitFor(() =>
+      expect(screen.getByTestId('loading')).toHaveTextContent('false'),
+    )
     await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(save).not.toHaveBeenCalled()
@@ -115,7 +133,9 @@ describe('useGardenState persistence', () => {
     const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
 
     render(<Harness />)
-    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    await waitFor(() =>
+      expect(screen.getByTestId('loading')).toHaveTextContent('false'),
+    )
 
     act(() => {
       screen.getByRole('button', { name: 'Plant' }).click()
@@ -169,9 +189,76 @@ describe('restoring a backup', () => {
     )
     expect(replace).toHaveBeenCalled()
 
-    const announcement = posted.find((message) => message.type === 'garden-saved')
+    const announcement = posted.find(
+      (message) => message.type === 'garden-saved',
+    )
     expect(announcement).toBeDefined()
     expect(announcement?.parts).toEqual(['meta', ...GARDEN_COLLECTIONS])
   })
 })
 
+describe('durable custom-image save feedback', () => {
+  const image = {
+    id: 'scene',
+    name: 'My image',
+    createdAt: '2026-09-08T00:00:00Z',
+    updatedAt: '2026-09-08T00:00:00Z',
+    mimeType: 'image/png' as const,
+    width: 1,
+    height: 1,
+    byteLength: 3,
+    imageData: 'YWJj',
+    crop: { x: 0.5, y: 0.5, zoom: 1 },
+  }
+  it('does not confirm success until the repository write completes', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: createInitialState('Tester', 'Garden'),
+    })
+    let finish!: (parts: []) => void
+    vi.spyOn(gardenRepository, 'save').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    let saved: Promise<{ ok: boolean }> | undefined
+    act(() => {
+      saved = result.current.saveCustomBackdrop(image)
+    })
+    let completed = false
+    void saved!.then(() => {
+      completed = true
+    })
+    await waitFor(() => expect(finish).toBeDefined())
+    expect(completed).toBe(false)
+    await act(async () => {
+      finish([])
+      await saved
+    })
+    expect(await saved).toEqual({ ok: true })
+  })
+  it('returns a quota error so the editor can retain its draft', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: createInitialState('Tester', 'Garden'),
+    })
+    vi.spyOn(gardenRepository, 'save').mockRejectedValue(
+      new Error('Storage is full'),
+    )
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    let saved: Promise<{ ok: boolean; message?: string }> | undefined
+    act(() => {
+      saved = result.current.saveCustomBackdrop(image)
+    })
+    await waitFor(() =>
+      expect(result.current.persistence.writeError).toBe('Storage is full'),
+    )
+    expect(await saved).toEqual({ ok: false, message: 'Storage is full' })
+    expect(result.current.state?.customBackdrops).toHaveLength(0)
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBeUndefined()
+  })
+})

@@ -1,0 +1,1234 @@
+/* 3.0: the same botanical garden, with quieter surfaces and room to breathe. */
+:root {
+  --surface: #fffdf7;
+  --surface-soft: #f1f2e8;
+  --edge: #d9dfd0;
+  --accent-soft: #e6eddd;
+  --text-soft: #58675b;
+}
+.theme-night {
+  --surface: #122d36;
+  --surface-soft: #193740;
+  --edge: #34505a;
+  --accent-soft: #24473f;
+  --text-soft: #bed0c9;
+}
+.app-shell {
+  background: var(--cream);
+}
+.app-shell::before {
+  opacity: 0.38;
+}
+.app-header {
+  min-height: 84px;
+  border-bottom: 1px solid var(--edge);
+  box-shadow: 0 3px 20px #14332406;
+}
+.app-header nav {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  gap: 0.1rem;
+}
+.app-header nav button {
+  padding: 0.65rem 0.75rem;
+  border-radius: 14px;
+  font-size: 0.82rem;
+}
+.app-header nav button.active {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.brand img {
+  width: 42px;
+  height: 42px;
+  box-shadow: none;
+}
+.brand strong {
+  letter-spacing: -0.03em;
+  font-size: 1.1rem;
+}
+main#main-content {
+  max-width: 1320px;
+  margin: auto;
+  padding: 2.5rem 2rem 5rem;
+}
+.view {
+  animation: none;
+}
+.page-header {
+  margin-bottom: 2rem;
+  gap: 2rem;
+}
+.page-header h1 {
+  font-size: clamp(2.3rem, 4vw, 3.5rem);
+  font-weight: 520;
+  line-height: 1.14;
+  padding-bottom: 0.1em;
+}
+.page-header p:not(.eyebrow) {
+  max-width: 660px;
+  color: var(--text-soft);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.eyebrow {
+  font-size: 0.68rem;
+  letter-spacing: 0.17em;
+  font-weight: 800;
+  line-height: 1.5;
+}
+h2 {
+  font-weight: 520;
+  letter-spacing: -0.035em;
+}
+h3 {
+  letter-spacing: -0.025em;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  box-shadow: 0 6px 25px #203c2910;
+  border-radius: 22px;
+}
+.card:hover {
+  transform: none;
+  box-shadow: 0 6px 25px #203c2910;
+}
+.card::before {
+  opacity: 0.4;
+}
+.primary-button,
+.secondary-button {
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 0.87rem;
+  box-shadow: none;
+  font-weight: 750;
+}
+.primary-button {
+  background: var(--forest);
+  color: #fffdf5;
+}
+.primary-button:hover:not(:disabled) {
+  background: var(--forest-dark);
+  box-shadow: 0 4px 12px #203c2920;
+  transform: translateY(-1px);
+}
+.secondary-button {
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  color: var(--ink);
+}
+.primary-button::before {
+  display: none;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+.section-heading {
+  gap: 1.2rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.section-heading h2 {
+  margin-bottom: 0.2rem;
+}
+.section-explainer {
+  max-width: 780px;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+input:not([type='range']):not([type='checkbox']):not([type='radio']),
+select,
+textarea {
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 11px;
+  color: var(--ink);
+  min-height: 44px;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--sage);
+}
+.theme-night .primary-button {
+  background: #92bca0;
+  color: #112d25;
+}
+.theme-night .primary-button:hover:not(:disabled) {
+  background: #add0b7;
+}
+.subtle-copy {
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+.count-badge {
+  background: var(--accent-soft);
+  border: 0;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* A framed living illustration, never a competing page background. */
+.garden-hero {
+  border-radius: 26px;
+  min-height: 510px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #c0c8ac;
+  box-shadow: 0 14px 35px #203c2920;
+  isolation: isolate;
+}
+.garden-hero::before {
+  background: linear-gradient(
+    180deg,
+    rgba(248, 245, 225, 0.9),
+    rgba(249, 246, 230, 0.35) 32%,
+    transparent 58%,
+    rgba(24, 47, 29, 0.16)
+  );
+  z-index: 1;
+}
+.garden-heading {
+  position: relative;
+  z-index: 6;
+  padding: 1.5rem;
+  pointer-events: none;
+  max-width: 650px;
+}
+.garden-heading h1 {
+  font-size: clamp(2.5rem, 4.7vw, 4rem);
+  font-weight: 520;
+  color: #244a36;
+  line-height: 1.1;
+  padding-bottom: 0.08em;
+  text-shadow: 0 1px 12px #fffcdf;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+.garden-heading .eyebrow,
+.garden-observation {
+  color: #304c38;
+}
+.garden-observation {
+  max-width: 480px;
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+.theme-night .garden-hero::before {
+  background: linear-gradient(
+    180deg,
+    rgba(11, 30, 39, 0.88),
+    rgba(11, 30, 39, 0.3) 36%,
+    transparent 64%,
+    rgba(11, 30, 39, 0.3)
+  );
+}
+.theme-night .garden-heading h1 {
+  color: #f2efd9;
+  text-shadow: 0 2px 10px #142d30;
+}
+.theme-night .garden-heading .eyebrow,
+.theme-night .garden-observation {
+  color: #e1e8d5;
+}
+.garden-quick-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.65rem 0 1.4rem;
+}
+.garden-quick-links button {
+  font-size: 0.85rem;
+}
+.garden-stats {
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 1.1rem 1.4rem;
+  margin-top: 0;
+  box-shadow: none;
+}
+.garden-plants {
+  z-index: 7;
+}
+.garden-flight-space {
+  z-index: 5;
+}
+.flight-traveller {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: auto;
+}
+.flight-heading {
+  width: max-content;
+  transform-origin: center;
+  line-height: 0;
+}
+.flight-heading .butterfly {
+  margin: 0;
+}
+.jar-display {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.jar-display.plant-jar {
+  bottom: -5px;
+  left: calc(50% + 12px);
+}
+.jar-display.small .jar-sprite {
+  width: 32px;
+  height: 36px;
+}
+.jar-sprite {
+  overflow: visible;
+}
+.custom-scene-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  border-radius: inherit;
+}
+.custom-scene-image {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+.seed-highlight {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+.seed-tray {
+  scroll-margin-top: 100px;
+}
+
+/* The dot is independent of the card's masked decorative edge. */
+.timeline-entry::before {
+  display: none;
+}
+.timeline-dot {
+  position: absolute;
+  top: 28px;
+  left: -1.37rem;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--forest);
+  box-shadow: 0 0 0 4px var(--cream);
+}
+.theme-night .timeline-dot {
+  background: #a4c7a9;
+}
+
+/* A small botanical boutique: artwork first, useful controls close by. */
+.wallet-stack {
+  gap: 0.5rem;
+}
+.nectar-wallet.large,
+.stardust-wallet.large {
+  min-width: auto;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.2rem 0.5rem;
+  padding: 0.65rem 0.9rem;
+  box-shadow: none;
+  border: 1px solid var(--edge);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 14px;
+}
+.wallet-stack .large span {
+  grid-column: 1 / -1;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+.shop-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--edge);
+  background: transparent;
+  border-radius: 0;
+  padding: 0 0 0.85rem;
+  gap: 0.4rem;
+  margin-bottom: 2rem;
+}
+.shop-tabs button {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0.7rem 1.2rem;
+  min-height: 44px;
+  border-radius: 99px;
+  color: var(--text-soft);
+}
+.shop-tabs button.active {
+  color: var(--ink);
+  background: var(--accent-soft);
+  border-color: var(--edge);
+  box-shadow: none;
+}
+.shop-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.8rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  padding: 1rem;
+  margin: 1.2rem 0;
+}
+.shop-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 750;
+  color: var(--text-soft);
+  margin: 0;
+}
+.shop-search {
+  flex: 1 1 220px;
+}
+.shop-filters select {
+  min-width: 130px;
+  text-transform: capitalize;
+}
+.shop-filters input,
+.shop-filters select {
+  font-size: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+}
+.shop-filters .check-filter {
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+}
+.shop-filters .check-filter input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--forest);
+}
+.boutique-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.boutique-card {
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 20px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 5px 20px #233e2810;
+}
+.item-art {
+  min-height: 165px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  background: radial-gradient(ellipse at 50% 65%, #fffaf0 0%, #edf0df 75%);
+  color: #597d55;
+}
+.item-art::after {
+  content: '';
+  position: absolute;
+  width: 100px;
+  height: 10px;
+  background: #50674312;
+  border-radius: 50%;
+  bottom: 20px;
+}
+.item-tag {
+  position: absolute;
+  top: 13px;
+  left: 15px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: #52644b;
+}
+.preview-button {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background: #fffdf4e8;
+  color: #35533b;
+  border: 1px solid #ced7c2;
+  border-radius: 99px;
+  min-height: 34px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.72rem;
+  z-index: 1;
+}
+.item-copy {
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.item-copy h3 {
+  font-size: 1.35rem;
+  margin-bottom: 0.5rem;
+}
+.item-copy p {
+  color: var(--text-soft);
+  line-height: 1.65;
+  font-size: 0.87rem;
+  margin-bottom: 0.8rem;
+}
+.item-fit {
+  color: var(--text-soft);
+  font-size: 0.69rem;
+  line-height: 1.5;
+  margin-top: auto;
+  padding-bottom: 1rem;
+}
+.item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-top: 1px solid var(--edge);
+  padding-top: 0.85rem;
+  margin-top: auto;
+}
+.item-footer .pattern-cost {
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+.item-footer button {
+  font-size: 0.73rem;
+  padding: 0.5rem 0.7rem;
+}
+.item-copy .owned-note {
+  font-size: 0.7rem;
+  padding-top: 0.5rem;
+}
+.theme-night .item-art {
+  background: radial-gradient(ellipse at 50% 65%, #35534b, #213d43);
+}
+.theme-night .item-tag {
+  color: #d4dec6;
+}
+.colour-dot {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #0002;
+}
+.jar-purchase-preview {
+  background: var(--surface-soft);
+  border-radius: 20px;
+  padding: 2rem 1rem;
+  gap: 0.8rem;
+}
+.jar-character-grid button,
+.jar-color-grid button {
+  min-height: 40px;
+  background: var(--surface);
+}
+.jar-color-grid button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.shop-feedback {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+}
+.empty-collection {
+  text-align: center;
+  padding: 3rem;
+  border: 1px dashed var(--edge);
+  border-radius: 20px;
+}
+.pass-hero {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 2rem;
+  padding: 2.5rem;
+  background: linear-gradient(110deg, var(--surface-soft), var(--surface));
+  border: 1px solid var(--edge);
+  border-radius: 24px;
+}
+.pass-hero h2 {
+  font-size: clamp(1.8rem, 3vw, 2.7rem);
+}
+.pass-hero p {
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+.pass-illustration {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 1rem;
+  border-left: 1px solid var(--edge);
+  color: var(--forest);
+}
+.pass-illustration > span {
+  font-size: 3rem;
+  color: #bba060;
+}
+.pass-illustration strong {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 450;
+  font-style: italic;
+  line-height: 1.3;
+}
+.pass-illustration small {
+  margin-top: 1rem;
+  color: var(--text-soft);
+}
+.motion-preview {
+  height: 170px;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(ellipse at bottom, #e9edd8, #faf8ef);
+}
+.motion-orbit {
+  position: absolute;
+  inset: 26% 15%;
+  border: 1px dashed #8ea17e55;
+  border-radius: 50%;
+  transform: rotate(-13deg);
+}
+.theme-night .motion-preview {
+  background: radial-gradient(ellipse at bottom, #294d48, #19333d);
+}
+.pattern-select-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+}
+.pattern-select-card .motion-preview {
+  width: 100%;
+}
+.pattern-select-copy {
+  padding: 1.25rem;
+  flex: 1;
+}
+.pattern-select-card > svg {
+  margin: 0 1.25rem 1rem;
+}
+
+/* Scenery and personal image studio. */
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.scene-card {
+  border: 1px solid var(--edge);
+  background: var(--surface);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.scene-card.selected {
+  outline: 2px solid var(--sage);
+  outline-offset: 3px;
+}
+.scene-card > img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+}
+.scene-card-copy {
+  padding: 1.2rem;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: start;
+}
+.scene-card-copy h3 {
+  font-size: 1.3rem;
+}
+.scene-card-copy p:not(.eyebrow) {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+.scene-card-copy > button {
+  margin-top: auto;
+}
+.scene-card .eyebrow {
+  font-size: 0.58rem;
+}
+.personal-scenes-heading {
+  margin-top: 3rem;
+}
+.scene-upload-card {
+  border: 1px dashed var(--sage);
+  background: var(--surface-soft);
+  border-radius: 20px;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+.scene-upload-card > span {
+  font-size: 2rem;
+  color: var(--sage);
+}
+.scene-upload-card strong {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+}
+.scene-upload-card small {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+.custom-scene-thumb {
+  position: relative;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+}
+.garden-dialog {
+  width: min(680px, calc(100% - 2rem));
+  max-height: 90svh;
+  border: 1px solid var(--edge);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: 0 30px 90px #10282055;
+  overflow-y: auto;
+}
+.garden-dialog::backdrop {
+  background: #142a24a6;
+  backdrop-filter: blur(4px);
+}
+.dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+.garden-dialog p {
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+.garden-dialog label {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+.image-upload {
+  border: 1px dashed var(--sage);
+  padding: 1rem;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+.image-upload input {
+  width: 100%;
+}
+.crop-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  border-radius: 14px;
+  margin: 1rem auto;
+  touch-action: none;
+  cursor: grab;
+  background: var(--surface-soft);
+}
+.crop-preview.phone {
+  max-width: 240px;
+  aspect-ratio: 3/4;
+}
+.crop-caption {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.4rem 0.7rem;
+  background: #fffbeacc;
+  color: #324f37;
+  font-family: var(--font-display);
+  border-radius: 8px;
+  pointer-events: none;
+}
+.crop-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.crop-controls input {
+  width: 100%;
+  accent-color: var(--forest);
+}
+.segmented-control {
+  display: flex;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  padding: 0.3rem;
+  gap: 0.3rem;
+}
+.segmented-control button {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 9px;
+  background: transparent;
+}
+.segmented-control button[aria-pressed='true'] {
+  background: var(--surface);
+  box-shadow: 0 2px 5px #142a2410;
+}
+.outfit-stage {
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  border-radius: 18px;
+  background: var(--surface-soft);
+  margin: 1rem 0;
+}
+.aura-rainbow {
+  transform-origin: center;
+  animation: ribbon-breathe 4s ease-in-out infinite;
+}
+@keyframes ribbon-breathe {
+  50% {
+    opacity: 0.6;
+    transform: translateX(-3px);
+  }
+}
+
+/* Field guide and release history. */
+.species-directory {
+  margin-bottom: 3rem;
+}
+.species-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.species-card {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 1rem;
+  padding: 1.4rem;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+}
+.species-portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.species-card h3 {
+  font-size: 1.3rem;
+  margin-bottom: 0.45rem;
+}
+.species-card p {
+  font-size: 0.8rem;
+  margin-bottom: 0.65rem;
+}
+.species-status {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.3rem 0.5rem;
+  border-radius: 99px;
+  color: var(--text-soft);
+  background: var(--surface-soft);
+}
+.species-status.raised {
+  background: var(--accent-soft);
+}
+.seed-recipe {
+  color: var(--forest);
+}
+.directory-help {
+  padding: 1.2rem;
+  margin-top: 1.5rem;
+  background: var(--surface-soft);
+  border-radius: 15px;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.directory-help summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+.directory-help p {
+  margin-top: 1rem;
+}
+.release-notice {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--edge);
+  padding: 0.85rem 1.2rem;
+  border-radius: 14px;
+  margin-bottom: 1.5rem;
+}
+.release-notice > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.release-notice .eyebrow {
+  font-size: 0.57rem;
+  color: var(--text-soft);
+}
+.release-notice strong {
+  font-size: 0.9rem;
+}
+.release-notice .text-button {
+  font-size: 0.85rem;
+}
+.notice-dismiss {
+  background: transparent;
+  width: 36px;
+  height: 36px;
+  font-size: 1.3rem;
+}
+.release-version {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  font-size: 0.75rem;
+  margin-bottom: 1rem;
+}
+.release-card {
+  padding: 2.5rem;
+}
+.release-card > h2 {
+  font-size: 2.3rem;
+}
+.release-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+.release-sections h3 {
+  font-size: 1.3rem;
+}
+.release-sections ul {
+  padding-left: 1.1rem;
+  line-height: 1.8;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 1180px) {
+  .app-header {
+    grid-template-columns: auto 1fr;
+  }
+  .app-header nav {
+    display: none;
+  }
+  .bottom-nav {
+    display: flex;
+  }
+}
+@media (max-width: 900px) {
+  main#main-content {
+    padding: 1.6rem 1.25rem 8rem;
+  }
+  .boutique-grid,
+  .scene-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .species-grid {
+    grid-template-columns: 1fr;
+  }
+  .pass-hero {
+    padding: 1.7rem;
+  }
+  .bottom-nav {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: 18px 18px 0 0;
+    background: var(--surface);
+    padding: 0.5rem 0.4rem max(0.55rem, env(safe-area-inset-bottom));
+    border: 1px solid var(--edge);
+    gap: 0;
+    justify-content: space-around;
+    overflow-x: auto;
+  }
+  .bottom-nav button {
+    min-width: 58px;
+    padding: 0.45rem 0.35rem;
+    border-radius: 11px;
+    font-size: 0.6rem;
+    gap: 0.25rem;
+  }
+  .bottom-nav button.active {
+    background: var(--accent-soft);
+    color: var(--ink);
+    box-shadow: none;
+  }
+  .bottom-nav button svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+@media (max-width: 600px) {
+  .app-header {
+    min-height: 68px;
+    padding: 0.6rem 1rem;
+    gap: 0.5rem;
+  }
+  .header-actions {
+    gap: 0.35rem;
+  }
+  .header-actions button {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+  }
+  .page-header {
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .page-header h1 {
+    font-size: 2.4rem;
+  }
+  .page-header p:not(.eyebrow) {
+    font-size: 0.9rem;
+  }
+  main#main-content {
+    padding: 1.25rem 0.95rem 9rem;
+  }
+  .garden-hero {
+    min-height: 460px;
+    border-radius: 20px;
+  }
+  .garden-heading {
+    padding: 1rem;
+  }
+  .garden-heading h1 {
+    font-size: 2.7rem;
+  }
+  .garden-observation {
+    font-size: 0.85rem;
+  }
+  .garden-quick-links {
+    gap: 0.3rem;
+  }
+  .garden-quick-links button {
+    font-size: 0.71rem;
+    text-align: left;
+  }
+  .garden-stats {
+    padding: 0.8rem;
+    gap: 0.5rem;
+  }
+  .shop-heading {
+    flex-direction: column;
+    align-items: start;
+  }
+  .wallet-stack {
+    display: flex;
+    flex-direction: row;
+  }
+  .wallet-stack .large {
+    display: flex;
+    padding: 0.5rem 0.8rem;
+  }
+  .shop-tabs {
+    gap: 0.2rem;
+    margin-bottom: 1.5rem;
+  }
+  .shop-tabs button {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.8rem;
+  }
+  .shop-filters {
+    padding: 0.8rem;
+    gap: 0.65rem;
+  }
+  .shop-filters label {
+    flex: 1 1 120px;
+  }
+  .shop-filters .shop-search {
+    flex-basis: 100%;
+  }
+  .boutique-grid {
+    gap: 0.75rem;
+  }
+  .boutique-card {
+    border-radius: 16px;
+  }
+  .item-art {
+    min-height: 145px;
+  }
+  .item-art .creature-sprite,
+  .item-art .butterfly-sprite {
+    width: 100px;
+  }
+  .item-copy {
+    padding: 0.85rem;
+  }
+  .item-copy h3 {
+    font-size: 1.12rem;
+  }
+  .item-copy p {
+    font-size: 0.78rem;
+  }
+  .item-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .item-footer .pattern-cost {
+    font-size: 0.7rem;
+  }
+  .item-tag {
+    left: 10px;
+    font-size: 0.51rem;
+  }
+  .preview-button {
+    right: 8px;
+    bottom: 8px;
+  }
+  .scene-grid {
+    grid-template-columns: 1fr;
+  }
+  .scene-card > img {
+    max-height: 220px;
+  }
+  .pass-hero {
+    grid-template-columns: 1fr;
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+  .pass-illustration {
+    border-left: 0;
+    border-top: 1px solid var(--edge);
+    padding-top: 1rem;
+  }
+  .pass-illustration strong {
+    font-size: 1.5rem;
+  }
+  .pass-illustration > span {
+    font-size: 2rem;
+  }
+  .species-card {
+    grid-template-columns: 80px 1fr;
+    padding: 1rem;
+    gap: 0.8rem;
+  }
+  .species-portrait svg {
+    width: 75px;
+  }
+  .species-card h3 {
+    font-size: 1.2rem;
+  }
+  .release-notice {
+    gap: 0.4rem;
+    padding: 0.75rem;
+  }
+  .release-notice .text-button {
+    font-size: 0.72rem;
+  }
+  .release-notice strong {
+    font-size: 0.8rem;
+  }
+  .release-sections {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .release-card {
+    padding: 1.5rem;
+  }
+  .garden-dialog {
+    padding: 1.25rem;
+  }
+  .crop-controls {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-rainbow {
+    animation: none;
+  }
+}
+
+.app-shell .app-header nav button.active {
+  color: var(--ink);
+}
+.app-shell .eyebrow {
+  color: var(--text-soft);
+}
+.app-shell .garden-heading .eyebrow {
+  color: #304c38;
+}
+.theme-night .garden-heading .eyebrow {
+  color: #e1e8d5;
+}
+@media (max-width: 900px) {
+  .bottom-nav {
+    transform: none;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .bottom-nav button {
+    min-width: 0;
+    min-height: 44px;
+  }
+}
+
+.theme-night .garden-hero::before {
+  background:
+    radial-gradient(circle at 12% 16%, #fff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 62% 23%, #fff8d0 0 1px, transparent 1.6px),
+    linear-gradient(
+      180deg,
+      rgba(11, 30, 39, 0.88),
+      rgba(11, 30, 39, 0.3) 36%,
+      transparent 64%,
+      rgba(11, 30, 39, 0.3)
+    );
+  background-size:
+    150px 140px,
+    240px 170px,
+    auto;
+}
+
+.flight-paused .wing,
+.flight-paused .aura {
+  animation-play-state: paused !important;
+}

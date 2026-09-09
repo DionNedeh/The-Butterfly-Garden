@@ -1,14 +1,17 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { effectiveBackdropId } from '../lib/appearance'
+import { useEffect, useRef, useMemo, useState, type CSSProperties } from 'react'
 import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarColors } from '../data/jars'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
 import { distinctSpeciesRaised } from '../lib/speciesAcquisition'
-import { flightRouteStyleFor } from '../lib/flightRoutes'
-import {
-  availableJars,
-  jarForPlant,
-} from '../lib/jars'
+import { FlyingButterfly } from './FlyingButterfly'
+import { JarSprite } from './sprites/JarSprite'
+import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
+import { activeCustomBackdrop } from '../lib/customBackdrops'
+import { hasGardenPassFeature } from '../lib/gardenPass'
+import { CustomBackdropImage } from './CustomBackdropImage'
+import { availableJars, jarForPlant } from '../lib/jars'
 import {
   DAILY_SEED_REWARD,
   EMERGENCE_SEED_REWARD,
@@ -64,6 +67,8 @@ export function GardenView({
   onSelectCompanion,
   onRenameCreature,
   onOpenCare,
+  seedFocus,
+  onOpenGuide,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
@@ -73,8 +78,14 @@ export function GardenView({
   onSelectCompanion: (creatureId: string) => void
   onRenameCreature: (creatureId: string, name: string) => void
   onOpenCare: () => void
+  seedFocus?: string
+  onOpenGuide?: () => void
 }) {
-  const [showSeedTray, setShowSeedTray] = useState(false)
+  const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
+  const seedTray = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (seedFocus) seedTray.current?.scrollIntoView({ block: 'start' })
+  }, [seedFocus])
   const [selectedPlantId, setSelectedPlantId] = useState<string>()
   const [confirmPlantRemoval, setConfirmPlantRemoval] = useState(false)
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
@@ -142,7 +153,9 @@ export function GardenView({
     observationChoices[
       getDailyPromptIndex(toLocalDate(), observationChoices.length)
     ]
-  const selectedPlant = state.plants.find((plant) => plant.id === selectedPlantId)
+  const selectedPlant = state.plants.find(
+    (plant) => plant.id === selectedPlantId,
+  )
   const selectedPlantDefinition = selectedPlant
     ? plantsById.get(selectedPlant.plantId)
     : undefined
@@ -165,7 +178,9 @@ export function GardenView({
   const unplacedJarCount = availableJars(state).length
   /** Which plant each placed jar is sitting on, by jar id. */
   const plantNameByJarId = useMemo(() => {
-    const gardenPlantsById = new Map(state.plants.map((plant) => [plant.id, plant]))
+    const gardenPlantsById = new Map(
+      state.plants.map((plant) => [plant.id, plant]),
+    )
     const names = new Map<string, string>()
     for (const placement of state.jarPlacements) {
       const plant = gardenPlantsById.get(placement.plantId)
@@ -177,12 +192,16 @@ export function GardenView({
 
   const placedJarSummaries = useMemo(() => {
     const jarsById = new Map(state.jars.map((jar) => [jar.id, jar]))
-    const gardenPlantsById = new Map(state.plants.map((plant) => [plant.id, plant]))
+    const gardenPlantsById = new Map(
+      state.plants.map((plant) => [plant.id, plant]),
+    )
     return state.jarPlacements
       .map((placement) => {
         const jar = jarsById.get(placement.jarId)
         const plant = gardenPlantsById.get(placement.plantId)
-        const plantDefinition = plant ? plantsById.get(plant.plantId) : undefined
+        const plantDefinition = plant
+          ? plantsById.get(plant.plantId)
+          : undefined
         const color = jar ? jarColorsById.get(jar.colorId) : undefined
         if (!jar || !plant || !plantDefinition || !color) return undefined
         return {
@@ -197,14 +216,43 @@ export function GardenView({
     flightPatterns.find(
       (pattern) => pattern.id === state.selectedFlightPatternId,
     ) ?? flightPatterns[0]
+  const customBackdrop = activeCustomBackdrop(
+    state,
+    hasGardenPassFeature('custom-backdrops'),
+  )
+  const [failedImage, setFailedImage] = useState<string>()
+  const sceneId = state.profile
+    ? effectiveBackdropId(state.profile)
+    : 'sunlit-meadow'
+  const [displayedScene, setDisplayedScene] = useState<typeof sceneId>('sunlit-meadow')
+  const [sceneUnavailable, setSceneUnavailable] = useState(false)
+  useEffect(() => {
+    let active = true
+    void loadBackdrop(sceneId).then(() => {
+      if (active) { setDisplayedScene(sceneId); setSceneUnavailable(false) }
+    }).catch(() => {
+      if (active) { setDisplayedScene('sunlit-meadow'); setSceneUnavailable(true) }
+    })
+    return () => { active = false }
+  }, [sceneId])
+
   const gardenFull = state.plants.length >= PLANT_CAPACITY
 
   return (
     <div className="view garden-view">
       <section
         className={`garden-hero backdrop-${state.profile?.selectedBackdropId ?? 'sunlit-meadow'}`}
+        style={{ backgroundImage: `url(${backdropAssets[displayedScene].image})` }}
         aria-labelledby="garden-title"
       >
+        {customBackdrop && failedImage !== customBackdrop.id && (
+          <div className="custom-scene-layer">
+            <CustomBackdropImage
+              image={customBackdrop}
+              onError={() => setFailedImage(customBackdrop.id)}
+            />
+          </div>
+        )}
         <div className="hero-petals" aria-hidden="true">
           {Array.from({ length: 7 }, (_, index) => (
             <span key={index} className={`hero-petal petal-${index + 1}`} />
@@ -218,24 +266,22 @@ export function GardenView({
           </p>
         </div>
 
-        <div className="garden-flight-space" aria-label="Butterflies flying in the garden">
-          {gardenButterflies.map((butterfly, index) => {
-            const route = flightRouteStyleFor(butterfly.id, index)
-            return (
-              <div
-                className={`flying-butterfly ${selectedPattern.animationClass}`}
-                style={route.style as CSSProperties}
-                key={butterfly.id}
-              >
-                <Butterfly
-                  speciesId={butterfly.speciesId}
-                  label={butterfly.label}
-                  outfit={butterfly.outfit}
-                  pettable
-                />
-              </div>
-            )
-          })}
+        <div
+          className="garden-flight-space"
+          aria-label="Butterflies flying in the garden"
+        >
+          {gardenButterflies.map((butterfly, index) => (
+            <FlyingButterfly
+              key={butterfly.id}
+              id={butterfly.id}
+              pattern={selectedPattern.id}
+              index={index}
+              speciesId={butterfly.speciesId}
+              label={butterfly.label}
+              outfit={butterfly.outfit}
+              reduced={state.profile?.reducedMotion}
+            />
+          ))}
         </div>
 
         <div className="garden-plants" aria-label="Plants in your garden">
@@ -253,10 +299,12 @@ export function GardenView({
               <button
                 type="button"
                 className={`garden-plant growth-${plant.growth}`}
-                style={{
-                  '--plant-color': definition?.color,
-                  '--plant-delay': `${index * -0.7}s`,
-                } as CSSProperties}
+                style={
+                  {
+                    '--plant-color': definition?.color,
+                    '--plant-delay': `${index * -0.7}s`,
+                  } as CSSProperties
+                }
                 key={plant.id}
                 title={`${definition?.name}: growth ${plant.growth} of ${MAX_PLANT_GROWTH}`}
                 aria-label={`View ${definition?.name ?? 'plant'}, growth ${plant.growth} of ${MAX_PLANT_GROWTH}${jarLabel}`}
@@ -274,11 +322,14 @@ export function GardenView({
                 />
                 {placedJar && (
                   <span
-                    className="decorative-jar plant-jar"
+                    className="jar-display plant-jar"
                     style={jarStyle(placedJar.colorId)}
                     aria-hidden="true"
                   >
-                    <span>{placedJar.character}</span>
+                    <JarSprite
+                      character={placedJar.character}
+                      colorId={placedJar.colorId}
+                    />
                   </span>
                 )}
               </button>
@@ -287,6 +338,24 @@ export function GardenView({
         </div>
       </section>
 
+      {sceneUnavailable && <p role="status">This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.</p>}
+      {state.profile?.selectedCustomBackdropId && !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
+      {failedImage && (
+        <p role="status">
+          Your image could not be displayed. The built-in scene is shown; your
+          saved image remains in your backup.
+        </p>
+      )}
+      <div className="garden-quick-links">
+        <button className="text-button" onClick={onOpenCare}>
+          Tend your companions →
+        </button>
+        {onOpenGuide && (
+          <button className="text-button" onClick={onOpenGuide}>
+            Find a butterfly & its seed →
+          </button>
+        )}
+      </div>
       <section className="garden-stats" aria-label="Garden resources">
         <div>
           <Icon name="seed" />
@@ -297,7 +366,9 @@ export function GardenView({
           <Icon name="leaf" />
           {/* Distinct species, not creatures: two Monarchs are one species
               welcomed, which is what the label has always claimed. */}
-          <strong>{distinctSpeciesRaised(state)} / {species.length}</strong>
+          <strong>
+            {distinctSpeciesRaised(state)} / {species.length}
+          </strong>
           <span>species welcomed</span>
         </div>
         <button
@@ -321,13 +392,18 @@ export function GardenView({
         {PLANT_SEED_COST} seed.
       </p>
 
-      <section className="card plant-inspector" aria-labelledby="plant-inspector-title">
+      <section
+        className="card plant-inspector"
+        aria-labelledby="plant-inspector-title"
+      >
         <div className="section-heading">
           <div>
             <p className="eyebrow">Plant care</p>
             <h2 id="plant-inspector-title">Garden plants</h2>
           </div>
-          <span className="count-badge">{state.plants.length} / {PLANT_CAPACITY}</span>
+          <span className="count-badge">
+            {state.plants.length} / {PLANT_CAPACITY}
+          </span>
         </div>
         <p className="section-explainer">
           Select a plant in the scene or from this list to see its field guide
@@ -360,7 +436,9 @@ export function GardenView({
           <article className="plant-detail">
             <div>
               <p className="eyebrow">
-                {selectedPlantDefinition.kind === 'host' ? 'Host plant' : 'Nectar plant'}
+                {selectedPlantDefinition.kind === 'host'
+                  ? 'Host plant'
+                  : 'Nectar plant'}
               </p>
               <h3>{selectedPlantDefinition.name}</h3>
               <em>{selectedPlantDefinition.scientificName}</em>
@@ -426,16 +504,19 @@ export function GardenView({
                     {selectedPlantJar ? (
                       <>
                         <span
-                          className="decorative-jar"
+                          className="jar-display"
                           style={jarStyle(selectedPlantJar.colorId)}
                           aria-hidden="true"
                         >
-                          <span>{selectedPlantJar.character}</span>
+                          <JarSprite
+                            character={selectedPlantJar.character}
+                            colorId={selectedPlantJar.colorId}
+                          />
                         </span>
                         <div>
                           <strong>
-                            {jarColorsById.get(selectedPlantJar.colorId)?.label ??
-                              'Custom'}{' '}
+                            {jarColorsById.get(selectedPlantJar.colorId)
+                              ?.label ?? 'Custom'}{' '}
                             {selectedPlantJar.character} jar
                           </strong>
                           <small>Placed on this plant spot.</small>
@@ -458,7 +539,10 @@ export function GardenView({
                     )}
                   </div>
 
-                  <div className="jar-inventory-grid" aria-label="Available jars">
+                  <div
+                    className="jar-inventory-grid"
+                    aria-label="Available jars"
+                  >
                     {placeableJars.length === 0 ? (
                       <p className="empty-copy">
                         {selectedPlantJar
@@ -470,9 +554,7 @@ export function GardenView({
                         const color = jarColorsById.get(jar.colorId)
                         const colorLabel = color?.label ?? 'Custom'
                         const heldBy = plantNameByJarId.get(jar.id)
-                        const action = heldBy
-                          ? `Move from ${heldBy}`
-                          : 'Place'
+                        const action = heldBy ? `Move from ${heldBy}` : 'Place'
                         return (
                           <button
                             type="button"
@@ -482,11 +564,14 @@ export function GardenView({
                             aria-label={`${action} ${colorLabel} ${jar.character} jar on ${selectedPlantDefinition.name}`}
                           >
                             <span
-                              className="decorative-jar"
+                              className="jar-display"
                               style={jarStyle(jar.colorId)}
                               aria-hidden="true"
                             >
-                              <span>{jar.character}</span>
+                              <JarSprite
+                                character={jar.character}
+                                colorId={jar.colorId}
+                              />
                             </span>
                             <span>{colorLabel}</span>
                             <small>{action}</small>
@@ -499,18 +584,19 @@ export function GardenView({
               )}
               {placedJarSummaries.length > 0 && (
                 <details className="placed-jars-list">
-                  <summary>
-                    Placed jars ({placedJarSummaries.length})
-                  </summary>
+                  <summary>Placed jars ({placedJarSummaries.length})</summary>
                   <ul>
                     {placedJarSummaries.map(({ placement, jar, label }) => (
                       <li key={placement.jarId}>
                         <span
-                          className="decorative-jar small"
+                          className="jar-display small"
                           style={jarStyle(jar.colorId)}
                           aria-hidden="true"
                         >
-                          <span>{jar.character}</span>
+                          <JarSprite
+                            character={jar.character}
+                            colorId={jar.colorId}
+                          />
                         </span>
                         {label}
                       </li>
@@ -520,7 +606,11 @@ export function GardenView({
               )}
             </div>
             <div className="plant-removal">
-              {removalBlocker && <p className="protected-plant-note">{removalBlocker} It cannot be removed yet.</p>}
+              {removalBlocker && (
+                <p className="protected-plant-note">
+                  {removalBlocker} It cannot be removed yet.
+                </p>
+              )}
               {!confirmPlantRemoval ? (
                 <button
                   className="text-button danger-text"
@@ -543,7 +633,10 @@ export function GardenView({
                     >
                       Yes, remove plant
                     </button>
-                    <button className="secondary-button" onClick={() => setConfirmPlantRemoval(false)}>
+                    <button
+                      className="secondary-button"
+                      onClick={() => setConfirmPlantRemoval(false)}
+                    >
                       Keep plant
                     </button>
                   </div>
@@ -557,26 +650,34 @@ export function GardenView({
       </section>
 
       {showSeedTray && (
-        <section className="card seed-tray" aria-labelledby="seed-tray-title">
+        <section
+          ref={seedTray}
+          className="card seed-tray"
+          aria-labelledby="seed-tray-title"
+        >
           <div className="section-heading">
             <div>
               <p className="eyebrow">Choose a new beginning</p>
               <h2 id="seed-tray-title">Seed tray</h2>
             </div>
-            <button className="text-button" onClick={() => setShowSeedTray(false)}>
+            <button
+              className="text-button"
+              onClick={() => setShowSeedTray(false)}
+            >
               Close
             </button>
           </div>
           <p className="section-explainer">
             Spend {PLANT_SEED_COST} seed to add a plant. Host plants can welcome
             the listed caterpillars after growing; nectar plants add flowers for
-            the butterflies already visiting.
-            {' '}The garden has {PLANT_CAPACITY} spaces.
+            the butterflies already visiting. The garden has {PLANT_CAPACITY}{' '}
+            spaces.
           </p>
           <div className="catalog-grid">
             {plants.map((plant) => (
               <button
-                className="plant-choice"
+                className={`plant-choice ${seedFocus === plant.id ? 'seed-highlight' : ''}`}
+                disabled={state.seeds < PLANT_SEED_COST || gardenFull}
                 key={plant.id}
                 onClick={() => {
                   onPlant(plant.id)
@@ -592,7 +693,9 @@ export function GardenView({
                 <small>
                   {plant.kind === 'host'
                     ? `Host for ${plant.speciesIds
-                        .map((speciesId) => speciesById.get(speciesId)?.commonName)
+                        .map(
+                          (speciesId) => speciesById.get(speciesId)?.commonName,
+                        )
                         .filter(Boolean)
                         .join(' and ')}`
                     : 'Nectar plant for visiting butterflies'}
@@ -614,8 +717,8 @@ export function GardenView({
           </div>
           <p className="section-explainer">
             Eggs hatch into caterpillars, caterpillars form chrysalises, and
-            chrysalises open into butterflies — each after three days of care
-            on the Care page. Progress is never lost.
+            chrysalises open into butterflies — each after three days of care on
+            the Care page. Progress is never lost.
           </p>
           {developing.length === 0 ? (
             <p className="empty-copy">
@@ -637,8 +740,7 @@ export function GardenView({
                     <div>
                       <strong>{creature.name}</strong>
                       <span>
-                        {stageLabels[creature.stage]} ·{' '}
-                        {definition?.commonName}
+                        {stageLabels[creature.stage]} · {definition?.commonName}
                       </span>
                       <small>
                         {careDaysCompleted(creature)} of {STAGE_CARE_DAYS} care
@@ -671,7 +773,8 @@ export function GardenView({
             <div className="companion-grid">
               {emerged.map((creature) => {
                 const definition = speciesById.get(creature.speciesId)
-                const selected = creature.id === state.profile?.activeCompanionId
+                const selected =
+                  creature.id === state.profile?.activeCompanionId
                 return (
                   <article
                     className={`companion-card ${selected ? 'selected' : ''}`}
@@ -689,7 +792,9 @@ export function GardenView({
                       />
                       <strong>{creature.name}</strong>
                       <small>{definition?.commonName}</small>
-                      <span>{selected ? 'Exploring with you' : 'Choose companion'}</span>
+                      <span>
+                        {selected ? 'Exploring with you' : 'Choose companion'}
+                      </span>
                     </button>
                     <form
                       className="butterfly-name-form"
@@ -713,7 +818,10 @@ export function GardenView({
                           aria-label={`Name for ${creature.name}`}
                         />
                       </label>
-                      <button className="secondary-button compact" type="submit">
+                      <button
+                        className="secondary-button compact"
+                        type="submit"
+                      >
                         Save name
                       </button>
                     </form>

@@ -50,6 +50,30 @@ export const gardenBackdrops: GardenBackdropDefinition[] = [
     description: 'Flowering stone arches surrounding a quiet lily pond.',
     unlock: { kind: 'garden-age', days: 60 },
   },
+  {
+    id: 'cottage-bloom',
+    name: 'Cottage Bloom',
+    description: 'A sunlit path through roses, daisies and lavender.',
+    unlock: { kind: 'free' },
+  },
+  {
+    id: 'rain-kissed-pond',
+    name: 'Rain-kissed Pond',
+    description: 'Silver water, soft rain and a little room to breathe.',
+    unlock: { kind: 'garden-age', days: 14 },
+  },
+  {
+    id: 'twilight-orchard',
+    name: 'Twilight Orchard',
+    description: 'Lanterns and fireflies among the apple blossoms.',
+    unlock: { kind: 'pass' },
+  },
+  {
+    id: 'cloud-garden',
+    name: 'Cloud Garden',
+    description: 'A quiet terrace above a sea of morning clouds.',
+    unlock: { kind: 'pass' },
+  },
 ]
 
 /** Days a backdrop has to be waited for, or 0 when it is not time-gated. */
@@ -139,11 +163,15 @@ export function daysUntilBackdrop(
   const backdrop = gardenBackdrops.find((item) => item.id === backdropId)
   return Math.max(
     0,
-    (backdrop ? backdropUnlockDays(backdrop) : 0) - elapsedGardenDays(profile, now),
+    (backdrop ? backdropUnlockDays(backdrop) : 0) -
+      elapsedGardenDays(profile, now),
   )
 }
 
-export function progressAppearance(state: AppState, now = new Date()): AppState {
+export function progressAppearance(
+  state: AppState,
+  now = new Date(),
+): AppState {
   const profile = state.profile
   if (!profile) return state
 

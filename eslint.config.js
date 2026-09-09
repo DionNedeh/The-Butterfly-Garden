@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'playwright-report', 'test-results']),
+  globalIgnores(['dist', 'playwright-report', 'test-results', '**/*.local/**']),
   {
     // Application code: type-aware rules, so mistakes that only show up with
     // type information — an unhandled promise, an unnecessary condition — are

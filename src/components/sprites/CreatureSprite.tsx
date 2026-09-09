@@ -11,9 +11,27 @@ import { OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
  * from the very first day.
  */
 /** Fixed per life stage; literals in the JSX would be new objects each render. */
-const EGG_ANCHOR: OutfitAnchor = { headX: 60, headY: 30, bodyX: 60, bodyY: 50, scale: 1 }
-const CATERPILLAR_ANCHOR: OutfitAnchor = { headX: 99, headY: 50, bodyX: 63, bodyY: 58, scale: 1 }
-const CHRYSALIS_ANCHOR: OutfitAnchor = { headX: 60, headY: 24, bodyX: 60, bodyY: 56, scale: 1 }
+const EGG_ANCHOR: OutfitAnchor = {
+  headX: 60,
+  headY: 30,
+  bodyX: 60,
+  bodyY: 50,
+  scale: 1,
+}
+const CATERPILLAR_ANCHOR: OutfitAnchor = {
+  headX: 99,
+  headY: 51,
+  bodyX: 87,
+  bodyY: 65,
+  scale: 1,
+}
+const CHRYSALIS_ANCHOR: OutfitAnchor = {
+  headX: 60,
+  headY: 24,
+  bodyX: 60,
+  bodyY: 56,
+  scale: 1,
+}
 
 /**
  * Memoized. These sprites are large SVG trees -- a garden scene draws up to
@@ -71,7 +89,12 @@ export const CreatureSprite = memo(function CreatureSprite({
           stroke="#4c7040"
           strokeWidth="2"
         />
-        <path d="M18 77 C40 68 68 58 92 49" stroke="#4c7040" strokeWidth="1.6" fill="none" />
+        <path
+          d="M18 77 C40 68 68 58 92 49"
+          stroke="#4c7040"
+          strokeWidth="1.6"
+          fill="none"
+        />
         {[
           'M34 72 C42 68 50 64 58 60',
           'M46 76 C56 70 66 64 76 57',
@@ -81,8 +104,23 @@ export const CreatureSprite = memo(function CreatureSprite({
         ))}
         {/* the egg */}
         <g className="egg-wobble">
-          <ellipse cx="60" cy="47" rx="14" ry="17" fill="#f7f0dc" stroke="#cbb98e" strokeWidth="1.6" />
-          <ellipse cx="60" cy="47" rx="14" ry="17" fill={primary} opacity="0.18" />
+          <ellipse
+            cx="60"
+            cy="47"
+            rx="14"
+            ry="17"
+            fill="#f7f0dc"
+            stroke="#cbb98e"
+            strokeWidth="1.6"
+          />
+          <ellipse
+            cx="60"
+            cy="47"
+            rx="14"
+            ry="17"
+            fill={primary}
+            opacity="0.18"
+          />
           {/* ridges */}
           {[-8, -4, 0, 4, 8].map((dx) => (
             <path
@@ -93,10 +131,18 @@ export const CreatureSprite = memo(function CreatureSprite({
               fill="none"
             />
           ))}
-          <ellipse cx="55" cy="39" rx="3.4" ry="5" fill="#fffdf4" opacity="0.8" />
+          <OutfitOverlay outfit={outfit} anchor={EGG_ANCHOR} layer="attached" />
+          <ellipse
+            cx="55"
+            cy="39"
+            rx="3.4"
+            ry="5"
+            fill="#fffdf4"
+            opacity="0.8"
+          />
           <circle cx="60" cy="47" r="2.6" fill={secondary} opacity="0.35" />
         </g>
-        <OutfitOverlay outfit={outfit} anchor={EGG_ANCHOR} />
+        <OutfitOverlay outfit={outfit} anchor={EGG_ANCHOR} layer="ambient" />
       </svg>
     )
   }
@@ -120,13 +166,31 @@ export const CreatureSprite = memo(function CreatureSprite({
         aria-label={`${name} caterpillar`}
       >
         {/* twig */}
-        <path d="M6 82 C40 76 82 76 114 80" stroke="#8a6238" strokeWidth="5" fill="none" strokeLinecap="round" />
-        <path d="M30 79 C34 74 40 72 46 72" stroke="#8a6238" strokeWidth="2.4" fill="none" />
+        <path
+          d="M6 82 C40 76 82 76 114 80"
+          stroke="#8a6238"
+          strokeWidth="5"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <path
+          d="M30 79 C34 74 40 72 46 72"
+          stroke="#8a6238"
+          strokeWidth="2.4"
+          fill="none"
+        />
         <g className="caterpillar-inch">
           {/* body segments, tail to head */}
           {segments.map((segment, index) => (
             <g key={segment.cx}>
-              <circle cx={segment.cx} cy={segment.cy} r={segment.r} fill={primary} stroke={secondary} strokeWidth="1.4" />
+              <circle
+                cx={segment.cx}
+                cy={segment.cy}
+                r={segment.r}
+                fill={primary}
+                stroke={secondary}
+                strokeWidth="1.4"
+              />
               {index % 2 === 0 ? (
                 <path
                   d={`M${segment.cx - segment.r * 0.7} ${segment.cy - segment.r * 0.55} A${segment.r * 0.75} ${segment.r * 0.75} 0 0 1 ${segment.cx + segment.r * 0.7} ${segment.cy - segment.r * 0.55}`}
@@ -135,29 +199,77 @@ export const CreatureSprite = memo(function CreatureSprite({
                   fill="none"
                 />
               ) : (
-                <circle cx={segment.cx} cy={segment.cy - segment.r * 0.35} r="2" fill="#f6efdc" opacity="0.9" />
+                <circle
+                  cx={segment.cx}
+                  cy={segment.cy - segment.r * 0.35}
+                  r="2"
+                  fill="#f6efdc"
+                  opacity="0.9"
+                />
               )}
               {/* prolegs */}
-              <path d={`M${segment.cx - 3} ${segment.cy + segment.r - 1} L${segment.cx - 4} ${segment.cy + segment.r + 4}`} stroke={secondary} strokeWidth="2" strokeLinecap="round" />
-              <path d={`M${segment.cx + 3} ${segment.cy + segment.r - 1} L${segment.cx + 4} ${segment.cy + segment.r + 4}`} stroke={secondary} strokeWidth="2" strokeLinecap="round" />
+              <path
+                d={`M${segment.cx - 3} ${segment.cy + segment.r - 1} L${segment.cx - 4} ${segment.cy + segment.r + 4}`}
+                stroke={secondary}
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <path
+                d={`M${segment.cx + 3} ${segment.cy + segment.r - 1} L${segment.cx + 4} ${segment.cy + segment.r + 4}`}
+                stroke={secondary}
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
             </g>
           ))}
           {/* head */}
-          <circle cx="99" cy="60" r="11" fill={primary} stroke={secondary} strokeWidth="1.6" />
+          <circle
+            cx="99"
+            cy="60"
+            r="11"
+            fill={primary}
+            stroke={secondary}
+            strokeWidth="1.6"
+          />
           {/* two eyes for a friendly, forward-tilted face */}
           <circle cx="95" cy="57.4" r="2" fill="#2b2118" />
           <circle cx="95.7" cy="56.7" r="0.7" fill="#fdf8ea" />
           <circle cx="103" cy="57" r="2" fill="#2b2118" />
           <circle cx="103.7" cy="56.3" r="0.7" fill="#fdf8ea" />
-          <path d="M95 64 Q99 67 103 64" stroke="#2b2118" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-          <path d="M94 51 C92 45 90 42 87 40" stroke={secondary} strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M102 50 C103 45 105 41 108 39" stroke={secondary} strokeWidth="2" fill="none" strokeLinecap="round" />
+          <path
+            d="M95 64 Q99 67 103 64"
+            stroke="#2b2118"
+            strokeWidth="1.4"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M94 51 C92 45 90 42 87 40"
+            stroke={secondary}
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M102 50 C103 45 105 41 108 39"
+            stroke={secondary}
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+          />
           <circle cx="87" cy="40" r="1.6" fill={secondary} />
           <circle cx="108" cy="39" r="1.6" fill={secondary} />
+          <OutfitOverlay
+            outfit={outfit}
+            anchor={CATERPILLAR_ANCHOR}
+            layer="attached"
+          />
         </g>
-        {/* Caterpillars keep headwear + aura, but neck accessories don't
-            suit the long low body, so they're hidden here. */}
-        <OutfitOverlay outfit={outfit} anchor={CATERPILLAR_ANCHOR} hideAccessory />
+        <OutfitOverlay
+          outfit={outfit}
+          anchor={CATERPILLAR_ANCHOR}
+          layer="ambient"
+        />
       </svg>
     )
   }
@@ -173,8 +285,19 @@ export const CreatureSprite = memo(function CreatureSprite({
       aria-label={`${name} chrysalis`}
     >
       {/* branch */}
-      <path d="M10 16 C42 10 80 10 112 18" stroke="#8a6238" strokeWidth="5" fill="none" strokeLinecap="round" />
-      <path d="M70 15 C74 20 76 24 76 28" stroke="#7c5a30" strokeWidth="2.4" fill="none" />
+      <path
+        d="M10 16 C42 10 80 10 112 18"
+        stroke="#8a6238"
+        strokeWidth="5"
+        fill="none"
+        strokeLinecap="round"
+      />
+      <path
+        d="M70 15 C74 20 76 24 76 28"
+        stroke="#7c5a30"
+        strokeWidth="2.4"
+        fill="none"
+      />
       <g className="chrysalis-sway">
         {/* silk pad + cremaster */}
         <path d="M60 14 L60 26" stroke="#cbb98e" strokeWidth="2.4" />
@@ -192,16 +315,48 @@ export const CreatureSprite = memo(function CreatureSprite({
           opacity="0.14"
         />
         {/* sculpted ridges */}
-        <path d="M48 44 C56 40 64 40 72 44" stroke="#5f8a4f" strokeWidth="1.2" fill="none" />
-        <path d="M47 52 C56 48 64 48 73 52" stroke="#5f8a4f" strokeWidth="1.2" fill="none" />
-        <path d="M49 62 C56 58 64 58 71 62" stroke="#5f8a4f" strokeWidth="1" fill="none" />
+        <path
+          d="M48 44 C56 40 64 40 72 44"
+          stroke="#5f8a4f"
+          strokeWidth="1.2"
+          fill="none"
+        />
+        <path
+          d="M47 52 C56 48 64 48 73 52"
+          stroke="#5f8a4f"
+          strokeWidth="1.2"
+          fill="none"
+        />
+        <path
+          d="M49 62 C56 58 64 58 71 62"
+          stroke="#5f8a4f"
+          strokeWidth="1"
+          fill="none"
+        />
         {/* the monarch-style gold crown dots */}
         {[50, 54.5, 59, 63.5, 68].map((x) => (
-          <circle key={x} cx={x} cy={40} r="1.4" fill="#e7b445" stroke="#a87716" strokeWidth="0.5" />
+          <circle
+            key={x}
+            cx={x}
+            cy={40}
+            r="1.4"
+            fill="#e7b445"
+            stroke="#a87716"
+            strokeWidth="0.5"
+          />
         ))}
+        <OutfitOverlay
+          outfit={outfit}
+          anchor={CHRYSALIS_ANCHOR}
+          layer="attached"
+        />
         <ellipse cx="54" cy="50" rx="3" ry="9" fill="#fffdf4" opacity="0.35" />
       </g>
-      <OutfitOverlay outfit={outfit} anchor={CHRYSALIS_ANCHOR} />
+      <OutfitOverlay
+        outfit={outfit}
+        anchor={CHRYSALIS_ANCHOR}
+        layer="ambient"
+      />
     </svg>
   )
 })

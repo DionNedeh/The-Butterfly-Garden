@@ -1,3 +1,5 @@
+import type { AppState } from '../types'
+import { SpeciesDirectory } from './SpeciesDirectory'
 import { STAGE_CARE_DAYS } from '../lib/lifecycle'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
 import {
@@ -88,7 +90,7 @@ const sections: GuideSection[] = [
     eyebrow: 'Dress-up',
     title: 'The Boutique and wardrobe',
     paragraphs: [
-      'Cosmetics come in three slots — headwear, accessories, and auras — and each lists the life stages it fits. Buy once, dress everyone: your whole garden shares one closet, managed from each companion\'s wardrobe on the Care page.',
+      "Cosmetics come in three slots — headwear, accessories, and auras — and each lists the life stages it fits. Buy once, dress everyone: your whole garden shares one closet, managed from each companion's wardrobe on the Care page.",
       'If a companion changes stage and an item no longer fits, it is only hidden, never lost.',
     ],
   },
@@ -97,7 +99,7 @@ const sections: GuideSection[] = [
     eyebrow: 'Something to look forward to',
     title: 'The Garden Pass',
     paragraphs: [
-      'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. These unlock with the Garden Pass in a future update. For now, they are lovely to look at.',
+      'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. They are included free in the current PWA preview. Try them from the Care wardrobe; no subscription or payment is active.',
     ],
   },
   {
@@ -132,7 +134,7 @@ const sections: GuideSection[] = [
     eyebrow: 'Seeing the month',
     title: 'The calendar planner',
     paragraphs: [
-      'The calendar on the Today page shows your whole month: dots for the goals landing on each day, suns for days you gathered Sunlight, and your mood\'s weather. Tap any upcoming day to plan a one-time goal for it — future you will find it waiting on the right morning.',
+      "The calendar on the Today page shows your whole month: dots for the goals landing on each day, suns for days you gathered Sunlight, and your mood's weather. Tap any upcoming day to plan a one-time goal for it — future you will find it waiting on the right morning.",
     ],
   },
   {
@@ -140,7 +142,7 @@ const sections: GuideSection[] = [
     eyebrow: 'Keepsakes',
     title: 'Letter jars',
     paragraphs: [
-      'Letter and number jars are decorative keepsakes for your plant spots: uppercase A–Z and 0–9 in eight colors, one reusable jar per purchase. Place, move, or return them from a plant\'s detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.',
+      "Letter and number jars are decorative keepsakes for your plant spots: uppercase A–Z and 0–9 in eight colors, one reusable jar per purchase. Place, move, or return them from a plant's detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.",
       'Removing a plant returns its jar safely to inventory. Like all shop purchases, jars are local, permanent, and non-refundable.',
     ],
   },
@@ -180,7 +182,13 @@ const sections: GuideSection[] = [
   },
 ]
 
-export function GuideView() {
+export function GuideView({
+  state,
+  onShowSeed,
+}: {
+  state: AppState
+  onShowSeed: (id: string) => void
+}) {
   return (
     <div className="view guide-view">
       <header className="page-header">
@@ -188,11 +196,12 @@ export function GuideView() {
           <p className="eyebrow">Marigold's field guide</p>
           <h1>How the garden works</h1>
           <p>
-            Everything in one place — from your first Sunlight to a garden
-            full of butterflies in tiny hats.
+            Everything in one place — from your first Sunlight to a garden full
+            of butterflies in tiny hats.
           </p>
         </div>
       </header>
+      <SpeciesDirectory state={state} onShowSeed={onShowSeed} />
       <div className="guide-grid">
         {sections.map((section) => (
           <section className="card guide-card" key={section.title}>
