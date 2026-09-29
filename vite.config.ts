@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -8,7 +9,13 @@ export default defineConfig(({ mode }) => {
   // through Google Play, so it has no service worker, no web manifest and no
   // precache -- the plugin is disabled but still answers its virtual modules.
   const android = mode === 'android'
+  const { version } = JSON.parse(
+    readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+  ) as { version: string }
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(version),
+    },
     base: android ? '/' : '/The-Butterfly-Garden/',
     build: android ? { outDir: 'dist-android' } : {},
     // Scan only the application, not local review HTML or archived checkouts.

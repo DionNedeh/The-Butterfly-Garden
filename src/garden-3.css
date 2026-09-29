@@ -1233,3 +1233,22 @@ textarea:focus {
 .flight-paused .aura {
   animation-play-state: paused !important;
 }
+
+/* Settings → About: the privacy policy (public/privacy.html) and the
+   third-party notices, shown as pages of their own. */
+.policy-frame {
+  display: block;
+  width: 100%;
+  height: max(420px, 70svh);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  background: #f7f3e8;
+}
+.notices-text {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

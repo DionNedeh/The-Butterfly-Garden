@@ -17,11 +17,14 @@ Run all four before pushing:
 npm run typecheck     # tsc -b, includes the e2e tsconfig
 npm run lint          # eslint
 npm test              # vitest, unit + component
-npm run test:e2e      # playwright, both mobile and desktop projects
+npm run test:e2e      # playwright: desktop, mobile, and the Android bundle
 ```
 
 The e2e suite includes axe accessibility checks, so it catches focus and
-contrast regressions that the unit tests do not.
+contrast regressions that the unit tests do not. Its `android-webview` project
+runs `e2e/android.spec.ts` against the Android build (`dist-android`, served on
+port 4174) in a phone-sized Chromium, where Capacitor's plugins fall back to
+their web implementations.
 
 A change that touches `android/`, `capacitor.config.ts`, the Android build
 mode, or anything behind `isAndroidApp()` also needs the Android checks below.

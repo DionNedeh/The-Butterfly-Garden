@@ -8,6 +8,9 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Plugins that live in this app rather than in an npm package have to
+        // be registered by hand, before the bridge is built.
+        registerPlugin(GardenFilesPlugin.class);
         super.onCreate(savedInstanceState);
         // Null only when the device has no usable WebView, in which case
         // Capacitor has already shown its own explanation instead.

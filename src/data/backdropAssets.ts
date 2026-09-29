@@ -13,6 +13,7 @@ import pondThumb from '../assets/thumb-rain-kissed-pond.webp'
 import orchardThumb from '../assets/thumb-twilight-orchard.webp'
 import cloudThumb from '../assets/thumb-cloud-garden.webp'
 import type { GardenBackdropId } from '../types'
+import { isAndroidApp } from '../lib/platform'
 
 export const backdropAssets: Record<
   GardenBackdropId,
@@ -34,7 +35,9 @@ export function loadBackdrop(id: GardenBackdropId): Promise<void> {
     image.onerror = () =>
       reject(
         new Error(
-          'This scene is not available offline yet. Reconnect once to download it.',
+          isAndroidApp()
+            ? 'This scene could not be opened. Please try again.'
+            : 'This scene is not available offline yet. Reconnect once to download it.',
         ),
       )
     image.src = backdropAssets[id].image

@@ -37,6 +37,9 @@ export type AppView =
   /** The end-of-day recap. Reached from Today, deliberately not in the nav. */
   | 'recap'
   | 'whats-new'
+  /** Reached from Settings → About. */
+  | 'privacy'
+  | 'notices'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'

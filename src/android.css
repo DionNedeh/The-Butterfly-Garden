@@ -1,0 +1,39 @@
+/*
+ * The Android app only (main.tsx adds .android-app to <html>).
+ *
+ * Android 15+ draws every app edge to edge, and index.html asks for
+ * viewport-fit=cover, so the page runs beneath the status bar at the top and
+ * the navigation bar at the bottom. env(safe-area-inset-*) reports how much of
+ * each edge those bars cover. The PWA's layout is untouched.
+ */
+
+/* A transparent border as tall as the status bar: the header's own background
+   (and blur) paints beneath it, while its padding at every breakpoint stays
+   exactly as the rest of the stylesheet sets it. */
+.android-app .app-header {
+  border-top: env(safe-area-inset-top, 0px) solid transparent;
+}
+
+/* In landscape, a camera cutout can sit at either side. */
+.android-app .app-shell {
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.android-app .bottom-nav {
+  padding-right: max(0.4rem, env(safe-area-inset-right, 0px));
+  padding-left: max(0.4rem, env(safe-area-inset-left, 0px));
+}
+
+.android-app .onboarding-shell {
+  padding-top: calc(1.2rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Keep dialogs clear of both bars on short screens. */
+.android-app .garden-dialog {
+  max-height: calc(
+    100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+      2rem
+  );
+}
