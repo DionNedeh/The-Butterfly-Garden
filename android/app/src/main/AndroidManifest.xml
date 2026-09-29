@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The app's own files are served from inside the APK and the page's
+      Content-Security-Policy allows no other origin, so the garden never goes
+      online. INTERNET stays declared because Android's WebView refuses network
+      loads without it, and whether that also affects Capacitor's local
+      responses has not been proven on a device yet.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Backups: the garden is a private journal, so Android never copies it to
+      Google Drive. dataExtractionRules (Android 12+) exclude everything from
+      cloud backup but leave direct phone-to-phone transfer on;
+      fullBackupContent does the same for older versions, where the two cannot
+      be separated, so nothing is backed up there. allowBackup stays true only
+      so the transfer rules apply at all: on some devices "false" alone still
+      permits transfers and on others blocks them.
+    -->
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- Only for photos a file picker's camera option writes; see file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+</manifest>

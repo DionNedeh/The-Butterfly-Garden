@@ -25,3 +25,4 @@ playwright-report
 *.sln
 *.sw?
 BUTTERFLY_GARDEN_2.0_TO_3.0_PLAN.md
+dist-android

@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
+import './android.css'
 import { currentRelease, hasUnseenRelease } from './data/releases'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
@@ -47,6 +48,14 @@ const SettingsView = lazy(() =>
 const ShopView = lazy(() =>
   import('./components/ShopView').then((m) => ({ default: m.ShopView })),
 )
+const PrivacyPolicyView = lazy(() =>
+  import('./components/PrivacyPolicyView').then((m) => ({
+    default: m.PrivacyPolicyView,
+  })),
+)
+const NoticesView = lazy(() =>
+  import('./components/NoticesView').then((m) => ({ default: m.NoticesView })),
+)
 import {
   ambientTrackName,
   DEFAULT_AMBIENT_TRACK_ID,
@@ -55,6 +64,14 @@ import { useAmbientSound } from './hooks/useAmbientSound'
 import { useGardenState } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
 import { useRecapWindow } from './hooks/useRecapWindow'
+import { backAction, requestDialogClose } from './lib/backNavigation'
+import {
+  leaveApp,
+  onAppActiveChange,
+  onBackButton,
+  setSystemBarsForTheme,
+} from './lib/native'
+import { isAndroidApp } from './lib/platform'
 import { moonlightForDate, sunlightForDate } from './lib/progression'
 import type { AppView } from './types'
 
@@ -109,8 +126,11 @@ function App() {
   const [seedFocus, setSeedFocus] = useState<string>()
   /** The day the recap was actually opened for, so it is never re-entered. */
   const [recapOpenedFor, setRecapOpenedFor] = useState<string>()
+  // Always true in the PWA. In the Android app, false while the app is in the
+  // background, so the soundscape does not keep playing from a pocket.
+  const [appActive, setAppActive] = useState(true)
   useAmbientSound(
-    Boolean(garden.state?.profile?.ambientSound),
+    Boolean(garden.state?.profile?.ambientSound) && appActive,
     garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
   )
   const [online, setOnline] = useState(navigator.onLine)
@@ -131,7 +151,7 @@ function App() {
     const syncVisibility = () => {
       document.documentElement.classList.toggle(
         'page-hidden',
-        document.visibilityState === 'hidden',
+        document.visibilityState === 'hidden' || !appActive,
       )
     }
     syncVisibility()
@@ -140,7 +160,35 @@ function App() {
       document.removeEventListener('visibilitychange', syncVisibility)
       document.documentElement.classList.remove('page-hidden')
     }
-  }, [])
+  }, [appActive])
+
+  useEffect(() => onAppActiveChange(setAppActive), [])
+
+  // Android's back gesture walks back through the app the way a gardener
+  // would expect: the open dialog first, then the recap to Today, then any
+  // page to the garden, and only then out of the app. The handler is
+  // registered once and reads the current page from a ref.
+  const viewRef = useRef(view)
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
+  useEffect(
+    () =>
+      onBackButton(() => {
+        const action = backAction(viewRef.current)
+        if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
+        else if (action.kind === 'view') {
+          window.scrollTo({ top: 0, behavior: 'instant' })
+          changeView(action.view)
+        } else void leaveApp()
+      }),
+    [],
+  )
+
+  const night = garden.state?.profile?.theme === 'night'
+  useEffect(() => {
+    void setSystemBarsForTheme(night)
+  }, [night])
 
   useEffect(() => {
     const handleOnline = () => setOnline(true)
@@ -297,7 +345,7 @@ function App() {
         </div>
       </header>
 
-      {!online && (
+      {!online && !isAndroidApp() && (
         <div className="offline-banner" role="status">
           You are offline. Your garden is still available and changes remain on
           this device.
@@ -311,7 +359,9 @@ function App() {
             {garden.persistence.reason === 'incompatible'
               ? 'It was written by a newer version of the app. Nothing has been changed or deleted — update the app, or restore a backup from Settings.'
               : garden.persistence.reason === 'unavailable'
-                ? 'This browser would not open its local storage. Your garden is still on this device; try reopening the app.'
+                ? isAndroidApp()
+                  ? 'The app could not open its storage on this phone. Your garden is still here; try closing and reopening the app.'
+                  : 'This browser would not open its local storage. Your garden is still on this device; try reopening the app.'
                 : 'The stored garden could not be read, so a copy has been set aside untouched. Restore a backup from Settings, or start fresh.'}
           </span>
           <span>
@@ -325,8 +375,9 @@ function App() {
           <strong>Your last change could not be saved.</strong>
           <span>{garden.persistence.writeError}</span>
           <span>
-            Recent edits are only in this tab. Export a backup from Settings
-            before closing it.
+            {isAndroidApp()
+              ? 'Recent edits are only held in memory. Save a backup from Settings before closing the app.'
+              : 'Recent edits are only in this tab. Export a backup from Settings before closing it.'}
           </span>
         </div>
       )}
@@ -454,6 +505,12 @@ function App() {
             />
           )}
           {activeView === 'whats-new' && <WhatsNewView />}
+          {activeView === 'privacy' && (
+            <PrivacyPolicyView onBack={() => setView('settings')} />
+          )}
+          {activeView === 'notices' && (
+            <NoticesView onBack={() => setView('settings')} />
+          )}
           {activeView === 'journal' && (
             <JournalView
               state={state}
@@ -479,6 +536,8 @@ function App() {
                 garden.markReleaseSeen(currentRelease.id)
                 setView('whats-new')
               }}
+              onOpenPrivacy={() => setView('privacy')}
+              onOpenNotices={() => setView('notices')}
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
