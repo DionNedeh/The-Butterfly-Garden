@@ -103,10 +103,30 @@ public final class PassEntitlement {
     }
 
     /**
+     * The time to judge the offline allowance by, given the wall clock and
+     * the phone's running time (elapsed since boot), and the same two as they
+     * read at the last check, along with that check's boot.
+     *
+     * The wall clock can be turned back or held still, so this never reads
+     * earlier than the time already seen at the last check, and within one
+     * boot it moves on by however long the phone has really been running
+     * since, whatever the clock says. Boot numbers below zero are unknown and
+     * earn no running time.
+     */
+    public static long trustedNow(long wallNow, long elapsedNow, int boot, long seenAt, long seenElapsed, int seenBoot) {
+        long floor = seenAt;
+        if (seenAt > 0 && boot >= 0 && boot == seenBoot && elapsedNow >= seenElapsed) {
+            floor = seenAt + (elapsedNow - seenElapsed);
+        }
+        return Math.max(wallNow, floor);
+    }
+
+    /**
      * Play could not be asked. Honour a recent confirmation from this device
      * for up to OFFLINE_TRUST_MS; never for someone Play never confirmed, and
-     * never when the clock reads earlier than the confirmation (a clock turned
-     * back cannot stretch the allowance).
+     * never when the time reads earlier than the confirmation. `now` is
+     * trustedNow, so a clock turned back or held still cannot stretch the
+     * allowance either.
      */
     public static Decision whenPlayUnreachable(long verifiedActiveAt, long now) {
         long age = now - verifiedActiveAt;

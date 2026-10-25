@@ -106,7 +106,8 @@ makes no medical claims. https://support.google.com/googleplay/android-developer
   declared.
 - **Google Play Billing Library is an SDK inside the app that reports to
   Google** (it bundles Google's datatransport logger). The app only wakes it
-  when the gardener opens the Garden Pass, subscribes or has a Pass, but
+  when the gardener opens the Garden Pass, subscribes, manages it in Google
+  Play or has a Pass, but
   whatever it sends counts as collection by an SDK in your app. Before
   answering, open the library's entry in Play SDK Index
   (https://play.google.com/sdks) and declare what it lists. If it lists
@@ -197,7 +198,8 @@ real phone (ideally one recent and one older, Android 8–10):
 - [ ] Journal and goal fields: the keyboard does not cover what is typed
 - [ ] Backup: "Save a backup" opens Android's save screen; saving to
       Downloads and to Google Drive both say "Backup saved"; backing out says
-      "No backup was saved"
+      "No backup was saved"; a garden with three personal backdrops (a backup
+      of several MB) saves without the app closing
 - [ ] Restore: the picker can select that backup (Downloads and Drive) and
       restores it; a backup made by the web version restores too
 - [ ] Personal backdrop: pick a photo, crop, save, reopen the app
@@ -208,7 +210,10 @@ real phone (ideally one recent and one older, Android 8–10):
 - [ ] Garden Pass, as a license tester: prices shown; subscribe, cancel
       partway, slow test card → "pending" then open; manage/cancel opens Play;
       lapse after the test subscription ends → garden notice, Pass items
-      hidden but nothing deleted; reinstall → Pass returns after opening the
-      Garden Pass page; airplane mode → Pass stays open (up to seven days)
+      hidden but nothing deleted; resubscribe from Settings → "Manage or
+      cancel in Google Play" → back in the app the Pass opens by itself;
+      account hold (Play Billing Lab) → "on hold", never "ended";
+      reinstall → Pass returns after opening the Garden Pass page; airplane
+      mode → Pass stays open (up to seven days)
 - [ ] Without ever opening the Garden Pass, Settings shows "Open the Garden
       Pass to check your subscription" (Play is not asked until then)

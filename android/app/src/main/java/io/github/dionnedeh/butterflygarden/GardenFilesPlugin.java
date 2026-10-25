@@ -27,6 +27,15 @@ import java.nio.charset.StandardCharsets;
 @CapacitorPlugin(name = "GardenFiles")
 public class GardenFilesPlugin extends Plugin {
 
+    /**
+     * The backup waiting for the gardener to choose where it goes. It is held
+     * here rather than in the call because Capacitor copies a call that opens
+     * another screen into the activity's saved state, twice; a backup of a
+     * few hundred kilobytes would then overflow Android's limit for that
+     * state and crash the app as the "Save to…" screen opened.
+     */
+    private String pendingText;
+
     @PluginMethod
     public void saveDocument(PluginCall call) {
         String fileName = call.getString("fileName");
@@ -36,6 +45,8 @@ public class GardenFilesPlugin extends Plugin {
             call.reject("fileName, mimeType and text are required.");
             return;
         }
+        pendingText = text;
+        call.getData().remove("text");
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType(mimeType);
@@ -45,16 +56,18 @@ public class GardenFilesPlugin extends Plugin {
 
     @ActivityCallback
     private void documentChosen(PluginCall call, ActivityResult result) {
+        String text = pendingText;
+        pendingText = null;
         // Null if Android recreated the app while the picker was open: the
-        // page that asked has gone, so there is no one to answer.
+        // page that asked has gone, and the backup with it, so there is no
+        // one to answer.
         if (call == null) return;
         Intent data = result.getData();
         Uri target = data == null ? null : data.getData();
-        if (result.getResultCode() != Activity.RESULT_OK || target == null) {
+        if (text == null || result.getResultCode() != Activity.RESULT_OK || target == null) {
             finish(call, false);
             return;
         }
-        String text = call.getString("text", "");
         // Off the main thread: a backup with personal images is megabytes.
         getBridge().execute(() -> {
             try (OutputStream stream = getContext().getContentResolver().openOutputStream(target, "w")) {

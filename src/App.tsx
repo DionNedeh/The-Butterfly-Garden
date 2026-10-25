@@ -428,7 +428,13 @@ function App() {
             <aside className="release-notice pass-lapse-notice">
               <div>
                 <span className="eyebrow">Garden Pass</span>
-                <strong>Your Garden Pass has ended.</strong>
+                <strong>
+                  {pass.state === 'suspended'
+                    ? 'Your Garden Pass is on hold until Google Play can take the payment.'
+                    : pass.state === 'pending'
+                      ? 'Your Garden Pass is waiting for a payment to go through.'
+                      : 'Your Garden Pass has ended.'}
+                </strong>
               </div>
               <span>
                 Its outfits, scenes and your own backdrops are resting, not

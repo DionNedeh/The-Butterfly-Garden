@@ -12,8 +12,9 @@ are part of the app, so opening it does not reveal a visit to anyone.
 The one exception is the Android app's optional Garden Pass. It is sold through
 Google Play, which requires Google's Play Billing Library inside the app, and
 that library can send Google diagnostics about purchases and its own operation.
-The app only starts it when the gardener opens the Garden Pass, subscribes, or
-already has a Pass, and never gives it anything the gardener has written.
+The app only starts it when the gardener opens the Garden Pass, subscribes,
+manages it in Google Play, or already has a Pass, and never gives it anything
+the gardener has written.
 Android's cloud backup is switched off for the app, and its WebView is opted
 out of Android's usage diagnostics.
 

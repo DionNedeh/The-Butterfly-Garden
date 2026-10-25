@@ -130,7 +130,9 @@ export function SettingsView({
   const [backupNote, setBackupNote] = useState<string>()
   const [restoreStep, setRestoreStep] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const android = isAndroidApp()
+  // Inline rather than isAndroidApp(): the bundler folds only an inline
+  // check, which keeps the Android-only cards and Play calls out of the PWA.
+  const android = import.meta.env.VITE_PLATFORM === 'android'
   const pass = usePassStatus()
   const [passNote, setPassNote] = useState<string>()
   const backupFileName = () =>
@@ -439,9 +441,10 @@ export function SettingsView({
               The optional Garden Pass is sold through Google Play, which takes
               the payment; the app never sees your payment details. Google&apos;s
               billing library, which Play requires for this, is only used when
-              you open the Garden Pass, subscribe, or have a Pass, and Google
-              may receive diagnostic information from it then. It is never
-              given anything you have written.
+              you open the Garden Pass, subscribe, manage it in Google Play, or
+              have a Pass, and Google may receive diagnostic information from
+              it then or shortly after. It is never given anything you have
+              written.
             </p>
             <p>
               Android&apos;s cloud backup is switched off for this app, so your

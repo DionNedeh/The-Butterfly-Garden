@@ -167,6 +167,14 @@ describe('GardenPassPanel', () => {
     expect(screen.queryByText(/resting, not deleted/i)).toBeNull()
   })
 
+  it('does not call a Pass on hold ended, or ask the gardener to subscribe again', () => {
+    renderPanel()
+    show('suspended', true)
+    expect(screen.getByText(/come back once the payment goes through/i)).toBeInTheDocument()
+    expect(screen.queryByText(/has ended/i)).toBeNull()
+    expect(screen.queryByText(/subscribe again/i)).toBeNull()
+  })
+
   it('says when there is nothing on sale rather than inventing a price', async () => {
     vi.mocked(billing.getPassOffers).mockResolvedValue({ offers: [], reachable: true })
     renderPanel()

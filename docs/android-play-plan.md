@@ -47,7 +47,8 @@ Decisions still open are listed in section 7.
   (CCT backend) and Play services, and its own code logs through it, so the
   library can report to Google over the network. The app therefore creates
   the Billing client only on first use and asks Play only when the gardener
-  opens the Garden Pass, subscribes, or has a subscription to follow; the
+  opens the Garden Pass, subscribes, comes back from Play's subscription
+  page, or has a subscription to follow; the
   privacy policy says so. Check Play SDK Index's entry for the library when
   answering the Data safety form.
 
@@ -94,7 +95,9 @@ source for a real purchase.
 Native (`GardenBilling`, Java):
 
 - loads the `garden_pass` offers with Play's localised prices and trial terms;
-- launches the purchase flow; re-checks on every launch and resume;
+- launches the purchase flow; re-checks on each launch and return to the app
+  while it follows a subscription, and on the return from Play's subscription
+  page;
 - verifies each purchase signature against the app's Play licence public key
   (not a secret);
 - acknowledges new purchases (Play refunds anything unacknowledged after

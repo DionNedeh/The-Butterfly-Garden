@@ -5,6 +5,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.SystemClock;
+import android.provider.Settings;
 import android.util.Base64;
 import com.android.billingclient.api.AcknowledgePurchaseParams;
 import com.android.billingclient.api.BillingClient;
@@ -28,8 +30,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import io.github.dionnedeh.butterflygarden.R;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * The Garden Pass, sold and checked through Google Play on this device.
@@ -41,10 +45,11 @@ import java.util.Locale;
  * Google's Billing Library itself, though, reports to Google as it works (it
  * bundles Google's datatransport logger), so it is only ever woken when it is
  * needed: the Billing client is created on first use, the gardener's own
- * request (opening the Garden Pass, subscribing) is what first uses it, and
- * the check on every return to the app runs only for someone with a
- * subscription to follow. A gardener who never looks at the Pass never runs
- * Google's billing code at all.
+ * request (opening the Garden Pass, subscribing, going to Play's subscription
+ * page) is what first uses it, and the check on each return to the app runs
+ * only for someone with a subscription to follow, or just back from that
+ * page. A gardener who never looks at the Pass never runs Google's billing
+ * code at all.
  *
  * All billing work happens on the main thread, which is where Play delivers
  * its callbacks too, so the fields below are never touched concurrently.
@@ -58,6 +63,16 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
     private static final String LAPSE_UNSEEN = "lapse_unseen";
     /** Set while there is a subscription to follow: active, pending or on hold. */
     private static final String FOLLOWING = "following";
+    /**
+     * Set when the gardener goes to Play's subscription page, where they can
+     * subscribe again; the next return asks Play, so a purchase made there is
+     * acknowledged in time rather than refunded.
+     */
+    private static final String CHECK_REQUESTED = "check_requested";
+    /** The trusted time, running time and boot at the last check; see PassEntitlement.trustedNow. */
+    private static final String SEEN_AT = "seen_at";
+    private static final String SEEN_ELAPSED = "seen_elapsed";
+    private static final String SEEN_BOOT = "seen_boot";
 
     private BillingClient client;
     private byte[] licenceKey = new byte[0];
@@ -68,6 +83,10 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
     private ProductDetails productDetails;
     /** A subscribe() call waiting for Play's answer. */
     private PluginCall purchaseCall;
+    /** Purchase tokens with an acknowledgement on its way, so none is sent twice. */
+    private final Set<String> acknowledging = new HashSet<>();
+    /** False until the first resume, which is the app starting. */
+    private boolean resumedBefore = false;
 
     @Override
     public void load() {
@@ -105,6 +124,12 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
     @Override
     protected void handleOnResume() {
         super.handleOnResume();
+        // The page asks for itself as the app starts (getStatus), so only a
+        // later return needs a check of its own.
+        if (!resumedBefore) {
+            resumedBefore = true;
+            return;
+        }
         getBridge().executeOnMainThread(() -> {
             if (following()) checkStatus(this::announce);
         });
@@ -218,6 +243,7 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
         );
         try {
             getActivity().startActivity(new Intent(Intent.ACTION_VIEW, page));
+            prefs().edit().putBoolean(CHECK_REQUESTED, true).apply();
             call.resolve();
         } catch (ActivityNotFoundException missing) {
             call.reject("Google Play could not be opened on this device.");
@@ -238,8 +264,14 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
         getBridge().executeOnMainThread(() -> {
             int code = result.getResponseCode();
             if (code == BillingResponseCode.OK || code == BillingResponseCode.ITEM_ALREADY_OWNED) {
-                // Ask Play for the whole picture rather than trusting this
-                // partial list; that also acknowledges the new purchase.
+                // Follow and acknowledge what Play delivered straight away,
+                // so a purchase is never refunded just because the check
+                // below could not reach Play. A purchase made outside the app
+                // while it is open (in Play's subscription page, say) arrives
+                // here too.
+                if (purchases != null) follow(purchases);
+                // Then ask Play for the whole picture rather than deciding
+                // from this partial list.
                 checkStatus((decision) -> {
                     announce(decision);
                     finishPurchase(outcomeFor(decision), decision);
@@ -289,7 +321,7 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
                         )
                     );
                 }
-                PassEntitlement.Decision decision = PassEntitlement.fromPlay(checked, verifiedActiveAt(), System.currentTimeMillis());
+                PassEntitlement.Decision decision = PassEntitlement.fromPlay(checked, verifiedActiveAt(), trustedNow());
                 remember(decision);
                 handler.handle(decision);
             }));
@@ -297,7 +329,47 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
     }
 
     private PassEntitlement.Decision unreachable() {
-        return PassEntitlement.whenPlayUnreachable(verifiedActiveAt(), System.currentTimeMillis());
+        return PassEntitlement.whenPlayUnreachable(verifiedActiveAt(), trustedNow());
+    }
+
+    /** Follows any verified Garden Pass in a list Play delivered, and acknowledges it. */
+    private void follow(List<Purchase> purchases) {
+        for (Purchase purchase : purchases) {
+            if (!purchase.getProducts().contains(PassEntitlement.PRODUCT_ID) || !verified(purchase)) continue;
+            int state = purchase.getPurchaseState();
+            if (state != Purchase.PurchaseState.PURCHASED && state != Purchase.PurchaseState.PENDING) continue;
+            prefs().edit().putBoolean(FOLLOWING, true).apply();
+            if (state == Purchase.PurchaseState.PURCHASED && !purchase.isAcknowledged()) acknowledge(purchase);
+        }
+    }
+
+    /**
+     * The time to decide by (see PassEntitlement.trustedNow), which is then
+     * kept as the time seen at this check.
+     */
+    private long trustedNow() {
+        SharedPreferences prefs = prefs();
+        long elapsed = SystemClock.elapsedRealtime();
+        int boot = bootCount();
+        long now = PassEntitlement.trustedNow(
+            System.currentTimeMillis(),
+            elapsed,
+            boot,
+            prefs.getLong(SEEN_AT, 0),
+            prefs.getLong(SEEN_ELAPSED, 0),
+            prefs.getInt(SEEN_BOOT, -1)
+        );
+        prefs.edit().putLong(SEEN_AT, now).putLong(SEEN_ELAPSED, elapsed).putInt(SEEN_BOOT, boot).apply();
+        return now;
+    }
+
+    /** Which boot of the phone this is, or -1 if Android will not say. */
+    private int bootCount() {
+        try {
+            return Settings.Global.getInt(getContext().getContentResolver(), Settings.Global.BOOT_COUNT, -1);
+        } catch (SecurityException refused) {
+            return -1;
+        }
     }
 
     private boolean verified(Purchase purchase) {
@@ -316,8 +388,10 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
      * the next time the app is opened.
      */
     private void acknowledge(Purchase purchase) {
-        AcknowledgePurchaseParams params = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchase.getPurchaseToken()).build();
-        client().acknowledgePurchase(params, (result) -> {});
+        String token = purchase.getPurchaseToken();
+        if (!acknowledging.add(token)) return;
+        AcknowledgePurchaseParams params = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(token).build();
+        client().acknowledgePurchase(params, (result) -> getBridge().executeOnMainThread(() -> acknowledging.remove(token)));
     }
 
     private void whenConnected(Runnable ready, Runnable failed) {
@@ -440,7 +514,8 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
     }
 
     private boolean following() {
-        return verifiedActiveAt() > 0 || prefs().getBoolean(FOLLOWING, false);
+        SharedPreferences prefs = prefs();
+        return verifiedActiveAt() > 0 || prefs.getBoolean(FOLLOWING, false) || prefs.getBoolean(CHECK_REQUESTED, false);
     }
 
     private long verifiedActiveAt() {
@@ -459,6 +534,8 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
             decision.state == PassEntitlement.State.SUSPENDED;
         if (ongoing) edit.putBoolean(FOLLOWING, true);
         else edit.remove(FOLLOWING);
+        // Play has answered, so a check the gardener asked for has happened.
+        edit.remove(CHECK_REQUESTED);
         edit.apply();
     }
 }

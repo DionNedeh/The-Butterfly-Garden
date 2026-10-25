@@ -112,8 +112,8 @@ images, is inside the app.
 The Garden Pass is sold through Google Play, so the Android app includes
 Google's Play Billing Library. That library can send Google diagnostics about
 purchases and its own operation. The app only starts it when the gardener
-opens the Garden Pass, subscribes, or already has a Pass; someone who never
-opens the Garden Pass never runs it. It is never given anything the gardener
+opens the Garden Pass, subscribes, manages it in Google Play, or already has a
+Pass; someone who does none of those never runs it. It is never given anything the gardener
 has written. `public/privacy.html` is the full policy, and the app shows it
 under Settings → About.
 

@@ -106,10 +106,13 @@ export function GardenView({
    * sprite. Building it per creature scanned the whole list every time, and
    * handed each sprite a fresh object that defeated its memo -- so typing a
    * butterfly's name below re-rendered every butterfly and flower on screen.
+   * Whether Pass outfits show is read here, during render, so the index is
+   * rebuilt when Google Play's answer opens or closes the Pass.
    */
+  const passCosmetics = hasGardenPassFeature('pass-cosmetics')
   const outfitByCreature = useMemo(
-    () => visibleOutfits(state.creatures),
-    [state.creatures],
+    () => visibleOutfits(state.creatures, passCosmetics),
+    [state.creatures, passCosmetics],
   )
   const emerged = state.creatures.filter(
     (creature) => creature.stage === 'butterfly',

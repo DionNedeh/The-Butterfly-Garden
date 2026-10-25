@@ -112,9 +112,9 @@ export function GardenPassPanel({
         {status.lapsed && status.state !== 'active' && (
           <div className="pass-lapse" role="status">
             <p>
-              Your Garden Pass has ended. Its outfits, scenes and your own
-              backdrops are resting, not deleted, and come back if you
-              subscribe again.
+              {status.state === 'suspended' || status.state === 'pending'
+                ? 'Its outfits, scenes and your own backdrops are resting, not deleted, and come back once the payment goes through.'
+                : 'Your Garden Pass has ended. Its outfits, scenes and your own backdrops are resting, not deleted, and come back if you subscribe again.'}
             </p>
             <button className="text-button" onClick={dismissLapse}>
               Dismiss

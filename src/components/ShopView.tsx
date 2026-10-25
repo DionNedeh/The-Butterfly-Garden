@@ -17,7 +17,6 @@ import { ShopItemCard } from './shop/ShopItemCard'
 import { ItemPreview } from './shop/ItemPreview'
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { GardenPassPanel } from './shop/GardenPassPanel'
-import { isAndroidApp } from '../lib/platform'
 
 export type ShopTab =
   | 'supplies'
@@ -142,7 +141,9 @@ export function ShopView({
       )}
       {(tab === 'supplies' || tab === 'boutique' || tab === 'pass') && (
         <>
-          {tab === 'pass' && isAndroidApp() ? (
+          {/* Inline rather than isAndroidApp(): the bundler folds only an
+              inline check, which keeps the Play panel out of the PWA. */}
+          {tab === 'pass' && import.meta.env.VITE_PLATFORM === 'android' ? (
             <GardenPassPanel
               onExploreBackdrops={() => setTab('backdrops')}
               onOpenCare={onOpenCare}

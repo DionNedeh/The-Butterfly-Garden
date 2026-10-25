@@ -115,6 +115,37 @@ public class PassEntitlementTest {
     }
 
     @Test
+    public void trustedTimeIsTheClockWhenNothingWasSeenBefore() {
+        assertEquals(NOW, PassEntitlement.trustedNow(NOW, 5 * DAY, 3, 0, 0, -1));
+    }
+
+    @Test
+    public void trustedTimeNeverGoesBackPastTheLastCheck() {
+        // The clock turned back a day after a check, on a later boot.
+        assertEquals(NOW, PassEntitlement.trustedNow(NOW - DAY, DAY, 4, NOW, 9 * DAY, 3));
+    }
+
+    @Test
+    public void trustedTimeKeepsRunningWhileTheClockIsHeldStill() {
+        // Same boot, eight days of running time later, the clock still reads
+        // the moment of the last check: the allowance has still run out.
+        long trusted = PassEntitlement.trustedNow(NOW, 9 * DAY, 3, NOW, DAY, 3);
+        assertEquals(NOW + 8 * DAY, trusted);
+        assertEquals(State.UNAVAILABLE, PassEntitlement.whenPlayUnreachable(NOW, trusted).state);
+    }
+
+    @Test
+    public void trustedTimeFollowsAClockThatIsAhead() {
+        assertEquals(NOW + DAY, PassEntitlement.trustedNow(NOW + DAY, 2 * DAY, 3, NOW, DAY + 1000, 3));
+    }
+
+    @Test
+    public void trustedTimeGivesNoRunningTimeAcrossBootsOrWhenTheBootIsUnknown() {
+        assertEquals(NOW, PassEntitlement.trustedNow(NOW - DAY, 9 * DAY, 4, NOW, DAY, 3));
+        assertEquals(NOW, PassEntitlement.trustedNow(NOW - DAY, 9 * DAY, -1, NOW, DAY, -1));
+    }
+
+    @Test
     public void withoutALicenceKeyNothingIsGranted() {
         Decision decision = PassEntitlement.unconfigured();
         assertEquals(State.UNCONFIGURED, decision.state);
