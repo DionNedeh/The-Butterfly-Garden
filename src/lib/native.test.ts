@@ -7,15 +7,15 @@ const saveDocument = vi.hoisted(() => vi.fn())
 const setStyle = vi.hoisted(() => vi.fn(() => Promise.resolve()))
 const minimizeApp = vi.hoisted(() => vi.fn(() => Promise.resolve()))
 const registerPlugin = vi.hoisted(() => vi.fn(() => ({ saveDocument })))
+const addListener = vi.hoisted(() =>
+  vi.fn((event: string, handler: (data: unknown) => void) => {
+    listeners.set(event, handler)
+    return Promise.resolve({ remove })
+  }),
+)
 
 vi.mock('@capacitor/app', () => ({
-  App: {
-    addListener: vi.fn((event: string, handler: (data: unknown) => void) => {
-      listeners.set(event, handler)
-      return Promise.resolve({ remove })
-    }),
-    minimizeApp,
-  },
+  App: { addListener, minimizeApp },
 }))
 vi.mock('@capacitor/core', () => ({
   registerPlugin,
@@ -44,8 +44,7 @@ describe('native bridge in the PWA', () => {
     await native.leaveApp()
     await native.setSystemBarsForTheme(true)
     unsubscribe()
-    const { App } = await import('@capacitor/app')
-    expect(App.addListener).not.toHaveBeenCalled()
+    expect(addListener).not.toHaveBeenCalled()
     expect(minimizeApp).not.toHaveBeenCalled()
     expect(setStyle).not.toHaveBeenCalled()
     await expect(
