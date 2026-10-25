@@ -59,9 +59,11 @@ export const MonthPlanner = memo(function MonthPlanner({
   today: string
   onPlanGoal: (title: string, scheduledDate: string) => void
 }) {
+  // Opens on the month of the day it is given, never the device clock's: the
+  // two disagree in tests, and briefly around midnight at a month's end.
   const [yearMonth, setYearMonth] = useState(() => {
-    const now = new Date()
-    return { year: now.getFullYear(), month: now.getMonth() }
+    const opening = localDateToNoon(today)
+    return { year: opening.getFullYear(), month: opening.getMonth() }
   })
   const [selectedDate, setSelectedDate] = useState(today)
   const [planTitle, setPlanTitle] = useState('')
