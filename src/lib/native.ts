@@ -16,15 +16,19 @@ const nothing: Unsubscribe = () => undefined
 /**
  * Subscribe to a Capacitor listener that is only available asynchronously,
  * returning a synchronous unsubscribe that also covers the case where the
- * caller leaves before the listener has been attached.
+ * caller leaves before the listener has been attached. A listener that cannot
+ * be attached at all (a plugin missing from this build) is simply absent.
  */
-function attach(pending: Promise<PluginListenerHandle>): Unsubscribe {
+export function attach(pending: Promise<PluginListenerHandle>): Unsubscribe {
   let handle: PluginListenerHandle | undefined
   let detached = false
-  void pending.then((attached) => {
-    if (detached) void attached.remove()
-    else handle = attached
-  })
+  pending.then(
+    (attached) => {
+      if (detached) void attached.remove()
+      else handle = attached
+    },
+    () => undefined,
+  )
   return () => {
     detached = true
     void handle?.remove()
@@ -97,6 +101,30 @@ export async function setSystemBarsForTheme(night: boolean): Promise<void> {
   }).catch(() => undefined)
 }
 
+/**
+ * One of the plugins that live in this app (android/app/src/main/java),
+ * registered once.
+ *
+ * Handed back inside a plain object: a Capacitor plugin proxy answers every
+ * property, `then` included, so a promise resolved with the proxy itself would
+ * treat it as a thenable and call a native method named "then" that never
+ * answers. Only call this after an inline VITE_PLATFORM check of your own.
+ */
+const inAppPlugins = new Map<string, Promise<{ plugin: unknown }>>()
+
+export async function inAppPlugin<T>(name: string): Promise<{ plugin: T }> {
+  if (import.meta.env.VITE_PLATFORM !== 'android')
+    throw new Error(`${name} is only available in the Android app.`)
+  let registered = inAppPlugins.get(name)
+  if (!registered) {
+    registered = import('@capacitor/core').then(({ registerPlugin }) => ({
+      plugin: registerPlugin(name),
+    }))
+    inAppPlugins.set(name, registered)
+  }
+  return (await registered) as { plugin: T }
+}
+
 interface GardenFilesPlugin {
   saveDocument(options: {
     fileName: string
@@ -104,13 +132,6 @@ interface GardenFilesPlugin {
     text: string
   }): Promise<{ saved: boolean }>
 }
-
-/**
- * Held inside a plain object: a Capacitor plugin proxy answers every property,
- * `then` included, so a promise resolved with the proxy itself would treat it
- * as a thenable and call a native method named "then" that never answers.
- */
-let gardenFiles: Promise<{ plugin: GardenFilesPlugin }> | undefined
 
 /**
  * Write text to a file the gardener chooses with Android's "Save to…" screen.
@@ -124,10 +145,7 @@ export async function saveTextDocument(
 ): Promise<boolean> {
   if (import.meta.env.VITE_PLATFORM !== 'android')
     throw new Error('Saving through Android is only available in the app.')
-  gardenFiles ??= import('@capacitor/core').then(({ registerPlugin }) => ({
-    plugin: registerPlugin<GardenFilesPlugin>('GardenFiles'),
-  }))
-  const { plugin } = await gardenFiles
+  const { plugin } = await inAppPlugin<GardenFilesPlugin>('GardenFiles')
   const { saved } = await plugin.saveDocument({ fileName, mimeType, text })
   return saved
 }

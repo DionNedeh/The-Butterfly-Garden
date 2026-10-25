@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The app's Google Play licence key: Play Console → Monetize with Play →
+      Monetization setup → Licensing, pasted as one line. It is a public key,
+      not a secret, and is how GardenBillingPlugin tells a genuine purchase
+      from a forged one. While it is empty the Garden Pass cannot be verified
+      and so is never granted; the app says it is not set up yet.
+    -->
+    <string name="garden_pass_licence_key" translatable="false"></string>
+</resources>

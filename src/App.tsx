@@ -64,6 +64,9 @@ import { useAmbientSound } from './hooks/useAmbientSound'
 import { useGardenState } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
 import { useRecapWindow } from './hooks/useRecapWindow'
+import { usePassStatus } from './hooks/usePassStatus'
+import { setPassStatus, trackPassStatus } from './lib/passEntitlement'
+import { dismissPassLapseNotice } from './lib/playBilling'
 import { backAction, requestDialogClose } from './lib/backNavigation'
 import {
   leaveApp,
@@ -115,8 +118,11 @@ function App() {
   const today = useLocalDate()
   const recap = useRecapWindow()
   const [view, changeView] = useState<AppView>('garden')
-  const setView = (next: AppView) => {
+  /** Set only when something asks for the shop's Garden Pass tab. */
+  const [shopOpensOnPass, setShopOpensOnPass] = useState(false)
+  const setView = (next: AppView, options: { onPass?: boolean } = {}) => {
     window.scrollTo({ top: 0, behavior: 'instant' })
+    setShopOpensOnPass(options.onPass ?? false)
     changeView(next)
   }
   const finishOnboarding = (name: string, gardenName: string) => {
@@ -184,6 +190,12 @@ function App() {
       }),
     [],
   )
+
+  // The Android app follows Google Play's answer about the Garden Pass; reading
+  // it here re-renders the whole garden whenever that answer changes, so
+  // every Pass check below sees it at once.
+  const pass = usePassStatus()
+  useEffect(() => (isAndroidApp() ? trackPassStatus() : undefined), [])
 
   const night = garden.state?.profile?.theme === 'night'
   useEffect(() => {
@@ -409,6 +421,38 @@ function App() {
             </aside>
           )}
 
+        {activeView === 'garden' &&
+          isAndroidApp() &&
+          pass.lapsed &&
+          pass.state !== 'active' && (
+            <aside className="release-notice pass-lapse-notice">
+              <div>
+                <span className="eyebrow">Garden Pass</span>
+                <strong>Your Garden Pass has ended.</strong>
+              </div>
+              <span>
+                Its outfits, scenes and your own backdrops are resting, not
+                deleted.
+              </span>
+              <button
+                className="text-button"
+                onClick={() => setView('shop', { onPass: true })}
+              >
+                See the Garden Pass →
+              </button>
+              <button
+                className="notice-dismiss"
+                aria-label="Dismiss Garden Pass notice"
+                onClick={() => {
+                  setPassStatus({ ...pass, lapsed: false })
+                  void dismissPassLapseNotice()
+                }}
+              >
+                ×
+              </button>
+            </aside>
+          )}
+
         <Suspense
           fallback={
             <p className="view-loading" role="status">
@@ -449,6 +493,7 @@ function App() {
               onPurchaseItem={garden.purchaseItem}
               onOpenCare={() => setView('care')}
               onOpenFlight={() => setView('flight-patterns')}
+              initialTab={shopOpensOnPass ? 'pass' : undefined}
               onSelectBackdrop={garden.selectBackdrop}
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
@@ -537,6 +582,7 @@ function App() {
                 setView('whats-new')
               }}
               onOpenPrivacy={() => setView('privacy')}
+              onOpenGardenPass={() => setView('shop', { onPass: true })}
               onOpenNotices={() => setView('notices')}
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}

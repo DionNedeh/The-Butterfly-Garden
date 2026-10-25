@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Android 12+. The garden is never copied to cloud backup (Google Drive).
-  Direct phone-to-phone transfer is left at its default, which moves
-  everything, so a gardener setting up a new phone keeps their garden.
+  Direct phone-to-phone transfer moves everything except the Garden Pass
+  record: the new phone asks Google Play for itself rather than inheriting
+  an allowance it never earned.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -16,4 +17,7 @@
         <exclude domain="device_database" path="." />
         <exclude domain="device_sharedpref" path="." />
     </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="garden_pass.xml" />
+    </device-transfer>
 </data-extraction-rules>

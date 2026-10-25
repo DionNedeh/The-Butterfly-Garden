@@ -16,8 +16,10 @@ import { FlightPreview } from './FlyingButterfly'
 import { ShopItemCard } from './shop/ShopItemCard'
 import { ItemPreview } from './shop/ItemPreview'
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
+import { GardenPassPanel } from './shop/GardenPassPanel'
+import { isAndroidApp } from '../lib/platform'
 
-type ShopTab =
+export type ShopTab =
   | 'supplies'
   | 'boutique'
   | 'jars'
@@ -39,6 +41,7 @@ export function ShopView({
   onPurchaseItem,
   onOpenCare = () => {},
   onOpenFlight = () => {},
+  initialTab = 'supplies',
   ...backdrops
 }: {
   state: AppState
@@ -47,8 +50,10 @@ export function ShopView({
   onPurchaseItem: (id: string) => void
   onOpenCare?: () => void
   onOpenFlight?: () => void
+  /** Where the shop opens; the garden's Pass notice opens it on the Pass. */
+  initialTab?: ShopTab
 } & BackdropActions) {
-  const [tab, setTab] = useState<ShopTab>('supplies')
+  const [tab, setTab] = useState<ShopTab>(initialTab)
   const [query, setQuery] = useState('')
   const [slot, setSlot] = useState('all')
   const [stage, setStage] = useState('all')
@@ -137,7 +142,12 @@ export function ShopView({
       )}
       {(tab === 'supplies' || tab === 'boutique' || tab === 'pass') && (
         <>
-          {tab === 'pass' ? (
+          {tab === 'pass' && isAndroidApp() ? (
+            <GardenPassPanel
+              onExploreBackdrops={() => setTab('backdrops')}
+              onOpenCare={onOpenCare}
+            />
+          ) : tab === 'pass' ? (
             <section className="pass-hero">
               <div>
                 <p className="eyebrow">A little more wonder</p>

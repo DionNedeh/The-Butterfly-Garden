@@ -4,7 +4,31 @@ import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import { saveTextDocument } from '../lib/native'
 import { isAndroidApp } from '../lib/platform'
+import { managePassSubscription, type PassStatus } from '../lib/playBilling'
+import { usePassStatus } from '../hooks/usePassStatus'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
+
+/** The Garden Pass card's one-line answer, from Google Play's latest. */
+function passSummary(status: PassStatus): string {
+  switch (status.state) {
+    case 'checking':
+      return 'Checking with Google Play…'
+    case 'active':
+      return status.fromCache
+        ? 'Your Garden Pass is open. Google Play will confirm it again once it can be reached.'
+        : 'Your Garden Pass is open.'
+    case 'pending':
+      return 'Google Play is still processing your payment.'
+    case 'suspended':
+      return 'Your Garden Pass is on hold because Google Play could not take the last payment.'
+    case 'inactive':
+      return 'You do not have a Garden Pass. Everything else in the garden is free.'
+    case 'unavailable':
+      return 'Google Play cannot be reached right now.'
+    case 'unconfigured':
+      return 'The Garden Pass is not set up in this version of the app yet.'
+  }
+}
 
 /** Optional inline note rendered beneath the name field. */
 const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
@@ -69,6 +93,7 @@ export function SettingsView({
   onOpenWhatsNew,
   onOpenPrivacy,
   onOpenNotices,
+  onOpenGardenPass,
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
   onSelectCustomBackdrop,
@@ -88,6 +113,7 @@ export function SettingsView({
   onOpenWhatsNew?: () => void
   onOpenPrivacy?: () => void
   onOpenNotices?: () => void
+  onOpenGardenPass?: () => void
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
   onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
@@ -103,6 +129,8 @@ export function SettingsView({
   const [restoreStep, setRestoreStep] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const android = isAndroidApp()
+  const pass = usePassStatus()
+  const [passNote, setPassNote] = useState<string>()
   const backupFileName = () =>
     `butterfly-garden-${new Date().toISOString().slice(0, 10)}.json`
 
@@ -293,6 +321,39 @@ export function SettingsView({
         </button>
       </section>
 
+      {android && (
+        <section
+          className="card pass-settings-card"
+          aria-labelledby="pass-settings-title"
+        >
+          <p className="eyebrow">Subscription</p>
+          <h2 id="pass-settings-title">Garden Pass</h2>
+          <p role="status">{passSummary(pass)}</p>
+          <div className="form-actions">
+            <button className="secondary-button" onClick={onOpenGardenPass}>
+              See the Garden Pass
+            </button>
+            {pass.state !== 'unconfigured' && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  setPassNote(undefined)
+                  void managePassSubscription().then((opened) => {
+                    if (!opened)
+                      setPassNote(
+                        'Google Play could not be opened on this device.',
+                      )
+                  })
+                }}
+              >
+                Manage or cancel in Google Play
+              </button>
+            )}
+          </div>
+          {passNote && <p className="settings-note">{passNote}</p>}
+        </section>
+      )}
+
       <section className="card backup-card" aria-labelledby="backup-title">
         <p className="eyebrow">Keep a copy</p>
         <h2 id="backup-title">Backup and restore</h2>
@@ -371,6 +432,11 @@ export function SettingsView({
             <p>
               The garden never contacts a third party. Everything it shows,
               down to its lettering, is already inside the app.
+            </p>
+            <p>
+              If you subscribe to the Garden Pass, Google Play takes the
+              payment. The app only asks the Play Store on this phone whether
+              your Pass is open; it never sees your payment details.
             </p>
             <p>
               Android&apos;s cloud backup is switched off for this app, so your

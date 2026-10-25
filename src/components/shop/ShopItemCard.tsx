@@ -2,6 +2,7 @@ import type { AppState, ShopItemDefinition } from '../../types'
 import { balanceFor, currencyLabel } from '../../lib/currency'
 import { canWearItem } from '../../lib/gardenPass'
 import { stageLabels } from '../../lib/lifecycle'
+import { isAndroidApp } from '../../lib/platform'
 import { CreatureSprite } from '../sprites/CreatureSprite'
 import { Icon } from '../Icons'
 
@@ -22,6 +23,11 @@ export function ShopItemCard({
   const allowed = canWearItem(state.ownedItemIds, item)
   const affordable = balanceFor(state, item.currency) >= item.cost
   const supply = item.kind === 'supply'
+  // In the Android app a Pass item is part of a real subscription, so it says
+  // so rather than "unavailable". These cards only appear on the Garden Pass
+  // tab, right beneath the Pass's own offers, so they need no button of
+  // their own until the Pass is open; "Try on" still works.
+  const playPass = isAndroidApp() && item.premium
   return (
     <article className={`boutique-card ${item.premium ? 'pass-piece' : ''}`}>
       <div className="item-art">
@@ -36,7 +42,13 @@ export function ShopItemCard({
           />
         )}
         <span className="item-tag">
-          {item.premium ? 'Pass preview' : supply ? 'Care supply' : item.slot}
+          {playPass
+            ? 'Garden Pass'
+            : item.premium
+              ? 'Pass preview'
+              : supply
+                ? 'Care supply'
+                : item.slot}
         </span>
         {!supply && (
           <button
@@ -62,11 +74,13 @@ export function ShopItemCard({
               name={item.currency === 'stardust' ? 'stardust' : 'nectar'}
               size={17}
             />
-            {item.premium
-              ? 'Included'
-              : `${item.cost} ${currencyLabel(item.currency)}`}
+            {playPass && !allowed
+              ? 'With the Garden Pass'
+              : item.premium
+                ? 'Included'
+                : `${item.cost} ${currencyLabel(item.currency)}`}
           </span>
-          {item.premium || owned ? (
+          {playPass && !allowed ? null : item.premium || owned ? (
             <button
               className="secondary-button compact"
               disabled={!allowed}

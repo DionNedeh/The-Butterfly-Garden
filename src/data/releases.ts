@@ -1,3 +1,5 @@
+import { isAndroidApp } from '../lib/platform'
+
 /**
  * What changed, release by release.
  *
@@ -42,7 +44,9 @@ export const releases: ReleaseNote[] = [
         title: 'A garden made personal',
         items: [
           'Four new illustrated scenes, plus your own images with local cropping and media-inclusive garden backups.',
-          'Garden Pass is a free PWA preview. No subscription or payment is active.',
+          isAndroidApp()
+            ? 'Garden Pass outfits, scenes and personal backdrops come with the optional Garden Pass subscription.'
+            : 'Garden Pass is a free PWA preview. No subscription or payment is active.',
         ],
       },
       {
@@ -72,9 +76,11 @@ export const releases: ReleaseNote[] = [
         ],
       },
       {
-        title: 'Garden Pass preview',
+        title: isAndroidApp() ? 'Garden Pass' : 'Garden Pass preview',
         items: [
-          'Garden Pass outfits are included free in this release so you can try them. No subscription or payment is active.',
+          isAndroidApp()
+            ? 'Every Garden Pass outfit can be tried on in the shop before you decide; the subscription is sold through Google Play.'
+            : 'Garden Pass outfits are included free in this release so you can try them. No subscription or payment is active.',
         ],
       },
       {

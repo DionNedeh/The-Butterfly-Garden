@@ -3,6 +3,7 @@ package io.github.dionnedeh.butterflygarden;
 import android.os.Bundle;
 import android.webkit.WebSettings;
 import com.getcapacitor.BridgeActivity;
+import io.github.dionnedeh.butterflygarden.billing.GardenBillingPlugin;
 
 public class MainActivity extends BridgeActivity {
 
@@ -11,6 +12,7 @@ public class MainActivity extends BridgeActivity {
         // Plugins that live in this app rather than in an npm package have to
         // be registered by hand, before the bridge is built.
         registerPlugin(GardenFilesPlugin.class);
+        registerPlugin(GardenBillingPlugin.class);
         super.onCreate(savedInstanceState);
         // Null only when the device has no usable WebView, in which case
         // Capacitor has already shown its own explanation instead.

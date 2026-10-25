@@ -27,8 +27,10 @@ Decisions still open are listed in section 7.
   8.13.0, Gradle 8.14.3, Java 21.
 - Google Play: since 31 Aug 2026 new apps and updates must target API 36, and
   must use Play Billing Library 8 or newer. Latest is 9.1.0.
-- Play Billing Library 9.1.0 pulls in mismatched Kotlin standard libraries; a
-  `kotlin-bom` platform constraint resolves the duplicate classes.
+- Play Billing Library 9.1.0 alone pulls in mismatched Kotlin standard
+  libraries (duplicate classes). In this project Capacitor's newer AndroidX
+  dependencies resolve them all to Kotlin 2.0.21, so no override is needed;
+  a `kotlin-bom` platform constraint is the fix if it ever reappears.
 - Maven Central answers `429 Too Many Requests` when Gradle downloads in
   wide parallel from the Claude container; fewer workers plus retries fixes it.
 - License testers can buy with test payment methods on **sideloaded debug
@@ -64,6 +66,19 @@ Same React app, two builds
   "no third party" promise.
 
 ## 4. The Garden Pass on Play Billing
+
+**Built.** Native: `android/app/src/main/java/.../billing/` —
+`GardenBillingPlugin` (Play Billing Library 9.1), `PassEntitlement` (every
+rule, JVM-tested) and `PurchaseSignature` (licence-key check, JVM-tested).
+Web: `src/lib/playBilling.ts` (typed, validating bridge),
+`src/lib/passEntitlement.ts` (the store), `playProvider` in
+`src/lib/gardenPass.ts`, `src/lib/passOffers.ts` (offer wording) and
+`src/components/shop/GardenPassPanel.tsx`. Settings has the Garden Pass card
+with Play's manage/cancel link, as Play's subscriptions policy requires.
+
+**Needs the licence key** before any purchase can be verified: paste it into
+`android/app/src/main/res/values/garden_pass.xml`. Until then the app says the
+Pass is not set up and grants nothing.
 
 The boundary in `src/lib/gardenPass.ts` was built for this: every access check
 goes through `gardenPassAccess`, and `verified-provider` is the reserved

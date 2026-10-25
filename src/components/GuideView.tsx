@@ -100,7 +100,9 @@ const sections: GuideSection[] = [
     eyebrow: 'Something to look forward to',
     title: 'The Garden Pass',
     paragraphs: [
-      'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. They are included free in the current PWA preview. Try them from the Care wardrobe; no subscription or payment is active.',
+      isAndroidApp()
+        ? 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape — beside extra scenes and your own images as backdrops. They come with the optional Garden Pass subscription from Google Play; you can try any outfit on first, and everything else in the garden is free.'
+        : 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. They are included free in the current PWA preview. Try them from the Care wardrobe; no subscription or payment is active.',
     ],
   },
   {

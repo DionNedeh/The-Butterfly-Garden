@@ -190,3 +190,55 @@ test('the Android-only pages have no serious accessibility violations', async ({
   offenders.push(...(await seriousViolations(page, 'Notices')))
   expect(offenders).toEqual([])
 })
+
+test('the Garden Pass speaks of Google Play, and says when Play cannot be reached', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Garden Pass', exact: true })
+    .click()
+  await expect(
+    page.getByRole('heading', { name: 'The Garden Pass' }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/everything else in the garden is free and stays free/i),
+  ).toBeVisible()
+  // No native billing in a browser, so Play is honestly unreachable.
+  await expect(
+    page.getByText(/google play cannot be reached right now/i),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Manage or cancel in Google Play' }),
+  ).toBeVisible()
+  await expect(page.getByText(/preview/i)).toHaveCount(0)
+  await expect(page.locator('.pass-piece').first()).toContainText(
+    'With the Garden Pass',
+  )
+  await page.waitForTimeout(300)
+  expect(await seriousViolations(page, 'Garden Pass')).toEqual([])
+
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Backdrops', exact: true })
+    .click()
+  await expect(
+    page.getByRole('button', { name: 'With the Garden Pass' }).first(),
+  ).toBeDisabled()
+
+  await mainNav(page)
+    .getByRole('button', { name: 'Settings', exact: true })
+    .click()
+  const passCard = page.locator('.pass-settings-card')
+  await expect(passCard).toContainText('Google Play cannot be reached right now.')
+  await passCard.getByRole('button', { name: 'See the Garden Pass' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'The Garden Pass' }),
+  ).toBeVisible()
+  expect(errors).toEqual([])
+})

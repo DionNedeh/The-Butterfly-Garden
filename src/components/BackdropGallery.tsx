@@ -69,7 +69,9 @@ export function BackdropGallery({
               <div className="scene-card-copy">
                 <span className="eyebrow">
                   {scene.unlock.kind === 'pass'
-                    ? 'Garden Pass preview'
+                    ? isAndroidApp()
+                      ? 'Garden Pass'
+                      : 'Garden Pass preview'
                     : scene.unlock.kind === 'free'
                       ? 'A gift for every garden'
                       : 'Grows with your garden'}
@@ -106,7 +108,9 @@ export function BackdropGallery({
                       : allowed
                         ? 'Use this scene'
                         : scene.unlock.kind === 'pass'
-                          ? 'Garden Pass unavailable'
+                          ? isAndroidApp()
+                            ? 'With the Garden Pass'
+                            : 'Garden Pass unavailable'
                           : `Opens in ${state.profile ? daysUntilBackdrop(state.profile, scene.id) : 0} days`}
                 </button>
               </div>
@@ -206,7 +210,9 @@ export function BackdropGallery({
           <strong>Add your own backdrop</strong>
           <small>
             {!customAllowed
-              ? 'Garden Pass unavailable'
+              ? isAndroidApp()
+                ? 'With the Garden Pass'
+                : 'Garden Pass unavailable'
               : state.customBackdrops.length >= CUSTOM_BACKDROP_SLOTS
                 ? 'Your three image spaces are full'
                 : 'JPEG, PNG or WebP · up to 10 MB'}
