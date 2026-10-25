@@ -74,3 +74,55 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// Google's own libraries (Play Billing, Play services, datatransport) ship
+// notices for the open-source code inside them, as third_party_licenses.json
+// and .txt in each AAR. Those notices must travel with the app, so every build
+// gathers them, deduplicated, into public/google-notices.txt, which
+// Capacitor serves and Settings → Open-source notices shows.
+abstract class GatherGoogleNotices extends DefaultTask {
+    @InputFiles
+    abstract ConfigurableFileCollection getAars()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDir()
+
+    @TaskAction
+    void gather() {
+        def notices = new TreeMap<String, String>()
+        aars.files.findAll { it.name.endsWith('.aar') }.each { aar ->
+            new java.util.zip.ZipFile(aar).withCloseable { zip ->
+                def index = zip.getEntry('third_party_licenses.json')
+                def text = zip.getEntry('third_party_licenses.txt')
+                if (index == null || text == null) return
+                byte[] body = zip.getInputStream(text).bytes
+                new JsonSlurper().parse(zip.getInputStream(index)).each { name, span ->
+                    notices.putIfAbsent(name as String, new String(body, span.start as int, span.length as int, 'UTF-8'))
+                }
+            }
+        }
+        def out = outputDir.get().file('public/google-notices.txt').asFile
+        out.parentFile.mkdirs()
+        out.setText(
+            'Notices for open-source components inside Google libraries used by the app\n' +
+            '(Google Play Billing Library, Google Play services, Google datatransport).\n\n' +
+            notices.collect { name, text -> "== ${name} ==\n\n${text.trim()}\n" }.join('\n'),
+            'UTF-8'
+        )
+    }
+}
+
+def googleNotices = tasks.register('gatherGoogleNotices', GatherGoogleNotices) {
+    aars.from(
+        configurations.getByName('releaseRuntimeClasspath').incoming.artifactView {
+            attributes { attribute(Attribute.of('artifactType', String), 'aar') }
+            lenient = true
+        }.files
+    )
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(googleNotices, { it.outputDir })
+    }
+}

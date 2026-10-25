@@ -22,6 +22,11 @@ describe('parseStatus', () => {
       fromCache: true,
       lapsed: false,
     })
+    expect(parseStatus({ state: 'unasked', fromCache: false, lapsed: true })).toEqual({
+      state: 'unasked',
+      fromCache: false,
+      lapsed: true,
+    })
   })
 
   it('reads anything unexpected as unavailable, never as access', () => {
@@ -99,6 +104,21 @@ describe('in the Android app', () => {
     const billing = await import('./playBilling')
     await expect(billing.getPassStatus()).resolves.toMatchObject({ state: 'unavailable' })
     await expect(billing.subscribeToPass('token')).resolves.toEqual({ outcome: 'failed' })
+  })
+
+  it('tells the native side whether this is a request or start-up', async () => {
+    vi.stubEnv('VITE_PLATFORM', 'android')
+    vi.resetModules()
+    const getStatus = vi.fn(() =>
+      Promise.resolve({ state: 'unasked', fromCache: false, lapsed: false }),
+    )
+    registerPlugin.mockReturnValue({ getStatus })
+    const billing = await import('./playBilling')
+    await expect(billing.getPassStatus({ ask: false })).resolves.toMatchObject({
+      state: 'unasked',
+    })
+    await billing.getPassStatus()
+    expect(getStatus.mock.calls).toEqual([[{ ask: false }], [{ ask: true }]])
   })
 
   it('passes through a purchase outcome and the status that came with it', async () => {

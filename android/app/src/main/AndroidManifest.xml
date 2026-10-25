@@ -2,11 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      The app's own files are served from inside the APK and the page's
-      Content-Security-Policy allows no other origin, so the garden never goes
-      online. INTERNET stays declared because Android's WebView refuses network
-      loads without it, and whether that also affects Capacitor's local
-      responses has not been proven on a device yet.
+      The page itself never goes online: its files are served from inside the
+      APK and its Content-Security-Policy allows no other origin. INTERNET is
+      still needed by Google's Play Billing Library, which reports to Google
+      as it works (see billing/GardenBillingPlugin.java, which only wakes it
+      when the Garden Pass needs it), and the WebView may rely on it too.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -30,6 +30,15 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
+
+        <!--
+          Android's WebView uploads usage diagnostics to Google on devices
+          whose owner agreed to share them; this app opts its WebView out, so
+          opening the garden is not reported that way either.
+        -->
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"

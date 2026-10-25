@@ -7,9 +7,8 @@ import type { PassOffer, PassState } from '../../lib/playBilling'
 import { GardenPassPanel } from './GardenPassPanel'
 
 vi.mock('../../lib/playBilling', () => ({
-  getPassStatus: vi.fn(() =>
-    Promise.resolve({ state: 'inactive', fromCache: false, lapsed: false }),
-  ),
+  // Never answers unless a test says so, so each test sets the state itself.
+  getPassStatus: vi.fn(() => new Promise(() => undefined)),
   getPassOffers: vi.fn(),
   subscribeToPass: vi.fn(),
   managePassSubscription: vi.fn(() => Promise.resolve(true)),
@@ -63,6 +62,13 @@ describe('GardenPassPanel', () => {
 
   it('says it is checking before Play has answered', () => {
     renderPanel()
+    expect(screen.getByText(/checking your garden pass/i)).toBeInTheDocument()
+  })
+
+  it('asks Play when it opens, since opening it is the gardener asking', () => {
+    show('unasked')
+    renderPanel()
+    expect(billing.getPassStatus).toHaveBeenCalledWith({ ask: true })
     expect(screen.getByText(/checking your garden pass/i)).toBeInTheDocument()
   })
 
@@ -127,8 +133,9 @@ describe('GardenPassPanel', () => {
     const user = userEvent.setup()
     renderPanel()
     show('unavailable')
+    vi.mocked(billing.getPassStatus).mockClear()
     await user.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(billing.getPassStatus).toHaveBeenCalled()
+    expect(billing.getPassStatus).toHaveBeenCalledWith({ ask: true })
   })
 
   it('says when a build has no Pass set up, and offers no Play link', () => {

@@ -41,17 +41,22 @@ export function setPassStatus(next: PassStatus): void {
   for (const listener of listeners) listener()
 }
 
-/** Ask Play again, e.g. after "Try again". */
+/**
+ * Ask Play now: when the Garden Pass page opens, or "Try again". The
+ * gardener's own request is what wakes Google's Billing Library.
+ */
 export async function refreshPassStatus(): Promise<void> {
-  setPassStatus(await getPassStatus())
+  setPassStatus(await getPassStatus({ ask: true }))
 }
 
 /**
- * Start following Play's answers: one question now, then every change Play
- * reports (the native side also re-checks each time the app is reopened).
+ * Start following Play's answers. At start-up Play is asked only if this
+ * device is following a subscription (otherwise the state is "unasked");
+ * after that, every change Play reports, including the native re-check each
+ * time a subscriber reopens the app.
  */
 export function trackPassStatus(): Unsubscribe {
   const stop = onPassStatusChange(setPassStatus)
-  void refreshPassStatus()
+  void getPassStatus({ ask: false }).then(setPassStatus)
   return stop
 }

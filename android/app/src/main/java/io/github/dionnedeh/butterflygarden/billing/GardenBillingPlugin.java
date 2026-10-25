@@ -36,8 +36,15 @@ import java.util.Locale;
  *
  * There is no server: the app asks the Play Store app on the phone which
  * purchases this Google account holds, verifies each against the licence key,
- * and decides with PassEntitlement. Nothing about a purchase leaves the device
- * through this app.
+ * and decides with PassEntitlement. This code sends nothing anywhere.
+ *
+ * Google's Billing Library itself, though, reports to Google as it works (it
+ * bundles Google's datatransport logger), so it is only ever woken when it is
+ * needed: the Billing client is created on first use, the gardener's own
+ * request (opening the Garden Pass, subscribing) is what first uses it, and
+ * the check on every return to the app runs only for someone with a
+ * subscription to follow. A gardener who never looks at the Pass never runs
+ * Google's billing code at all.
  *
  * All billing work happens on the main thread, which is where Play delivers
  * its callbacks too, so the fields below are never touched concurrently.
@@ -49,6 +56,8 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
     private static final String PREFS = "garden_pass";
     private static final String VERIFIED_ACTIVE_AT = "verified_active_at";
     private static final String LAPSE_UNSEEN = "lapse_unseen";
+    /** Set while there is a subscription to follow: active, pending or on hold. */
+    private static final String FOLLOWING = "following";
 
     private BillingClient client;
     private byte[] licenceKey = new byte[0];
@@ -68,11 +77,18 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
         } catch (IllegalArgumentException malformed) {
             licenceKey = new byte[0];
         }
-        client = BillingClient.newBuilder(getContext())
-            .setListener(this)
-            .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
-            .enableAutoServiceReconnection()
-            .build();
+    }
+
+    /** Created on first use, never at start-up; see the class comment. */
+    private BillingClient client() {
+        if (client == null) {
+            client = BillingClient.newBuilder(getContext())
+                .setListener(this)
+                .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
+                .enableAutoServiceReconnection()
+                .build();
+        }
+        return client;
     }
 
     @Override
@@ -81,18 +97,40 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
         super.handleOnDestroy();
     }
 
-    /** Every return to the app re-checks, so a lapse or renewal shows promptly. */
+    /**
+     * A return to the app re-checks a subscription this device is following,
+     * so a renewal, lapse or fixed payment shows promptly. Nobody else's
+     * return wakes the Billing Library.
+     */
     @Override
     protected void handleOnResume() {
         super.handleOnResume();
-        getBridge().executeOnMainThread(() -> checkStatus(this::announce));
+        getBridge().executeOnMainThread(() -> {
+            if (following()) checkStatus(this::announce);
+        });
     }
 
     // ---------------------------------------------------------------- methods
 
+    /**
+     * The Pass's state. With ask=false (the app starting up) Play is only
+     * asked for a subscription this device is following; otherwise the answer
+     * is "unasked", and the Garden Pass page asks when it is opened.
+     */
     @PluginMethod
     public void getStatus(PluginCall call) {
-        getBridge().executeOnMainThread(() -> checkStatus((decision) -> call.resolve(status(decision))));
+        boolean ask = Boolean.TRUE.equals(call.getBoolean("ask", true));
+        getBridge().executeOnMainThread(() -> {
+            if (!ask && licenceKey.length > 0 && !following()) {
+                JSObject unasked = new JSObject();
+                unasked.put("state", "unasked");
+                unasked.put("fromCache", false);
+                unasked.put("lapsed", prefs().getBoolean(LAPSE_UNSEEN, false));
+                call.resolve(unasked);
+                return;
+            }
+            checkStatus((decision) -> call.resolve(status(decision)));
+        });
     }
 
     @PluginMethod
@@ -108,7 +146,7 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
                     )
                 )
                 .build();
-            client.queryProductDetailsAsync(params, (result, details) -> getBridge().executeOnMainThread(() -> {
+            client().queryProductDetailsAsync(params, (result, details) -> getBridge().executeOnMainThread(() -> {
                 JSObject answer = new JSObject();
                 JSArray offers = new JSArray();
                 if (result.getResponseCode() == BillingResponseCode.OK && !details.getProductDetailsList().isEmpty()) {
@@ -155,7 +193,7 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
                     .build();
                 purchaseCall = call;
                 getBridge().saveCall(call);
-                BillingResult launched = client.launchBillingFlow(getActivity(), params);
+                BillingResult launched = client().launchBillingFlow(getActivity(), params);
                 // Anything but OK means Play never showed its purchase sheet,
                 // so onPurchasesUpdated will not follow.
                 if (launched.getResponseCode() != BillingResponseCode.OK) {
@@ -224,8 +262,14 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
             return;
         }
         whenConnected(() -> {
-            QueryPurchasesParams params = QueryPurchasesParams.newBuilder().setProductType(ProductType.SUBS).build();
-            client.queryPurchasesAsync(params, (result, purchases) -> getBridge().executeOnMainThread(() -> {
+            // Include subscriptions in account hold: otherwise Play leaves them
+            // out, and a subscriber whose payment failed would be told their
+            // Pass had ended instead of how to fix the payment.
+            QueryPurchasesParams params = QueryPurchasesParams.newBuilder()
+                .setProductType(ProductType.SUBS)
+                .includeSuspendedSubscriptions(true)
+                .build();
+            client().queryPurchasesAsync(params, (result, purchases) -> getBridge().executeOnMainThread(() -> {
                 if (result.getResponseCode() != BillingResponseCode.OK) {
                     handler.handle(unreachable());
                     return;
@@ -273,11 +317,11 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
      */
     private void acknowledge(Purchase purchase) {
         AcknowledgePurchaseParams params = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchase.getPurchaseToken()).build();
-        client.acknowledgePurchase(params, (result) -> {});
+        client().acknowledgePurchase(params, (result) -> {});
     }
 
     private void whenConnected(Runnable ready, Runnable failed) {
-        if (client.isReady()) {
+        if (client().isReady()) {
             ready.run();
             return;
         }
@@ -285,7 +329,7 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
         onConnectionFailed.add(failed);
         if (connecting) return;
         connecting = true;
-        client.startConnection(
+        client().startConnection(
             new BillingClientStateListener() {
                 @Override
                 public void onBillingSetupFinished(BillingResult result) {
@@ -395,6 +439,10 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
         return getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
+    private boolean following() {
+        return verifiedActiveAt() > 0 || prefs().getBoolean(FOLLOWING, false);
+    }
+
     private long verifiedActiveAt() {
         return prefs().getLong(VERIFIED_ACTIVE_AT, 0);
     }
@@ -405,6 +453,12 @@ public class GardenBillingPlugin extends Plugin implements PurchasesUpdatedListe
         else edit.remove(VERIFIED_ACTIVE_AT);
         if (decision.state == PassEntitlement.State.ACTIVE) edit.remove(LAPSE_UNSEEN);
         else if (decision.lapsed) edit.putBoolean(LAPSE_UNSEEN, true);
+        boolean ongoing =
+            decision.state == PassEntitlement.State.ACTIVE ||
+            decision.state == PassEntitlement.State.PENDING ||
+            decision.state == PassEntitlement.State.SUSPENDED;
+        if (ongoing) edit.putBoolean(FOLLOWING, true);
+        else edit.remove(FOLLOWING);
         edit.apply();
     }
 }

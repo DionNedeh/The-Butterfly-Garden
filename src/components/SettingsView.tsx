@@ -13,6 +13,8 @@ function passSummary(status: PassStatus): string {
   switch (status.state) {
     case 'checking':
       return 'Checking with Google Play…'
+    case 'unasked':
+      return 'Open the Garden Pass to check your subscription with Google Play.'
     case 'active':
       return status.fromCache
         ? 'Your Garden Pass is open. Google Play will confirm it again once it can be reached.'
@@ -430,13 +432,16 @@ export function SettingsView({
               what you write.
             </p>
             <p>
-              The garden never contacts a third party. Everything it shows,
+              The garden itself never contacts anyone. Everything it shows,
               down to its lettering, is already inside the app.
             </p>
             <p>
-              If you subscribe to the Garden Pass, Google Play takes the
-              payment. The app only asks the Play Store on this phone whether
-              your Pass is open; it never sees your payment details.
+              The optional Garden Pass is sold through Google Play, which takes
+              the payment; the app never sees your payment details. Google&apos;s
+              billing library, which Play requires for this, is only used when
+              you open the Garden Pass, subscribe, or have a Pass, and Google
+              may receive diagnostic information from it then. It is never
+              given anything you have written.
             </p>
             <p>
               Android&apos;s cloud backup is switched off for this app, so your

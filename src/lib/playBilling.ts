@@ -13,6 +13,12 @@ import { attach, inAppPlugin, type Unsubscribe } from './native'
 export type PassState =
   /** Not yet asked. */
   | 'checking'
+  /**
+   * Play was deliberately not asked: nothing on this device has a Garden
+   * Pass to follow, and Google's Billing Library is only woken when needed
+   * (the Garden Pass page asks when it opens).
+   */
+  | 'unasked'
   | 'active'
   | 'pending'
   | 'suspended'
@@ -56,7 +62,7 @@ export type PurchaseOutcome =
   | 'unconfirmed'
 
 interface GardenBillingPlugin {
-  getStatus(): Promise<unknown>
+  getStatus(options: { ask: boolean }): Promise<unknown>
   getOffers(): Promise<unknown>
   subscribe(options: { offerToken: string }): Promise<unknown>
   manage(): Promise<void>
@@ -74,6 +80,7 @@ const UNAVAILABLE: PassStatus = {
 }
 
 const STATES: readonly PassState[] = [
+  'unasked',
   'active',
   'pending',
   'suspended',
@@ -167,12 +174,18 @@ const OUTCOMES: readonly PurchaseOutcome[] = [
  */
 const billing = () => inAppPlugin<GardenBillingPlugin>('GardenBilling')
 
-/** Ask Google Play, on this device, whether the Pass is open. */
-export async function getPassStatus(): Promise<PassStatus> {
+/**
+ * Whether the Pass is open, from Google Play on this device. With
+ * `ask: false` Play is only asked if this device has a subscription to
+ * follow; otherwise the answer is "unasked".
+ */
+export async function getPassStatus(
+  { ask }: { ask: boolean } = { ask: true },
+): Promise<PassStatus> {
   if (import.meta.env.VITE_PLATFORM !== 'android') return UNAVAILABLE
   try {
     const { plugin } = await billing()
-    return parseStatus(await plugin.getStatus())
+    return parseStatus(await plugin.getStatus({ ask }))
   } catch {
     return UNAVAILABLE
   }

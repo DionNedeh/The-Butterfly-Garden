@@ -43,6 +43,13 @@ Decisions still open are listed in section 7.
   Google from a server. Google still charges a service fee on those sales.
 - Google's billing security guidance recommends verifying purchases on a
   backend. This app deliberately does not (section 1).
+- Play Billing Library 9.1.0 depends on Google's `datatransport` logger
+  (CCT backend) and Play services, and its own code logs through it, so the
+  library can report to Google over the network. The app therefore creates
+  the Billing client only on first use and asks Play only when the gardener
+  opens the Garden Pass, subscribes, or has a subscription to follow; the
+  privacy policy says so. Check Play SDK Index's entry for the library when
+  answering the Data safety form.
 
 ## 3. Architecture
 

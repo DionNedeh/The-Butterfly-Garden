@@ -15,7 +15,7 @@ async function load() {
   return { ...pass, ...entitlement }
 }
 
-const status = (state: 'active' | 'pending' | 'suspended' | 'inactive' | 'unavailable' | 'unconfigured') =>
+const status = (state: 'unasked' | 'active' | 'pending' | 'suspended' | 'inactive' | 'unavailable' | 'unconfigured') =>
   ({ state, fromCache: false, lapsed: false }) as const
 
 describe('the Garden Pass in the Android app', () => {
@@ -40,7 +40,7 @@ describe('the Garden Pass in the Android app', () => {
     vi.stubEnv('VITE_PLATFORM', 'android')
     const { gardenPassAccess, setPassStatus } = await load()
     expect(gardenPassAccess('pass-cosmetics').allowed).toBe(false)
-    for (const closed of ['pending', 'suspended', 'inactive', 'unavailable', 'unconfigured'] as const) {
+    for (const closed of ['unasked', 'pending', 'suspended', 'inactive', 'unavailable', 'unconfigured'] as const) {
       setPassStatus(status(closed))
       expect(gardenPassAccess('pass-cosmetics').allowed).toBe(false)
       expect(gardenPassAccess('custom-backdrops').allowed).toBe(false)
@@ -85,7 +85,7 @@ describe('the Garden Pass in the Android app', () => {
     expect(listener).toHaveBeenCalledOnce()
   })
 
-  it('asks Play once on start and follows its changes after', async () => {
+  it('on start, lets the native side decide whether to ask, then follows changes', async () => {
     vi.stubEnv('VITE_PLATFORM', 'android')
     const { trackPassStatus, passStatus } = await load()
     const playBilling = await import('./playBilling')
@@ -96,6 +96,9 @@ describe('the Garden Pass in the Android app', () => {
       return () => undefined
     })
     trackPassStatus()
+    // Start-up never forces Play to be asked; the native side asks only
+    // for a subscription this device is following.
+    expect(playBilling.getPassStatus).toHaveBeenCalledWith({ ask: false })
     await vi.waitFor(() => expect(passStatus().state).toBe('active'))
     push?.(status('suspended'))
     expect(passStatus().state).toBe('suspended')

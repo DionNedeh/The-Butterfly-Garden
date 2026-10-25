@@ -49,6 +49,12 @@ export function GardenPassPanel({
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
 
+  // Opening the Pass is the gardener asking, so this is where Play is asked
+  // for anyone the app was not already following.
+  useEffect(() => {
+    void refreshPassStatus()
+  }, [])
+
   const showOffers = status.state === 'inactive'
   useEffect(() => {
     if (!showOffers) return
@@ -116,7 +122,7 @@ export function GardenPassPanel({
           </div>
         )}
 
-        {status.state === 'checking' && (
+        {(status.state === 'checking' || status.state === 'unasked') && (
           <p role="status">Checking your Garden Pass with Google Play…</p>
         )}
 
