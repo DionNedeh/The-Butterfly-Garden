@@ -135,9 +135,34 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     expect(screen.queryByText('Your garden has grown.')).toBeNull()
   })
 
-  it('shows the sunlight earned today against the daily cap', async () => {
+  it('shows the sunlight earned today against the daily cap, each currency named alike', async () => {
     await openGarden()
-    expect(screen.getByTitle('Sunlight earned today')).toHaveTextContent('0 / 5')
+    expect(screen.getByTitle('Sunlight earned today')).toHaveTextContent('0 / 5 Sunlight today')
+    expect(screen.getByTitle('Nectar balance')).toHaveTextContent(/Nectar$/)
+    expect(screen.getByTitle('Stardust balance')).toHaveTextContent(/Stardust$/)
+  })
+
+  it('opens support from the Guide and returns there', async () => {
+    const user = await openGarden()
+    await user.click(primaryNav().getByRole('button', { name: 'Guide' }))
+    await user.click(await screen.findByRole('button', { name: 'If you need support now' }, { timeout: 3000 }))
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'If you need support now' }, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/support')
+    await user.click(screen.getByRole('button', { name: 'Back to the Guide' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'How the garden works' })).toBeInTheDocument()
+  })
+
+  it('starts the fade-out when the sound is turned on, and turns the sound off at the end', async () => {
+    const user = await openGarden()
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    await user.selectOptions(await screen.findByLabelText('Fade out after', {}, { timeout: 3000 }), '15')
+    expect(screen.getByText('The timer starts when the sound is turned on.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Turn on / }))
+    expect(screen.getByText(/The sound fades away at/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Turn off / }))
+    expect(screen.getByText('The timer starts when the sound is turned on.')).toBeInTheDocument()
   })
 
   it('says when a change could not be saved, and what to do', async () => {

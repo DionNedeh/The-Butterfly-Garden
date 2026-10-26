@@ -216,10 +216,12 @@ describe('the Moonlight recap', () => {
     expect(screen.getByText('Rounding out Monday')).toBeInTheDocument()
   })
 
-  it('shows the day back before asking about it', () => {
+  it('shows the day back in words before asking about it, with no streak', () => {
     renderRecap()
     expect(screen.getByText('Here is your day.')).toBeInTheDocument()
     expect(screen.getByText('Sunlight earned')).toBeInTheDocument()
+    expect(screen.getByText(/^You /)).toBeInTheDocument()
+    expect(screen.queryByText(/in a row|streak/i)).toBeNull()
   })
 
   it('can be left without collecting', async () => {

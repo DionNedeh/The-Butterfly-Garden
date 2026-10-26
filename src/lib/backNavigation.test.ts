@@ -31,9 +31,10 @@ describe('backAction', () => {
     expect(backAction('recap')).toEqual({ kind: 'view', view: 'today' })
   })
 
-  it('returns the privacy policy and notices to Settings', () => {
+  it('returns the privacy policy, notices and support page to Settings', () => {
     expect(backAction('privacy')).toEqual({ kind: 'view', view: 'settings' })
     expect(backAction('notices')).toEqual({ kind: 'view', view: 'settings' })
+    expect(backAction('support')).toEqual({ kind: 'view', view: 'settings' })
   })
 
   it('returns any other page to the garden', () => {

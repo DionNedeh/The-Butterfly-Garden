@@ -9,12 +9,15 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 
 ## What is included
 
-- Five-level inner weather check-ins, with an editable private journal
-- One-time, daily, and selected-weekday goals, plus skip, snooze and archive
+- Five-level inner weather check-ins with nothing preselected, plus "Not sure
+  today", and an editable private journal
+- One-time, daily, and selected-weekday goals, plus skip, snooze and archive,
+  each of them undoable for a few seconds
 - A month planner for scheduling one-time goals onto any upcoming day
 - Optional daily reflections drawn from a rotating set of prompts
-- Sunlight rewards capped at five per day, converting to Nectar, and a Sunlight
-  streak in the journal: the run of days with at least one act of care
+- Sunlight rewards capped at five per day, converting to Nectar, and a rhythm
+  in the journal: days cared for in the last seven and this month, which a
+  missed day never resets, and which Settings can hide
 - Moonlight: from 6 pm (until 4 am on a late night) a short evening recap closes
   the day, can plan tomorrow's first goal, is kept in the journal, and earns
   one Stardust, whether or not the day earned any Sunlight
@@ -29,7 +32,10 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - Seven illustrated backdrops and up to three personal images with crop and zoom
 - The Garden Pass: a Google Play subscription in the Android app, and a free
   preview in the PWA (no payment is taken on the web)
-- Three soundscapes synthesised on device — no audio files are downloaded
+- Three soundscapes synthesised on device — no audio files are downloaded —
+  with an optional fade-out after 15, 30 or 60 minutes
+- "If you need support now": a short, dated list of crisis lines that hands
+  off to the phone, reachable from Settings, the Guide and a stormy check-in
 - Backup and restore to a JSON file including your personal backdrop images
 - IndexedDB persistence with no account, analytics, or cloud transfer
 - Installable offline PWA and GitHub Pages deployment

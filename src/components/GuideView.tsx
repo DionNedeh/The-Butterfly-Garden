@@ -38,7 +38,7 @@ const sections: GuideSection[] = [
     paragraphs: [
       `From ${recapOpensAt()} you can round out your day: a few short questions about how it ended up, what went well, and what you would rather not carry into tomorrow. Every question can be skipped, and the recap is kept in your journal.`,
       `Closing the day earns ${MOONLIGHT_STARDUST_REWARD} Stardust — once per day, whether or not you earned any Sunlight. Some days the only thing you managed was getting to the end of them, and that still counts. If you are up past midnight the recap keeps offering yesterday until four in the morning, so a late night closes the day you actually lived.`,
-      'Moonlight is separate from Sunlight. It does not grow your plants and it does not keep your Sunlight streak alive — that still asks for an act of care.',
+      'Moonlight is separate from Sunlight. It does not grow your plants and it does not count toward your rhythm of care days — that still asks for an act of care.',
     ],
   },
   {
@@ -127,10 +127,10 @@ const sections: GuideSection[] = [
   {
     icon: 'journal',
     eyebrow: 'Kept as you wrote it',
-    title: 'Journal and the Sunlight streak',
+    title: 'Journal and your rhythm',
     paragraphs: [
       'The Journal holds your dated moods, reflections, and butterfly field notes. Personal entries can be edited or deleted at any time, and nothing you write is scored or analyzed.',
-      'Your Sunlight streak grows when you earn at least one Sunlight on consecutive days and restarts after a completely missed day. It is just a gentle mirror — it never changes plant or butterfly progress.',
+      'Your rhythm counts the days you earned at least one Sunlight: how many of the last seven, and how many this month. A missed day never sets it back to zero. It is just a gentle mirror, it never changes plant or butterfly progress, and Settings can hide the numbers altogether.',
     ],
   },
   {
@@ -193,9 +193,11 @@ const sections: GuideSection[] = [
 export function GuideView({
   state,
   onShowSeed,
+  onOpenSupport,
 }: {
   state: AppState
   onShowSeed: (id: string) => void
+  onOpenSupport?: () => void
 }) {
   return (
     <div className="view guide-view">
@@ -224,6 +226,15 @@ export function GuideView({
           </section>
         ))}
       </div>
+      {onOpenSupport && (
+        <p className="support-link-note">
+          The garden is a place for small acts of care, not a stand-in for a
+          person.{' '}
+          <button className="text-button" onClick={onOpenSupport}>
+            If you need support now
+          </button>
+        </p>
+      )}
     </div>
   )
 }

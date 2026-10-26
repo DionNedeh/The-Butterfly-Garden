@@ -22,6 +22,7 @@ const PATHS: Record<AppView, string> = {
   'whats-new': 'whats-new',
   privacy: 'privacy',
   notices: 'notices',
+  support: 'support',
 }
 
 const VIEWS = new Map<string, AppView>(

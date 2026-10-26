@@ -5,9 +5,9 @@ import type { PersistenceStatus } from '../hooks/useGardenState'
 import { createInitialState } from '../lib/progression'
 import { SettingsView } from './SettingsView'
 
-function renderSettings(
+function renderSettings<Extra extends Record<string, unknown>>(
   persistence: PersistenceStatus = { readOnly: false },
-  overrides: Record<string, unknown> = {},
+  overrides: Extra = {} as Extra,
 ) {
   const handlers = {
     onUpdateProfile: vi.fn(),
@@ -125,5 +125,42 @@ describe('SettingsView garden motion', () => {
     await user.click(screen.getByRole('radio', { name: /reduce garden motion/i }))
     await user.click(screen.getByRole('button', { name: 'Save settings' }))
     expect(onUpdateProfile).toHaveBeenLastCalledWith('Tester', 'Test Garden', 'reduce')
+  })
+})
+
+describe('SettingsView rhythm, sound and support', () => {
+  it('hides and shows day counts at once', async () => {
+    const user = userEvent.setup()
+    const { onSetDayCountsHidden } = renderSettings(undefined, { onSetDayCountsHidden: vi.fn() })
+    const toggle = screen.getByRole('checkbox', { name: /show day counts/i })
+    expect(toggle).toBeChecked()
+    await user.click(toggle)
+    expect(onSetDayCountsHidden).toHaveBeenCalledWith(true)
+  })
+
+  it('chooses a fade-out, says it is not a sleep aid, and when the sound will fade', async () => {
+    const user = userEvent.setup()
+    const { onChooseFadeOut } = renderSettings(undefined, { onChooseFadeOut: vi.fn() })
+    expect(screen.getByText(/It is not a sleep aid/)).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Fade out after'), '30')
+    expect(onChooseFadeOut).toHaveBeenLastCalledWith(30)
+    await user.selectOptions(screen.getByLabelText('Fade out after'), '')
+    expect(onChooseFadeOut).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('says when a running fade ends, or that it waits for the sound', () => {
+    renderSettings(undefined, {
+      onChooseFadeOut: vi.fn(),
+      fadeOutMinutes: 15,
+      fadeOutEndsAt: new Date(2026, 9, 26, 22, 45).getTime(),
+    })
+    expect(screen.getByText(/The sound fades away at/)).toBeInTheDocument()
+  })
+
+  it('opens the support page from About', async () => {
+    const onOpenSupport = vi.fn()
+    renderSettings(undefined, { onOpenSupport })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'If you need support now' }))
+    expect(onOpenSupport).toHaveBeenCalledOnce()
   })
 })

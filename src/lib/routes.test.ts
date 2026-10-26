@@ -14,6 +14,7 @@ const EVERY_VIEW: AppView[] = [
   'whats-new',
   'privacy',
   'notices',
+  'support',
 ]
 
 describe('pages in the address bar', () => {

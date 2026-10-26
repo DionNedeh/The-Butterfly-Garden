@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAmbientSound } from './useAmbientSound'
+import { FADE_OUT_SECONDS, useAmbientSound } from './useAmbientSound'
 
 /**
  * A stand-in for the Web Audio API.
@@ -152,5 +152,33 @@ describe('useAmbientSound', () => {
     expect(() =>
       renderHook(() => useAmbientSound(true, 'garden-chimes')),
     ).not.toThrow()
+  })
+})
+
+describe('the fade-out timer', () => {
+  it('lowers the sound over its last minute, and brings it back if the timer is taken away', () => {
+    vi.useFakeTimers()
+    try {
+      installAudio()
+      const endsAt = Date.now() + FADE_OUT_SECONDS * 1000 + 5_000
+      const initialProps: { fade?: number } = { fade: endsAt }
+      const { rerender } = renderHook(
+        ({ fade }: { fade?: number }) => useAmbientSound(true, 'garden', fade),
+        { initialProps },
+      )
+      const context = contexts[0] as unknown as { createGain: ReturnType<typeof vi.fn> }
+      const master = (context.createGain.mock.results[0].value as ReturnType<typeof audioNode>).gain
+      master.linearRampToValueAtTime.mockClear()
+
+      vi.advanceTimersByTime(4_000)
+      expect(master.linearRampToValueAtTime).not.toHaveBeenCalledWith(0, expect.anything())
+      vi.advanceTimersByTime(1_000)
+      expect(master.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number))
+
+      rerender({ fade: undefined })
+      expect(master.linearRampToValueAtTime).toHaveBeenLastCalledWith(0.5, expect.any(Number))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

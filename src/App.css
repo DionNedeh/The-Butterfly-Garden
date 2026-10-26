@@ -2291,14 +2291,6 @@
     padding: 0.48rem 0.58rem;
   }
 
-  .header-sunlight {
-    display: none;
-  }
-
-  .nectar-wallet > span {
-    display: none;
-  }
-
   .pattern-select-card {
     grid-template-columns: 1fr;
   }
@@ -2969,9 +2961,17 @@
   white-space: nowrap;
 }
 
+/* Named for screen readers, the same way for both currencies, and left to
+   their icons on screen: the header has no room for the words. */
 .header-actions .nectar-wallet > span,
 .header-actions .stardust-wallet > span {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .header-actions {
@@ -3550,6 +3550,13 @@
   resize: vertical;
 }
 
+.recap-day-words {
+  margin: 1rem 0 0;
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
 .recap-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
@@ -3652,4 +3659,151 @@
   gap: 0.4rem;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* =====================================================================
+   Kinder moments (Voyager b, "Now")
+   ===================================================================== */
+
+/* "Not sure today": a quiet sixth answer under the five weathers. */
+.unsure-choice {
+  justify-self: start;
+  margin: -0.4rem 0 0.8rem;
+}
+
+.unsure-choice.selected {
+  border-radius: 999px;
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.weather-unsure {
+  border: 2px dashed #9aa79f;
+  background: transparent;
+}
+
+.weather-unsure::after {
+  display: none;
+}
+
+/* Undo in place of "Are you sure?" (components/UndoToast). */
+.undo-region {
+  position: fixed;
+  z-index: 55;
+  bottom: 1.5rem;
+  left: 50%;
+  width: min(440px, calc(100% - 2rem));
+  transform: translateX(-50%);
+}
+
+.undo-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 16px;
+  /* Fixed colours: the night theme turns --forest-dark pale. */
+  background: #224438;
+  padding: 0.6rem 0.6rem 0.6rem 1rem;
+  color: #fffdf7;
+  box-shadow: 0 14px 34px rgba(35, 62, 51, 0.28);
+}
+
+.theme-night .undo-toast {
+  border: 1px solid rgba(231, 196, 120, 0.4);
+  background: #18303d;
+}
+
+.undo-toast .text-button {
+  color: #fbe7a6;
+  font-weight: 800;
+}
+
+@media (max-width: 1080px) {
+  /* Above the two-row dock. */
+  .undo-region {
+    bottom: 9rem;
+  }
+}
+
+/* "If you need support now" and the quiet ways to it. */
+.support-link-note {
+  margin: 1rem 0 0;
+  color: var(--muted);
+}
+
+.guide-view .support-link-note {
+  text-align: center;
+}
+
+.support-lines {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.support-line h2 {
+  margin-bottom: 0.3rem;
+}
+
+.support-line a {
+  text-decoration: none;
+}
+
+.support-urgent {
+  border-left: 5px solid #b4553d;
+}
+
+.support-checked {
+  max-width: 60ch;
+}
+
+/* The soundscape's fade-out timer. */
+.fade-out-setting {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.fade-out-setting select {
+  max-width: 16rem;
+}
+
+/* How far a scene that grows with the garden has come. */
+.unlock-ring {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: conic-gradient(currentColor var(--ripeness, 0%), rgba(0, 0, 0, 0.12) 0);
+  vertical-align: -0.2rem;
+}
+
+/* The header keeps Sunlight on phones too, so the narrowest ones tighten it
+   rather than letting the pills slide over the garden's icon. */
+@media (max-width: 400px) {
+  .app-header {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .header-actions {
+    gap: 0.3rem;
+  }
+
+  .header-sunlight,
+  .header-actions .nectar-wallet,
+  .header-actions .stardust-wallet {
+    gap: 0.25rem;
+    padding: 0.4rem 0.45rem;
+    font-size: 0.8rem;
+  }
+
+  .header-actions .theme-toggle {
+    width: 38px;
+    height: 38px;
+  }
 }

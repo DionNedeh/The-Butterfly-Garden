@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
@@ -65,11 +65,22 @@ const Onboarding = lazy(() =>
 const NoticesView = lazy(() =>
   import('./components/NoticesView').then((m) => ({ default: m.NoticesView })),
 )
+const SupportView = lazy(() =>
+  import('./components/SupportView').then((m) => ({ default: m.SupportView })),
+)
+
+/** What the support page's own back button says, for the page that opened it. */
+const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
+  settings: 'Back to Settings',
+  today: 'Back to Today',
+  guide: 'Back to the Guide',
+}
 import {
   ambientTrackName,
   DEFAULT_AMBIENT_TRACK_ID,
 } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
+import { useFadeOut } from './hooks/useFadeOut'
 import { useGardenState } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
 import { useRecapWindow } from './hooks/useRecapWindow'
@@ -160,6 +171,12 @@ function App() {
   }
   const setView = (next: AppView, options: { onPass?: boolean } = {}) =>
     navigate({ view: next, onPass: options.onPass })
+  /** The page "If you need support now" was opened from, to return to. */
+  const [supportFrom, setSupportFrom] = useState<AppView>('garden')
+  const openSupport = () => {
+    setSupportFrom(route.view)
+    setView('support')
+  }
   useEffect(() => {
     const follow = () => {
       window.scrollTo({ top: 0, behavior: 'instant' })
@@ -189,9 +206,12 @@ function App() {
   // Always true in the PWA. In the Android app, false while the app is in the
   // background, so the soundscape does not keep playing from a pocket.
   const [appActive, setAppActive] = useState(true)
+  const { setAmbientSound } = garden
+  const fadeOut = useFadeOut(useCallback(() => setAmbientSound(false), [setAmbientSound]))
   useAmbientSound(
     Boolean(garden.state?.profile?.ambientSound) && appActive,
     garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
+    fadeOut.endsAt,
   )
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
@@ -399,16 +419,15 @@ function App() {
           <span className="header-sunlight" title="Sunlight earned today">
             <Icon name="sun" size={19} />
             {sunlight} / {DAILY_SUNLIGHT_CAP}
+            <span className="sr-only"> Sunlight today</span>
           </span>
           <span className="nectar-wallet" title="Nectar balance">
             <Icon name="nectar" size={19} />
-            <strong>{state.nectar}</strong>
-            <span>Nectar</span>
+            <strong>{state.nectar}</strong> <span>Nectar</span>
           </span>
           <span className="stardust-wallet" title="Stardust balance">
             <Icon name="stardust" size={19} />
-            <strong>{state.stardust}</strong>
-            <span>Stardust</span>
+            <strong>{state.stardust}</strong> <span>Stardust</span>
           </span>
           {installPrompt && (
             <button
@@ -426,7 +445,10 @@ function App() {
           )}
           <button
             className={`theme-toggle sound-toggle ${profile.ambientSound ? 'sound-on' : ''}`}
-            onClick={garden.toggleAmbientSound}
+            onClick={() => {
+              fadeOut.soundSwitched(!profile.ambientSound)
+              garden.toggleAmbientSound()
+            }}
             aria-pressed={profile.ambientSound ?? false}
             aria-label={
               profile.ambientSound
@@ -664,6 +686,9 @@ function App() {
               onWakeGoal={garden.wakeGoal}
               onPlanGoal={garden.planGoal}
               onSetGoalArchived={garden.setGoalArchived}
+              onUncompleteGoal={garden.uncompleteGoal}
+              onRestoreGoal={garden.restoreGoal}
+              onOpenSupport={openSupport}
               recap={offeredRecap}
               moonlightCollected={recapCollected}
               onOpenRecap={() => {
@@ -690,6 +715,7 @@ function App() {
                 setSeedFocus(id)
                 setView('garden')
               }}
+              onOpenSupport={openSupport}
             />
           )}
           {activeView === 'whats-new' && <WhatsNewView />}
@@ -698,6 +724,12 @@ function App() {
           )}
           {activeView === 'notices' && (
             <NoticesView onBack={() => setView('settings')} />
+          )}
+          {activeView === 'support' && (
+            <SupportView
+              onBack={() => setView(supportFrom)}
+              backLabel={SUPPORT_BACK_LABELS[supportFrom] ?? 'Back to the garden'}
+            />
           )}
           {activeView === 'journal' && (
             <JournalView
@@ -731,6 +763,13 @@ function App() {
               onOpenPrivacy={() => setView('privacy')}
               onOpenGardenPass={() => setView('shop', { onPass: true })}
               onOpenNotices={() => setView('notices')}
+              onOpenSupport={openSupport}
+              onSetDayCountsHidden={garden.setDayCountsHidden}
+              fadeOutMinutes={fadeOut.minutes}
+              fadeOutEndsAt={fadeOut.endsAt}
+              onChooseFadeOut={(minutes) =>
+                fadeOut.choose(minutes, Boolean(profile.ambientSound))
+              }
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}

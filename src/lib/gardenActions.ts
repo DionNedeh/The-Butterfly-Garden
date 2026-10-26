@@ -4,6 +4,7 @@ import type {
   GardenBackdropId,
   Goal,
   GoalSchedule,
+  MoodChoice,
   MoodEntry,
   RecapEntry,
   ReflectionEntry,
@@ -11,6 +12,7 @@ import type {
 import { availableBackdropIds } from './appearance'
 import { addDaysToLocalDate, toLocalDate } from './date'
 import { createId } from './id'
+import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
 import {
   awardMoonlight,
@@ -155,6 +157,52 @@ export function deleteGoal(state: AppState, goalId: string): AppState {
   }
 }
 
+/**
+ * Put back a goal that was just deleted, where it was, with its completions.
+ *
+ * What makes Delete undoable. A goal that is somehow already back is left
+ * alone rather than doubled.
+ */
+export function restoreGoal(
+  state: AppState,
+  goal: Goal,
+  index: number,
+  completions: AppState['completions'],
+): AppState {
+  if (state.goals.some((item) => item.id === goal.id)) return state
+  const goals = [...state.goals]
+  goals.splice(Math.max(0, Math.min(index, goals.length)), 0, goal)
+  const known = new Set(state.completions.map((completion) => completion.id))
+  return {
+    ...state,
+    goals,
+    completions: [
+      ...state.completions,
+      ...completions.filter((completion) => !known.has(completion.id)),
+    ],
+  }
+}
+
+/**
+ * Take back a goal marked done by mistake.
+ *
+ * The completion goes; any Sunlight it earned stays, the way deleting a
+ * check-in never takes its Sunlight back. Completing it again earns nothing
+ * more, because each completion's Sunlight is awarded once.
+ */
+export function uncompleteGoal(
+  state: AppState,
+  goalId: string,
+  localDate: string,
+): AppState {
+  const id = `${goalId}:${localDate}`
+  if (!state.completions.some((item) => item.id === id)) return state
+  return {
+    ...state,
+    completions: state.completions.filter((item) => item.id !== id),
+  }
+}
+
 /** Mark a goal done for the day, once, and earn its Sunlight. */
 export function completeGoal(state: AppState, goalId: string, now: Date): AppState {
   const localDate = toLocalDate(now)
@@ -170,10 +218,15 @@ export function completeGoal(state: AppState, goalId: string, now: Date): AppSta
   return awardSunlight(completed, `goal:${id}`, now)
 }
 
-/** Today's check-in, written or rewritten, and its Sunlight. */
+/**
+ * Today's check-in, written or rewritten, and its Sunlight.
+ *
+ * The Sunlight is the same whatever the answer, "not sure" included: it is
+ * for checking in, never for the weather chosen.
+ */
 export function saveMood(
   state: AppState,
-  level: MoodEntry['level'],
+  choice: MoodChoice,
   note: string,
   now: Date,
 ): AppState {
@@ -182,7 +235,7 @@ export function saveMood(
   const entry: MoodEntry = {
     id: existing?.id ?? createId(),
     localDate,
-    level,
+    ...moodFields(choice),
     note: note.trim(),
     createdAt: existing?.createdAt ?? now.toISOString(),
     updatedAt: now.toISOString(),
@@ -350,6 +403,18 @@ export function selectBackdrop(
 export function markReleaseSeen(state: AppState, releaseId: string): AppState {
   if (!state.profile || state.profile.lastSeenReleaseId === releaseId) return state
   return { ...state, profile: { ...state.profile, lastSeenReleaseId: releaseId } }
+}
+
+/** Show or hide day counts in the journal. Nothing counted is lost either way. */
+export function setDayCountsHidden(state: AppState, hidden: boolean): AppState {
+  if (!state.profile || (state.profile.hideDayCounts === true) === hidden) return state
+  return { ...state, profile: { ...state.profile, hideDayCounts: hidden } }
+}
+
+/** Sound on or off; the fade-out timer (hooks/useFadeOut) turns it off too. */
+export function setAmbientSound(state: AppState, on: boolean): AppState {
+  if (!state.profile || Boolean(state.profile.ambientSound) === on) return state
+  return { ...state, profile: { ...state.profile, ambientSound: on } }
 }
 
 export function toggleAmbientSound(state: AppState): AppState {

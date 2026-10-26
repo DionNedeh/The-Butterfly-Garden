@@ -30,6 +30,7 @@ import type {
   Goal,
   GoalSchedule,
   JarColorId,
+  MoodChoice,
   MoodEntry,
   OutfitSlot,
   RecapEntry,
@@ -131,9 +132,13 @@ export function useGardenState() {
         const now = new Date()
         update((current) => act.completeGoal(current, goalId, now))
       },
-      saveMood: (level: MoodEntry['level'], note: string) => {
+      uncompleteGoal: (goalId: string, localDate: string) =>
+        update((current) => act.uncompleteGoal(current, goalId, localDate)),
+      restoreGoal: (goal: Goal, index: number, completions: AppState['completions']) =>
+        update((current) => act.restoreGoal(current, goal, index, completions)),
+      saveMood: (choice: MoodChoice, note: string) => {
         const now = new Date()
-        update((current) => act.saveMood(current, level, note, now))
+        update((current) => act.saveMood(current, choice, note, now))
         // The first thing written in the journal is the other moment to ask.
         void requestPersistentStorage()
       },
@@ -246,6 +251,10 @@ export function useGardenState() {
       markReleaseSeen: (releaseId: string) =>
         update((current) => act.markReleaseSeen(current, releaseId)),
       toggleAmbientSound: () => update(act.toggleAmbientSound),
+      setAmbientSound: (on: boolean) =>
+        update((current) => act.setAmbientSound(current, on)),
+      setDayCountsHidden: (hidden: boolean) =>
+        update((current) => act.setDayCountsHidden(current, hidden)),
       selectAmbientTrack: (ambientTrack: AmbientTrackId) =>
         update((current) => act.selectAmbientTrack(current, ambientTrack)),
       toggleTheme: () => update(act.toggleTheme),

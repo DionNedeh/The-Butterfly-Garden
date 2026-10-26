@@ -264,15 +264,44 @@ test('onboards, completes care, and writes a private journal entry', async ({
     .click()
   await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Blue Morpho')).toBeVisible()
-  await expect(
-    page.getByRole('heading', { name: 'Sunlight streak' }),
-  ).toBeVisible()
-  await expect(page.getByLabel('1 day streak')).toBeVisible()
-  await expect(page.getByText('Today is counted')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Your rhythm' })).toBeVisible()
+  await expect(page.getByLabel('1 of the last 7 days cared for')).toBeVisible()
+  await expect(page.getByText(/never sets this back/)).toBeVisible()
   await expect(page.getByText('A little more spacious.')).toBeVisible()
   await expect(
     page.getByText('I noticed sunlight on the kitchen table.'),
   ).toBeVisible()
+})
+
+test('a check-in can be unsure, a tap can be undone, and support is a link away', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+
+  // Nothing is chosen for the gardener, and "not sure" is an answer.
+  const save = page.getByRole('button', { name: /save check-in/i })
+  await expect(save).toBeDisabled()
+  await page.getByRole('button', { name: 'Not sure today' }).click()
+  await save.click()
+  await expect(page.getByRole('button', { name: /update check-in/i })).toBeVisible()
+
+  // Marking a goal done by mistake can be taken back for a few seconds.
+  await page.getByLabel('Add a goal').fill('Water the fern')
+  await page.getByRole('button', { name: 'Add goal' }).click()
+  await page.getByRole('button', { name: /complete water the fern/i }).click()
+  await expect(page.getByText('Water the fern marked done.')).toBeVisible()
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(page.getByRole('button', { name: /complete water the fern/i })).toBeEnabled()
+
+  // Support is reachable from Settings, and hands off to the phone.
+  await mainNav(page).getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('button', { name: 'If you need support now' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'If you need support now' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Call 116 123' })).toHaveAttribute('href', 'tel:116123')
+  expect(await seriousViolations(page, 'Support')).toEqual([])
+  await page.getByRole('button', { name: 'Back to Settings' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
 })
 
 test('supports plant selection and permanent local reset confirmation', async ({
@@ -548,7 +577,7 @@ test('shows plant details, protects active hosts, and frees a full garden space'
     }
   })
   await page.reload()
-  await expect(page.getByText(/all 8 plant spaces filled/i)).toBeVisible()
+  await expect(page.getByText(/all 8 spaces are growing/i)).toBeVisible()
   await expect(
     page.getByRole('button', { name: /plant a seed/i }),
   ).toBeDisabled()

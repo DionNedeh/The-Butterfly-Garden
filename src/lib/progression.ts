@@ -302,7 +302,7 @@ export function recapForDate(
  * Deliberately not routed through `awardSunlight`. Moonlight pays in Stardust
  * and touches nothing else -- no plant growth, because that is the engine of
  * egg discovery and is paced by the Sunlight cap, and no Sunlight award,
- * because the journal promises that a Sunlight streak means an act of care.
+ * because a day in the journal's rhythm of care means an act of care.
  *
  * The `moonlight` ledger is the dedupe key, not the recap. A gardener who
  * deletes a recap and writes it again is not paid twice.

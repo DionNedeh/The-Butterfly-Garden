@@ -14,7 +14,7 @@ import { useState } from 'react'
  * the last time it was synced. Once the gardener has typed, their draft wins
  * until they save or leave the page.
  */
-export function useSyncedDraft<T extends string | number>(
+export function useSyncedDraft<T extends string | number | undefined>(
   external: T,
 ): [T, (value: T) => void] {
   const [draft, setDraft] = useState(external)

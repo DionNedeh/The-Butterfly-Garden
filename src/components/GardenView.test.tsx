@@ -196,3 +196,26 @@ describe('the companions card', () => {
     expect(screen.getByText(/^Pip is still changing\./)).toBeInTheDocument()
   })
 })
+
+describe('saying why', () => {
+  it('says why a seed cannot be planted when the tray is empty', () => {
+    renderGarden({ seeds: 0 })
+    const button = screen.getByRole('button', { name: 'Plant a seed' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription(/No seeds in your tray yet/)
+  })
+
+  it('says what a host plant did about eggs', async () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    const plant = { id: 'host-1', plantId: 'milkweed', growth: 3, plantedAt: '2026-10-01T10:00:00.000Z' }
+    renderGarden({
+      plants: [plant],
+      creatures: [
+        seed.creatures[0],
+        { ...butterfly('queen', 1), name: 'Pip', sourcePlantId: 'host-1' },
+      ],
+    })
+    await userEvent.setup().click(screen.getByRole('button', { name: /Milkweed 1/ }))
+    expect(screen.getByText("This bloom brought Pip's egg.")).toBeInTheDocument()
+  })
+})

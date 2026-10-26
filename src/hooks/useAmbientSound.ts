@@ -34,6 +34,12 @@ interface PianoNote {
   velocity?: number
 }
 
+/** The soundscape's full volume, reached over three seconds at the start. */
+const MASTER_VOLUME = 0.5
+
+/** How long the fade-out timer takes to bring the sound down to nothing. */
+export const FADE_OUT_SECONDS = 60
+
 const CHIME_NOTES = [523.25, 587.33, 659.25, 783.99, 880, 1046.5]
 const PIANO_BEAT_SECONDS = 60 / 72
 const PIANO_LOOP_BEATS = 24
@@ -98,7 +104,7 @@ function createEngine(): AmbientEngine | undefined {
   const master = context.createGain()
   master.gain.value = 0
   master.connect(context.destination)
-  master.gain.linearRampToValueAtTime(0.5, context.currentTime + 3)
+  master.gain.linearRampToValueAtTime(MASTER_VOLUME, context.currentTime + 3)
 
   const engine: AmbientEngine = {
     context,
@@ -376,7 +382,18 @@ function stopEngine(engine: AmbientEngine) {
   }, 900)
 }
 
-export function useAmbientSound(enabled: boolean, trackId: AmbientTrackId) {
+/**
+ * Play the chosen soundscape while `enabled`.
+ *
+ * `fadeEndsAt` (a time in ms) lowers it gently over the last
+ * FADE_OUT_SECONDS before then; the caller turns the sound off at that time
+ * (hooks/useFadeOut). Taking the timer away brings the volume back.
+ */
+export function useAmbientSound(
+  enabled: boolean,
+  trackId: AmbientTrackId,
+  fadeEndsAt?: number,
+) {
   const engineRef = useRef<AmbientEngine>(undefined)
 
   useEffect(() => {
@@ -390,4 +407,29 @@ export function useAmbientSound(enabled: boolean, trackId: AmbientTrackId) {
       }
     }
   }, [enabled, trackId])
+
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!enabled || !engine || fadeEndsAt === undefined) return
+    const ramp = (to: number, seconds: number) => {
+      if (engine.stopped) return
+      const { context, master } = engine
+      try {
+        master.gain.cancelScheduledValues(context.currentTime)
+        master.gain.setValueAtTime(master.gain.value, context.currentTime)
+        master.gain.linearRampToValueAtTime(to, context.currentTime + seconds)
+      } catch {
+        // The context may already be closed.
+      }
+    }
+    const untilFade = fadeEndsAt - FADE_OUT_SECONDS * 1000 - Date.now()
+    const timer = window.setTimeout(
+      () => ramp(0, Math.max(1, (fadeEndsAt - Date.now()) / 1000)),
+      Math.max(0, untilFade),
+    )
+    return () => {
+      window.clearTimeout(timer)
+      ramp(MASTER_VOLUME, 2)
+    }
+  }, [enabled, trackId, fadeEndsAt])
 }
