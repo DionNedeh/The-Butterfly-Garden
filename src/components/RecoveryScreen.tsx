@@ -1,0 +1,152 @@
+import { useState } from 'react'
+import type { PersistenceStatus } from '../hooks/useGardenState'
+import { datedFileName, saveTextFile } from '../lib/download'
+import { isAndroidApp } from '../lib/platform'
+import { MAX_BACKUP_BYTES } from './SafeMode'
+
+/**
+ * Shown instead of onboarding when a garden is stored but could not be read.
+ *
+ * This used to greet the gardener as brand new and ask them to name a garden,
+ * which is the worst thing to say to someone with years of entries. Here they
+ * are told what happened and what each choice does, safest first.
+ */
+export function RecoveryScreen({
+  reason,
+  onRestore,
+  onDownloadSetAside,
+  onStartFresh,
+}: {
+  reason: PersistenceStatus['reason']
+  onRestore: (text: string) => Promise<{ ok: boolean; message: string }>
+  onDownloadSetAside: () => Promise<string | undefined>
+  onStartFresh: () => Promise<{ ok: boolean; message?: string }>
+}) {
+  const [note, setNote] = useState<string>()
+  const [confirmFresh, setConfirmFresh] = useState(false)
+  const unavailable = reason === 'unavailable'
+
+  const explanation =
+    reason === 'incompatible'
+      ? 'It was written by a newer version of the app. Nothing has been changed or deleted. Updating the app is the simplest fix.'
+      : unavailable
+        ? isAndroidApp()
+          ? 'The app could not open its storage on this phone. Your garden is still here. Closing and reopening the app usually fixes this.'
+          : 'This browser would not open its storage just now. Your garden is still on this device. Reopening the app usually fixes this.'
+        : 'Part of it could not be read, so a copy has been set aside untouched. You can download that copy, put a backup back, or start a new garden.'
+
+  const downloadSetAside = async () => {
+    setNote(undefined)
+    try {
+      const text = await onDownloadSetAside()
+      if (!text) {
+        setNote('There is no set-aside copy to download yet.')
+        return
+      }
+      const outcome = await saveTextFile(
+        datedFileName('set-aside-copy'),
+        'application/json',
+        text,
+      )
+      setNote(
+        outcome === 'cancelled'
+          ? 'Nothing was saved.'
+          : 'Keep that file safe: it is the garden exactly as it was stored.',
+      )
+    } catch {
+      setNote('The set-aside copy could not be saved there.')
+    }
+  }
+
+  const restore = async (file: File) => {
+    setNote(undefined)
+    if (file.size > MAX_BACKUP_BYTES) {
+      setNote('That file is too large to be a garden backup.')
+      return
+    }
+    const result = await onRestore(await file.text())
+    setNote(result.message)
+  }
+
+  return (
+    <main className="safe-mode recovery-screen" aria-labelledby="recovery-title">
+      <section className="card safe-mode-card">
+        <p className="eyebrow">Your garden is safe</p>
+        <h1 id="recovery-title">Your saved garden could not be opened</h1>
+        <p>{explanation}</p>
+        <p>Saving is paused, so nothing already stored can be overwritten.</p>
+        <div className="form-actions">
+          {unavailable ? (
+            <button
+              className="primary-button"
+              onClick={() => window.location.reload()}
+            >
+              Try again
+            </button>
+          ) : (
+            <button
+              className="primary-button"
+              onClick={() => void downloadSetAside()}
+            >
+              Download the set-aside copy
+            </button>
+          )}
+          <label className="secondary-button file-button">
+            Restore a backup
+            <input
+              type="file"
+              accept="application/json,.json,text/plain,application/octet-stream"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void restore(file)
+              }}
+            />
+          </label>
+        </div>
+        {note && (
+          <p className="settings-note" role="status">
+            {note}
+          </p>
+        )}
+        {!unavailable && (
+          <div className="safe-mode-fresh">
+            {!confirmFresh ? (
+              <button
+                className="text-button"
+                onClick={() => setConfirmFresh(true)}
+              >
+                Start a new garden instead…
+              </button>
+            ) : (
+              <div className="delete-confirmation" role="alert">
+                <strong>
+                  The set-aside copy stays on this device, and you can still
+                  download it from Settings. A new garden starts empty.
+                </strong>
+                <div className="form-actions">
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      void onStartFresh().then((result) => {
+                        if (!result.ok) setNote(result.message)
+                      })
+                    }}
+                  >
+                    Start a new garden
+                  </button>
+                  <button
+                    className="text-button"
+                    onClick={() => setConfirmFresh(false)}
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+    </main>
+  )
+}

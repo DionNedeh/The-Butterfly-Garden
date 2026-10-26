@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { clearDraft, useDraft } from '../lib/drafts'
 import { moodLevels } from '../data/content'
 import { addDaysToLocalDate, formatWeekday } from '../lib/date'
 import {
@@ -68,9 +69,18 @@ export function MoonlightRecap({
 }) {
   const [step, setStep] = useState(0)
   const [level, setLevel] = useState<MoodEntry['level']>()
-  const [wentWell, setWentWell] = useState('')
-  const [settingDown, setSettingDown] = useState('')
-  const [forTomorrow, setForTomorrow] = useState('')
+  // Kept as drafts until the night is collected, so a recap survives a change
+  // of page, a reload or a closed tab -- keyed by the day it closes, so a
+  // draft can never be collected against the wrong night.
+  const [wentWell, setWentWell] = useDraft(`recap:${targetDate}:wentWell`, '')
+  const [settingDown, setSettingDown] = useDraft(
+    `recap:${targetDate}:settingDown`,
+    '',
+  )
+  const [forTomorrow, setForTomorrow] = useDraft(
+    `recap:${targetDate}:forTomorrow`,
+    '',
+  )
   const [planForTomorrow, setPlanForTomorrow] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -125,6 +135,11 @@ export function MoonlightRecap({
       forTomorrow,
       planForTomorrow: planForTomorrow && forTomorrow.trim().length > 0,
     })
+    clearDraft(
+      `recap:${targetDate}:wentWell`,
+      `recap:${targetDate}:settingDown`,
+      `recap:${targetDate}:forTomorrow`,
+    )
     onClose()
   }
 

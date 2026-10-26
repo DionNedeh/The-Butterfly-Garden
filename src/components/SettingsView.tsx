@@ -1,9 +1,20 @@
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
-import { saveTextDocument } from '../lib/native'
+import { previewBackup, type BackupPreview } from '../lib/backupPreview'
+import { formatJournalDate } from '../lib/date'
+import { datedFileName, saveTextFile } from '../lib/download'
 import { isAndroidApp } from '../lib/platform'
+import {
+  formatBytes,
+  isAppleMobileBrowser,
+  isInstalledApp,
+  requestPersistentStorage,
+  storageStatus,
+  type StorageStatus,
+} from '../lib/storage'
+import { MAX_BACKUP_BYTES } from './SafeMode'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
@@ -51,9 +62,6 @@ const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
   [0x3d8993e5, [37809, 15841, 37760, 15785, 37811, 15846, 37772, 15853]],
 ]
 
-/** How long a backup's blob URL is kept alive so the download can read it. */
-const BACKUP_URL_LIFETIME_MS = 60_000
-
 /**
  * What the restore picker offers. On Android the system file picker filters
  * by the type each storage app reports, and some report a .json file as plain
@@ -91,6 +99,10 @@ export function SettingsView({
   onSelectBackdrop,
   onExportGarden,
   onImportGarden,
+  onUndoRestore,
+  onDownloadSetAside,
+  onDiscardSetAside,
+  onCountSetAside,
   onDeleteAll,
   onOpenWhatsNew,
   onOpenPrivacy,
@@ -109,8 +121,17 @@ export function SettingsView({
   ) => void
   onSelectAmbientTrack: (trackId: AmbientTrackId) => void
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
-  onExportGarden: () => string
+  /** Undefined while the garden is read-only: see useGardenState. */
+  onExportGarden: () => string | undefined
   onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
+  onUndoRestore?: (
+    snapshotId: string,
+  ) => Promise<{ ok: boolean; message: string }>
+  /** The newest set-aside copy of an unreadable garden, as file text. */
+  onDownloadSetAside?: () => Promise<string | undefined>
+  onDiscardSetAside?: () => Promise<void>
+  /** How many set-aside copies are kept, to decide whether to mention them. */
+  onCountSetAside?: () => Promise<number>
   onDeleteAll: () => Promise<{ ok: boolean; message?: string }>
   onOpenWhatsNew?: () => void
   onOpenPrivacy?: () => void
@@ -129,74 +150,144 @@ export function SettingsView({
   const [deleteError, setDeleteError] = useState<string>()
   const [backupNote, setBackupNote] = useState<string>()
   const [restoreStep, setRestoreStep] = useState(false)
+  /** A chosen backup, read and described, waiting for the gardener's yes. */
+  const [pendingRestore, setPendingRestore] = useState<
+    BackupPreview & { text: string }
+  >()
+  const [restoring, setRestoring] = useState(false)
+  /** The undo offer the gardener dismissed, so it is not shown again. */
+  const [undoDismissed, setUndoDismissed] = useState<string>()
+  const [setAsideCount, setSetAsideCount] = useState(0)
+  const [storage, setStorage] = useState<StorageStatus>()
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Inline rather than isAndroidApp(): the bundler folds only an inline
   // check, which keeps the Android-only cards and Play calls out of the PWA.
   const android = import.meta.env.VITE_PLATFORM === 'android'
   const pass = usePassStatus()
   const [passNote, setPassNote] = useState<string>()
-  const backupFileName = () =>
-    `butterfly-garden-${new Date().toISOString().slice(0, 10)}.json`
+  useEffect(() => {
+    let active = true
+    void onCountSetAside?.().then((count) => {
+      if (active) setSetAsideCount(count)
+    })
+    if (!android) {
+      void storageStatus().then((status) => {
+        if (active) setStorage(status)
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [onCountSetAside, android])
 
   /**
-   * Android: the gardener picks where the file goes, and Android reports
-   * whether it was written, so here -- unlike a browser download -- success
-   * can be stated plainly.
+   * One button, the right way for each build. On Android the gardener picks
+   * where the file goes, and Android reports whether it was written, so
+   * success can be stated plainly. In a browser the download is the
+   * browser's from the moment it starts: deliberately not "downloaded",
+   * because claiming a success we cannot observe is how someone ends up
+   * trusting a backup that was never written.
    */
-  const saveBackupOnAndroid = async () => {
+  const saveBackup = async () => {
+    setBackupNote(undefined)
+    const text = onExportGarden()
+    if (text === undefined) {
+      setBackupNote(
+        'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
+      )
+      return
+    }
+    try {
+      const outcome = await saveTextFile(
+        datedFileName(''),
+        'application/json',
+        text,
+      )
+      setBackupNote(
+        outcome === 'saved'
+          ? 'Backup saved. Keep the file somewhere safe.'
+          : outcome === 'cancelled'
+            ? 'No backup was saved.'
+            : 'Backup started. Check your downloads and keep the file somewhere safe.',
+      )
+    } catch {
+      setBackupNote(
+        android
+          ? 'The backup could not be saved there. Try choosing another place.'
+          : 'This browser would not start the download.',
+      )
+    }
+  }
+
+  const saveSetAside = async () => {
     setBackupNote(undefined)
     try {
-      const saved = await saveTextDocument(
-        backupFileName(),
+      const text = await onDownloadSetAside?.()
+      if (!text) {
+        setBackupNote('There is no set-aside copy to download.')
+        return
+      }
+      const outcome = await saveTextFile(
+        datedFileName('set-aside-copy'),
         'application/json',
-        onExportGarden(),
+        text,
       )
       setBackupNote(
-        saved
-          ? 'Backup saved. Keep the file somewhere safe.'
-          : 'No backup was saved.',
+        outcome === 'cancelled'
+          ? 'No copy was saved.'
+          : 'Keep that file safe: it is the garden exactly as it was stored.',
       )
     } catch {
-      setBackupNote(
-        'The backup could not be saved there. Try choosing another place.',
-      )
+      setBackupNote('The set-aside copy could not be saved there.')
     }
   }
 
-  const downloadBackup = () => {
-    try {
-      const blob = new Blob([onExportGarden()], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = backupFileName()
-      // In the document while it is clicked: a detached anchor works in current
-      // browsers, but this is the gardener's only copy of everything they have
-      // written and it is not worth the assumption.
-      document.body.append(link)
-      link.click()
-      link.remove()
-      // The download reads the blob asynchronously, so revoking on the next
-      // line can cancel it before it starts -- silently, since the click
-      // itself never reports failure. Hold the URL until the read is well
-      // past, then release it so nothing leaks.
-      window.setTimeout(() => URL.revokeObjectURL(url), BACKUP_URL_LIFETIME_MS)
-      // Deliberately not "downloaded": the browser owns the save dialog from
-      // here, and claiming success we cannot observe is how someone ends up
-      // trusting a backup that was never written.
-      setBackupNote(
-        'Backup started. Check your downloads and keep the file somewhere safe.',
-      )
-    } catch {
-      setBackupNote('This browser would not start the download.')
+  /** Read and describe the chosen file; nothing is replaced yet. */
+  const chooseBackup = async (file: File) => {
+    setBackupNote(undefined)
+    setPendingRestore(undefined)
+    if (file.size > MAX_BACKUP_BYTES) {
+      setBackupNote('That file is too large to be a garden backup.')
+      return
     }
+    const text = await file.text()
+    const preview = previewBackup(text)
+    if (!preview.ok) {
+      setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
+      return
+    }
+    setPendingRestore({ ...preview, text })
   }
 
-  const restoreBackup = async (file: File) => {
-    const result = await onImportGarden(await file.text())
+  const confirmRestore = async () => {
+    if (!pendingRestore) return
+    setRestoring(true)
+    const result = await onImportGarden(pendingRestore.text)
+    setRestoring(false)
     setBackupNote(result.message)
-    if (result.ok) setRestoreStep(false)
+    if (result.ok) {
+      setPendingRestore(undefined)
+      setRestoreStep(false)
+    }
   }
+
+  const undoRestore = async (snapshotId: string) => {
+    const result = await onUndoRestore?.(snapshotId)
+    if (!result) return
+    setBackupNote(result.message)
+    if (result.ok) setUndoDismissed(snapshotId)
+  }
+
+  const askToKeepStorage = async () => {
+    await requestPersistentStorage()
+    setStorage(await storageStatus())
+  }
+
+  const undoSnapshotId =
+    persistence.lastRestoreSnapshotId &&
+    persistence.lastRestoreSnapshotId !== undoDismissed
+      ? persistence.lastRestoreSnapshotId
+      : undefined
   const profile = state.profile
   // Availability rather than earned unlocks: a Garden Pass scene is choosable
   // while access holds, and is never recorded as permanently earned.
@@ -369,7 +460,8 @@ export function SettingsView({
         <div className="form-actions">
           <button
             className="secondary-button"
-            onClick={android ? () => void saveBackupOnAndroid() : downloadBackup}
+            disabled={persistence.readOnly}
+            onClick={() => void saveBackup()}
           >
             {android ? 'Save a backup' : 'Download a backup'}
           </button>
@@ -386,7 +478,10 @@ export function SettingsView({
           ) : (
             <button
               className="text-button"
-              onClick={() => setRestoreStep(false)}
+              onClick={() => {
+                setRestoreStep(false)
+                setPendingRestore(undefined)
+              }}
             >
               Cancel restore
             </button>
@@ -407,18 +502,164 @@ export function SettingsView({
               onChange={(event) => {
                 const file = event.target.files?.[0]
                 event.target.value = ''
-                if (file) void restoreBackup(file)
+                if (file) void chooseBackup(file)
               }}
             />
           </div>
         )}
-        {backupNote && <p className="settings-note">{backupNote}</p>}
+        {pendingRestore && (
+          <div className="restore-preview" aria-labelledby="restore-preview-title">
+            <h3 id="restore-preview-title">
+              {pendingRestore.gardenName
+                ? `This backup holds ${pendingRestore.gardenName}`
+                : 'This backup holds a garden'}
+            </h3>
+            <ul>
+              {pendingRestore.counts && (
+                <>
+                  <li>
+                    {pendingRestore.counts.checkIns} check-ins,{' '}
+                    {pendingRestore.counts.reflections} reflections and{' '}
+                    {pendingRestore.counts.recaps} evening recaps
+                  </li>
+                  <li>
+                    {pendingRestore.counts.goals} goals,{' '}
+                    {pendingRestore.counts.butterflies} butterflies and{' '}
+                    {pendingRestore.counts.images} of your own images
+                  </li>
+                </>
+              )}
+              {pendingRestore.firstDay && pendingRestore.lastDay && (
+                <li>
+                  Written from {formatJournalDate(pendingRestore.firstDay)} to{' '}
+                  {formatJournalDate(pendingRestore.lastDay)}
+                </li>
+              )}
+              {pendingRestore.exportedAt && (
+                <li>
+                  Saved on{' '}
+                  {new Date(pendingRestore.exportedAt).toLocaleString()}
+                  {pendingRestore.appVersion
+                    ? ` by version ${pendingRestore.appVersion}`
+                    : ''}
+                </li>
+              )}
+              {pendingRestore.repaired > 0 && (
+                <li>
+                  {pendingRestore.repaired} damaged{' '}
+                  {pendingRestore.repaired === 1 ? 'entry' : 'entries'} will be
+                  repaired as it is restored.
+                </li>
+              )}
+            </ul>
+            <p>
+              The garden here now is kept aside, so you can undo the restore
+              afterwards.
+            </p>
+            <div className="form-actions">
+              <button
+                className="primary-button"
+                disabled={restoring}
+                onClick={() => void confirmRestore()}
+              >
+                Restore this backup
+              </button>
+              <button
+                className="text-button"
+                onClick={() => setPendingRestore(undefined)}
+              >
+                Choose another file
+              </button>
+            </div>
+          </div>
+        )}
+        {undoSnapshotId && onUndoRestore && (
+          <div className="form-actions undo-restore">
+            <button
+              className="secondary-button"
+              onClick={() => void undoRestore(undoSnapshotId)}
+            >
+              Undo the restore
+            </button>
+            <button
+              className="text-button"
+              onClick={() => setUndoDismissed(undoSnapshotId)}
+            >
+              Keep the restored garden
+            </button>
+          </div>
+        )}
+        {backupNote && (
+          <p className="settings-note" role="status">
+            {backupNote}
+          </p>
+        )}
         {persistence.readOnly && (
           <p className="settings-note error">
             Saving is paused because the stored garden could not be read. The
             unreadable copy has been set aside untouched; restoring a backup
             here will start saving again.
           </p>
+        )}
+        {(setAsideCount > 0 || persistence.readOnly) && onDownloadSetAside && (
+          <div className="set-aside">
+            <p>
+              A copy of a garden this version could not read has been set aside
+              on this device.
+            </p>
+            <div className="form-actions">
+              <button
+                className="secondary-button"
+                onClick={() => void saveSetAside()}
+              >
+                Download the set-aside copy
+              </button>
+              {!persistence.readOnly && onDiscardSetAside && (
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    void onDiscardSetAside().then(() => {
+                      setSetAsideCount(0)
+                      setBackupNote('The set-aside copies were discarded.')
+                    })
+                  }}
+                >
+                  Discard set-aside copies
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {!android && storage && storage.protection !== 'unknown' && (
+          <div className="storage-status">
+            <p>
+              <strong>
+                {storage.protection === 'protected'
+                  ? 'This browser has agreed to keep your garden.'
+                  : 'This browser may clear your garden if it runs short of space.'}
+              </strong>{' '}
+              {storage.usage !== undefined &&
+                `The garden and the app use about ${formatBytes(storage.usage)} here.`}
+            </p>
+            {storage.protection === 'best-effort' && (
+              <>
+                {isAppleMobileBrowser() && !isInstalledApp() && (
+                  <p>
+                    On iPhone and iPad, Safari clears a site's storage after
+                    seven days without a visit. Add the garden to your Home
+                    Screen (Share → Add to Home Screen) to keep it, and keep a
+                    backup too.
+                  </p>
+                )}
+                <button
+                  className="text-button"
+                  onClick={() => void askToKeepStorage()}
+                >
+                  Ask the browser again
+                </button>
+              </>
+            )}
+          </div>
         )}
       </section>
 

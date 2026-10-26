@@ -31,9 +31,14 @@ import {
   unequipOutfitSlot,
 } from '../lib/wardrobe'
 import { removePlant } from '../lib/plantManagement'
+import { requestPersistentStorage } from '../lib/storage'
+import { loadDrafts, resetDrafts } from '../lib/drafts'
 import {
+  GardenConflictError,
+  GardenDeletedElsewhereError,
+  GardenDeletionPendingError,
   gardenRepository,
-  readImportedState,
+  inspectImportedState,
   type GardenPart,
   type LoadResult,
 } from '../repository/gardenRepository'
@@ -56,15 +61,39 @@ import type {
 /** Tabs tell each other when the shared garden changed underneath them. */
 const SYNC_CHANNEL = 'butterfly-garden-sync'
 
+/** What tabs say to each other on the sync channel. */
+type SyncMessage =
+  | { type: 'garden-saved'; parts?: unknown }
+  /** A tab is about to delete the garden: stop writing now. */
+  | { type: 'garden-clearing' }
+  /** The garden is gone: start again from nothing. */
+  | { type: 'garden-cleared' }
+  /** The deletion did not happen after all: read the garden again. */
+  | { type: 'garden-clear-failed' }
+
+/** How long an image save may wait for its write before giving up. */
+const MEDIA_SAVE_TIMEOUT_MS = 30_000
+
+/** Retry delays after storage could not be read, in milliseconds. */
+const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
+
 export interface PersistenceStatus {
   /**
    * True when the stored garden could not be read. Saving stays disabled so
    * this session can never overwrite data it failed to understand.
    */
   readOnly: boolean
-  reason?: LoadResult['reason']
+  /** Why saving is paused; 'deleting' while another tab deletes the garden. */
+  reason?: LoadResult['reason'] | 'deleting'
   /** Message from the most recent failed write, if any. */
   writeError?: string
+  /**
+   * Something the gardener should know that is not a failure: another tab
+   * changed or deleted the garden. Shown once, dismissible.
+   */
+  notice?: string
+  /** The copy taken before the most recent restore, so it can be undone. */
+  lastRestoreSnapshotId?: string
 }
 
 function errorMessage(error: unknown): string {
@@ -72,6 +101,8 @@ function errorMessage(error: unknown): string {
     ? error.message
     : 'Your garden could not be saved to this device.'
 }
+
+type MediaResult = { ok: boolean; message?: string }
 
 export function useGardenState() {
   const [state, setState] = useState<AppState>()
@@ -81,121 +112,243 @@ export function useGardenState() {
   })
   /** The exact object last known to be on disk; never re-saved as-is. */
   const persistedRef = useRef<AppState>(undefined)
+  /** Image saves waiting for their write, settled exactly once each. */
   const mediaWaiters = useRef(
-    new Map<
-      CustomBackdrop,
-      (result: { ok: boolean; message?: string }) => void
-    >(),
+    new Map<CustomBackdrop, (result: MediaResult) => void>(),
   )
   const readOnlyRef = useRef(false)
   const channelRef = useRef<BroadcastChannel>(undefined)
+  const retryRef = useRef<{ timer?: number; attempt: number }>({ attempt: 0 })
 
-  const applyLoadResult = useCallback((result: LoadResult) => {
-    for (const resolve of mediaWaiters.current.values())
-      resolve({
+  const settleMedia = useCallback((result: MediaResult) => {
+    for (const settle of [...mediaWaiters.current.values()]) settle(result)
+    mediaWaiters.current.clear()
+  }, [])
+
+  const applyLoadResult = useCallback(
+    (result: LoadResult) => {
+      settleMedia({
         ok: false,
         message:
           'The garden changed in another tab. Please try saving your image again.',
       })
-    mediaWaiters.current.clear()
-    persistedRef.current = result.state
-    readOnlyRef.current = result.status === 'withheld'
-    setPersistence((current) => ({
-      ...current,
-      readOnly: result.status === 'withheld',
-      reason: result.reason,
-    }))
-    setState(
-      result.status === 'loaded' ? progressGarden(result.state) : result.state,
-    )
-  }, [])
+      persistedRef.current = result.state
+      readOnlyRef.current = result.status === 'withheld'
+      setPersistence((current) => ({
+        ...current,
+        readOnly: result.status === 'withheld',
+        reason: result.reason,
+      }))
+      setState(
+        result.status === 'loaded'
+          ? progressGarden(result.state)
+          : result.state,
+      )
+    },
+    [settleMedia],
+  )
+
+  /**
+   * Stop writing while keeping what is on screen.
+   *
+   * Used when this tab can no longer trust its baseline -- another tab wrote
+   * something this build cannot read, or storage stopped answering. The
+   * garden stays visible; only saving pauses.
+   */
+  const pauseSaving = useCallback(
+    (reason: PersistenceStatus['reason']) => {
+      settleMedia({ ok: false, message: 'Saving is paused right now.' })
+      readOnlyRef.current = true
+      setPersistence((current) => ({ ...current, readOnly: true, reason }))
+    },
+    [settleMedia],
+  )
+
+  /**
+   * Keep trying to read storage after it stopped answering, backing off.
+   * Saving stays paused until a read succeeds.
+   */
+  const retryLoad = useCallback(() => {
+    const retry = retryRef.current
+    if (retry.timer !== undefined) return
+    const delay =
+      RETRY_DELAYS_MS[Math.min(retry.attempt, RETRY_DELAYS_MS.length - 1)]
+    retry.timer = window.setTimeout(() => {
+      retry.timer = undefined
+      retry.attempt += 1
+      void gardenRepository.load().then((result) => {
+        if (result.status === 'loaded') {
+          retry.attempt = 0
+          applyLoadResult(result)
+          setPersistence((current) => ({ ...current, notice: undefined }))
+        } else if (result.reason === 'unavailable') {
+          retryLoad()
+        } else {
+          pauseSaving(result.reason)
+        }
+      })
+    }, delay)
+  }, [applyLoadResult, pauseSaving])
+
+  /** Another tab deleted the garden: start again from nothing, saving nothing. */
+  const resetAfterDeletion = useCallback(
+    (notice = 'This garden was deleted in another tab.') => {
+      gardenRepository.forget()
+      settleMedia({ ok: false, message: notice })
+      resetDrafts()
+      persistedRef.current = undefined
+      readOnlyRef.current = false
+      setPersistence({ readOnly: false, notice })
+      setState(undefined)
+      setLoading(false)
+    },
+    [settleMedia],
+  )
 
   useEffect(() => {
     let active = true
+    const retry = retryRef.current
     void gardenRepository.load().then((result) => {
       if (!active) return
       applyLoadResult(result)
       setLoading(false)
+      if (result.status === 'withheld' && result.reason === 'unavailable') {
+        retryLoad()
+      }
+      if (result.status === 'loaded') {
+        void loadDrafts()
+        // Returning gardeners who never got the request still deserve it.
+        if (result.state.profile) void requestPersistentStorage()
+      }
     })
     const waiters = mediaWaiters.current
     return () => {
       active = false
-      for (const resolve of waiters.values())
-        resolve({ ok: false, message: 'Image saving was interrupted.' })
+      if (retry.timer !== undefined) window.clearTimeout(retry.timer)
+      retry.timer = undefined
+      for (const settle of [...waiters.values()])
+        settle({ ok: false, message: 'Image saving was interrupted.' })
       waiters.clear()
     }
-  }, [applyLoadResult])
+  }, [applyLoadResult, retryLoad])
 
   // Another tab wrote the shared garden; adopt its version instead of racing it.
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return
     const channel = new BroadcastChannel(SYNC_CHANNEL)
     channelRef.current = channel
-    channel.onmessage = (
-      event: MessageEvent<{ type?: string; parts?: unknown }>,
-    ) => {
-      if (event.data?.type !== 'garden-saved' || readOnlyRef.current) return
+    channel.onmessage = (event: MessageEvent<SyncMessage | undefined>) => {
+      const message = event.data
+      if (message?.type === 'garden-clearing') {
+        pauseSaving('deleting')
+        return
+      }
+      if (message?.type === 'garden-cleared') {
+        resetAfterDeletion()
+        return
+      }
+      if (message?.type === 'garden-clear-failed') {
+        void gardenRepository.load().then(applyLoadResult)
+        return
+      }
+      if (message?.type !== 'garden-saved' || readOnlyRef.current) return
       // The sender names what it wrote, so only those parts are read back.
       // A message without them -- an older tab -- falls back to a full load.
-      void gardenRepository.adopt(event.data.parts).then((result) => {
-        if (result.status === 'loaded') applyLoadResult(result)
+      void gardenRepository.adopt(message.parts).then((result) => {
+        if (result.status === 'loaded') {
+          applyLoadResult(result)
+          return
+        }
+        // Anything else means this tab's picture of the stored garden can no
+        // longer be trusted. Carrying on would make its next edit write every
+        // part of its stale garden over whatever the other tab stored -- the
+        // one thing this layer promises never to do. So: stop writing, keep
+        // the garden on screen, and say why.
+        pauseSaving(result.reason)
+        if (result.reason === 'unavailable') retryLoad()
       })
     }
     return () => {
       channel.close()
       channelRef.current = undefined
     }
-  }, [applyLoadResult])
+  }, [applyLoadResult, pauseSaving, resetAfterDeletion, retryLoad])
 
-  const persist = useCallback(async (next: AppState) => {
-    try {
-      const written = await gardenRepository.save(next)
-      persistedRef.current = next
-      for (const [record, resolve] of mediaWaiters.current) {
-        if (next.customBackdrops.includes(record)) {
-          resolve({ ok: true })
-          mediaWaiters.current.delete(record)
+  const persist = useCallback(
+    async (next: AppState) => {
+      try {
+        const written = await gardenRepository.save(next)
+        persistedRef.current = next
+        for (const [record, settle] of [...mediaWaiters.current]) {
+          if (next.customBackdrops.includes(record)) settle({ ok: true })
         }
-      }
-      setPersistence((current) =>
-        current.writeError ? { ...current, writeError: undefined } : current,
-      )
-      // Nothing changed on disk means nothing for another tab to pick up;
-      // announcing it anyway would make every other tab re-read for no reason.
-      if (written.length > 0) {
-        channelRef.current?.postMessage({
-          type: 'garden-saved',
-          parts: written,
-        })
-      }
-    } catch (error) {
-      for (const [record, resolve] of mediaWaiters.current) {
-        if (next.customBackdrops.includes(record)) {
-          const previous = persistedRef.current
-          // Keep the old scene active on quota/decode write failure. The editor
-          // still owns the unsaved draft; unrelated in-memory edits survive.
-          if (previous) setState((current) => current?.customBackdrops.includes(record) ? {
-            ...current,
-            customBackdrops: previous.customBackdrops,
-            profile: current.profile ? { ...current.profile, selectedCustomBackdropId: previous.profile?.selectedCustomBackdropId } : undefined,
-          } : current)
-          resolve({ ok: false, message: errorMessage(error) })
-          mediaWaiters.current.delete(record)
+        setPersistence((current) =>
+          current.writeError ? { ...current, writeError: undefined } : current,
+        )
+        // Nothing changed on disk means nothing for another tab to pick up;
+        // announcing it anyway would make every other tab re-read for no reason.
+        if (written.length > 0) {
+          channelRef.current?.postMessage({
+            type: 'garden-saved',
+            parts: written,
+          } satisfies SyncMessage)
         }
+      } catch (error) {
+        if (error instanceof GardenDeletedElsewhereError) {
+          resetAfterDeletion()
+          return
+        }
+        if (error instanceof GardenConflictError) {
+          // Another tab wrote first. Its garden is the true one: read it back
+          // and say plainly that this change was not kept.
+          settleMedia({ ok: false, message: error.message })
+          const result = await gardenRepository.load()
+          if (result.status === 'loaded') applyLoadResult(result)
+          else pauseSaving(result.reason)
+          setPersistence((current) => ({ ...current, notice: error.message }))
+          return
+        }
+        for (const [record, settle] of [...mediaWaiters.current]) {
+          if (next.customBackdrops.includes(record)) {
+            const previous = persistedRef.current
+            // Keep the old scene active on quota/decode write failure. The
+            // editor still owns the unsaved draft; unrelated in-memory edits
+            // survive.
+            if (previous)
+              setState((current) =>
+                current?.customBackdrops.includes(record)
+                  ? {
+                      ...current,
+                      customBackdrops: previous.customBackdrops,
+                      profile: current.profile
+                        ? {
+                            ...current.profile,
+                            selectedCustomBackdropId:
+                              previous.profile?.selectedCustomBackdropId,
+                          }
+                        : undefined,
+                    }
+                  : current,
+              )
+            settle({ ok: false, message: errorMessage(error) })
+          }
+        }
+        setPersistence((current) => ({
+          ...current,
+          writeError: errorMessage(error),
+        }))
       }
-      setPersistence((current) => ({
-        ...current,
-        writeError: errorMessage(error),
-      }))
-    }
-  }, [])
+    },
+    [applyLoadResult, pauseSaving, resetAfterDeletion, settleMedia],
+  )
 
   /**
    * Written straight through rather than debounced. Coalescing writes would
    * save a few milliseconds per action, but it also opens a window where a
    * closed tab loses the reflection someone just wrote — a bad trade for a
    * journal. The reference check below already skips redundant writes, so a
-   * state object that did not change is never re-serialised.
+   * state object that did not change is never re-serialised. (Unsaved drafts
+   * are another matter: see lib/drafts.ts.)
    */
   useEffect(() => {
     if (loading || !state || persistence.readOnly) return
@@ -229,7 +382,28 @@ export function useGardenState() {
   // Read-through to the newest state for actions that need to inspect it,
   // without giving those actions a new identity on every render.
   const stateRef = useRef(state)
-  stateRef.current = state
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
+  /** Adopt a garden that just replaced the stored one, and tell other tabs. */
+  const adoptReplacement = useCallback(
+    (garden: AppState, written: GardenPart[]) => {
+      settleMedia({ ok: false, message: 'The garden was replaced.' })
+      persistedRef.current = garden
+      readOnlyRef.current = false
+      setState(progressGarden(garden))
+      setLoading(false)
+      // Every other tab is holding the garden this one just replaced. Without
+      // this they keep it, and the next edit made in one of them writes part
+      // of it back over the restored garden.
+      channelRef.current?.postMessage({
+        type: 'garden-saved',
+        parts: written,
+      } satisfies SyncMessage)
+    },
+    [settleMedia],
+  )
 
   /**
    * Every action keeps a stable identity so memoized views (the month
@@ -239,6 +413,15 @@ export function useGardenState() {
     () => ({
       onboard: (name: string, gardenName: string) => {
         setState(createInitialState(name, gardenName))
+        setPersistence((current) =>
+          current.notice ? { ...current, notice: undefined } : current,
+        )
+        // A new garden is the moment to ask the browser to keep it.
+        void requestPersistentStorage()
+      },
+      /** Clear a notice once the gardener has read it. */
+      dismissNotice: () => {
+        setPersistence((current) => ({ ...current, notice: undefined }))
       },
       addGoal: (
         title: string,
@@ -385,6 +568,8 @@ export function useGardenState() {
             : [...current.moods, entry]
           return awardSunlight({ ...current, moods }, `mood:${localDate}`, now)
         })
+        // The first thing written in the journal is the other moment to ask.
+        void requestPersistentStorage()
       },
       deleteMood: (id: string) => {
         update((current) => ({
@@ -428,6 +613,7 @@ export function useGardenState() {
             now,
           )
         })
+        void requestPersistentStorage()
       },
       updateReflection: (entry: ReflectionEntry) => {
         update((current) => ({
@@ -499,8 +685,8 @@ export function useGardenState() {
       },
       /**
        * Delete a recap. The `moonlight` ledger is deliberately untouched: the
-       * night has been collected, and rewriting what was said about it must not
-       * pay out again.
+       * night has been collected, and rewriting what was said about it must
+       * not pay out again.
        */
       deleteRecap: (id: string) => {
         update((current) => ({
@@ -586,14 +772,19 @@ export function useGardenState() {
        * Save one of the gardener's own images and show it.
        *
        * The record and the reference to it move in a single update, so the
-       * garden is never observed pointing at an image that is not there. It goes
-       * through the hook's ordinary update path rather than writing to the
-       * repository directly, which would race the save effect that owns
+       * garden is never observed pointing at an image that is not there. It
+       * goes through the hook's ordinary update path rather than writing to
+       * the repository directly, which would race the save effect that owns
        * persistence.
+       *
+       * The answer comes exactly once: when that record reaches disk, when the
+       * write fails, when the update turns out not to add it (the garden
+       * changed underneath, say), or after a timeout -- never left hanging,
+       * which used to block every later image save until a reload.
        */
       saveCustomBackdrop: async (
         record: CustomBackdrop,
-      ): Promise<{ ok: boolean; message?: string }> => {
+      ): Promise<MediaResult> => {
         if (readOnlyRef.current)
           return {
             ok: false,
@@ -621,9 +812,35 @@ export function useGardenState() {
         }
         // The normal save effect owns the transaction. Resolve only after that
         // exact image reaches disk, keeping quota failures visible in the editor.
-        return new Promise((resolve) => {
-          mediaWaiters.current.set(record, resolve)
-          update((state) => putCustomBackdrop(state, record))
+        return new Promise<MediaResult>((resolve) => {
+          const settle = (result: MediaResult) => {
+            if (mediaWaiters.current.get(record) !== settle) return
+            mediaWaiters.current.delete(record)
+            window.clearTimeout(timer)
+            resolve(result)
+          }
+          const timer = window.setTimeout(
+            () =>
+              settle({
+                ok: false,
+                message: 'Saving the image took too long. Please try again.',
+              }),
+            MEDIA_SAVE_TIMEOUT_MS,
+          )
+          mediaWaiters.current.set(record, settle)
+          update((state) => {
+            const next = putCustomBackdrop(state, record)
+            if (!next.customBackdrops.includes(record)) {
+              queueMicrotask(() =>
+                settle({
+                  ok: false,
+                  message:
+                    'The garden changed while the image was saving. Please try again.',
+                }),
+              )
+            }
+            return next
+          })
         })
       },
       deleteCustomBackdrop: (id: string) => {
@@ -691,17 +908,53 @@ export function useGardenState() {
             : undefined,
         }))
       },
-      /** A portable copy of the whole garden, for the gardener to keep. */
-      exportGarden: (): string => {
+      /**
+       * A portable copy of the whole garden, for the gardener to keep.
+       *
+       * Refused while the garden is read-only: what is on screen then is a
+       * blank stand-in for a garden this build could not read, and a "backup"
+       * of it would be an empty file that a later restore trusts. The set-aside
+       * copy is what can be downloaded instead (see `quarantinedCopy`).
+       */
+      exportGarden: (): string | undefined => {
+        if (readOnlyRef.current) return undefined
         return JSON.stringify(
           {
             format: 'the-butterfly-garden',
             exportedAt: new Date().toISOString(),
+            appVersion: __APP_VERSION__,
             garden: stateRef.current,
           },
           null,
           2,
         )
+      },
+      /**
+       * The newest set-aside copy of a garden this build could not read, as a
+       * file the gardener can keep, or undefined when there is none.
+       */
+      quarantinedCopy: async (): Promise<string | undefined> => {
+        const [newest] = await gardenRepository.quarantined()
+        if (!newest) return undefined
+        return JSON.stringify(
+          {
+            format: 'the-butterfly-garden-set-aside',
+            exportedAt: new Date().toISOString(),
+            appVersion: __APP_VERSION__,
+            reason: newest.reason,
+            storedAt: newest.storedAt,
+            garden: newest.raw,
+          },
+          null,
+          2,
+        )
+      },
+      /** How many set-aside copies are kept. */
+      countQuarantined: async (): Promise<number> =>
+        (await gardenRepository.quarantined()).length,
+      /** Discard every set-aside copy, once the gardener has kept what they need. */
+      discardQuarantine: async (): Promise<void> => {
+        await gardenRepository.clearQuarantine()
       },
       /** Replace the garden with a previously exported backup. */
       importGarden: async (
@@ -713,47 +966,86 @@ export function useGardenState() {
         } catch {
           return { ok: false, message: 'That file is not a garden backup.' }
         }
-        const imported = readImportedState(parsed)
+        const inspection = inspectImportedState(parsed)
+        const imported = inspection.state
         if (!imported) {
           return {
             ok: false,
-            message:
-              'That backup could not be read. It may be from a newer version of the garden.',
+            message: `That backup could not be restored. ${inspection.refused ?? 'It may be from a newer version of the garden.'}`,
           }
         }
         let written: GardenPart[]
+        const startedAt = new Date().toISOString()
         try {
           if (imported.customBackdrops.length) {
             const { verifyBackdropImages } = await import('../lib/imageImport')
             await verifyBackdropImages(imported.customBackdrops)
           }
-          // Replaced rather than saved: a restore swaps the whole document, and
-          // writing only the difference from the garden being replaced can leave
-          // a collection's stored record behind.
-          written = await gardenRepository.replace(imported)
+          // Replaced rather than saved: a restore swaps the whole document,
+          // and writing only the difference from the garden being replaced can
+          // leave a collection's stored record behind. The garden being
+          // replaced is copied aside first, so the restore can be undone.
+          written = await gardenRepository.replace(imported, { snapshot: true })
         } catch (error) {
           return { ok: false, message: errorMessage(error) }
         }
-        persistedRef.current = imported
-        readOnlyRef.current = false
-        setPersistence({ readOnly: false })
-        setState(progressGarden(imported))
-        setLoading(false)
-        // Every other tab is holding the garden this one just replaced. Without
-        // this they keep it, and the next edit made in one of them writes part
-        // of it back over the restored garden.
-        channelRef.current?.postMessage({
-          type: 'garden-saved',
-          parts: written,
+        const [snapshot] = await gardenRepository.snapshots()
+        setPersistence({
+          readOnly: false,
+          lastRestoreSnapshotId:
+            snapshot && snapshot.takenAt >= startedAt ? snapshot.id : undefined,
         })
+        adoptReplacement(imported, written)
+        const repaired = inspection.repaired
         return {
           ok: true,
-          message: 'Your garden was restored from the backup.',
+          message:
+            repaired > 0
+              ? `Your garden was restored from the backup. ${repaired} damaged ${repaired === 1 ? 'entry was' : 'entries were'} repaired along the way.`
+              : 'Your garden was restored from the backup.',
         }
       },
-      deleteAll: async (): Promise<{ ok: boolean; message?: string }> => {
+      /** Put back the garden a restore replaced. */
+      undoRestore: async (
+        snapshotId: string,
+      ): Promise<{ ok: boolean; message: string }> => {
+        let previous: AppState | undefined
+        let written: GardenPart[]
         try {
-          await gardenRepository.clear()
+          previous = await gardenRepository.snapshot(snapshotId)
+          if (!previous) {
+            return {
+              ok: false,
+              message: 'The garden from before the restore could not be read.',
+            }
+          }
+          written = await gardenRepository.replace(previous)
+        } catch (error) {
+          return { ok: false, message: errorMessage(error) }
+        }
+        setPersistence({ readOnly: false })
+        adoptReplacement(previous, written)
+        return {
+          ok: true,
+          message: 'Your garden is back to how it was before the restore.',
+        }
+      },
+      /**
+       * Start a new garden over one this build could not read.
+       *
+       * The unreadable garden has already been set aside in quarantine by the
+       * load that withheld it, and stays there; this only lets saving resume
+       * for a new garden. Refused when storage itself could not be opened.
+       */
+      startFresh: async (): Promise<{ ok: boolean; message?: string }> => {
+        if ((await gardenRepository.quarantined()).length === 0)
+          return {
+            ok: false,
+            message:
+              'There is no set-aside copy of your garden yet, so starting again could lose it.',
+          }
+        try {
+          await gardenRepository.prepareFreshStart()
         } catch (error) {
           return { ok: false, message: errorMessage(error) }
         }
@@ -764,8 +1056,41 @@ export function useGardenState() {
         setLoading(false)
         return { ok: true }
       },
+      deleteAll: async (): Promise<{ ok: boolean; message?: string }> => {
+        // Other tabs stop writing first, so none can recreate part of the
+        // garden in the moment between the deletion and its announcement.
+        channelRef.current?.postMessage({
+          type: 'garden-clearing',
+        } satisfies SyncMessage)
+        try {
+          await gardenRepository.clear()
+        } catch (error) {
+          if (error instanceof GardenDeletionPendingError) {
+            // The deletion is queued, not cancelled: it completes as soon as
+            // the other tab lets go. This tab behaves as if it already has, so
+            // nothing here can write the garden back.
+            resetAfterDeletion(error.message)
+            return { ok: false, message: error.message }
+          }
+          channelRef.current?.postMessage({
+            type: 'garden-clear-failed',
+          } satisfies SyncMessage)
+          return { ok: false, message: errorMessage(error) }
+        }
+        settleMedia({ ok: false, message: 'The garden was deleted.' })
+        resetDrafts()
+        persistedRef.current = undefined
+        readOnlyRef.current = false
+        setPersistence({ readOnly: false })
+        setState(undefined)
+        setLoading(false)
+        channelRef.current?.postMessage({
+          type: 'garden-cleared',
+        } satisfies SyncMessage)
+        return { ok: true }
+      },
     }),
-    [update],
+    [update, adoptReplacement, resetAfterDeletion, settleMedia],
   )
 
   return { state, loading, persistence, ...actions }

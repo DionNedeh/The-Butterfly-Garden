@@ -729,8 +729,10 @@ describe('garden repository', () => {
       // If this fails you changed the collections. Work the checklist on
       // COLLECTION_STORES in gardenRepository.ts, raise DATABASE_VERSION so
       // installed databases gain the store, then update the numbers here.
+      // Version 6 added the snapshots and drafts stores, which are not
+      // collections of the garden, so the collection count stayed at 12.
       expect(GARDEN_COLLECTIONS).toHaveLength(12)
-      expect(DATABASE_VERSION).toBe(5)
+      expect(DATABASE_VERSION).toBe(6)
     })
 
     it('creates every part store when an older database is upgraded', () => {
