@@ -1233,3 +1233,73 @@ textarea:focus {
 .flight-paused .aura {
   animation-play-state: paused !important;
 }
+
+/* Settings → About: the privacy policy (public/privacy.html) and the
+   third-party notices, shown as pages of their own. */
+.policy-frame {
+  display: block;
+  width: 100%;
+  height: max(420px, 70svh);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  background: #f7f3e8;
+}
+.notices-text {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The Garden Pass in the Android app (shop/GardenPassPanel.tsx). */
+.pass-includes {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+.pass-offer-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.pass-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.pass-offer > div {
+  display: grid;
+  gap: 0.2rem;
+}
+.pass-offer span {
+  color: var(--text-soft);
+}
+.pass-terms {
+  font-size: 0.9rem;
+}
+.pass-lapse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.pass-lapse p {
+  margin: 0;
+}

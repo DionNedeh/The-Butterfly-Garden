@@ -9,6 +9,7 @@ import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
 import { hasGardenPassFeature } from '../lib/gardenPass'
 import { CUSTOM_BACKDROP_SLOTS } from '../lib/customBackdrops'
 import { CustomBackdropImage } from './CustomBackdropImage'
+import { isAndroidApp } from '../lib/platform'
 
 const Editor = lazy(() => import('./CustomBackdropEditor'))
 export interface BackdropActions {
@@ -43,8 +44,9 @@ export function BackdropGallery({
         <span className="count-badge">{gardenBackdrops.length} scenes</span>
       </div>
       <p className="section-explainer">
-        Choose a little world for your garden. Download a scene once to keep it
-        close when you're offline.
+        {isAndroidApp()
+          ? 'Choose a little world for your garden. Every scene is already on your phone.'
+          : "Choose a little world for your garden. Download a scene once to keep it close when you're offline."}
       </p>
       <div className="scene-grid">
         {gardenBackdrops.map((scene) => {
@@ -67,7 +69,9 @@ export function BackdropGallery({
               <div className="scene-card-copy">
                 <span className="eyebrow">
                   {scene.unlock.kind === 'pass'
-                    ? 'Garden Pass preview'
+                    ? isAndroidApp()
+                      ? 'Garden Pass'
+                      : 'Garden Pass preview'
                     : scene.unlock.kind === 'free'
                       ? 'A gift for every garden'
                       : 'Grows with your garden'}
@@ -104,7 +108,9 @@ export function BackdropGallery({
                       : allowed
                         ? 'Use this scene'
                         : scene.unlock.kind === 'pass'
-                          ? 'Garden Pass unavailable'
+                          ? isAndroidApp()
+                            ? 'With the Garden Pass'
+                            : 'Garden Pass unavailable'
                           : `Opens in ${state.profile ? daysUntilBackdrop(state.profile, scene.id) : 0} days`}
                 </button>
               </div>
@@ -204,7 +210,9 @@ export function BackdropGallery({
           <strong>Add your own backdrop</strong>
           <small>
             {!customAllowed
-              ? 'Garden Pass unavailable'
+              ? isAndroidApp()
+                ? 'With the Garden Pass'
+                : 'Garden Pass unavailable'
               : state.customBackdrops.length >= CUSTOM_BACKDROP_SLOTS
                 ? 'Your three image spaces are full'
                 : 'JPEG, PNG or WebP · up to 10 MB'}

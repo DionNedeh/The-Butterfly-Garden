@@ -1,8 +1,11 @@
 # The Butterfly Garden
 
-A private, local-first self-care PWA where small acts of care cultivate a
-butterfly sanctuary. Everything you write stays in this browser: there is no
-account, no server, no analytics, and no third-party request of any kind.
+A private, local-first self-care app where small acts of care cultivate a
+butterfly sanctuary. It runs as a PWA on the web and as an Android app for
+Google Play. Everything you write stays on your device: there is no account, no
+server, no analytics, and no tracking. The only third-party code that ever
+talks to the network is Google Play's billing library in the Android app, and
+only for the optional Garden Pass (see [Privacy](#privacy)).
 
 ## What is included
 
@@ -17,11 +20,13 @@ account, no server, no analytics, and no third-party request of any kind.
 - A searchable shop with outfit previews, coloured glass jars, and twelve flight patterns
 - 25 real butterfly species with field notes, seed guidance, and selectable companions
 - Seven illustrated backdrops and up to three personal images with crop and zoom
-- A free Garden Pass PWA preview; no payment or subscription is active
+- The Garden Pass: a Google Play subscription in the Android app, and a free
+  preview in the PWA (no payment is taken on the web)
 - Three soundscapes synthesised on device — no audio files are downloaded
 - Backup and restore to a JSON file including your personal backdrop images
 - IndexedDB persistence with no account, analytics, or cloud transfer
 - Installable offline PWA and GitHub Pages deployment
+- An Android app for Google Play, built with Capacitor from the same code
 - Reduced-motion, night mode, and responsive mobile support
 
 ## Development
@@ -44,7 +49,7 @@ npm run lint       # ESLint everywhere; type-aware rules over src/
 npm run typecheck  # app, build config and end-to-end tests
 npm test           # unit and component tests
 npm run build
-npm run test:e2e   # Playwright, desktop and mobile, with an axe sweep
+npm run test:e2e   # Playwright: desktop, mobile and the Android bundle, with an axe sweep
 
 npm audit --omit=dev --audit-level=high   # runtime dependencies only
 ```
@@ -58,6 +63,30 @@ npx playwright install chromium
 The lint, typecheck, unit, end-to-end and audit checks run in CI on every push
 and pull request, and a failure blocks the deploy. `npm run build` runs on
 pushes to `main` rather than on pull requests, since only a push can deploy.
+
+## The Android app
+
+The Google Play app is this React app bundled by Capacitor 8, with two small
+native plugins: one saves backups through Android's own save screen, the other
+sells and checks the Garden Pass with Google Play Billing. It needs Java 21,
+Node 24 and the Android SDK (`scripts/setup-android-sdk.sh` installs it).
+
+```bash
+export ANDROID_HOME=~/android-sdk
+npm run build:android          # web bundle into dist-android/
+npx cap sync android           # copy it into android/
+cd android && ./gradlew lintRelease testReleaseUnitTest assembleDebug bundleRelease
+```
+
+`.github/workflows/android.yml` runs those checks on every push and pull
+request. Signed release builds come only from running that workflow by hand on
+`main`, with the upload key held in the `play-release` environment's secrets;
+no key is ever kept in this repository.
+
+- [docs/android-play-plan.md](docs/android-play-plan.md): the decisions behind
+  the app and the Garden Pass, and why each was made
+- [docs/play-store/README.md](docs/play-store/README.md): store listing text,
+  Play Console answers, release steps, and the checks that need a real phone
 
 ## Privacy
 
@@ -75,17 +104,31 @@ Clearing site data removes the garden, so **Settings → Backup and restore**
 writes a copy straight to your device. That file contains everything you have
 written; keep it somewhere you would keep a diary.
 
+In the Android app the garden is kept in the app's private storage, and
+Android's cloud backup is switched off for it; device-to-device transfer to a
+new phone still works. Everything the app shows, including its typefaces and
+images, is inside the app.
+
+The Garden Pass is sold through Google Play, so the Android app includes
+Google's Play Billing Library. That library can send Google diagnostics about
+purchases and its own operation. The app only starts it when the gardener
+opens the Garden Pass, subscribes, manages it in Google Play, or already has a
+Pass; someone who does none of those never runs it. It is never given anything the gardener
+has written. `public/privacy.html` is the full policy, and the app shows it
+under Settings → About.
+
 If the app ever finds a saved garden it cannot read — one written by a newer
 version, for instance — it will not overwrite it. Saving pauses, the record is
 set aside untouched, and a banner explains what happened.
 
-## 3.0 review and future app work
+## 3.0 review and the Garden Pass
 
 See [the local 3.0 review](docs/3.0-LOCAL-REVIEW.md) for implementation coverage,
-verification, and remaining physical-device checks. Version 3.0 remains a PWA.
-`src/lib/gardenPass.ts` separates release preview access from a future verified
-provider; backups do not confer paid access. Native packaging, billing,
-server-side purchase verification, and Google Play submission remain later work.
+verification, and remaining physical-device checks. `src/lib/gardenPass.ts`
+keeps the PWA's preview apart from the Android app's verified Google Play
+subscription, so a preview can never pass for a purchase; backups do not confer
+paid access. Purchases are checked on the device, against Google's signature,
+with no server.
 
 Schema 6 / IndexedDB version 5 includes personal image data. Older app builds
 cannot read a garden after this upgrade; keep an exported backup before updates.
@@ -102,7 +145,10 @@ not a grant of rights to it: no use, copying, modification or redistribution is
 permitted without written permission. See `LICENSE`.
 
 Third-party components that ship inside the built app (React, idb, Workbox,
-and the Fraunces and Nunito Sans typefaces) keep their own permissive licences.
-All of them allow commercial distribution through application stores, and all
-of them require their notices to travel with the build — those are collected in
-`THIRD-PARTY-NOTICES.md`, which must be included in any release.
+and the Fraunces and Nunito Sans typefaces, plus Capacitor and Google's AndroidX
+and Play Billing libraries in the Android app) keep their own licences. All of
+them allow commercial distribution through application stores, and all of them
+require their notices to travel with the build — those are collected in
+`THIRD-PARTY-NOTICES.md`, which must be included in any release. The Android
+build also gathers the notices Google ships inside its libraries, and the app
+shows both under Settings → About → Open-source notices.

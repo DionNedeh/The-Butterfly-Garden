@@ -17,11 +17,42 @@ Run all four before pushing:
 npm run typecheck     # tsc -b, includes the e2e tsconfig
 npm run lint          # eslint
 npm test              # vitest, unit + component
-npm run test:e2e      # playwright, both mobile and desktop projects
+npm run test:e2e      # playwright: desktop, mobile, and the Android bundle
 ```
 
 The e2e suite includes axe accessibility checks, so it catches focus and
-contrast regressions that the unit tests do not.
+contrast regressions that the unit tests do not. Its `android-webview` project
+runs `e2e/android.spec.ts` against the Android build (`dist-android`, served on
+port 4174) in a phone-sized Chromium, where Capacitor's plugins fall back to
+their web implementations.
+
+A change that touches `android/`, `capacitor.config.ts`, the Android build
+mode, or anything behind `isAndroidApp()` also needs the Android checks below.
+
+## The Android app
+
+The Google Play app is the same React app bundled by Capacitor; see
+`docs/android-play-plan.md` for the decisions behind it. It needs Java 21,
+Node 24 and the Android SDK. A fresh container has no SDK; install it with
+`scripts/setup-android-sdk.sh` (needs `dl.google.com` reachable).
+
+```
+export ANDROID_HOME=~/android-sdk
+npm run build:android          # web bundle into dist-android/, base path /
+npx cap sync android           # copy it into android/ and regenerate plugin wiring
+cd android && ./gradlew lintRelease testReleaseUnitTest assembleDebug bundleRelease
+```
+
+`npx cap sync` must run before Gradle on a fresh checkout: it writes the
+gitignored `capacitor-cordova-android-plugins/` project that
+`android/settings.gradle` includes.
+
+Release signing happens only in the `android.yml` workflow's `release` job,
+from the `play-release` environment's secrets. Never create, copy or commit a
+keystore in this repository, and never put key material in a chat.
+
+Launcher icons are generated: edit `public/icons/icon-512.webp`, then run
+`python3 scripts/generate-android-icons.py` (needs Pillow).
 
 ## Playwright browsers
 

@@ -23,6 +23,7 @@ import {
   selectCustomBackdrop as selectCustomBackdropIn,
 } from '../lib/customBackdrops'
 import { hasGardenPassFeature } from '../lib/gardenPass'
+import { isAndroidApp } from '../lib/platform'
 import { performCare } from '../lib/lifecycle'
 import {
   equipOutfitItem,
@@ -606,7 +607,9 @@ export function useGardenState() {
         if (!hasGardenPassFeature('custom-backdrops'))
           return {
             ok: false,
-            message: 'Custom backdrops are not available in this release.',
+            message: isAndroidApp()
+              ? 'Your own backdrops come with the Garden Pass.'
+              : 'Custom backdrops are not available in this release.',
           }
         const current = stateRef.current
         if (!current) return { ok: false, message: 'Open your garden first.' }

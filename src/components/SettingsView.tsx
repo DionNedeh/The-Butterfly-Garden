@@ -2,7 +2,35 @@ import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { useRef, useState } from 'react'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
+import { saveTextDocument } from '../lib/native'
+import { isAndroidApp } from '../lib/platform'
+import { managePassSubscription, type PassStatus } from '../lib/playBilling'
+import { usePassStatus } from '../hooks/usePassStatus'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
+
+/** The Garden Pass card's one-line answer, from Google Play's latest. */
+function passSummary(status: PassStatus): string {
+  switch (status.state) {
+    case 'checking':
+      return 'Checking with Google Play…'
+    case 'unasked':
+      return 'Open the Garden Pass to check your subscription with Google Play.'
+    case 'active':
+      return status.fromCache
+        ? 'Your Garden Pass is open. Google Play will confirm it again once it can be reached.'
+        : 'Your Garden Pass is open.'
+    case 'pending':
+      return 'Google Play is still processing your payment.'
+    case 'suspended':
+      return 'Your Garden Pass is on hold because Google Play could not take the last payment.'
+    case 'inactive':
+      return 'You do not have a Garden Pass. Everything else in the garden is free.'
+    case 'unavailable':
+      return 'Google Play cannot be reached right now.'
+    case 'unconfigured':
+      return 'The Garden Pass is not set up in this version of the app yet.'
+  }
+}
 
 /** Optional inline note rendered beneath the name field. */
 const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
@@ -25,6 +53,16 @@ const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
 
 /** How long a backup's blob URL is kept alive so the download can read it. */
 const BACKUP_URL_LIFETIME_MS = 60_000
+
+/**
+ * What the restore picker offers. On Android the system file picker filters
+ * by the type each storage app reports, and some report a .json file as plain
+ * text or unknown bytes, which would grey out a perfectly good backup. The
+ * file's contents are checked on import either way.
+ */
+const BACKUP_ACCEPT = isAndroidApp()
+  ? 'application/json,.json,text/plain,application/octet-stream'
+  : 'application/json,.json'
 
 function foldName(value: string): number {
   let hash = 2166136261
@@ -55,6 +93,9 @@ export function SettingsView({
   onImportGarden,
   onDeleteAll,
   onOpenWhatsNew,
+  onOpenPrivacy,
+  onOpenNotices,
+  onOpenGardenPass,
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
   onSelectCustomBackdrop,
@@ -72,6 +113,9 @@ export function SettingsView({
   onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
   onDeleteAll: () => Promise<{ ok: boolean; message?: string }>
   onOpenWhatsNew?: () => void
+  onOpenPrivacy?: () => void
+  onOpenNotices?: () => void
+  onOpenGardenPass?: () => void
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
   onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
@@ -86,6 +130,38 @@ export function SettingsView({
   const [backupNote, setBackupNote] = useState<string>()
   const [restoreStep, setRestoreStep] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Inline rather than isAndroidApp(): the bundler folds only an inline
+  // check, which keeps the Android-only cards and Play calls out of the PWA.
+  const android = import.meta.env.VITE_PLATFORM === 'android'
+  const pass = usePassStatus()
+  const [passNote, setPassNote] = useState<string>()
+  const backupFileName = () =>
+    `butterfly-garden-${new Date().toISOString().slice(0, 10)}.json`
+
+  /**
+   * Android: the gardener picks where the file goes, and Android reports
+   * whether it was written, so here -- unlike a browser download -- success
+   * can be stated plainly.
+   */
+  const saveBackupOnAndroid = async () => {
+    setBackupNote(undefined)
+    try {
+      const saved = await saveTextDocument(
+        backupFileName(),
+        'application/json',
+        onExportGarden(),
+      )
+      setBackupNote(
+        saved
+          ? 'Backup saved. Keep the file somewhere safe.'
+          : 'No backup was saved.',
+      )
+    } catch {
+      setBackupNote(
+        'The backup could not be saved there. Try choosing another place.',
+      )
+    }
+  }
 
   const downloadBackup = () => {
     try {
@@ -93,7 +169,7 @@ export function SettingsView({
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `butterfly-garden-${new Date().toISOString().slice(0, 10)}.json`
+      link.download = backupFileName()
       // In the document while it is clicked: a detached anchor works in current
       // browsers, but this is the gardener's only copy of everything they have
       // written and it is not worth the assumption.
@@ -249,18 +325,53 @@ export function SettingsView({
         </button>
       </section>
 
+      {android && (
+        <section
+          className="card pass-settings-card"
+          aria-labelledby="pass-settings-title"
+        >
+          <p className="eyebrow">Subscription</p>
+          <h2 id="pass-settings-title">Garden Pass</h2>
+          <p role="status">{passSummary(pass)}</p>
+          <div className="form-actions">
+            <button className="secondary-button" onClick={onOpenGardenPass}>
+              See the Garden Pass
+            </button>
+            {pass.state !== 'unconfigured' && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  setPassNote(undefined)
+                  void managePassSubscription().then((opened) => {
+                    if (!opened)
+                      setPassNote(
+                        'Google Play could not be opened on this device.',
+                      )
+                  })
+                }}
+              >
+                Manage or cancel in Google Play
+              </button>
+            )}
+          </div>
+          {passNote && <p className="settings-note">{passNote}</p>}
+        </section>
+      )}
+
       <section className="card backup-card" aria-labelledby="backup-title">
         <p className="eyebrow">Keep a copy</p>
         <h2 id="backup-title">Backup and restore</h2>
         <p className="section-explainer">
-          Your garden lives only in this browser. A backup file is the only way
-          to move it to another device or bring it back after site data is
-          cleared. Nothing is uploaded — the file is saved straight to this
-          device.
+          {android
+            ? 'Your garden lives only in this app, on this phone. A backup file is the only sure way to move it to another phone or bring it back if the app is uninstalled or its storage is cleared. Nothing is uploaded — you choose where the file is saved.'
+            : 'Your garden lives only in this browser. A backup file is the only way to move it to another device or bring it back after site data is cleared. Nothing is uploaded — the file is saved straight to this device.'}
         </p>
         <div className="form-actions">
-          <button className="secondary-button" onClick={downloadBackup}>
-            Download a backup
+          <button
+            className="secondary-button"
+            onClick={android ? () => void saveBackupOnAndroid() : downloadBackup}
+          >
+            {android ? 'Save a backup' : 'Download a backup'}
           </button>
           {!restoreStep ? (
             <button
@@ -284,12 +395,14 @@ export function SettingsView({
         {restoreStep && (
           <div className="delete-confirmation" role="alert">
             <strong>
-              Restoring replaces everything currently in this browser.
+              {android
+                ? 'Restoring replaces everything currently in this app.'
+                : 'Restoring replaces everything currently in this browser.'}
             </strong>
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/json,.json"
+              accept={BACKUP_ACCEPT}
               aria-label="Backup file"
               onChange={(event) => {
                 const file = event.target.files?.[0]
@@ -312,28 +425,84 @@ export function SettingsView({
       <section className="card privacy-card" aria-labelledby="privacy-title">
         <p className="eyebrow">Plain-language privacy</p>
         <h2 id="privacy-title">This garden stays on this device</h2>
+        {android ? (
+          <>
+            <p>
+              Your goals, check-ins, reflections, plants, and butterflies are
+              stored only in this app, on this phone. We do not create an
+              account, run analytics, send your entries to a server, or analyze
+              what you write.
+            </p>
+            <p>
+              The garden itself never contacts anyone. Everything it shows,
+              down to its lettering, is already inside the app.
+            </p>
+            <p>
+              The optional Garden Pass is sold through Google Play, which takes
+              the payment; the app never sees your payment details. Google&apos;s
+              billing library, which Play requires for this, is only used when
+              you open the Garden Pass, subscribe, manage it in Google Play, or
+              have a Pass, and Google may receive diagnostic information from
+              it then or shortly after. It is never given anything you have
+              written.
+            </p>
+            <p>
+              Android&apos;s cloud backup is switched off for this app, so your
+              journal is never copied to Google Drive. Moving to a new phone
+              with Android&apos;s own transfer may bring the garden along; a
+              backup file always can.
+            </p>
+            <p>
+              Uninstalling the app or clearing its storage removes your garden.
+              Cross-device sync is not part of this release, so keep a backup
+              above if the garden matters to you.
+            </p>
+          </>
+        ) : (
+          <>
+            <p>
+              Your goals, check-ins, reflections, plants, and butterflies are
+              stored only in this browser. We do not create an account, run
+              analytics, send your entries to a server, or analyze what you
+              write.
+            </p>
+            <p>
+              The garden never contacts a third party — even its lettering is
+              bundled with the app rather than fetched from a font service, so
+              opening it tells no one that you did.
+            </p>
+            <p>
+              The few things it does fetch after loading come from the app
+              itself: the backdrops that unlock later, and a handful of extra
+              letterforms, are left out of the install so a new gardener does
+              not download half a megabyte they cannot use yet.
+            </p>
+            <p>
+              Clearing this site&apos;s browser storage, uninstalling without
+              keeping site data, or using another device can remove your
+              garden. Cross-device sync is not part of this release, so keep a
+              backup above if the garden matters to you.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="card about-card" aria-labelledby="about-title">
+        <p className="eyebrow">About</p>
+        <h2 id="about-title">The Butterfly Garden {__APP_VERSION__}</h2>
         <p>
-          Your goals, check-ins, reflections, plants, and butterflies are stored
-          only in this browser. We do not create an account, run analytics, send
-          your entries to a server, or analyze what you write.
+          A self-care companion, not a medical device. It does not diagnose,
+          treat, cure, or prevent any condition. If you are struggling, please
+          talk to a healthcare professional or someone you trust.
         </p>
-        <p>
-          The garden never contacts a third party — even its lettering is
-          bundled with the app rather than fetched from a font service, so
-          opening it tells no one that you did.
-        </p>
-        <p>
-          The few things it does fetch after loading come from the app itself:
-          the backdrops that unlock later, and a handful of extra letterforms,
-          are left out of the install so a new gardener does not download half a
-          megabyte they cannot use yet.
-        </p>
-        <p>
-          Clearing this site&apos;s browser storage, uninstalling without
-          keeping site data, or using another device can remove your garden.
-          Cross-device sync is not part of this release, so keep a backup above
-          if the garden matters to you.
-        </p>
+        <div className="form-actions">
+          <button className="secondary-button" onClick={onOpenPrivacy}>
+            Privacy policy
+          </button>
+          <button className="text-button" onClick={onOpenNotices}>
+            Open-source notices
+          </button>
+        </div>
       </section>
 
       <section className="card danger-card" aria-labelledby="delete-title">
@@ -341,7 +510,7 @@ export function SettingsView({
         <h2 id="delete-title">Delete all local data</h2>
         <p>
           This removes the complete garden, journal, goals, and collection from
-          this browser. It cannot be undone.
+          {android ? ' this app' : ' this browser'}. It cannot be undone.
         </p>
         {!deleteStep ? (
           <button className="danger-button" onClick={() => setDeleteStep(true)}>
