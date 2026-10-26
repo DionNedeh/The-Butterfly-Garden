@@ -10,6 +10,8 @@ export function FlyingButterfly({
   label = 'Butterfly',
   outfit,
   reduced = false,
+  calm = false,
+  settled = false,
   preview = false,
 }: {
   id: string
@@ -19,6 +21,10 @@ export function FlyingButterfly({
   label?: string
   outfit?: Partial<Record<OutfitSlot, string>>
   reduced?: boolean
+  /** Calm motion: a smaller, slower loop (see lib/motion). */
+  calm?: boolean
+  /** Resting in calm motion: at its static pose, wings still. */
+  settled?: boolean
   preview?: boolean
 }) {
   const size = preview ? 48 : 96
@@ -27,8 +33,9 @@ export function FlyingButterfly({
     pattern,
     index,
     size,
-    reduced,
+    reduced || settled,
     preview,
+    calm,
   )
   return (
     <div
@@ -44,6 +51,7 @@ export function FlyingButterfly({
           outfit={outfit}
           size={size}
           pettable={!preview}
+          flapping={!settled}
         />
       </div>
     </div>
@@ -53,9 +61,11 @@ export function FlyingButterfly({
 export function FlightPreview({
   pattern,
   reduced = false,
+  calm = false,
 }: {
   pattern: FlightPatternId
   reduced?: boolean
+  calm?: boolean
 }) {
   return (
     <div className="motion-preview" aria-hidden="true">
@@ -64,6 +74,7 @@ export function FlightPreview({
         id={`preview-${pattern}`}
         pattern={pattern}
         reduced={reduced}
+        calm={calm}
         preview
       />
     </div>

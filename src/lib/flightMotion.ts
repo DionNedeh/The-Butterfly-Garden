@@ -197,6 +197,8 @@ export interface FlightMotionInput {
   /** Pixels to keep clear at the top for the title and controls. */
   safeTop?: number
   reducedMotion?: boolean
+  /** Calm motion (lib/motion): a smaller, slower loop with softer banking. */
+  calm?: boolean
   /** Number of emitted keyframes. Enough to read as smooth, few enough to
    *  hand to the animation API without cost. */
   samples?: number
@@ -227,6 +229,12 @@ export interface FlightTrack {
 
 const DEFAULT_SAMPLES = 24
 const MAX_BANK_DEGREES = 7
+/** Calm motion keeps this share of a pattern's reach about its centre... */
+const CALM_REACH = 0.7
+/** ...takes this much longer over each loop... */
+const CALM_PACE = 1.6
+/** ...and banks this much as steeply. */
+const CALM_BANK = 0.5
 /** Below this horizontal movement the previous facing is kept, so a sprite
  *  hovering near a turn does not flicker between headings. */
 const FACING_HYSTERESIS = 0.004
@@ -343,6 +351,7 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
     auraMargin = 0,
     safeTop = 0,
     reducedMotion = false,
+    calm = false,
     samples = DEFAULT_SAMPLES,
   } = input
 
@@ -385,7 +394,8 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
     raw.push(sampleAt(motion, index / samples, phaseShift))
   }
 
-  const factor = fitFactor(raw, motion.center)
+  const factor = fitFactor(raw, motion.center) * (calm ? CALM_REACH : 1)
+  const maxBank = MAX_BANK_DEGREES * (calm ? CALM_BANK : 1)
   const toScene = (point: { x: number; y: number }) => ({
     x: left + (motion.center.x + (point.x - motion.center.x) * factor) * usableWidth,
     y: top + (motion.center.y + (point.y - motion.center.y) * factor) * usableHeight,
@@ -428,10 +438,7 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
       facing = dx >= 0 ? 1 : -1
     }
     const slope = Math.abs(dx) < 1e-6 ? 0 : dy / dx
-    const bank = Math.max(
-      -MAX_BANK_DEGREES,
-      Math.min(MAX_BANK_DEGREES, slope * facing * MAX_BANK_DEGREES),
-    )
+    const bank = Math.max(-maxBank, Math.min(maxBank, slope * facing * maxBank))
     keyframes.push({
       offset: offsets[index],
       x: Number(point.x.toFixed(2)),
@@ -441,7 +448,9 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
     })
   }
 
-  const durationMs = Math.round(motion.baseDurationMs * (0.88 + drawDuration * 0.28))
+  const durationMs = Math.round(
+    motion.baseDurationMs * (0.88 + drawDuration * 0.28) * (calm ? CALM_PACE : 1),
+  )
   const delayMs = -Math.round(
     (drawDelay * durationMs + densityIndex * (durationMs / 12)) % durationMs,
   )

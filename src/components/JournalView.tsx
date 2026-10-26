@@ -115,7 +115,7 @@ export function JournalView({
             <strong id="species-journal-title">Butterflies welcomed</strong>
           </span>
           <span className="count-badge">
-            {emerged.length} / {species.length}
+            {emergedBySpecies.size} / {species.length}
           </span>
         </summary>
         <div className="species-grid" aria-labelledby="species-journal-title">

@@ -28,12 +28,65 @@ export const backdropAssets: Record<
   'cloud-garden': { image: cloud, thumbnail: cloudThumb },
 }
 
-export function loadBackdrop(id: GardenBackdropId): Promise<void> {
-  return new Promise((resolve, reject) => {
+/** How long a scene may take before the gallery stops waiting for it. */
+export const BACKDROP_TIMEOUT_MS = 8000
+
+/** Scenes already downloaded and decoded this session. */
+const decoded = new Set<GardenBackdropId>()
+/** Loads under way, so two callers share one download. */
+const loading = new Map<GardenBackdropId, Promise<void>>()
+
+/** Whether a scene can be shown at once, with nothing left to fetch or decode. */
+export function isBackdropReady(id: GardenBackdropId): boolean {
+  return decoded.has(id)
+}
+
+/**
+ * Fetches and decodes a scene, so swapping to it never shows a half-drawn
+ * image. Settles within BACKDROP_TIMEOUT_MS: a stalled request used to leave
+ * the scene gallery waiting, and disabled, for as long as it stalled.
+ */
+export function loadBackdrop(
+  id: GardenBackdropId,
+  timeoutMs = BACKDROP_TIMEOUT_MS,
+): Promise<void> {
+  if (decoded.has(id)) return Promise.resolve()
+  const pending = loading.get(id)
+  if (pending) return pending
+  const load = new Promise<void>((resolve, reject) => {
     const image = new Image()
-    image.onload = () => resolve()
+    let settled = false
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timer)
+      loading.delete(id)
+      if (error) {
+        reject(error)
+        return
+      }
+      decoded.add(id)
+      resolve()
+    }
+    const timer = window.setTimeout(
+      () =>
+        finish(
+          new Error(
+            'This scene is taking too long to open. Please try again in a moment.',
+          ),
+        ),
+      timeoutMs,
+    )
+    image.onload = () => {
+      // Decoded off the main thread before anything swaps to it. An engine
+      // without decode(), or one that refuses, still has a loaded image.
+      void Promise.resolve(image.decode?.()).then(
+        () => finish(),
+        () => finish(),
+      )
+    }
     image.onerror = () =>
-      reject(
+      finish(
         new Error(
           isAndroidApp()
             ? 'This scene could not be opened. Please try again.'
@@ -42,4 +95,6 @@ export function loadBackdrop(id: GardenBackdropId): Promise<void> {
       )
     image.src = backdropAssets[id].image
   })
+  loading.set(id, load)
+  return load
 }

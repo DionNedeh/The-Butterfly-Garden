@@ -15,8 +15,10 @@ import {
   MOONLIGHT_STARDUST_REWARD,
   moonlightForDate,
   NECTAR_PER_SUNLIGHT,
+  nextCompanionName,
   recapForDate,
 } from './progression'
+import { butterflyNames } from '../data/content'
 
 beforeEach(() => {
   vi.stubGlobal('crypto', {
@@ -32,6 +34,34 @@ describe('garden progression', () => {
       state = awardSunlight(state, `activity-${index}`, now)
     }
     expect(state.sunlight).toHaveLength(DAILY_SUNLIGHT_CAP)
+  })
+
+  it('hands back the same plants when none of them can grow', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const grown: AppState = {
+      ...createEmptyState(),
+      plants: [{ id: 'p1', plantId: 'aster', growth: 3, plantedAt: '2026-06-01T00:00:00.000Z' }],
+    }
+    const after = awardSunlight(grown, 'mood:2026-06-13', now)
+    expect(after.sunlight).toHaveLength(1)
+    // Identity, so the repository's change check writes nothing for plants.
+    expect(after.plants).toBe(grown.plants)
+  })
+
+  it('grows only the first plant that can still grow', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const garden: AppState = {
+      ...createEmptyState(),
+      plants: [
+        { id: 'p1', plantId: 'aster', growth: 3, plantedAt: '2026-06-01T00:00:00.000Z' },
+        { id: 'p2', plantId: 'aster', growth: 1, plantedAt: '2026-06-01T00:00:00.000Z' },
+        { id: 'p3', plantId: 'aster', growth: 0, plantedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    }
+    const after = awardSunlight(garden, 'mood:2026-06-13', now)
+    expect(after.plants.map((plant) => plant.growth)).toEqual([3, 2, 0])
+    expect(after.plants[0]).toBe(garden.plants[0])
+    expect(after.plants[2]).toBe(garden.plants[2])
   })
 
   it('does not award the same activity twice', () => {
@@ -318,5 +348,31 @@ describe('collecting Moonlight', () => {
     expect(recapForDate(state, '2026-09-08')).toBeDefined()
     expect(recapForDate(state, '2026-09-09')).toBeUndefined()
     expect(state.recaps[0].createdAt).toBe(afterMidnight.toISOString())
+  })
+})
+
+describe('naming a new companion', () => {
+  it('never gives the third creature a second Sol', () => {
+    // Sol is the starter, and Sol is also third in the list.
+    expect(nextCompanionName([{ name: 'Sol' }, { name: 'Juniper' }])).not.toBe('Sol')
+  })
+
+  it('gives every companion a different name while names remain', () => {
+    const creatures: Array<{ name: string }> = [{ name: 'Sol' }]
+    for (let index = 0; index < butterflyNames.length - 1; index += 1) {
+      creatures.push({ name: nextCompanionName(creatures) })
+    }
+    expect(new Set(creatures.map((creature) => creature.name)).size).toBe(creatures.length)
+  })
+
+  it('numbers a name once every name is taken', () => {
+    const everyone = butterflyNames.map((name) => ({ name }))
+    const next = nextCompanionName(everyone)
+    expect(next).toMatch(/ 2$/)
+    expect(nextCompanionName([...everyone, { name: next }])).not.toBe(next)
+  })
+
+  it('treats a renamed companion by its new name', () => {
+    expect(nextCompanionName([{ name: '  juniper ' }])).not.toBe('Juniper')
   })
 })

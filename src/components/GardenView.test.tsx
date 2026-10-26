@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { species } from '../data/content'
+import { CALM_AIRBORNE } from '../lib/motion'
 import { createInitialState } from '../lib/progression'
 import type { AppState, CreatureInstance } from '../types'
 import { GardenView } from './GardenView'
@@ -83,6 +84,32 @@ describe('GardenView flight scene', () => {
 
     // Three companions plus Marigold, with no rotation needed.
     expect(screen.getAllByRole('button', { name: /^Pet / })).toHaveLength(4)
+  })
+
+  it('in calm motion keeps everyone in the scene but only a few in the air', () => {
+    const emerged = species
+      .slice(0, 20)
+      .map((definition, index) => butterfly(definition.id, index))
+    const seed = createInitialState('Tester', 'Test Garden')
+    renderGarden({
+      creatures: emerged,
+      profile: {
+        ...seed.profile!,
+        activeCompanionId: 'emerged-19',
+        calmMotion: true,
+      },
+    })
+
+    const flyers = screen.getAllByRole('button', { name: /^Pet / })
+    expect(flyers).toHaveLength(12)
+    const flapping = flyers.filter((flyer) =>
+      flyer.querySelector('.butterfly-sprite.flapping'),
+    )
+    expect(flapping).toHaveLength(CALM_AIRBORNE)
+    // The guide and the chosen companion are among those still flying.
+    const flyingNames = flapping.map((flyer) => flyer.getAttribute('aria-label') ?? '')
+    expect(flyingNames.some((name) => name.startsWith('Pet Marigold'))).toBe(true)
+    expect(flyingNames.some((name) => name.startsWith('Pet Flyer 19'))).toBe(true)
   })
 })
 

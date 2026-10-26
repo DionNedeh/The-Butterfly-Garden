@@ -182,6 +182,16 @@ describe('validating a garden', () => {
     })
   })
 
+  it('keeps calm motion only as a true or false choice', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const calm = validateGarden(garden({ profile: { ...base, calmMotion: true } }))
+    expect(calm.state?.profile?.calmMotion).toBe(true)
+    const odd = validateGarden(garden({ profile: { ...base, calmMotion: 'yes' } }))
+    expect(odd.state?.profile?.calmMotion).toBe(false)
+    const older = validateGarden(garden({ profile: base }))
+    expect(older.state?.profile?.calmMotion).toBeUndefined()
+  })
+
   it('still refuses a garden from a newer version, saying so', () => {
     const result = validateGarden(garden({ version: 99 }))
     expect(result.state).toBeUndefined()

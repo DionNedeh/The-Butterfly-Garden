@@ -30,6 +30,10 @@ jobs:
         # Actions are pinned by commit SHA: a mutable tag like @v4 lets an
         # upstream compromise run arbitrary code with this workflow's token.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The job token is not left in .git/config, where npm ci's install
+          # scripts and anything else in the job could read it.
+          persist-credentials: false
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -86,6 +90,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The job token is not left in .git/config, where npm ci's install
+          # scripts and anything else in the job could read it.
+          persist-credentials: false
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -126,9 +134,11 @@ jobs:
           BG_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.BG_UPLOAD_KEYSTORE_PASSWORD }}
           BG_UPLOAD_KEY_ALIAS: ${{ secrets.BG_UPLOAD_KEY_ALIAS }}
           BG_UPLOAD_KEY_PASSWORD: ${{ secrets.BG_UPLOAD_KEY_PASSWORD }}
-        # The run number only ever grows, so each signed build gets a
-        # versionCode Google Play has not seen.
-        run: ./gradlew bundleRelease assembleRelease -PversionCode=${{ github.run_number }}
+          # The run number only ever grows, so each signed build gets a
+          # versionCode Google Play has not seen. Passed through the
+          # environment, never expanded into the script itself.
+          VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew bundleRelease assembleRelease -PversionCode="$VERSION_CODE"
       - name: Check the signatures
         working-directory: android/app/build/outputs
         # jarsigner exits 0 even for an unsigned bundle ("jar is unsigned."),

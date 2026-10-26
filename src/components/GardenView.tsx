@@ -36,6 +36,7 @@ import { Butterfly } from './Butterfly'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
+import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
 
 /** Catalogs are static, so index them once at module load instead of scanning
  *  them inside every render loop. */
@@ -142,6 +143,7 @@ export function GardenView({
   // once. Marigold and the active companion always fly; the rest rotate
   // daily so every butterfly gets regular time in the air.
   const MAX_VISIBLE_FLYERS = 12
+  const motion = motionPreference(state.profile)
   let gardenButterflies = allGardenButterflies
   if (allGardenButterflies.length > MAX_VISIBLE_FLYERS) {
     const always = allGardenButterflies.filter(
@@ -239,16 +241,30 @@ export function GardenView({
   const sceneId = state.profile
     ? effectiveBackdropId(state.profile)
     : 'sunlit-meadow'
-  const [displayedScene, setDisplayedScene] = useState<typeof sceneId>('sunlit-meadow')
+  // The chosen scene from the first frame. Starting from Sunlit Meadow and
+  // swapping once the chosen one loaded flashed the wrong garden on every
+  // visit. A scene changed while the garden is open swaps only once decoded.
+  const [displayedScene, setDisplayedScene] = useState<typeof sceneId>(sceneId)
   const [sceneUnavailable, setSceneUnavailable] = useState(false)
   useEffect(() => {
     let active = true
-    void loadBackdrop(sceneId).then(() => {
-      if (active) { setDisplayedScene(sceneId); setSceneUnavailable(false) }
-    }).catch(() => {
-      if (active) { setDisplayedScene('sunlit-meadow'); setSceneUnavailable(true) }
-    })
-    return () => { active = false }
+    void loadBackdrop(sceneId).then(
+      () => {
+        if (active) {
+          setDisplayedScene(sceneId)
+          setSceneUnavailable(false)
+        }
+      },
+      () => {
+        if (active) {
+          setDisplayedScene('sunlit-meadow')
+          setSceneUnavailable(true)
+        }
+      },
+    )
+    return () => {
+      active = false
+    }
   }, [sceneId])
 
   const gardenFull = state.plants.length >= PLANT_CAPACITY
@@ -294,7 +310,11 @@ export function GardenView({
               speciesId={butterfly.speciesId}
               label={butterfly.label}
               outfit={butterfly.outfit}
-              reduced={state.profile?.reducedMotion}
+              reduced={motion === 'reduce'}
+              calm={motion === 'calm'}
+              // The first few keep flying; the rest settle, which is most
+              // of what makes calm motion lighter on an old phone.
+              settled={motion === 'calm' && index >= CALM_AIRBORNE}
             />
           ))}
         </div>

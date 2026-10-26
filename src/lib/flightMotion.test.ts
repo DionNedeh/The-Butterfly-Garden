@@ -191,3 +191,42 @@ describe('flight motion generation', () => {
     expect(generated.keyframes.length).toBeGreaterThan(2)
   })
 })
+
+describe('calm motion', () => {
+  const extent = (frames: Array<{ x: number; y: number }>) => ({
+    width: Math.max(...frames.map((f) => f.x)) - Math.min(...frames.map((f) => f.x)),
+    height: Math.max(...frames.map((f) => f.y)) - Math.min(...frames.map((f) => f.y)),
+  })
+
+  it.each(flightPatterns.map((pattern) => pattern.id))(
+    'flies %s smaller, slower and with softer banking',
+    (patternId) => {
+      const full = track({ patternId })
+      const calm = track({ patternId, calm: true })
+      expect(calm.durationMs).toBeGreaterThan(full.durationMs * 1.5)
+      const fullExtent = extent(full.keyframes)
+      const calmExtent = extent(calm.keyframes)
+      expect(calmExtent.width).toBeLessThan(fullExtent.width)
+      expect(calmExtent.height).toBeLessThanOrEqual(fullExtent.height)
+      for (const key of calm.keyframes) {
+        expect(Math.abs(key.bank)).toBeLessThanOrEqual(3.5)
+      }
+    },
+  )
+
+  it('still keeps the sprite inside the scene and closes its loop', () => {
+    const calm = generateFlightTrack({ ...PHONE, calm: true, auraMargin: 12 })
+    const scale = calm.scale
+    for (const key of calm.keyframes) {
+      expect(key.x - (64 * scale) / 2).toBeGreaterThanOrEqual(0)
+      expect(key.x + (64 * scale) / 2).toBeLessThanOrEqual(PHONE.bounds.width)
+    }
+    const first = calm.keyframes[0]
+    const last = calm.keyframes[calm.keyframes.length - 1]
+    expect({ x: last.x, y: last.y, facing: last.facing }).toEqual({
+      x: first.x,
+      y: first.y,
+      facing: first.facing,
+    })
+  })
+})

@@ -136,6 +136,26 @@ describe('JournalView', () => {
   })
 })
 
+describe('butterflies welcomed', () => {
+  it('counts species, so two monarchs are one of the set', () => {
+    const base = gardenWithDays(1)
+    const monarch = (id: string) => ({
+      id,
+      speciesId: 'monarch',
+      name: id,
+      stage: 'butterfly' as const,
+      careDates: {},
+      actionLog: {},
+      bond: 0,
+      outfit: {},
+      carePoints: 0,
+      discoveredAt: '2026-01-01T00:00:00.000Z',
+    })
+    renderJournal({ ...base, creatures: [monarch('a'), monarch('b')] })
+    expect(document.querySelector('.field-notes .count-badge')?.textContent).toMatch(/^1 \/ \d+$/)
+  })
+})
+
 describe('recaps in the journal', () => {
   const DAY = '2026-01-01'
   const base = () => createInitialState('Tester', 'Test Garden')

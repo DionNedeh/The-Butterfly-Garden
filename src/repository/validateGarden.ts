@@ -499,6 +499,27 @@ function balance(value: unknown, ctx: Context): number {
   return 0
 }
 
+/**
+ * Image collections already found sound, by identity.
+ *
+ * Checking one runs a pattern over up to ~4 MB of base64. A sync from another
+ * tab validates the whole garden again, though its images rarely changed, and
+ * adopt() hands an unchanged collection back as the very same array. Garden
+ * state is replaced, never edited in place, so an array that passed once
+ * still holds what passed. A changed collection is a new array and is checked
+ * in full.
+ *
+ * Moving images to Blobs in a store of their own (the plan's first idea) would
+ * also save the base64 third, but costs a schema migration and object-URL
+ * lifetimes for three images at most; this removes the repeated cost, which
+ * was the measured problem.
+ */
+const checkedImageCollections = new WeakSet<object>()
+
+function imagesChecked(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && checkedImageCollections.has(value)
+}
+
 const AMBIENT_TRACK_IDS = new Set<string>(
   ambientTracks.map((track) => track.id),
 )
@@ -538,6 +559,9 @@ function checkProfile(
   }
   if (value.ambientSound !== undefined) {
     profile.ambientSound = value.ambientSound === true
+  }
+  if (value.calmMotion !== undefined) {
+    profile.calmMotion = value.calmMotion === true
   }
   if (value.theme !== undefined && !THEMES.has(value.theme as string)) {
     ctx.repaired += 1
@@ -675,11 +699,11 @@ export function validateGarden(value: unknown): GardenValidation {
    * leaves the stored garden untouched and says so.
    */
   const storedCustomBackdrops = candidate.customBackdrops
-  if (
-    storedCustomBackdrops !== undefined &&
-    !isValidCustomBackdropCollection(storedCustomBackdrops)
-  ) {
-    return { repaired: 0, refused: 'One of its images is damaged.' }
+  if (storedCustomBackdrops !== undefined && !imagesChecked(storedCustomBackdrops)) {
+    if (!isValidCustomBackdropCollection(storedCustomBackdrops)) {
+      return { repaired: 0, refused: 'One of its images is damaged.' }
+    }
+    checkedImageCollections.add(storedCustomBackdrops as object)
   }
   const customBackdrops = (storedCustomBackdrops ??
     []) as AppState['customBackdrops']

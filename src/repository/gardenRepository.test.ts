@@ -772,12 +772,17 @@ describe('garden repository', () => {
       const before = maturedGarden()
       const after = checkInWithMood(before)
 
-      // The trap: awardSunlight maps over plants unconditionally, so `plants`
-      // arrives with a new array identity even though no plant grew. A plain
-      // reference check would call it dirty on every single check-in.
-      expect(after.plants).not.toBe(before.plants)
-
+      // Nothing grew, and awardSunlight now hands the plants back as they
+      // were. It used to rebuild the array on every check-in, so a plain
+      // reference check called it dirty each time.
+      expect(after.plants).toBe(before.plants)
       expect(changedParts(before, after).sort()).toEqual(
+        ['meta', 'moods', 'sunlight'].sort(),
+      )
+
+      // A collection rebuilt with the same elements still is not a change.
+      const rebuilt = { ...after, plants: [...after.plants] }
+      expect(changedParts(before, rebuilt).sort()).toEqual(
         ['meta', 'moods', 'sunlight'].sort(),
       )
     })

@@ -77,3 +77,86 @@ describe('outfit auras', () => {
     }
   })
 })
+
+describe('sprite layers', () => {
+  /** The classes the stylesheet animates. Each must sit on a layer. */
+  const MOVING = [
+    '.wing',
+    '.plant-sway',
+    '.egg-wobble',
+    '.caterpillar-inch',
+    '.chrysalis-sway',
+    '.aura-layer',
+  ].join(', ')
+
+  function expectMotionOnLayers(container: HTMLElement) {
+    const moving = [...container.querySelectorAll(MOVING)]
+    expect(moving.length).toBeGreaterThan(0)
+    for (const element of moving) {
+      // Chromium animates a layer on the compositor, but an element inside
+      // an SVG on the main thread, with a layout every frame.
+      expect(element.tagName.toLowerCase()).toBe('svg')
+      expect(element.classList.contains('sprite-layer')).toBe(true)
+      expect(element.parentElement?.classList.contains('sprite-frame')).toBe(true)
+    }
+  }
+
+  it('animates a butterfly only through its layers', () => {
+    const { container } = render(
+      <ButterflySprite
+        speciesId="monarch"
+        outfit={{ aura: 'sparkle-aura', headwear: 'flower-crown', accessory: 'silk-bow' }}
+      />,
+    )
+    expectMotionOnLayers(container)
+    expect(container.querySelectorAll('.wing')).toHaveLength(2)
+  })
+
+  it('animates every life stage and plant only through layers', () => {
+    const stages: CreatureStage[] = ['egg', 'caterpillar', 'chrysalis']
+    for (const stage of stages) {
+      const { container, unmount } = render(
+        <CreatureSprite speciesId="monarch" stage={stage} outfit={{ aura: 'firefly-glow' }} />,
+      )
+      expectMotionOnLayers(container)
+      unmount()
+    }
+    for (const growth of [0, 1, 2, 3]) {
+      const { container, unmount } = render(<FlowerSprite plantId="aster" growth={growth} />)
+      expectMotionOnLayers(container)
+      unmount()
+    }
+  })
+
+  it('keeps the drawing order: wings, body, aura, then what is worn', () => {
+    const { container } = render(
+      <ButterflySprite
+        speciesId="monarch"
+        outfit={{ aura: 'sparkle-aura', headwear: 'flower-crown' }}
+      />,
+    )
+    const layers = [...container.querySelectorAll('.sprite-frame > .sprite-layer')]
+    expect(layers.map((layer) => layer.getAttribute('class'))).toEqual([
+      'sprite-layer wing wing-left',
+      'sprite-layer wing wing-right',
+      'sprite-layer ',
+      'sprite-layer aura-layer aura-motion-sparkle',
+      'sprite-layer ',
+    ])
+    expect(layers[4].querySelector('.outfit-overlay')).not.toBeNull()
+  })
+
+  it('names a creature and hides a flower from assistive technology', () => {
+    const { getByRole, container } = render(
+      <>
+        <CreatureSprite speciesId="monarch" stage="egg" label="Sunny" />
+        <FlowerSprite plantId="aster" growth={3} />
+      </>,
+    )
+    expect(getByRole('img', { name: 'Sunny egg' })).toBeTruthy()
+    expect(container.querySelector('.flower-sprite')?.getAttribute('aria-hidden')).toBe('true')
+    for (const layer of container.querySelectorAll('.sprite-layer')) {
+      expect(layer.getAttribute('aria-hidden')).toBe('true')
+    }
+  })
+})

@@ -180,7 +180,7 @@ const sections: GuideSection[] = [
     eyebrow: 'Yours alone',
     title: 'Privacy, backdrops, and starting over',
     paragraphs: [
-      'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Reduce garden motion in Settings pauses decorative animation.',
+      'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether.',
       'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme.',
       isAndroidApp()
         ? 'Delete all local data in Settings permanently removes this garden from this phone; clearing the app\'s storage or uninstalling it does the same. There is no undo, so treat it kindly.'

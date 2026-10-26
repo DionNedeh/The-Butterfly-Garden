@@ -13,6 +13,7 @@ export function Butterfly({
   pettable = false,
   size = 96,
   outfit,
+  flapping = true,
 }: {
   speciesId: string
   label: string
@@ -20,6 +21,7 @@ export function Butterfly({
   pettable?: boolean
   size?: number
   outfit?: Partial<Record<OutfitSlot, string>>
+  flapping?: boolean
 }) {
   const [petCount, setPetCount] = useState(0)
   const pet = () => {
@@ -40,7 +42,13 @@ export function Butterfly({
       onClick={pet}
       onKeyDown={handleKeyDown}
     >
-      <ButterflySprite speciesId={speciesId} label={label} size={size} outfit={outfit} />
+      <ButterflySprite
+        speciesId={speciesId}
+        label={label}
+        size={size}
+        outfit={outfit}
+        flapping={flapping}
+      />
       {petCount > 0 && (
         <span className="heart-burst" key={petCount} aria-hidden="true">
           <span>♥</span>

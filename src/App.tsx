@@ -81,6 +81,10 @@ import { isAndroidApp } from './lib/platform'
 import { moonlightForDate, sunlightForDate } from './lib/progression'
 import { addDaysToLocalDate } from './lib/date'
 import type { AppView } from './types'
+import { motionClass, motionPreference } from './lib/motion'
+import { isArrival, movedTo } from './lib/hosting'
+import { MovedBanner } from './components/MovedBanner'
+import { Celebrations } from './components/Celebrations'
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -254,13 +258,19 @@ function App() {
             </button>
           </div>
         )}
-        <Onboarding onComplete={finishOnboarding} />
+        <Onboarding
+          onComplete={finishOnboarding}
+          onRestore={garden.importGarden}
+          arriving={isArrival()}
+          movedTo={movedTo()}
+        />
       </>
     )
   }
 
   const state = garden.state
   const profile = state.profile
+  const newAddress = movedTo()
   // Unreachable after the check above; it narrows the type for what follows.
   if (!profile) return <Onboarding onComplete={finishOnboarding} />
   const sunlight = sunlightForDate(state, today)
@@ -299,7 +309,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell theme-${profile.theme ?? 'sunlight'} ${profile.reducedMotion ? 'reduce-motion' : ''}`}
+      className={`app-shell theme-${profile.theme ?? 'sunlight'} ${motionClass(motionPreference(profile))}`}
     >
       <header className="app-header">
         <button
@@ -456,6 +466,12 @@ function App() {
           </span>
         </div>
       )}
+
+      {newAddress && (
+        <MovedBanner target={newAddress} onExportGarden={garden.exportGarden} />
+      )}
+
+      <Celebrations />
 
       <main id="main-content">
         {activeView === 'garden' &&

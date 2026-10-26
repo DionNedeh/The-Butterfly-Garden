@@ -27,6 +27,10 @@ jobs:
         # Actions are pinned by commit SHA: a mutable tag like @v4 lets an
         # upstream compromise run arbitrary code with this workflow's token.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The job token is not left in .git/config, where npm ci's install
+          # scripts and anything else in the job could read it.
+          persist-credentials: false
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -34,6 +38,10 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Verify package signatures and provenance
+        # Checks the registry signatures (and attestations, where published)
+        # of everything npm ci just installed.
+        run: npm audit signatures
       - name: Lint
         run: npm run lint
       - name: Typecheck
@@ -65,6 +73,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The job token is not left in .git/config, where npm ci's install
+          # scripts and anything else in the job could read it.
+          persist-credentials: false
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

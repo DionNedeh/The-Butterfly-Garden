@@ -10,6 +10,7 @@ export function useFlightMotion(
   size: number,
   reduced: boolean,
   preview: boolean,
+  calm = false,
 ) {
   const travel = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLDivElement>(null)
@@ -52,6 +53,7 @@ export function useFlightMotion(
         auraMargin: preview ? 3 : 12,
         safeTop: preview ? 0 : Math.min(130, frame.clientHeight * 0.28),
         reducedMotion: reduced || preference.matches,
+        calm,
       })
       const pose = track.staticPose
       element.style.transform = `translate(${pose.x}px, ${pose.y}px)`
@@ -105,6 +107,6 @@ export function useFlightMotion(
       document.removeEventListener('visibilitychange', sync)
       preference.removeEventListener('change', create)
     }
-  }, [id, pattern, index, size, reduced, preview])
+  }, [id, pattern, index, size, reduced, preview, calm])
   return { travel, heading }
 }

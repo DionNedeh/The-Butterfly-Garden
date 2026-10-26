@@ -17,6 +17,7 @@ import { ShopItemCard } from './shop/ShopItemCard'
 import { ItemPreview } from './shop/ItemPreview'
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { GardenPassPanel } from './shop/GardenPassPanel'
+import { motionPreference } from '../lib/motion'
 
 export type ShopTab =
   | 'supplies'
@@ -411,6 +412,7 @@ export function ShopView({
                     <FlightPreview
                       pattern={pattern.id}
                       reduced={state.profile?.reducedMotion}
+                      calm={motionPreference(state.profile) === 'calm'}
                     />
                     <div className="item-copy">
                       <p className="eyebrow">
