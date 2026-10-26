@@ -317,16 +317,19 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     page.getByRole('button', { name: 'Switch to sunlight mode' }),
   ).toBeVisible()
   // Stars belong to the garden scene; the shell only takes on the night veil.
-  const starLayers = await page.evaluate(() => ({
-    shell: getComputedStyle(document.querySelector('.app-shell')!)
-      .backgroundImage,
-    garden: getComputedStyle(
-      document.querySelector('.garden-hero')!,
-      '::before',
-    ).backgroundImage,
-  }))
-  expect(starLayers.garden).toContain('radial-gradient')
-  expect(starLayers.shell).not.toContain('url(')
+  // Polled: the scene's veil eases in, and WebKit reports the daytime layers
+  // until that transition is done.
+  const starLayers = () =>
+    page.evaluate(() => ({
+      shell: getComputedStyle(document.querySelector('.app-shell')!)
+        .backgroundImage,
+      garden: getComputedStyle(
+        document.querySelector('.garden-hero')!,
+        '::before',
+      ).backgroundImage,
+    }))
+  await expect.poll(async () => (await starLayers()).garden).toContain('radial-gradient')
+  expect((await starLayers()).shell).not.toContain('url(')
   expect(await seriousViolations(page, 'Night garden')).toEqual([])
 
   await editGardenRecord(page, (state) => {
@@ -606,9 +609,26 @@ test('persists emergence and selects the new butterfly as companion', async ({
   await expect(page.getByText('Welcomed as Luna')).toBeVisible()
 })
 
+/**
+ * Whether this engine's Playwright build can reload a page while emulating
+ * offline. WebKit's fails the navigation itself ("WebKit encountered an
+ * internal error") before the service worker can answer, so there the offline
+ * relaunch is left to Chromium and Firefox, and the report says so.
+ */
+function canReloadOffline(browserName: string): boolean {
+  if (browserName !== 'webkit') return true
+  test.info().annotations.push({
+    type: 'not run in WebKit',
+    description:
+      'The offline reload: Playwright WebKit fails it under offline emulation. Chromium and Firefox cover it.',
+  })
+  return false
+}
+
 test('has no serious accessibility violations and relaunches offline', async ({
   page,
   context,
+  browserName,
 }) => {
   await enterGarden(page)
   await page.waitForTimeout(450)
@@ -618,6 +638,7 @@ test('has no serious accessibility violations and relaunches offline', async ({
   await expect(
     page.getByRole('heading', { name: 'Sunlit Sanctuary' }),
   ).toBeVisible()
+  if (!canReloadOffline(browserName)) return
   await context.setOffline(true)
   try {
     await page.reload()
@@ -633,6 +654,8 @@ test('has no serious accessibility violations and relaunches offline', async ({
 test('has no serious accessibility violations on any view', async ({
   page,
 }) => {
+  // Eight full axe runs: more than the default timeout allows in a slower engine.
+  test.slow()
   await enterGarden(page)
   const views = [
     'Garden',
@@ -655,6 +678,7 @@ test('has no serious accessibility violations on any view', async ({
 })
 
 test('every shop tab is reachable and accessible', async ({ page }) => {
+  test.slow()
   await enterGarden(page)
   await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   const offenders: string[] = []
@@ -840,6 +864,7 @@ test.describe('rounding out the day', () => {
 test('personal backdrop crops, survives reload and backup restore, and rejects corrupt media', async ({
   page,
   context,
+  browserName,
 }) => {
   test.setTimeout(60_000)
   await enterGarden(page)
@@ -932,6 +957,7 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
     `data:${image.mimeType};base64,${image.imageData}`,
   )
   await page.evaluate(() => navigator.serviceWorker.ready)
+  if (!canReloadOffline(browserName)) return
   await context.setOffline(true)
   await page.reload()
   await expect(page.locator('.custom-scene-layer img')).toBeVisible()
@@ -977,101 +1003,110 @@ test('species seed guidance opens the right seed without planting it', async ({
   await expect(page.locator('.garden-plant')).toHaveCount(2)
 })
 
-test('flight stays full-sized through turns and respects reduced motion', async ({
-  page,
-}) => {
-  await enterGarden(page)
-  const traveller = page.locator('.flight-traveller').first()
-  await expect
-    .poll(() => traveller.evaluate((el) => el.getAnimations().length))
-    .toBe(1)
-  const determinants = await page
-    .locator('.flight-heading')
-    .first()
-    .evaluate((el) => {
-      const animation = el.getAnimations()[0]
-      animation.pause()
-      const values: number[] = []
-      for (let time = 0; time <= 20000; time += 137) {
-        animation.currentTime = time
-        const matrix = new DOMMatrix(getComputedStyle(el).transform)
-        values.push(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c))
+test.describe('the garden in flight', () => {
+  // These are about motion itself, so they keep it on where a project turns
+  // it off for everything else (WebKit in CI; see playwright.config.ts).
+  test.use({ reducedMotion: 'no-preference' })
+
+  test('flight stays full-sized through turns and respects reduced motion', async ({
+    page,
+  }) => {
+    await enterGarden(page)
+    const traveller = page.locator('.flight-traveller').first()
+    await expect
+      .poll(() => traveller.evaluate((el) => el.getAnimations().length))
+      .toBe(1)
+    const determinants = await page
+      .locator('.flight-heading')
+      .first()
+      .evaluate((el) => {
+        const animation = el.getAnimations()[0]
+        animation.pause()
+        const values: number[] = []
+        for (let time = 0; time <= 20000; time += 137) {
+          animation.currentTime = time
+          const matrix = new DOMMatrix(getComputedStyle(el).transform)
+          values.push(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c))
+        }
+        return values
+      })
+    expect(Math.min(...determinants)).toBeGreaterThan(0.2)
+    const clipped = await page.locator('.garden-flight-space').evaluate(frame => {
+      const traveller = frame.querySelector('.flight-traveller')!
+      const heading = frame.querySelector('.flight-heading')!
+      const bounds = frame.getBoundingClientRect()
+      const animations = [...traveller.getAnimations(), ...heading.getAnimations()]
+      animations.forEach(animation => animation.pause())
+      for (let time = 0; time <= 25000; time += 191) {
+        animations.forEach(animation => { animation.currentTime = time })
+        const rect = heading.getBoundingClientRect()
+        if (rect.left < bounds.left || rect.right > bounds.right || rect.top < bounds.top || rect.bottom > bounds.bottom) return true
       }
-      return values
+      return false
     })
-  expect(Math.min(...determinants)).toBeGreaterThan(0.2)
-  const clipped = await page.locator('.garden-flight-space').evaluate(frame => {
-    const traveller = frame.querySelector('.flight-traveller')!
-    const heading = frame.querySelector('.flight-heading')!
-    const bounds = frame.getBoundingClientRect()
-    const animations = [...traveller.getAnimations(), ...heading.getAnimations()]
-    animations.forEach(animation => animation.pause())
-    for (let time = 0; time <= 25000; time += 191) {
-      animations.forEach(animation => { animation.currentTime = time })
-      const rect = heading.getBoundingClientRect()
-      if (rect.left < bounds.left || rect.right > bounds.right || rect.top < bounds.top || rect.bottom > bounds.bottom) return true
-    }
-    return false
+    expect(clipped).toBe(false)
+
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await expect
+      .poll(() => traveller.evaluate((el) => el.getAnimations().length))
+      .toBe(0)
+    const before = await traveller.getAttribute('style')
+    await page.waitForTimeout(150)
+    expect(await traveller.getAttribute('style')).toBe(before)
   })
-  expect(clipped).toBe(false)
 
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await expect
-    .poll(() => traveller.evaluate((el) => el.getAnimations().length))
-    .toBe(0)
-  const before = await traveller.getAttribute('style')
-  await page.waitForTimeout(150)
-  expect(await traveller.getAttribute('style')).toBe(before)
-})
+  test('butterflies keep flying while hovered, tapped, and holding focus', async ({
+    page,
+  }) => {
+    await enterGarden(page)
+    const flyer = page.locator('.garden-flight-space .flight-traveller').first()
+    await expect
+      .poll(() => flyer.evaluate((el) => el.getAnimations().length))
+      .toBe(1)
 
-test('butterflies keep flying while hovered, tapped, and holding focus', async ({
-  page,
-}) => {
-  await enterGarden(page)
-  const flyer = page.locator('.garden-flight-space .flight-traveller').first()
-  await expect
-    .poll(() => flyer.evaluate((el) => el.getAnimations().length))
-    .toBe(1)
+    /** Travel, facing and the CSS wing flap, for one butterfly. */
+    const flightState = () =>
+      flyer.evaluate((el) => {
+        const wing = el.querySelector('.wing')
+        return {
+          travel: el.getAnimations().map((a) => a.playState),
+          heading: (
+            el.querySelector('.flight-heading')?.getAnimations() ?? []
+          ).map((a) => a.playState),
+          wing: wing ? getComputedStyle(wing).animationPlayState : 'none',
+          paused: el.classList.contains('flight-paused'),
+        }
+      })
 
-  /** Travel, facing and the CSS wing flap, for one butterfly. */
-  const flightState = () =>
-    flyer.evaluate((el) => {
-      const wing = el.querySelector('.wing')
-      return {
-        travel: el.getAnimations().map((a) => a.playState),
-        heading: (
-          el.querySelector('.flight-heading')?.getAnimations() ?? []
-        ).map((a) => a.playState),
-        wing: wing ? getComputedStyle(wing).animationPlayState : 'none',
-        paused: el.classList.contains('flight-paused'),
-      }
-    })
+    const stillFlying = async (moment: string) => {
+      const state = await flightState()
+      expect(state.travel, `${moment}: travel`).not.toContain('paused')
+      expect(state.heading, `${moment}: heading`).not.toContain('paused')
+      expect(state.wing, `${moment}: wing flap`).not.toBe('paused')
+      expect(state.paused, `${moment}: flight-paused class`).toBe(false)
+    }
 
-  const stillFlying = async (moment: string) => {
-    const state = await flightState()
-    expect(state.travel, `${moment}: travel`).not.toContain('paused')
-    expect(state.heading, `${moment}: heading`).not.toContain('paused')
-    expect(state.wing, `${moment}: wing flap`).not.toBe('paused')
-    expect(state.paused, `${moment}: flight-paused class`).toBe(false)
-  }
+    const marigold = flyer.locator('.butterfly')
+    await stillFlying('at rest')
 
-  const marigold = flyer.locator('.butterfly')
-  await stillFlying('at rest')
+    await marigold.hover({ force: true })
+    await stillFlying('while hovered')
 
-  await marigold.hover({ force: true })
-  await stillFlying('while hovered')
+    // A tap pets the butterfly and leaves focus on it; neither may stop flight.
+    await marigold.click({ force: true })
+    await stillFlying('after a tap')
 
-  // A tap pets the butterfly and leaves focus on it; neither may stop flight.
-  await marigold.click({ force: true })
-  await stillFlying('after a tap')
+    await page.mouse.move(4, 4)
+    await page.waitForTimeout(200)
+    await stillFlying('pointer away, still focused')
 
-  await page.mouse.move(4, 4)
-  await page.waitForTimeout(200)
-  await stillFlying('pointer away, still focused')
-
-  // Work nobody can see still stops: scrolling the scene out of view pauses it.
-  await mainNav(page).getByRole('button', { name: 'Guide', exact: true }).click()
-  await expect.poll(async () => (await flightState()).paused).toBe(true)
+    // Work nobody can see still stops: scrolling the scene out of view pauses
+    // it, and bringing it back resumes it.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    await expect.poll(async () => (await flightState()).paused).toBe(true)
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect.poll(async () => (await flightState()).paused).toBe(false)
+  })
 })
 
 test('a garden that cannot be read opens recovery, never onboarding', async ({

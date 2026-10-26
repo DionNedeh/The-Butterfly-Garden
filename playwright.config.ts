@@ -5,18 +5,24 @@ import { defineConfig, devices, type Project } from '@playwright/test'
  * is always a Chromium WebView. Opt-in with E2E_ALL_BROWSERS=1, because these
  * engines are installed only in CI (see the `browsers` job in
  * deploy-pages.yml); a contributor's machine usually has Chromium alone.
+ *
+ * WebKit runs with reduced motion. On a CI runner it renders without a GPU,
+ * and with every butterfly and plant animating it fell to a frame every second
+ * or so and then stopped painting altogether, which no real iPhone does. These
+ * runs are for what Safari does differently with storage, layout and input;
+ * the tests that are about motion turn it back on for themselves.
  */
 const otherBrowsers: Project[] = process.env.E2E_ALL_BROWSERS
   ? [
       {
         name: 'desktop-webkit',
         testIgnore: /android\.spec\.ts/,
-        use: { ...devices['Desktop Safari'] },
+        use: { ...devices['Desktop Safari'], reducedMotion: 'reduce' },
       },
       {
         name: 'mobile-webkit',
         testIgnore: /android\.spec\.ts/,
-        use: { ...devices['iPhone 15'] },
+        use: { ...devices['iPhone 15'], reducedMotion: 'reduce' },
       },
       {
         name: 'desktop-firefox',

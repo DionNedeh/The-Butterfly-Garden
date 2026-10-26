@@ -14,10 +14,12 @@
     <!-- The garden makes no network requests of its own: scripts, styles,
          fonts and images all come from this origin, and nothing may be sent
          anywhere. Typography is bundled (see src/fonts.css) rather than
-         fetched from a font CDN, so no third party ever sees a visit. -->
+         fetched from a font CDN, so no third party ever sees a visit.
+         frame-ancestors is not listed: a meta tag cannot carry it, browsers
+         log an error for trying, and lib/hosting.ts handles being framed. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
 
     <title>The Butterfly Garden</title>

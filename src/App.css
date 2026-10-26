@@ -735,6 +735,14 @@
   z-index: 1;
 }
 
+/* A tap belongs to the plant whose slot it lands in. Sprites overhang their
+   slots, and the selected plant is lifted above the rest, so letting the
+   sprite take taps sent a tap beside it to the wrong plant on narrow
+   screens. The slots tile the row, so every point has exactly one owner. */
+.garden-plant .sprite-frame {
+  pointer-events: none;
+}
+
 .garden-plant:focus-visible .flower-sprite,
 .garden-plant[aria-pressed='true'] .flower-sprite {
   outline: 3px solid #fff4a8;
