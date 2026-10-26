@@ -7,6 +7,9 @@ import { currentRelease, hasUnseenRelease } from './data/releases'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { Onboarding } from './components/Onboarding'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { RecoveryScreen } from './components/RecoveryScreen'
+import { ViewProblem } from './components/ViewProblem'
 import { SplashScreen } from './components/SplashScreen'
 import { TodayView } from './components/TodayView'
 import { UpdatePrompt } from './components/UpdatePrompt'
@@ -76,6 +79,7 @@ import {
 } from './lib/native'
 import { isAndroidApp } from './lib/platform'
 import { moonlightForDate, sunlightForDate } from './lib/progression'
+import { addDaysToLocalDate } from './lib/date'
 import type { AppView } from './types'
 
 interface InstallPromptEvent extends Event {
@@ -224,11 +228,40 @@ function App() {
   }
 
   if (!garden.state?.profile) {
-    return <Onboarding onComplete={finishOnboarding} />
+    // A garden is stored but could not be read: never greet its gardener as
+    // a newcomer. The recovery screen says what happened and what to do.
+    if (garden.persistence.readOnly) {
+      return (
+        <RecoveryScreen
+          reason={garden.persistence.reason}
+          onRestore={garden.importGarden}
+          onDownloadSetAside={garden.quarantinedCopy}
+          onStartFresh={garden.startFresh}
+        />
+      )
+    }
+    return (
+      <>
+        {garden.persistence.notice && (
+          <div className="persistence-banner notice-banner" role="status">
+            <span>{garden.persistence.notice}</span>
+            <button
+              className="notice-dismiss"
+              aria-label="Dismiss notice"
+              onClick={garden.dismissNotice}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <Onboarding onComplete={finishOnboarding} />
+      </>
+    )
   }
 
   const state = garden.state
   const profile = state.profile
+  // Unreachable after the check above; it narrows the type for what follows.
   if (!profile) return <Onboarding onComplete={finishOnboarding} />
   const sunlight = sunlightForDate(state, today)
   const activeTrackName = ambientTrackName(profile.ambientTrack)
@@ -244,16 +277,24 @@ function App() {
   /**
    * The recap is the one view that can stop being available while the gardener
    * is standing in it: four o'clock arrives, or another tab collects the night
-   * first. Falling back to Today is derived rather than corrected after the
-   * fact, so the flow is never briefly rendered against a day already closed.
+   * first.
    *
-   * It is tied to the day it was opened for, not merely to the recap being
-   * available. Otherwise a tab left open overnight would fall back to Today at
-   * four in the morning while still holding 'recap', and then walk itself back
-   * into the flow the moment the next evening opened -- with nobody having
-   * asked for it.
+   * A recap already opened stays open for the day it was opened for, until it
+   * is collected or left -- four o'clock arriving mid-answer used to drop the
+   * gardener back on Today with their words gone. It is bounded to that day or
+   * the one after, so a tab left in the recap does not keep offering a night
+   * from days ago. Another tab collecting the night still closes it, derived
+   * here rather than corrected after the fact, so the flow is never rendered
+   * against a day already closed.
    */
-  const inRecap = view === 'recap' && recapOpenedFor === recapTarget
+  const openedRecapDate =
+    recapOpenedFor &&
+    !garden.persistence.readOnly &&
+    !moonlightForDate(state, recapOpenedFor) &&
+    addDaysToLocalDate(recapOpenedFor, 1) >= today
+      ? recapOpenedFor
+      : undefined
+  const inRecap = view === 'recap' && openedRecapDate !== undefined
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
 
   return (
@@ -364,7 +405,16 @@ function App() {
         </div>
       )}
 
-      {garden.persistence.readOnly && (
+      {garden.persistence.readOnly &&
+        garden.persistence.reason === 'deleting' && (
+          <div className="persistence-banner" role="alert">
+            <strong>This garden is being deleted in another tab.</strong>
+            <span>Saving is paused here so nothing can be written back.</span>
+          </div>
+        )}
+
+      {garden.persistence.readOnly &&
+        garden.persistence.reason !== 'deleting' && (
         <div className="persistence-banner" role="alert">
           <strong>Your saved garden could not be opened.</strong>
           <span>
@@ -379,6 +429,19 @@ function App() {
           <span>
             Saving is paused so nothing already stored is overwritten.
           </span>
+        </div>
+      )}
+
+      {garden.persistence.notice && (
+        <div className="persistence-banner notice-banner" role="status">
+          <span>{garden.persistence.notice}</span>
+          <button
+            className="notice-dismiss"
+            aria-label="Dismiss notice"
+            onClick={garden.dismissNotice}
+          >
+            ×
+          </button>
         </div>
       )}
 
@@ -459,6 +522,10 @@ function App() {
             </aside>
           )}
 
+        <ErrorBoundary
+          resetKey={activeView}
+          fallback={() => <ViewProblem onHome={() => setView('garden')} />}
+        >
         <Suspense
           fallback={
             <p className="view-loading" role="status">
@@ -535,13 +602,13 @@ function App() {
               }}
             />
           )}
-          {inRecap && recapTarget && (
+          {inRecap && openedRecapDate && (
             <MoonlightRecap
               state={state}
-              targetDate={recapTarget}
+              targetDate={openedRecapDate}
               today={today}
               onCollect={(submission) =>
-                garden.collectMoonlight(recapTarget, submission)
+                garden.collectMoonlight(openedRecapDate, submission)
               }
               onClose={() => setView('today')}
             />
@@ -582,6 +649,10 @@ function App() {
               onSelectBackdrop={garden.selectBackdrop}
               onExportGarden={garden.exportGarden}
               onImportGarden={garden.importGarden}
+              onUndoRestore={garden.undoRestore}
+              onDownloadSetAside={garden.quarantinedCopy}
+              onDiscardSetAside={garden.discardQuarantine}
+              onCountSetAside={garden.countQuarantined}
               onDeleteAll={garden.deleteAll}
               onOpenWhatsNew={() => {
                 garden.markReleaseSeen(currentRelease.id)
@@ -596,6 +667,7 @@ function App() {
             />
           )}
         </Suspense>
+        </ErrorBoundary>
       </main>
 
       <nav className="bottom-nav" aria-label="Mobile navigation">

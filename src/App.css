@@ -147,6 +147,129 @@
   font-size: 0.9rem;
 }
 
+/* Saving paused, a failed write, or news from another tab. These carry the
+   most important sentences the app ever shows, so they must look like it. */
+.persistence-banner {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.75rem auto 0;
+  width: min(1120px, calc(100% - 2rem));
+  border: 1px solid #e3b4ab;
+  border-radius: 16px;
+  background: #fbeae6;
+  padding: 0.8rem 1rem;
+  color: #6b2a26;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.persistence-banner strong {
+  font-size: 0.98rem;
+}
+
+.notice-banner {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  border-color: #b9d2c3;
+  background: #e8f2ec;
+  color: var(--forest-dark);
+}
+
+.settings-note {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.settings-note.error {
+  color: var(--danger);
+}
+
+/* A file input dressed as a button: the input itself stays on top, invisible
+   but focusable, so keyboard and screen-reader users reach the real control. */
+.file-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-button:focus-within {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Safe mode and the recovery screen: calm, readable, nothing animated. */
+.safe-mode {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100svh;
+  place-items: center;
+  padding: 1.2rem;
+  background: var(--cream);
+  color: var(--ink);
+}
+
+.safe-mode-card {
+  display: grid;
+  gap: 0.9rem;
+  width: min(620px, 100%);
+}
+
+.safe-mode-card h1 {
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+}
+
+.safe-mode-detail summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.safe-mode-fresh {
+  border-top: 1px solid var(--line);
+  padding-top: 0.8rem;
+}
+
+.view-problem {
+  display: grid;
+  gap: 0.8rem;
+  width: min(720px, 100%);
+  margin: 2rem auto;
+}
+
+.restore-preview,
+.set-aside,
+.storage-status {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+}
+
+.restore-preview ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.restore-preview h3 {
+  margin: 0;
+}
+
+.undo-restore {
+  margin-top: 0.6rem;
+}
+
 #main-content {
   padding: clamp(1rem, 3vw, 2rem);
 }
@@ -2402,6 +2525,28 @@
 .theme-night .protected-plant-note {
   background: #3c3328;
   color: #efd1a4;
+}
+
+.theme-night .persistence-banner {
+  border-color: rgba(239, 170, 160, 0.45);
+  background: #3a2326;
+  color: #f6d6d0;
+}
+
+.theme-night .notice-banner {
+  border-color: rgba(167, 202, 188, 0.35);
+  background: #17323a;
+  color: #d9f2e5;
+}
+
+.theme-night .settings-note.error {
+  color: #f2a99f;
+}
+
+.theme-night .restore-preview,
+.theme-night .set-aside,
+.theme-night .storage-status {
+  border-color: rgba(167, 202, 188, 0.2);
 }
 
 .theme-night .card,

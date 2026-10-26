@@ -908,6 +908,12 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
       mimeType: 'application/json',
       buffer: Buffer.from(JSON.stringify(corrupted)),
     })
+  // A restore shows what the file holds first, and replaces nothing until
+  // the gardener agrees. The damaged image is caught on that agreement.
+  await expect(
+    page.getByRole('heading', { name: /this backup holds/i }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Restore this backup' }).click()
   await expect(page.getByText(/not a readable JPEG/)).toBeVisible()
   await expect(page.getByLabel('Garden name', { exact: true })).not.toHaveValue(
     'Must not replace the garden',
@@ -919,7 +925,12 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
       mimeType: 'application/json',
       buffer: Buffer.from(text),
     })
+  await page.getByRole('button', { name: 'Restore this backup' }).click()
   await expect(page.getByText(/restored/i).last()).toBeVisible()
+  // The garden it replaced was kept, so the restore can be undone.
+  await expect(
+    page.getByRole('button', { name: 'Undo the restore' }),
+  ).toBeVisible()
   await mainNav(page)
     .getByRole('button', { name: 'Garden', exact: true })
     .click()
@@ -1068,4 +1079,57 @@ test('butterflies keep flying while hovered, tapped, and holding focus', async (
   // Work nobody can see still stops: scrolling the scene out of view pauses it.
   await mainNav(page).getByRole('button', { name: 'Guide', exact: true }).click()
   await expect.poll(async () => (await flightState()).paused).toBe(true)
+})
+
+test('a garden that cannot be read opens recovery, never onboarding', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await page.getByRole('heading', { level: 1 }).first().waitFor()
+  // Damage one stored collection, the way a failed disk or a bad hand-edit
+  // might, then open the app again.
+  await page.waitForTimeout(250)
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const tx = db.transaction('moods', 'readwrite')
+          tx.objectStore('moods').put('not a collection', 'current')
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          tx.onerror = () => reject(tx.error)
+        }
+      }),
+  )
+  await page.reload()
+
+  await expect(
+    page.getByRole('heading', { name: /your saved garden could not be opened/i }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: /welcome to your butterfly garden/i }),
+  ).toHaveCount(0)
+
+  // The set-aside copy is the garden exactly as it was stored.
+  const downloadPromise = page.waitForEvent('download')
+  await page
+    .getByRole('button', { name: /download the set-aside copy/i })
+    .click()
+  const download = await downloadPromise
+  const copy = JSON.parse(await readFile((await download.path())!, 'utf8')) as {
+    garden: { moods: unknown }
+  }
+  expect(copy.garden.moods).toBe('not a collection')
+
+  const accessibility = await new AxeBuilder({ page }).analyze()
+  expect(
+    accessibility.violations.filter(
+      (v) => v.impact === 'serious' || v.impact === 'critical',
+    ),
+  ).toEqual([])
 })

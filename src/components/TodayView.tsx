@@ -16,6 +16,7 @@ import {
   sunlightForDate,
 } from '../lib/progression'
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
+import { clearDraft, useDraft } from '../lib/drafts'
 import type { AppState, Goal, GoalSchedule, MoodEntry } from '../types'
 import { Icon } from './Icons'
 import { MonthPlanner } from './MonthPlanner'
@@ -66,11 +67,16 @@ export function TodayView({
   const [mood, setMood] = useSyncedDraft<MoodEntry['level']>(
     existingMood?.level ?? 3,
   )
-  const [moodNote, setMoodNote] = useSyncedDraft(existingMood?.note ?? '')
+  // Unsaved words are kept as drafts across page changes and reloads, keyed
+  // by the day they belong to (lib/drafts.ts).
+  const moodNoteKey = `mood-note:${today}`
+  const reflectionKey = `reflection:${today}`
+  const [moodNote, setMoodNote] = useDraft(moodNoteKey, existingMood?.note ?? '')
   const [goalTitle, setGoalTitle] = useState('')
   const [schedule, setSchedule] = useState<GoalSchedule>('daily')
   const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
-  const [reflection, setReflection] = useSyncedDraft(
+  const [reflection, setReflection] = useDraft(
+    reflectionKey,
     existingReflection?.body ?? '',
   )
   const [editingGoal, setEditingGoal] = useState<Goal>()
@@ -199,7 +205,10 @@ export function TodayView({
         </label>
         <button
           className="primary-button"
-          onClick={() => onSaveMood(mood, moodNote)}
+          onClick={() => {
+            onSaveMood(mood, moodNote)
+            clearDraft(moodNoteKey)
+          }}
         >
           {existingMood ? 'Update check-in' : 'Save check-in'}
         </button>
@@ -452,7 +461,10 @@ export function TodayView({
         <button
           className="primary-button"
           disabled={!reflection.trim()}
-          onClick={() => onSaveReflection(prompt.id, reflection)}
+          onClick={() => {
+            onSaveReflection(prompt.id, reflection)
+            clearDraft(reflectionKey)
+          }}
         >
           {existingReflection ? 'Update reflection' : 'Keep this reflection'}
         </button>
