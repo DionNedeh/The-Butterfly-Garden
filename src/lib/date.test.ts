@@ -186,3 +186,11 @@ describe('the Moonlight recap window', () => {
     expect(at(2026, 8, 8, 12).targetDate).toBeUndefined()
   })
 })
+
+describe('when the recap opens', () => {
+  it('reads as the gardener’s clock reads', async () => {
+    const { recapOpensAt } = await import('./date')
+    expect(recapOpensAt('en-US')).toMatch(/^6\s?PM$/)
+    expect(recapOpensAt('en-GB')).toBe('18')
+  })
+})

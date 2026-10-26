@@ -52,10 +52,6 @@ export function jarForPlant(state: AppState, plantId: string) {
     : undefined
 }
 
-export function jarCapacityReached(state: AppState): boolean {
-  return state.jars.length >= JAR_CAPACITY
-}
-
 export function availableJars(state: AppState): JarInstance[] {
   const placedJarIds = new Set(state.jarPlacements.map((placement) => placement.jarId))
   return state.jars.filter((jar) => !placedJarIds.has(jar.id))

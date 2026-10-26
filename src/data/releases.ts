@@ -96,6 +96,11 @@ export const releases: ReleaseNote[] = [
 /** The release this build is describing. */
 export const currentRelease = releases[0]
 
+/** "3.0" from "3.0.0": how the app speaks of a release. */
+export function releaseName(release: Pick<ReleaseNote, 'version'> = currentRelease): string {
+  return release.version.split('.').slice(0, 2).join('.')
+}
+
 /**
  * Whether a gardener has release notes waiting.
  *

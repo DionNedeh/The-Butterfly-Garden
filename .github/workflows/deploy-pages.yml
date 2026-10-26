@@ -46,6 +46,10 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Unused files and exports
+        # knip: anything exported that nothing imports fails the build, so dead
+        # code does not quietly come back (knip.json says what counts).
+        run: npm run knip
       - name: Unit tests
         run: npm test
       - name: Audit runtime dependencies
@@ -54,6 +58,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests
         run: npm run test:e2e
+      - name: Bundle budgets
+        # The e2e servers have just built dist/, so this only measures it.
+        run: npm run budgets
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

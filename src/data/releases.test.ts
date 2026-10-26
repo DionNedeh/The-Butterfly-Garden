@@ -55,3 +55,12 @@ describe('release notes', () => {
     expect(hasUnseenRelease(currentRelease.id)).toBe(false)
   })
 })
+
+describe('speaking of a release', () => {
+  it('names it by major and minor version', async () => {
+    const { releaseName, currentRelease } = await import('./releases')
+    expect(releaseName({ version: '3.0.0' })).toBe('3.0')
+    expect(releaseName({ version: '3.12.4' })).toBe('3.12')
+    expect(releaseName()).toBe(currentRelease.version.split('.').slice(0, 2).join('.'))
+  })
+})

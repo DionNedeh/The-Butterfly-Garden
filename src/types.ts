@@ -352,7 +352,6 @@ export interface FlightPatternDefinition {
   description: string
   cost: number
   currency: Extract<CurrencyId, 'nectar' | 'stardust'>
-  animationClass: string
 }
 
 export interface JarColorDefinition {

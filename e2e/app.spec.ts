@@ -175,6 +175,36 @@ async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
 }
 
+test('pages live in the address: Back, Forward and a reload all keep their place', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await expect(page).toHaveURL(/\/The-Butterfly-Garden\/$/)
+
+  await mainNav(page).getByRole('button', { name: 'Journal', exact: true }).click()
+  await expect(page).toHaveURL(/#\/journal$/)
+  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await expect(page).toHaveURL(/#\/shop$/)
+
+  await page.goBack()
+  await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+  // A reload used to land on the garden whatever page was open.
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+
+  await page.goBack()
+  await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+  await page.goForward()
+  await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+
+  // A link straight to a page opens it; one that names no page opens the garden.
+  await page.goto('/The-Butterfly-Garden/#/settings')
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  await page.goto('/The-Butterfly-Garden/#/nowhere')
+  await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+  await expect(page).toHaveURL(/\/The-Butterfly-Garden\/$/)
+})
+
 test('onboards, completes care, and writes a private journal entry', async ({
   page,
 }) => {
@@ -886,6 +916,9 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   await editor.getByRole('button', { name: 'Save & use backdrop' }).click()
   await expect(editor).not.toBeVisible()
   await page.reload()
+  // A reload keeps its page now (#/shop); the image shows in the garden.
+  await expect(page.getByRole('heading', { level: 1, name: /stock up/i })).toBeVisible()
+  await mainNav(page).getByRole('button', { name: 'Garden', exact: true }).click()
   await expect(page.locator('.custom-scene-layer img')).toBeVisible()
   await expect(page.locator('.custom-scene-layer img')).toHaveJSProperty(
     'naturalWidth',

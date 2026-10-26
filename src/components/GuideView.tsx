@@ -12,6 +12,7 @@ import {
 import type { IconName } from '../types'
 import { Icon } from './Icons'
 import { isAndroidApp } from '../lib/platform'
+import { recapOpensAt } from '../lib/date'
 
 interface GuideSection {
   icon: IconName
@@ -35,7 +36,7 @@ const sections: GuideSection[] = [
     eyebrow: 'Closing the day',
     title: 'Moonlight — round out the evening',
     paragraphs: [
-      'From six in the evening you can round out your day: a few short questions about how it ended up, what went well, and what you would rather not carry into tomorrow. Every question can be skipped, and the recap is kept in your journal.',
+      `From ${recapOpensAt()} you can round out your day: a few short questions about how it ended up, what went well, and what you would rather not carry into tomorrow. Every question can be skipped, and the recap is kept in your journal.`,
       `Closing the day earns ${MOONLIGHT_STARDUST_REWARD} Stardust — once per day, whether or not you earned any Sunlight. Some days the only thing you managed was getting to the end of them, and that still counts. If you are up past midnight the recap keeps offering yesterday until four in the morning, so a late night closes the day you actually lived.`,
       'Moonlight is separate from Sunlight. It does not grow your plants and it does not keep your Sunlight streak alive — that still asks for an act of care.',
     ],

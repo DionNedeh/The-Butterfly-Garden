@@ -3,15 +3,13 @@ import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
 import './android.css'
-import { currentRelease, hasUnseenRelease } from './data/releases'
+import { currentRelease, hasUnseenRelease, releaseName } from './data/releases'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
-import { Onboarding } from './components/Onboarding'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { RecoveryScreen } from './components/RecoveryScreen'
 import { ViewProblem } from './components/ViewProblem'
 import { SplashScreen } from './components/SplashScreen'
-import { TodayView } from './components/TodayView'
 import { UpdatePrompt } from './components/UpdatePrompt'
 
 /**
@@ -56,6 +54,14 @@ const PrivacyPolicyView = lazy(() =>
     default: m.PrivacyPolicyView,
   })),
 )
+// Today and onboarding load with the rest of the pages rather than with the
+// garden: a returning gardener lands on the garden and may never need them.
+const TodayView = lazy(() =>
+  import('./components/TodayView').then((m) => ({ default: m.TodayView })),
+)
+const Onboarding = lazy(() =>
+  import('./components/Onboarding').then((m) => ({ default: m.Onboarding })),
+)
 const NoticesView = lazy(() =>
   import('./components/NoticesView').then((m) => ({ default: m.NoticesView })),
 )
@@ -78,13 +84,23 @@ import {
   setSystemBarsForTheme,
 } from './lib/native'
 import { isAndroidApp } from './lib/platform'
-import { moonlightForDate, sunlightForDate } from './lib/progression'
+import {
+  DAILY_SUNLIGHT_CAP,
+  moonlightForDate,
+  sunlightForDate,
+} from './lib/progression'
 import { addDaysToLocalDate } from './lib/date'
 import type { AppView } from './types'
 import { motionClass, motionPreference } from './lib/motion'
 import { isArrival, movedTo } from './lib/hosting'
+import { routeFromHash, urlForRoute, type Route } from './lib/routes'
 import { MovedBanner } from './components/MovedBanner'
 import { Celebrations } from './components/Celebrations'
+
+function currentUrl(): string {
+  const { pathname, search, hash } = window.location
+  return `${pathname}${search}${hash}`
+}
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -125,16 +141,46 @@ function App() {
   const garden = useGardenState()
   const today = useLocalDate()
   const recap = useRecapWindow()
-  const [view, changeView] = useState<AppView>('garden')
+  // The page lives in the address (lib/routes), so Back and Forward work, a
+  // reload stays put, and a link or shortcut can open a page directly.
+  const [route, setRoute] = useState<Route>(
+    () => routeFromHash(window.location.hash) ?? { view: 'garden' },
+  )
+  const view = route.view
   /** Set only when something asks for the shop's Garden Pass tab. */
-  const [shopOpensOnPass, setShopOpensOnPass] = useState(false)
-  const setView = (next: AppView, options: { onPass?: boolean } = {}) => {
+  const shopOpensOnPass = route.view === 'shop' && route.onPass === true
+  const navigate = (next: Route, options: { replace?: boolean } = {}) => {
     window.scrollTo({ top: 0, behavior: 'instant' })
-    setShopOpensOnPass(options.onPass ?? false)
-    changeView(next)
+    const url = urlForRoute(next)
+    if (url !== currentUrl()) {
+      if (options.replace) window.history.replaceState(null, '', url)
+      else window.history.pushState(null, '', url)
+    }
+    setRoute(next)
   }
+  const setView = (next: AppView, options: { onPass?: boolean } = {}) =>
+    navigate({ view: next, onPass: options.onPass })
+  useEffect(() => {
+    const follow = () => {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      setRoute(routeFromHash(window.location.hash) ?? { view: 'garden' })
+    }
+    window.addEventListener('popstate', follow)
+    return () => window.removeEventListener('popstate', follow)
+  }, [])
+  // With a garden open, the address always names the page on screen: an
+  // unknown or spent hash (an old link, a recap from last night, the move's
+  // #/arrive) is quietly replaced. Not before: onboarding still needs #/arrive.
+  const hasGarden = Boolean(garden.state?.profile)
+  useEffect(() => {
+    if (!hasGarden) return
+    const wanted = urlForRoute(route)
+    if (wanted !== currentUrl()) window.history.replaceState(null, '', wanted)
+  }, [route, hasGarden])
+  /** Read once: whether this visit arrived from the old address (lib/hosting). */
+  const [arriving] = useState(isArrival)
   const finishOnboarding = (name: string, gardenName: string) => {
-    window.scrollTo({ top: 0, behavior: 'instant' })
+    navigate({ view: 'garden' }, { replace: true })
     garden.onboard(name, gardenName)
   }
   const [seedFocus, setSeedFocus] = useState<string>()
@@ -192,8 +238,12 @@ function App() {
         const action = backAction(viewRef.current)
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
         else if (action.kind === 'view') {
+          // Android's back walks up a fixed ladder (lib/backNavigation), not
+          // through history, so each step replaces the address.
           window.scrollTo({ top: 0, behavior: 'instant' })
-          changeView(action.view)
+          const url = urlForRoute({ view: action.view })
+          if (url !== currentUrl()) window.history.replaceState(null, '', url)
+          setRoute({ view: action.view })
         } else void leaveApp()
       }),
     [],
@@ -258,12 +308,14 @@ function App() {
             </button>
           </div>
         )}
-        <Onboarding
-          onComplete={finishOnboarding}
-          onRestore={garden.importGarden}
-          arriving={isArrival()}
-          movedTo={movedTo()}
-        />
+        <Suspense fallback={<SplashScreen />}>
+          <Onboarding
+            onComplete={finishOnboarding}
+            onRestore={garden.importGarden}
+            arriving={arriving}
+            movedTo={movedTo()}
+          />
+        </Suspense>
       </>
     )
   }
@@ -272,7 +324,7 @@ function App() {
   const profile = state.profile
   const newAddress = movedTo()
   // Unreachable after the check above; it narrows the type for what follows.
-  if (!profile) return <Onboarding onComplete={finishOnboarding} />
+  if (!profile) return null
   const sunlight = sunlightForDate(state, today)
   const activeTrackName = ambientTrackName(profile.ambientTrack)
   const recapCollected = recap.targetDate
@@ -346,7 +398,7 @@ function App() {
         <div className="header-actions">
           <span className="header-sunlight" title="Sunlight earned today">
             <Icon name="sun" size={19} />
-            {sunlight} / 5
+            {sunlight} / {DAILY_SUNLIGHT_CAP}
           </span>
           <span className="nectar-wallet" title="Nectar balance">
             <Icon name="nectar" size={19} />
@@ -478,7 +530,9 @@ function App() {
           hasUnseenRelease(state.profile?.lastSeenReleaseId) && (
             <aside className="release-notice">
               <div>
-                <span className="eyebrow">A little more wonder · 3.0</span>
+                <span className="eyebrow">
+                  A little more wonder · {releaseName()}
+                </span>
                 <strong>Your garden has grown.</strong>
               </div>
               <button

@@ -99,13 +99,5 @@ describe('the patterns added in 3.0', () => {
       expect(selectFlightPattern(owned, id).selectedFlightPatternId).toBe(id)
     }
   })
-
-  it('gives every pattern an animation class matching its id', () => {
-    // The scene applies `animationClass` verbatim; a mismatch silently leaves
-    // the butterfly on the default path while the shop claims otherwise.
-    for (const pattern of flightPatterns) {
-      expect(pattern.animationClass).toBe(`pattern-${pattern.id}`)
-    }
-  })
 })
 

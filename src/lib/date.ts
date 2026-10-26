@@ -47,6 +47,13 @@ export function addDaysToLocalDate(localDate: string, days: number): string {
 /** The hour the Moonlight recap becomes available, in local time. */
 export const RECAP_OPENS_HOUR = 18
 
+/** That hour as the gardener's clock shows it: "6 PM", or "18" in 24-hour locales. */
+export function recapOpensAt(locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric' }).format(
+    new Date(2000, 0, 1, RECAP_OPENS_HOUR),
+  )
+}
+
 /**
  * The hour the after-midnight grace window closes, in local time.
  *
