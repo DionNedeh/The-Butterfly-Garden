@@ -66,10 +66,11 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,png,jpg,webp,svg,woff2}'],
           // Keep full optional scenes out of the install. Thumbnails are small
           // and precached; full scenes are fetched and cached when selected.
+          // The two scenes every garden starts with, Sunlit Meadow and Cottage
+          // Bloom, are precached, so choosing either works offline from day one.
           globIgnores: [
             '**/garden-woodland-brook-*',
             '**/garden-secret-conservatory-*',
-            '**/garden-cottage-bloom-*',
             '**/garden-rain-kissed-pond-*',
             '**/garden-twilight-orchard-*',
             '**/garden-cloud-garden-*',
@@ -82,7 +83,7 @@ export default defineConfig(({ mode }) => {
           runtimeCaching: [
             {
               urlPattern:
-                /\/assets\/garden-(woodland-brook|secret-conservatory|cottage-bloom|rain-kissed-pond|twilight-orchard|cloud-garden)-[^/]+$/,
+                /\/assets\/garden-(woodland-brook|secret-conservatory|rain-kissed-pond|twilight-orchard|cloud-garden)-[^/]+$/,
               handler: 'CacheFirst',
               options: {
                 cacheName: 'garden-backdrops',

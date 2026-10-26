@@ -1,5 +1,5 @@
 import { memo, useId } from 'react'
-import { jarColors } from '../../data/jars'
+import { JAR_LABEL, jarColors } from '../../data/jars'
 
 /** One piece of glassware, shared by the shop, plant bed and keepsake shelf. */
 export const JarSprite = memo(function JarSprite({
@@ -83,7 +83,7 @@ export const JarSprite = memo(function JarSprite({
         width="34"
         height="29"
         rx="9"
-        fill="#fff9e8"
+        fill={JAR_LABEL}
         stroke={color.border}
         strokeOpacity=".3"
       />
@@ -91,7 +91,7 @@ export const JarSprite = memo(function JarSprite({
         x="40"
         y="62"
         textAnchor="middle"
-        fill={color.border}
+        fill={color.text}
         fontFamily="Fraunces, Georgia, serif"
         fontWeight="650"
         fontSize="25"

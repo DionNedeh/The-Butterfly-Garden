@@ -1,14 +1,47 @@
 import { useState } from 'react'
+import { ARRIVAL_HASH } from '../lib/hosting'
 import { Butterfly } from './Butterfly'
+import { MAX_BACKUP_BYTES } from './SafeMode'
 
 export function Onboarding({
   onComplete,
+  onRestore,
+  arriving = false,
+  movedTo,
 }: {
   onComplete: (name: string, gardenName: string) => void
+  /** Bring a garden in from a backup instead of starting a new one. */
+  onRestore?: (text: string) => Promise<{ ok: boolean; message: string }>
+  /** Opened from the old address to receive a garden (lib/hosting). */
+  arriving?: boolean
+  /** Set only at an old address: where the garden lives now. */
+  movedTo?: URL
 }) {
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
   const [gardenName, setGardenName] = useState('Sunlit Sanctuary')
+  const [restoreOpen, setRestoreOpen] = useState(arriving)
+  const [restoreNote, setRestoreNote] = useState<string>()
+
+  const restore = async (file: File) => {
+    if (!onRestore) return
+    setRestoreNote(undefined)
+    if (file.size > MAX_BACKUP_BYTES) {
+      setRestoreNote('That file is too large to be a garden backup.')
+      return
+    }
+    const result = await onRestore(await file.text())
+    if (result.ok && window.location.hash === ARRIVAL_HASH) {
+      // Arrived and restored: the address no longer needs to say so.
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname + window.location.search,
+      )
+    }
+    // On success the garden opens, so only a refusal stays to be read.
+    if (!result.ok) setRestoreNote(result.message)
+  }
 
   return (
     <main className="onboarding-shell">
@@ -31,9 +64,50 @@ export function Onboarding({
               I am Marigold. As you care for yourself, we will grow a living
               sanctuary together. Nothing here wilts when you need time away.
             </p>
+            {movedTo && (
+              <p className="moved-note" role="note">
+                The garden now lives at{' '}
+                <a href={movedTo.href}>{movedTo.host}</a>. If you have been
+                growing one there, it is waiting for you.
+              </p>
+            )}
             <button className="primary-button" onClick={() => setStep(1)}>
               Enter the garden
             </button>
+            {onRestore &&
+              (restoreOpen ? (
+                <div className="onboarding-restore">
+                  <p>
+                    {arriving
+                      ? 'Welcome to the garden’s new home. Choose the backup you just saved, and everything you have grown comes with you.'
+                      : 'Bring a garden here from a backup file, from another device or another browser.'}
+                  </p>
+                  <label className="secondary-button file-button">
+                    Choose a backup
+                    <input
+                      type="file"
+                      accept="application/json,.json,text/plain,application/octet-stream"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        event.target.value = ''
+                        if (file) void restore(file)
+                      }}
+                    />
+                  </label>
+                  {restoreNote && (
+                    <p className="settings-note error" role="status">
+                      {restoreNote}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <button
+                  className="text-button"
+                  onClick={() => setRestoreOpen(true)}
+                >
+                  I have a backup
+                </button>
+              ))}
           </>
         ) : step === 1 ? (
           <form

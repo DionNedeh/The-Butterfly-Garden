@@ -7,6 +7,12 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/The-Butterfly-Garden/')
 })
 
+/*
+ * The Settings name notes (see nameNotes in SettingsView.tsx) are a
+ * deliberate, harmless easter egg: a personal message for a few names. These
+ * fixtures are encoded the same way so the messages stay a surprise in the
+ * test file too; decodeFixture undoes it.
+ */
 const PROFILE_NOTE_KEY = 0x5f3a91c7
 
 const decodeFixture = (codes: readonly number[]) =>
@@ -439,9 +445,13 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await mainNav(page)
     .getByRole('button', { name: 'Settings', exact: true })
     .click()
+  await page.getByLabel('Calm garden motion').check()
+  await page.getByRole('button', { name: 'Save settings' }).click()
+  await expect(page.locator('.app-shell')).toHaveClass(/calm-motion/)
   await page.getByLabel('Reduce garden motion').check()
   await page.getByRole('button', { name: 'Save settings' }).click()
   await expect(page.locator('.app-shell')).toHaveClass(/reduce-motion/)
+  await expect(page.locator('.app-shell')).not.toHaveClass(/calm-motion/)
 })
 
 test('buys reusable jars, places, moves, replaces, and removes them', async ({

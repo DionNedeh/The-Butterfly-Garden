@@ -3,6 +3,7 @@ import { currencyLabel } from '../lib/currency'
 import type { AppState, FlightPatternId } from '../types'
 import { FlightPreview } from './FlyingButterfly'
 import { Icon } from './Icons'
+import { motionPreference } from '../lib/motion'
 
 export function FlightPatternsView({
   state,
@@ -38,6 +39,7 @@ export function FlightPatternsView({
               <FlightPreview
                 pattern={pattern.id}
                 reduced={state.profile?.reducedMotion}
+                calm={motionPreference(state.profile) === 'calm'}
               />
               <span className="pattern-select-copy">
                 <strong>{pattern.name}</strong>

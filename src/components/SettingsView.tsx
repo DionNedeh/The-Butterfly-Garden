@@ -18,6 +18,8 @@ import { MAX_BACKUP_BYTES } from './SafeMode'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
+import { motionPreference, type MotionPreference } from '../lib/motion'
+import { counted } from '../lib/plural'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
 function passSummary(status: PassStatus): string {
@@ -43,7 +45,15 @@ function passSummary(status: PassStatus): string {
   }
 }
 
-/** Optional inline note rendered beneath the name field. */
+/**
+ * Optional inline note rendered beneath the name field.
+ *
+ * Deliberate, and harmless: a small personal message the author left for a
+ * few particular names, kept out of plain sight so it stays a surprise.
+ * Each entry is an FNV-1a hash of a folded name and its note, XOR-encoded
+ * against that hash (see noteForName). Nothing here reads, stores or sends
+ * anything; e2e/app.spec.ts checks the notes from fixtures encoded alike.
+ */
 const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
   [
     0xd9b9523f,
@@ -60,6 +70,29 @@ const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
     ],
   ],
   [0x3d8993e5, [37809, 15841, 37760, 15785, 37811, 15846, 37772, 15853]],
+]
+
+const MOTION_CHOICES: ReadonlyArray<{
+  value: MotionPreference
+  label: string
+  description: string
+}> = [
+  {
+    value: 'full',
+    label: 'Full garden motion',
+    description: 'Wings, plants and flight move as they were drawn to.',
+  },
+  {
+    value: 'calm',
+    label: 'Calm garden motion',
+    description:
+      'Slower wings and swaying, gentler flight, and only a few butterflies aloft. Kinder to older phones and batteries.',
+  },
+  {
+    value: 'reduce',
+    label: 'Reduce garden motion',
+    description: 'Pause decorative swaying and butterfly flight.',
+  },
 ]
 
 /**
@@ -117,7 +150,7 @@ export function SettingsView({
   onUpdateProfile: (
     name: string,
     gardenName: string,
-    reducedMotion: boolean,
+    motion: MotionPreference,
   ) => void
   onSelectAmbientTrack: (trackId: AmbientTrackId) => void
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
@@ -143,8 +176,8 @@ export function SettingsView({
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
-  const [reducedMotion, setReducedMotion] = useState(
-    state.profile?.reducedMotion ?? false,
+  const [motion, setMotion] = useState<MotionPreference>(
+    motionPreference(state.profile),
   )
   const [deleteStep, setDeleteStep] = useState(false)
   const [deleteError, setDeleteError] = useState<string>()
@@ -311,7 +344,7 @@ export function SettingsView({
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            onUpdateProfile(name, gardenName, reducedMotion)
+            onUpdateProfile(name, gardenName, motion)
           }}
         >
           <label>
@@ -332,17 +365,24 @@ export function SettingsView({
               required
             />
           </label>
-          <label className="toggle-row">
-            <span>
-              <strong>Reduce garden motion</strong>
-              <small>Pause decorative swaying and butterfly flight.</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={reducedMotion}
-              onChange={(event) => setReducedMotion(event.target.checked)}
-            />
-          </label>
+          <fieldset className="motion-options">
+            <legend>Garden motion</legend>
+            {MOTION_CHOICES.map((choice) => (
+              <label className="toggle-row" key={choice.value}>
+                <span>
+                  <strong>{choice.label}</strong>
+                  <small>{choice.description}</small>
+                </span>
+                <input
+                  type="radio"
+                  name="garden-motion"
+                  value={choice.value}
+                  checked={motion === choice.value}
+                  onChange={() => setMotion(choice.value)}
+                />
+              </label>
+            ))}
+          </fieldset>
           <button className="primary-button" type="submit">
             Save settings
           </button>
@@ -518,14 +558,16 @@ export function SettingsView({
               {pendingRestore.counts && (
                 <>
                   <li>
-                    {pendingRestore.counts.checkIns} check-ins,{' '}
-                    {pendingRestore.counts.reflections} reflections and{' '}
-                    {pendingRestore.counts.recaps} evening recaps
+                    {counted(pendingRestore.counts.checkIns, 'check-in', 'check-ins')},{' '}
+                    {counted(pendingRestore.counts.reflections, 'reflection', 'reflections')}{' '}
+                    and{' '}
+                    {counted(pendingRestore.counts.recaps, 'evening recap', 'evening recaps')}
                   </li>
                   <li>
-                    {pendingRestore.counts.goals} goals,{' '}
-                    {pendingRestore.counts.butterflies} butterflies and{' '}
-                    {pendingRestore.counts.images} of your own images
+                    {counted(pendingRestore.counts.goals, 'goal', 'goals')},{' '}
+                    {counted(pendingRestore.counts.butterflies, 'butterfly', 'butterflies')}{' '}
+                    and{' '}
+                    {counted(pendingRestore.counts.images, 'image of your own', 'images of your own')}
                   </li>
                 </>
               )}

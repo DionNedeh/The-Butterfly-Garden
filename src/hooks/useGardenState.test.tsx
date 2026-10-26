@@ -11,6 +11,7 @@ import {
   GardenConflictError,
   gardenRepository,
 } from '../repository/gardenRepository'
+import { onAnnouncement } from '../lib/announcer'
 import { createEmptyState, createInitialState } from '../lib/progression'
 import { useGardenState } from './useGardenState'
 
@@ -450,5 +451,58 @@ describe('an image save that never hears back', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('marking what the gardener brought about', () => {
+  const nearlyGrown = () => ({
+    ...createInitialState('Tester', 'Test Garden'),
+    plants: [
+      { id: 'p1', plantId: 'aster', growth: 2, plantedAt: '2026-01-01T00:00:00.000Z' },
+    ],
+  })
+
+  it('announces a bloom the gardener caused', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: nearlyGrown(),
+    })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue(['plants'])
+    const heard: string[] = []
+    const stop = onAnnouncement((events) => heard.push(...events.map((event) => event.kind)))
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(heard).toEqual([])
+
+    // A check-in earns Sunlight, and Sunlight grows the plant into bloom.
+    act(() => result.current.saveMood(4, ''))
+    await waitFor(() => expect(heard).toContain('plant-bloomed'))
+    stop()
+  })
+
+  it('stays quiet about what another tab did', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: nearlyGrown(),
+    })
+    const grownElsewhere = {
+      ...nearlyGrown(),
+      plants: [{ ...nearlyGrown().plants[0], growth: 3 }],
+    }
+    vi.spyOn(gardenRepository, 'adopt').mockResolvedValue({
+      status: 'loaded',
+      state: grownElsewhere,
+    })
+    const heard: string[] = []
+    const stop = onAnnouncement((events) => heard.push(...events.map((event) => event.kind)))
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    const other = new BroadcastChannel('butterfly-garden-sync')
+    other.postMessage({ type: 'garden-saved', parts: ['plants'] })
+    await waitFor(() => expect(result.current.state?.plants[0].growth).toBe(3))
+    other.close()
+    expect(heard).toEqual([])
+    stop()
   })
 })

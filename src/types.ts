@@ -95,6 +95,13 @@ export interface Profile {
   createdAt: string
   activeCompanionId?: string
   reducedMotion: boolean
+  /**
+   * The middle way between full motion and `reducedMotion`: slower wings and
+   * swaying, gentler flight, fewer butterflies aloft (see lib/motion). Ignored
+   * while `reducedMotion` is on. Optional, so an older garden or backup reads
+   * as full motion.
+   */
+  calmMotion?: boolean
   /** Whether the selected on-device soundscape is playing. */
   ambientSound?: boolean
   /** Soundscape played while ambient sound is enabled. */
@@ -352,6 +359,10 @@ export interface JarColorDefinition {
   id: JarColorId
   label: string
   fill: string
+  /**
+   * Ink for the letter on the jar's cream label (JAR_LABEL). Kept at WCAG AA
+   * contrast or better against it; jars.test.ts checks every colour.
+   */
   text: string
   border: string
   highlight: string

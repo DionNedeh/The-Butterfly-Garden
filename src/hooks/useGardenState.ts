@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MotionPreference } from '../lib/motion'
+import { announce } from '../lib/announcer'
+import { gardenEvents } from '../lib/gardenEvents'
 import { addDaysToLocalDate, toLocalDate } from '../lib/date'
 import {
   awardMoonlight,
@@ -375,9 +378,29 @@ export function useGardenState() {
     }
   }, [])
 
+  /** Set by update(): the next state change is the gardener's own doing. */
+  const localChange = useRef(false)
   const update = useCallback((recipe: (current: AppState) => AppState) => {
-    setState((current) => (current ? recipe(current) : current))
+    setState((current) => {
+      if (!current) return current
+      const next = recipe(current)
+      // Only a real change: a no-op left flagged would let the next sync
+      // from another tab be announced as this gardener's doing.
+      if (next !== current) localChange.current = true
+      return next
+    })
   }, [])
+
+  // Mark what the gardener's own actions brought about. Only those: a sync
+  // from another tab, a load or a restore is not a moment to celebrate here.
+  const announcedFrom = useRef<AppState | undefined>(undefined)
+  useEffect(() => {
+    const previous = announcedFrom.current
+    announcedFrom.current = state
+    if (!localChange.current) return
+    localChange.current = false
+    if (previous && state) announce(gardenEvents(previous, state))
+  }, [state])
 
   // Read-through to the newest state for actions that need to inspect it,
   // without giving those actions a new identity on every render.
@@ -894,7 +917,7 @@ export function useGardenState() {
       updateProfile: (
         name: string,
         gardenName: string,
-        reducedMotion: boolean,
+        motion: MotionPreference,
       ) => {
         update((current) => ({
           ...current,
@@ -903,7 +926,8 @@ export function useGardenState() {
                 ...current.profile,
                 name: name.trim() || current.profile.name,
                 gardenName: gardenName.trim() || current.profile.gardenName,
-                reducedMotion,
+                reducedMotion: motion === 'reduce',
+                calmMotion: motion === 'calm',
               }
             : undefined,
         }))

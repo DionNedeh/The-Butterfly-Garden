@@ -10,6 +10,7 @@ import { hasGardenPassFeature } from '../lib/gardenPass'
 import { CUSTOM_BACKDROP_SLOTS } from '../lib/customBackdrops'
 import { CustomBackdropImage } from './CustomBackdropImage'
 import { isAndroidApp } from '../lib/platform'
+import { counted } from '../lib/plural'
 
 const Editor = lazy(() => import('./CustomBackdropEditor'))
 export interface BackdropActions {
@@ -111,7 +112,7 @@ export function BackdropGallery({
                           ? isAndroidApp()
                             ? 'With the Garden Pass'
                             : 'Garden Pass unavailable'
-                          : `Opens in ${state.profile ? daysUntilBackdrop(state.profile, scene.id) : 0} days`}
+                          : `Opens in ${counted(state.profile ? daysUntilBackdrop(state.profile, scene.id) : 0, 'day', 'days')}`}
                 </button>
               </div>
             </article>

@@ -109,3 +109,21 @@ describe('SettingsView data management', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('SettingsView garden motion', () => {
+  it('offers full, calm and reduced motion, and saves the choice', async () => {
+    const user = userEvent.setup()
+    const { onUpdateProfile } = renderSettings()
+    const group = screen.getByRole('group', { name: 'Garden motion' })
+    expect(group).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /full garden motion/i })).toBeChecked()
+
+    await user.click(screen.getByRole('radio', { name: /calm garden motion/i }))
+    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    expect(onUpdateProfile).toHaveBeenLastCalledWith('Tester', 'Test Garden', 'calm')
+
+    await user.click(screen.getByRole('radio', { name: /reduce garden motion/i }))
+    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    expect(onUpdateProfile).toHaveBeenLastCalledWith('Tester', 'Test Garden', 'reduce')
+  })
+})

@@ -36,6 +36,8 @@
      opacity carries the same look at a fraction of the compositing cost. */
   --glass-card-solid: linear-gradient(160deg, rgba(255, 255, 253, 0.95), rgba(250, 247, 238, 0.9));
   --glass-header: linear-gradient(180deg, rgba(255, 254, 249, 0.86), rgba(255, 253, 246, 0.66));
+  /* The mobile dock: opaque, so nothing reads through its labels. */
+  --dock-fill: #fffdf7;
   --glass-border: rgba(255, 255, 255, 0.6);
   --glass-hairline: rgba(49, 92, 75, 0.14);
   --card-radius: 26px;
@@ -68,6 +70,7 @@
   --glass-card: linear-gradient(160deg, rgba(24, 52, 70, 0.78), rgba(14, 34, 48, 0.68));
   --glass-card-solid: linear-gradient(160deg, rgba(24, 52, 70, 0.93), rgba(14, 34, 48, 0.88));
   --glass-header: linear-gradient(180deg, rgba(15, 38, 54, 0.82), rgba(10, 27, 40, 0.6));
+  --dock-fill: #0c202e;
   --glass-border: rgba(140, 201, 171, 0.22);
   --glass-hairline: rgba(140, 201, 171, 0.2);
 
@@ -115,11 +118,6 @@ h1 {
   font-weight: 600;
 }
 
-h2 {
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 .eyebrow {
   background: var(--grad-gold);
   -webkit-background-clip: text;
@@ -153,9 +151,6 @@ h2 {
 .app-shell {
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(120% 90% at 50% -10%, var(--aurora-veil), transparent 60%),
-    var(--cream);
   /* clip (not scroll) contains the oversized ambient layers without adding
      scroll height, and keeps the sticky header anchored to the viewport. */
   overflow: clip;
@@ -207,11 +202,6 @@ h2 {
 .app-header {
   background: var(--glass-header);
   backdrop-filter: blur(22px) saturate(1.6);
-  -webkit-backdrop-filter: blur(22px) saturate(1.6);
-  border-bottom: 1px solid transparent;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.5) inset,
-    0 10px 30px -20px rgba(30, 52, 42, 0.5);
 }
 .app-header::after {
   content: '';
@@ -225,16 +215,11 @@ h2 {
 .theme-night .app-header {
   background: var(--glass-header);
 }
-
-.brand img {
-  box-shadow: 0 4px 16px rgba(49, 92, 75, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
-}
 .brand strong {
   background: var(--grad-forest);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  letter-spacing: -0.01em;
 }
 .theme-night .brand strong {
   background: linear-gradient(120deg, #b8ecd2, #8cc9ab);
@@ -245,9 +230,6 @@ h2 {
 
 /* Nav track becomes a frosted rail with a glowing active pill */
 .app-header nav {
-  background: rgba(255, 255, 255, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: inset 0 2px 6px rgba(36, 58, 50, 0.08);
   backdrop-filter: blur(8px);
 }
 .theme-night .app-header nav {
@@ -265,8 +247,6 @@ h2 {
 }
 .app-header nav button.active {
   color: #fffdf7;
-  background: var(--grad-forest);
-  box-shadow: var(--shadow-glow-forest), 0 1px 0 rgba(255, 255, 255, 0.25) inset;
 }
 .app-header nav button.active svg {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
@@ -356,7 +336,6 @@ h2 {
   overflow: hidden;
   background-image: var(--grad-forest);
   background-size: 180% 180%;
-  box-shadow: var(--shadow-glow-forest), 0 1px 0 rgba(255, 255, 255, 0.28) inset;
   letter-spacing: 0.01em;
 }
 .primary-button::before {
@@ -376,9 +355,6 @@ h2 {
 }
 
 .secondary-button {
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(246, 248, 242, 0.86));
-  border: 1px solid rgba(49, 92, 75, 0.28);
-  box-shadow: 0 6px 16px -10px rgba(36, 58, 50, 0.4);
   transition: transform 200ms var(--ease-spring), border-color 200ms ease, box-shadow 200ms ease;
 }
 .secondary-button:not(:disabled):hover {
@@ -420,10 +396,6 @@ h2 {
 .card,
 .garden-stats {
   position: relative;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--card-radius);
-  background: var(--glass-card-solid, var(--glass-card));
-  box-shadow: var(--shadow-glass);
   transition: transform 300ms var(--ease-spring), box-shadow 300ms ease;
 }
 /* Top sheen + hairline */
@@ -438,14 +410,6 @@ h2 {
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
-  opacity: 0.9;
-}
-.card:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.6) inset,
-    0 6px 16px rgba(36, 58, 50, 0.1),
-    0 34px 60px -24px rgba(36, 58, 50, 0.4);
 }
 .theme-night .card::before {
   background: linear-gradient(160deg, rgba(150, 210, 190, 0.28), transparent 45%);
@@ -510,19 +474,12 @@ h2 {
   color: transparent;
 }
 .count-badge {
-  background: linear-gradient(150deg, rgba(232, 239, 230, 0.9), rgba(214, 228, 214, 0.7));
-  border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: 0 2px 8px -4px rgba(36, 58, 50, 0.4);
 }
 
 /* ------------------------------------------------------------------
    10. Garden hero — cinematic light
    ------------------------------------------------------------------ */
-.garden-hero {
-  box-shadow:
-    0 30px 70px -30px rgba(30, 52, 42, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.16) inset;
-}
 /* Sun-shimmer sweeping the scene */
 .garden-hero .hero-petals::after {
   content: '';
@@ -538,10 +495,6 @@ h2 {
 @keyframes hero-glow {
   from { opacity: 0.55; transform: translateX(-4%); }
   to { opacity: 0.95; transform: translateX(4%); }
-}
-.garden-heading h1 {
-  color: #fffdf7;
-  text-shadow: 0 2px 30px rgba(20, 48, 37, 0.4), 0 0 1px rgba(255, 255, 255, 0.5);
 }
 .garden-observation {
   text-shadow: 0 1px 12px rgba(20, 48, 37, 0.45);
@@ -646,15 +599,6 @@ h2 {
 /* ------------------------------------------------------------------
    13. Shop
    ------------------------------------------------------------------ */
-.shop-tabs button {
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.88), rgba(247, 249, 243, 0.76));
-  border: 1.5px solid rgba(255, 255, 255, 0.55);
-}
-.shop-tabs button.active {
-  background: var(--grad-forest);
-  border-color: transparent;
-  box-shadow: var(--shadow-glow-forest);
-}
 .theme-night .shop-tabs button {
   background: linear-gradient(160deg, rgba(28, 56, 72, 0.7), rgba(18, 42, 56, 0.6));
   border-color: rgba(140, 201, 171, 0.2);
@@ -662,16 +606,6 @@ h2 {
 .shop-item-icon.premium,
 .stardust-wallet {
   box-shadow: 0 10px 26px -10px rgba(108, 90, 156, 0.7), 0 1px 0 rgba(255, 255, 255, 0.2) inset;
-}
-.garden-pass-banner {
-  box-shadow: 0 26px 60px -28px rgba(55, 49, 90, 0.85);
-}
-.garden-pass-banner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(40% 60% at 20% 30%, rgba(255, 255, 255, 0.12), transparent 60%);
-  pointer-events: none;
 }
 .pattern-cost,
 .premium-cost {
@@ -776,7 +710,6 @@ h2 {
   border: 1px solid rgba(255, 255, 255, 0.6);
   background: var(--glass-card);
   backdrop-filter: blur(28px) saturate(1.5);
-  -webkit-backdrop-filter: blur(28px) saturate(1.5);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.7) inset,
     0 40px 90px -40px rgba(29, 52, 43, 0.7);
@@ -842,14 +775,16 @@ h2 {
 }
 
 /* ------------------------------------------------------------------
-   18. Mobile bottom nav — floating glass dock
+   18. Mobile bottom nav — the dock
    ------------------------------------------------------------------ */
 @media (max-width: 1080px) {
+  /* Solid rather than blurred glass. The dock is fixed, so a backdrop blur
+     re-filters everything scrolling beneath it on every frame, which a
+     modest phone GPU feels; and the glass let page text show through the
+     labels. Even 4% see-through left text legible behind them. */
   .bottom-nav {
-    background: var(--glass-header) !important;
+    background: var(--dock-fill) !important;
     border: 1px solid rgba(255, 255, 255, 0.5) !important;
-    backdrop-filter: blur(24px) saturate(1.6);
-    -webkit-backdrop-filter: blur(24px) saturate(1.6);
     box-shadow: 0 18px 44px -18px rgba(35, 62, 51, 0.55), 0 1px 0 rgba(255, 255, 255, 0.5) inset !important;
   }
   .bottom-nav button {
@@ -881,11 +816,6 @@ h2 {
 .offline-banner {
   background: linear-gradient(120deg, #3e6658, #315c4b);
 }
-.loading-screen {
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 236, 179, 0.5), transparent 45%),
-    linear-gradient(160deg, #edf1e8, #dbe6d6);
-}
 
 /* ------------------------------------------------------------------
    20. Motion & accessibility guards
@@ -894,19 +824,16 @@ h2 {
    chrome an opaque fallback where the effect is unsupported. */
 @media (prefers-reduced-transparency: reduce) {
   .app-header,
-  .bottom-nav,
   .onboarding-card,
   .update-toast,
   .garden-stats {
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
     background: var(--glass-card-solid, var(--paper));
   }
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .app-header,
-  .bottom-nav,
   .onboarding-card,
   .update-toast,
   .garden-stats {
@@ -969,9 +896,6 @@ h2 {
   .app-shell::after {
     opacity: 0.28;
   }
-  .card {
-    border-radius: 22px;
-  }
 }
 
 /* Tidy the header brand on phones so the name never crushes to "T…".
@@ -979,9 +903,6 @@ h2 {
 @media (max-width: 620px) {
   .brand small {
     display: none;
-  }
-  .brand strong {
-    font-size: 1rem;
   }
 }
 @media (max-width: 440px) {

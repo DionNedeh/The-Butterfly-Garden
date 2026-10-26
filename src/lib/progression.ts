@@ -122,6 +122,28 @@ export function createInitialState(
   }
 }
 
+/**
+ * A name no companion in the garden has yet. Names are offered in order,
+ * starting where the garden's size points; the list used to be taken purely
+ * by count, so the third creature was always a second "Sol". Once every name
+ * is taken, the next one gains a number: "Juniper 2".
+ */
+export function nextCompanionName(
+  creatures: ReadonlyArray<Pick<CreatureInstance, 'name'>>,
+): string {
+  const taken = new Set(creatures.map((creature) => creature.name.trim().toLowerCase()))
+  const start = creatures.length % butterflyNames.length
+  for (let offset = 0; offset < butterflyNames.length; offset += 1) {
+    const name = butterflyNames[(start + offset) % butterflyNames.length]
+    if (!taken.has(name.toLowerCase())) return name
+  }
+  const base = butterflyNames[start]
+  for (let number = 2; ; number += 1) {
+    const name = `${base} ${number}`
+    if (!taken.has(name.toLowerCase())) return name
+  }
+}
+
 function discoverEgg(
   state: AppState,
   maturePlant: PlantInstance,
@@ -138,11 +160,10 @@ function discoverEgg(
     definition.speciesIds,
   )
   if (!speciesId) return undefined
-  const count = state.creatures.length
   return {
     id: createId(),
     speciesId,
-    name: butterflyNames[count % butterflyNames.length],
+    name: nextCompanionName(state.creatures),
     stage: 'egg',
     careDates: {},
     actionLog: {},
@@ -222,12 +243,17 @@ export function awardSunlight(
   }
 
   let creatures = state.creatures
+  // The first plant still growing grows a step. When every plant is grown the
+  // collection is handed back as it was, so the save that follows finds
+  // nothing to write there.
+  let plants = state.plants
   let grownPlant: PlantInstance | undefined
-  const plants = state.plants.map((plant) => {
-    if (grownPlant || plant.growth >= MAX_PLANT_GROWTH) return plant
-    grownPlant = { ...plant, growth: plant.growth + 1 }
-    return grownPlant
-  })
+  const growing = state.plants.findIndex((plant) => plant.growth < MAX_PLANT_GROWTH)
+  if (growing !== -1) {
+    grownPlant = { ...state.plants[growing], growth: state.plants[growing].growth + 1 }
+    plants = [...state.plants]
+    plants[growing] = grownPlant
+  }
   if (grownPlant?.growth === MAX_PLANT_GROWTH) {
     const discovered = discoverEgg(state, grownPlant, now)
     if (discovered) creatures = [...creatures, discovered]

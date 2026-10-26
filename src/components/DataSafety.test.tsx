@@ -156,7 +156,7 @@ describe('restoring from Settings', () => {
     expect(
       await screen.findByRole('heading', { name: /this backup holds from the file/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/1 check-ins/)).toBeInTheDocument()
+    expect(screen.getByText(/1 check-in,/)).toBeInTheDocument()
     expect(onImportGarden).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: /restore this backup/i }))

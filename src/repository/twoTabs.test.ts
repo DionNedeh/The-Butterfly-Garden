@@ -6,6 +6,7 @@ import {
   GardenConflictError,
   GardenDeletedElsewhereError,
   GardenWithheldError,
+  inspectImportedState,
   RAW_EXPORT_FORMAT,
   readImportedState,
 } from './gardenRepository'
@@ -206,5 +207,45 @@ describe('drafts and safe mode', () => {
     db.close()
     const result = await createGardenRepository(name).load()
     expect(result).toMatchObject({ status: 'withheld', reason: 'incompatible' })
+  })
+})
+
+describe('moving to a new address', () => {
+  it('restores a backup made at the old address whole at the new one', async () => {
+    // Two origins are two databases: nothing carries over but the file.
+    const old = createGardenRepository(freshName())
+    const fresh = createGardenRepository(freshName())
+    const grown = {
+      ...garden(7),
+      nectar: 12,
+      moods: [
+        {
+          id: 'm1',
+          localDate: '2026-10-25',
+          level: 4 as const,
+          note: 'A long walk by the river.',
+          createdAt: '2026-10-25T09:00:00.000Z',
+          updatedAt: '2026-10-25T09:00:00.000Z',
+        },
+      ],
+    }
+    await old.save(grown)
+    const before = (await old.load()).state
+
+    // The file exactly as Settings and the move banner write it.
+    const file = JSON.stringify({
+      format: 'the-butterfly-garden',
+      exportedAt: '2026-10-26T12:00:00.000Z',
+      appVersion: '3.0.0',
+      garden: before,
+    })
+    const inspection = inspectImportedState(JSON.parse(file))
+    expect(inspection.refused).toBeUndefined()
+    expect(inspection.repaired).toBe(0)
+    await fresh.replace(inspection.state!)
+
+    const after = await createGardenRepository(names[names.length - 1]).load()
+    expect(after.status).toBe('loaded')
+    expect(after.state).toEqual(before)
   })
 })

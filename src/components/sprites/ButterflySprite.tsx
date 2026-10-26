@@ -1,7 +1,8 @@
 import { memo, useId, type ReactNode } from 'react'
 import { getSpecies } from '../../lib/progression'
 import type { ButterflyWingShape, OutfitSlot } from '../../types'
-import { OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
+import { OutfitLayers, type OutfitAnchor } from './OutfitOverlay'
+import { SpriteFrame, SpriteLayer } from './SpriteFrame'
 
 /**
  * Detailed SVG butterfly, drawn in a spread (top-down) pose.
@@ -10,6 +11,9 @@ import { OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
  * wing is drawn explicitly; the right wing mirrors it. Each species keeps
  * its real silhouette (swallowtail tails, longwing panels, ragged edges...)
  * and a hand-tuned marking layer approximating its actual pattern.
+ *
+ * Each wing is its own layer so the flap runs on the compositor; see
+ * `SpriteFrame` for why.
  */
 
 interface WingPaths {
@@ -448,6 +452,8 @@ function wingMarkings(
 
 /** Fixed per sprite; a literal in the JSX would be a new object every render
  *  and would defeat the memo on OutfitOverlay. */
+const VIEW_BOX = '0 0 120 110'
+
 const BUTTERFLY_ANCHOR: OutfitAnchor = {
   headX: 60,
   headY: 31,
@@ -494,72 +500,79 @@ export const ButterflySprite = memo(function ButterflySprite({
   const isClear = definition?.wingShape === 'clear'
 
   return (
-    <svg
-      viewBox="0 0 120 110"
+    <SpriteFrame
       width={size}
       height={size * (110 / 120)}
       className={`butterfly-sprite ${flapping ? 'flapping' : ''} ${className}`}
-      role="img"
-      aria-label={label ?? definition?.commonName ?? 'Butterfly'}
+      label={label ?? definition?.commonName ?? 'Butterfly'}
     >
-      <defs>
-        <clipPath id={clipId}>
-          <path d={shape.fore} />
-          <path d={shape.hind} />
-        </clipPath>
-        <radialGradient id={glowId} cx="40%" cy="40%" r="70%">
-          <stop offset="0%" stopColor="#9adcff" />
-          <stop offset="100%" stopColor="#168bd2" />
-        </radialGradient>
-        {/* The wing is described once and mirrored, rather than building the
-            whole marking layer twice for every butterfly on screen. */}
-        <g id={wingId}>
-          <path
-            d={shape.fore}
-            fill={primary}
-            stroke={secondary}
-            strokeWidth={isClear ? 2.2 : 1.2}
-            opacity={isClear ? 0.55 : 1}
-          />
-          <path
-            d={shape.hind}
-            fill={primary}
-            stroke={secondary}
-            strokeWidth={isClear ? 2.2 : 1.2}
-            opacity={isClear ? 0.5 : 0.96}
-          />
-          {wingMarkings(pattern, secondary, clip, `url(#${glowId})`)}
+      {/* Left wing. It also holds the shared definitions: the other layers
+          refer to them by id, which works across a document's SVGs. */}
+      <SpriteLayer viewBox={VIEW_BOX} className="wing wing-left">
+        <defs>
+          <clipPath id={clipId}>
+            <path d={shape.fore} />
+            <path d={shape.hind} />
+          </clipPath>
+          <radialGradient id={glowId} cx="40%" cy="40%" r="70%">
+            <stop offset="0%" stopColor="#9adcff" />
+            <stop offset="100%" stopColor="#168bd2" />
+          </radialGradient>
+          {/* The wing is described once and mirrored, rather than building the
+              whole marking layer twice for every butterfly on screen. */}
+          <g id={wingId}>
+            <path
+              d={shape.fore}
+              fill={primary}
+              stroke={secondary}
+              strokeWidth={isClear ? 2.2 : 1.2}
+              opacity={isClear ? 0.55 : 1}
+            />
+            <path
+              d={shape.hind}
+              fill={primary}
+              stroke={secondary}
+              strokeWidth={isClear ? 2.2 : 1.2}
+              opacity={isClear ? 0.5 : 0.96}
+            />
+            {wingMarkings(pattern, secondary, clip, `url(#${glowId})`)}
+          </g>
+        </defs>
+        <use href={`#${wingId}`} />
+      </SpriteLayer>
+
+      {/* Right wing, mirrored inside its layer; the layer carries the flap. */}
+      <SpriteLayer viewBox={VIEW_BOX} className="wing wing-right">
+        <g transform="translate(120,0) scale(-1,1)">
+          <use href={`#${wingId}`} />
         </g>
-      </defs>
+      </SpriteLayer>
 
-      {/* Left wing */}
-      <use href={`#${wingId}`} className="wing wing-left" />
-
-      {/* Right wing (mirrored; the inner element carries the flap animation) */}
-      <g transform="translate(120,0) scale(-1,1)">
-        <use href={`#${wingId}`} className="wing wing-right" />
-      </g>
-
-      {/* Body */}
-      <g className="butterfly-body-group">
-        <ellipse cx="60" cy="58" rx="4.6" ry="20" fill="#3b3128" />
-        <ellipse cx="60" cy="44" rx="5.2" ry="7" fill="#4a3d31" />
-        <circle cx="60" cy="34" r="5.4" fill="#3b3128" />
-        <circle cx="57.8" cy="32.5" r="1.1" fill="#f3ecdd" />
-        <circle cx="62.2" cy="32.5" r="1.1" fill="#f3ecdd" />
-        {/* segment lines */}
-        {[52, 58, 64, 70].map((y) => (
-          <path key={y} d={`M56 ${y} Q60 ${y + 2} 64 ${y}`} stroke="#251f19" strokeWidth="0.9" fill="none" />
-        ))}
-        <path d="M57 30 C52 20 46 16 42 15" stroke="#3b3128" strokeWidth="1.6" fill="none" />
-        <path d="M63 30 C68 20 74 16 78 15" stroke="#3b3128" strokeWidth="1.6" fill="none" />
-        <circle cx="42" cy="15" r="1.8" fill="#3b3128" />
-        <circle cx="78" cy="15" r="1.8" fill="#3b3128" />
-      </g>
+      <SpriteLayer viewBox={VIEW_BOX}>
+        <g className="butterfly-body-group">
+          <ellipse cx="60" cy="58" rx="4.6" ry="20" fill="#3b3128" />
+          <ellipse cx="60" cy="44" rx="5.2" ry="7" fill="#4a3d31" />
+          <circle cx="60" cy="34" r="5.4" fill="#3b3128" />
+          <circle cx="57.8" cy="32.5" r="1.1" fill="#f3ecdd" />
+          <circle cx="62.2" cy="32.5" r="1.1" fill="#f3ecdd" />
+          {/* segment lines */}
+          {[52, 58, 64, 70].map((y) => (
+            <path key={y} d={`M56 ${y} Q60 ${y + 2} 64 ${y}`} stroke="#251f19" strokeWidth="0.9" fill="none" />
+          ))}
+          <path d="M57 30 C52 20 46 16 42 15" stroke="#3b3128" strokeWidth="1.6" fill="none" />
+          <path d="M63 30 C68 20 74 16 78 15" stroke="#3b3128" strokeWidth="1.6" fill="none" />
+          <circle cx="42" cy="15" r="1.8" fill="#3b3128" />
+          <circle cx="78" cy="15" r="1.8" fill="#3b3128" />
+        </g>
+      </SpriteLayer>
 
       {outfit && (
-        <OutfitOverlay outfit={outfit} anchor={BUTTERFLY_ANCHOR} />
+        <OutfitLayers
+          viewBox={VIEW_BOX}
+          outfit={outfit}
+          anchor={BUTTERFLY_ANCHOR}
+        />
       )}
-    </svg>
+    </SpriteFrame>
   )
 })
