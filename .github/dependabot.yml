@@ -1,9 +1,13 @@
 version: 2
 updates:
+  # Every ecosystem waits a week after a release before proposing it: most
+  # hijacked packages are found and pulled within days of publication.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       # Toolchain churn is noisy and low risk; runtime dependencies ship to
@@ -18,6 +22,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
 
   # The Android app's Gradle dependencies, the Play Billing Library among
   # them: Google retires old Billing Library versions on a published schedule.
@@ -25,4 +31,6 @@ updates:
     directory: /android
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
