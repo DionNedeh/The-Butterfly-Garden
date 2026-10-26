@@ -15,7 +15,6 @@ import { gardenRepository, type Drafts } from '../repository/gardenRepository'
  */
 
 let drafts: Drafts = {}
-let loaded = false
 const listeners = new Set<() => void>()
 let writeTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -47,7 +46,6 @@ export async function loadDrafts(): Promise<void> {
   const stored = await gardenRepository.readDrafts()
   // Anything typed while the read was in flight wins over what was stored.
   drafts = { ...stored, ...drafts }
-  loaded = true
   emit()
 }
 
@@ -84,11 +82,6 @@ function subscribe(listener: () => void) {
   return () => {
     listeners.delete(listener)
   }
-}
-
-/** Whether stored drafts have been read yet; tests and the hook use this. */
-export function draftsLoaded() {
-  return loaded
 }
 
 if (typeof document !== 'undefined') {

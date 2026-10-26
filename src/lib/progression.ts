@@ -26,6 +26,8 @@ export const DAILY_SUNLIGHT_CAP = 5
 export const NECTAR_PER_SUNLIGHT = 3
 export const MAX_PLANT_GROWTH = 3
 export const STARTER_SEEDS = 2
+/** The monarch caterpillar every garden starts with, until it is renamed. */
+export const STARTER_COMPANION_NAME = 'Sol'
 export const STARTER_NECTAR = 10
 export const DAILY_SEED_REWARD = 1
 export const PLANT_SEED_COST = 1
@@ -102,7 +104,7 @@ export function createInitialState(
       {
         id: createId(),
         speciesId: 'monarch',
-        name: 'Sol',
+        name: STARTER_COMPANION_NAME,
         stage: 'caterpillar',
         careDates: {},
         actionLog: {},

@@ -186,3 +186,13 @@ describe('the species welcomed figure', () => {
   })
 })
 
+
+describe('the companions card', () => {
+  it('speaks of the starter by the name the gardener gave it', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    renderGarden({
+      creatures: seed.creatures.map((creature) => ({ ...creature, name: 'Pip' })),
+    })
+    expect(screen.getByText(/^Pip is still changing\./)).toBeInTheDocument()
+  })
+})

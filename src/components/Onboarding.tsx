@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ARRIVAL_HASH } from '../lib/hosting'
 import { Butterfly } from './Butterfly'
 import { MAX_BACKUP_BYTES } from './SafeMode'
+import { STARTER_COMPANION_NAME } from '../lib/progression'
 
 export function Onboarding({
   onComplete,
@@ -194,8 +195,9 @@ export function Onboarding({
             <div className="chrysalis-note">
               <span className="chrysalis small" aria-hidden="true" />
               <p>
-                Sol, your monarch caterpillar, is already waiting on the Care
-                page — with fresh leaves packed in your satchel.
+                {STARTER_COMPANION_NAME}, your monarch caterpillar, is already
+                waiting on the Care page — with fresh leaves packed in your
+                satchel.
               </p>
             </div>
             <button

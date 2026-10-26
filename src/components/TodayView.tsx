@@ -7,6 +7,7 @@ import {
   getDailyPromptIndex,
   isGoalDue,
   isGoalSkipped,
+  recapOpensAt,
   retiredOnceGoalIds,
   type RecapWindow,
 } from '../lib/date'
@@ -165,7 +166,7 @@ export function TodayView({
               {moonlightCollected
                 ? 'Your recap is kept in the journal.'
                 : !recap.open
-                  ? 'After six, you can look back on the day and collect a Moonlight bonus.'
+                  ? `From ${recapOpensAt()}, you can look back on the day and collect a Moonlight bonus.`
                   : 'A few questions, all of them skippable, and a Moonlight bonus for closing the day.'}
             </p>
           </div>

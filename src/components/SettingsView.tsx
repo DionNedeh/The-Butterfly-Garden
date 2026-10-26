@@ -20,6 +20,7 @@ import { usePassStatus } from '../hooks/usePassStatus'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
 import { motionPreference, type MotionPreference } from '../lib/motion'
 import { counted } from '../lib/plural'
+import { releaseName } from '../data/releases'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
 function passSummary(status: PassStatus): string {
@@ -446,7 +447,7 @@ export function SettingsView({
         )}
       <section className="card">
         <p className="eyebrow">Growing together</p>
-        <h2>The garden, version 3.0</h2>
+        <h2>The garden, version {releaseName()}</h2>
         <p>
           Discover the little things that make this release feel more like
           yours.

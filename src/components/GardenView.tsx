@@ -814,7 +814,9 @@ export function GardenView({
           </div>
           {emerged.length === 0 ? (
             <p className="empty-copy">
-              Sol is still changing. The garden will be ready when they emerge.
+              {developing[0]
+                ? `${developing[0].name} is still changing. The garden will be ready when they emerge.`
+                : 'Your companions are still changing. The garden will be ready when they emerge.'}
             </p>
           ) : (
             <div className="companion-grid">
