@@ -60,7 +60,7 @@ export const MonthPlanner = memo(function MonthPlanner({
   onPlanGoal: (title: string, scheduledDate: string) => void
 }) {
   const [yearMonth, setYearMonth] = useState(() => {
-    const now = new Date()
+    const now = localDateToNoon(today)
     return { year: now.getFullYear(), month: now.getMonth() }
   })
   const [selectedDate, setSelectedDate] = useState(today)
