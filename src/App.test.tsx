@@ -41,7 +41,12 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('the app shell', () => {
+// Each test renders the whole app; the first walks into every lazily loaded
+// page. That outgrows Vitest's five seconds on a busy CI runner with coverage
+// on, without anything being wrong.
+const WHOLE_APP_TIMEOUT_MS = 20_000
+
+describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
   it('opens every page from the navigation, and the address follows', async () => {
     const user = await openGarden()
     const pages: Array<[string, RegExp | string, string]> = [
@@ -154,7 +159,7 @@ async function openGardenAt(heading: string) {
   ).toBeInTheDocument()
 }
 
-describe('arriving at an address', () => {
+describe('arriving at an address', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
   it('opens an unknown page as the garden and cleans the address', async () => {
     window.history.replaceState(null, '', '/#/somewhere-old')
     await openGardenAt('Quiet Corner')
