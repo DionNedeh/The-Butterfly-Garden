@@ -28,7 +28,10 @@ export function useFlightMotion(
     const preference = matchMedia('(prefers-reduced-motion: reduce)')
     let animations: Animation[] = []
     let visible = true
-    let previousSize = ''
+    // The size the first track is built for. A resize observer reports once
+    // as soon as it starts observing; without this, that first report would
+    // build every butterfly's animations a second time as it appears.
+    let previousSize = `${frame.clientWidth}:${frame.clientHeight}`
     const sync = () => {
       // Only stop for work nobody can see. Pointer and focus deliberately do
       // not pause: a butterfly froze under the cursor, and a tap left it

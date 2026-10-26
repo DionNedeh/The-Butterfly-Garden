@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GARDEN_COLLECTIONS,
   GardenConflictError,
+  GardenDeletedElsewhereError,
+  GardenDeletionPendingError,
   gardenRepository,
 } from '../repository/gardenRepository'
 import { onAnnouncement } from '../lib/announcer'
@@ -504,5 +506,596 @@ describe('marking what the gardener brought about', () => {
     other.close()
     expect(heard).toEqual([])
     stop()
+  })
+})
+
+describe('every action, through the hook', () => {
+  async function renderReady() {
+    const seed = createInitialState('Tester', 'Test Garden')
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: {
+        ...seed,
+        nectar: 500,
+        stardust: 500,
+        seeds: 5,
+        goals: [
+          {
+            id: 'g1',
+            title: 'Walk',
+            schedule: 'daily',
+            weekdays: [],
+            createdDate: '2026-01-01',
+            archived: false,
+          },
+        ],
+      },
+    })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const view = renderHook(() => useGardenState())
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    return view
+  }
+
+  it('edits goals: add, plan, skip, snooze, wake, complete, archive, delete', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => result.current.addGoal('Stretch', 'weekdays', [1, 2]))
+    expect(garden().goals.at(-1)?.title).toBe('Stretch')
+    act(() => result.current.planGoal('  ', '2026-12-01'))
+    act(() => result.current.planGoal('Post the letter', '2026-12-01'))
+    expect(garden().goals.at(-1)).toMatchObject({ schedule: 'once', scheduledDate: '2026-12-01' })
+    act(() => result.current.skipGoal('g1'))
+    expect(garden().goals[0].skippedDates).toHaveLength(1)
+    act(() => result.current.snoozeGoal('g1', 2))
+    expect(garden().goals[0].snoozedUntil).toBeDefined()
+    act(() => result.current.wakeGoal('g1'))
+    expect(garden().goals[0].snoozedUntil).toBeUndefined()
+    act(() => result.current.completeGoal('g1'))
+    expect(garden().completions).toHaveLength(1)
+    act(() => result.current.updateGoal({ ...garden().goals[0], title: 'Long walk' }))
+    act(() => result.current.setGoalArchived('g1', true))
+    expect(garden().goals[0]).toMatchObject({ title: 'Long walk', archived: true })
+    act(() => result.current.deleteGoal('g1'))
+    expect(garden().goals.find((goal) => goal.id === 'g1')).toBeUndefined()
+    expect(garden().completions).toEqual([])
+  })
+
+  it('writes, edits and deletes the journal and the recap', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => result.current.saveMood(4, 'Fine'))
+    act(() => result.current.updateMood({ ...garden().moods[0], note: 'Better' }))
+    expect(garden().moods[0].note).toBe('Better')
+    act(() => result.current.deleteMood(garden().moods[0].id))
+    expect(garden().moods).toEqual([])
+
+    act(() => result.current.saveReflection('notice', 'Rain on the window'))
+    act(() => result.current.updateReflection({ ...garden().reflections[0], body: 'Sun' }))
+    expect(garden().reflections[0].body).toBe('Sun')
+    act(() => result.current.deleteReflection(garden().reflections[0].id))
+    expect(garden().reflections).toEqual([])
+
+    act(() => result.current.collectMoonlight('2026-10-25', { wentWell: 'Tea' }))
+    expect(garden().recaps).toHaveLength(1)
+    act(() => result.current.updateRecap({ ...garden().recaps[0], wentWell: 'Coffee' }))
+    expect(garden().recaps[0].wentWell).toBe('Coffee')
+    act(() => result.current.deleteRecap(garden().recaps[0].id))
+    expect(garden().recaps).toEqual([])
+  })
+
+  it('tends the garden: plants, care, shop, flight, jars and companions', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    const plants = garden().plants.length
+    act(() => result.current.plant('aster'))
+    expect(garden().plants).toHaveLength(plants + 1)
+    const planted = garden().plants.at(-1)!.id
+    act(() => result.current.removePlant(planted))
+    expect(garden().plants).toHaveLength(plants)
+
+    const sol = garden().creatures[0]
+    act(() => result.current.careForCreature(sol.id, 'feed'))
+    act(() => result.current.purchaseItem('flower-crown'))
+    expect(garden().ownedItemIds).toContain('flower-crown')
+    act(() => result.current.equipItem(sol.id, 'flower-crown'))
+    act(() => result.current.unequipSlot(sol.id, 'headwear'))
+    expect(garden().creatures[0].outfit.headwear).toBeUndefined()
+
+    act(() => result.current.purchaseFlightPattern('petal-hop'))
+    act(() => result.current.selectFlightPattern('petal-hop'))
+    expect(garden().selectedFlightPatternId).toBe('petal-hop')
+
+    act(() => result.current.purchaseJar('A', 'blue'))
+    const jar = garden().jars[0]
+    act(() => result.current.placeJar(jar.id, garden().plants[0].id))
+    expect(garden().jarPlacements).toHaveLength(1)
+    act(() => result.current.removeJarPlacement(garden().plants[0].id))
+    expect(garden().jarPlacements).toEqual([])
+
+    act(() => result.current.renameCreature(sol.id, 'Pip'))
+    act(() => result.current.selectCompanion(sol.id))
+    expect(garden().creatures[0].name).toBe('Pip')
+    expect(garden().profile?.activeCompanionId).toBe(sol.id)
+  })
+
+  it('changes the gardener’s settings and scenes', async () => {
+    const { result } = await renderReady()
+    const profile = () => result.current.state!.profile!
+    act(() => result.current.toggleTheme())
+    act(() => result.current.toggleAmbientSound())
+    act(() => result.current.selectAmbientTrack('piano-music'))
+    act(() => result.current.updateProfile('Robin', 'Glade', 'calm'))
+    act(() => result.current.markReleaseSeen('release-x'))
+    act(() => result.current.selectBackdrop('cottage-bloom'))
+    expect(profile()).toMatchObject({
+      theme: 'night',
+      ambientSound: true,
+      ambientTrack: 'piano-music',
+      name: 'Robin',
+      gardenName: 'Glade',
+      calmMotion: true,
+      lastSeenReleaseId: 'release-x',
+      selectedBackdropId: 'cottage-bloom',
+    })
+    act(() => result.current.selectCustomBackdrop(undefined))
+    act(() => result.current.deleteCustomBackdrop('none'))
+    expect(result.current.state!.customBackdrops).toEqual([])
+  })
+
+  it('exports the garden it holds as a backup file', async () => {
+    const { result } = await renderReady()
+    const file = JSON.parse(result.current.exportGarden()!) as { format: string; garden: { seeds: number } }
+    expect(file.format).toBe('the-butterfly-garden')
+    expect(file.garden.seeds).toBe(5)
+  })
+
+  it('refuses an image save it cannot make, saying why', async () => {
+    const { result } = await renderReady()
+    const answer = await result.current.saveCustomBackdrop({ id: 'x' } as never)
+    expect(answer.ok).toBe(false)
+    expect(answer.message).toBeTruthy()
+  })
+})
+
+describe('the way back from a garden that could not be read', () => {
+  async function renderWithheld() {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'withheld',
+      state: createEmptyState(),
+      reason: 'malformed',
+    })
+    const view = renderHook(() => useGardenState())
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    return view
+  }
+
+  const setAside = {
+    id: 'q1',
+    reason: 'malformed' as const,
+    storedAt: '2026-10-01T10:00:00.000Z',
+    raw: { profile: { name: 'Robin' } },
+  }
+
+  it('offers the newest set-aside copy as a file, and counts and discards them', async () => {
+    const { result } = await renderWithheld()
+    const quarantined = vi.spyOn(gardenRepository, 'quarantined').mockResolvedValue([])
+    expect(await result.current.quarantinedCopy()).toBeUndefined()
+    expect(await result.current.countQuarantined()).toBe(0)
+
+    quarantined.mockResolvedValue([setAside])
+    const copy = JSON.parse((await result.current.quarantinedCopy())!) as Record<string, unknown>
+    expect(copy).toMatchObject({
+      format: 'the-butterfly-garden-set-aside',
+      reason: 'malformed',
+      storedAt: setAside.storedAt,
+      garden: setAside.raw,
+    })
+    expect(await result.current.countQuarantined()).toBe(1)
+
+    const clear = vi.spyOn(gardenRepository, 'clearQuarantine').mockResolvedValue()
+    await result.current.discardQuarantine()
+    expect(clear).toHaveBeenCalledOnce()
+  })
+
+  it('starts a new garden only once the old one is set aside', async () => {
+    const { result } = await renderWithheld()
+    const quarantined = vi.spyOn(gardenRepository, 'quarantined').mockResolvedValue([])
+    const prepare = vi.spyOn(gardenRepository, 'prepareFreshStart').mockResolvedValue()
+
+    let outcome: { ok: boolean; message?: string } | undefined
+    await act(async () => {
+      outcome = await result.current.startFresh()
+    })
+    expect(outcome).toMatchObject({ ok: false, message: expect.stringMatching(/no set-aside copy/) })
+    expect(prepare).not.toHaveBeenCalled()
+
+    quarantined.mockResolvedValue([setAside])
+    await act(async () => {
+      outcome = await result.current.startFresh()
+    })
+    expect(outcome).toEqual({ ok: true })
+    expect(result.current.persistence.readOnly).toBe(false)
+    expect(result.current.state).toBeUndefined()
+  })
+
+  it('says why a new garden could not be started, rather than failing silently', async () => {
+    const { result } = await renderWithheld()
+    vi.spyOn(gardenRepository, 'quarantined').mockRejectedValueOnce(new Error('Storage is locked.'))
+    let outcome: { ok: boolean; message?: string } | undefined
+    await act(async () => {
+      outcome = await result.current.startFresh()
+    })
+    expect(outcome).toEqual({ ok: false, message: 'Storage is locked.' })
+    expect(result.current.persistence.readOnly).toBe(true)
+
+    vi.spyOn(gardenRepository, 'quarantined').mockResolvedValue([setAside])
+    vi.spyOn(gardenRepository, 'prepareFreshStart').mockRejectedValueOnce('no reason')
+    await act(async () => {
+      outcome = await result.current.startFresh()
+    })
+    expect(outcome).toEqual({ ok: false, message: 'Your garden could not be saved to this device.' })
+  })
+
+  it('still restores when the copy that would undo it cannot be found', async () => {
+    const { result } = await renderWithheld()
+    vi.spyOn(gardenRepository, 'replace').mockResolvedValue([])
+    vi.spyOn(gardenRepository, 'snapshots').mockRejectedValue(new Error('blocked'))
+    let outcome: { ok: boolean; message: string } | undefined
+    await act(async () => {
+      outcome = await result.current.importGarden(
+        JSON.stringify({ format: 'the-butterfly-garden', garden: createInitialState('Robin', 'Back Again') }),
+      )
+    })
+    expect(outcome?.ok).toBe(true)
+    expect(result.current.state?.profile?.gardenName).toBe('Back Again')
+    expect(result.current.persistence).toMatchObject({ readOnly: false, lastRestoreSnapshotId: undefined })
+  })
+
+  it('refuses a file that is not JSON, and an undo it cannot make', async () => {
+    const { result } = await renderWithheld()
+    expect(await result.current.importGarden('not json')).toEqual({
+      ok: false,
+      message: 'That file is not a garden backup.',
+    })
+
+    vi.spyOn(gardenRepository, 'snapshot').mockResolvedValueOnce(undefined)
+    expect(await result.current.undoRestore('missing')).toEqual({
+      ok: false,
+      message: 'The garden from before the restore could not be read.',
+    })
+    vi.spyOn(gardenRepository, 'snapshot').mockRejectedValueOnce(new Error('Gone.'))
+    expect(await result.current.undoRestore('broken')).toEqual({ ok: false, message: 'Gone.' })
+  })
+})
+
+describe('the edges of persistence', () => {
+  const loaded = (seeds: number) => ({
+    status: 'loaded' as const,
+    state: { ...createInitialState('Tester', 'Test Garden'), seeds },
+  })
+  const withheld = (reason: 'unavailable' | 'malformed') => ({
+    status: 'withheld' as const,
+    state: createEmptyState(),
+    reason,
+  })
+
+  async function renderLoaded(seeds = 2) {
+    const load = vi.spyOn(gardenRepository, 'load').mockResolvedValue(loaded(seeds))
+    const view = renderHook(() => useGardenState())
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    return { ...view, load }
+  }
+
+  /** Say something on the sync channel, as another tab would. */
+  async function fromAnotherTab(message: unknown) {
+    const other = new BroadcastChannel('butterfly-garden-sync')
+    other.postMessage(message)
+    other.close()
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+  }
+
+  it('keeps trying storage that would not open, backing off, until it answers', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const load = vi
+        .spyOn(gardenRepository, 'load')
+        .mockResolvedValueOnce(withheld('unavailable'))
+        .mockResolvedValueOnce(withheld('unavailable'))
+        .mockResolvedValueOnce(loaded(9))
+      const { result } = renderHook(() => useGardenState())
+      await waitFor(() => expect(result.current.persistence.reason).toBe('unavailable'))
+
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      expect(load).toHaveBeenCalledTimes(2)
+      // The second wait is longer than the first.
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      expect(load).toHaveBeenCalledTimes(2)
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      expect(load).toHaveBeenCalledTimes(3)
+      expect(result.current.state?.seeds).toBe(9)
+      expect(result.current.persistence.readOnly).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops retrying, and says why, when storage answers with a garden it cannot read', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.spyOn(gardenRepository, 'load')
+        .mockResolvedValueOnce(withheld('unavailable'))
+        .mockResolvedValueOnce(withheld('malformed'))
+      const { result } = renderHook(() => useGardenState())
+      await waitFor(() => expect(result.current.persistence.reason).toBe('unavailable'))
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      expect(result.current.persistence).toMatchObject({ readOnly: true, reason: 'malformed' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops writing while another tab deletes, and resumes if that fails', async () => {
+    const { result, load } = await renderLoaded(2)
+    await fromAnotherTab({ type: 'garden-clearing' })
+    expect(result.current.persistence).toMatchObject({ readOnly: true, reason: 'deleting' })
+
+    load.mockResolvedValue(loaded(4))
+    await fromAnotherTab({ type: 'garden-clear-failed' })
+    await waitFor(() => expect(result.current.persistence.readOnly).toBe(false))
+    expect(result.current.state?.seeds).toBe(4)
+  })
+
+  it('ignores news from other tabs while it cannot write, and messages it does not know', async () => {
+    const { result } = await renderLoaded(2)
+    const adopt = vi.spyOn(gardenRepository, 'adopt')
+    await fromAnotherTab({ type: 'something-new' })
+    await fromAnotherTab(undefined)
+    expect(adopt).not.toHaveBeenCalled()
+
+    await fromAnotherTab({ type: 'garden-clearing' })
+    await fromAnotherTab({ type: 'garden-saved', parts: ['meta'] })
+    expect(adopt).not.toHaveBeenCalled()
+    expect(result.current.state?.seeds).toBe(2)
+  })
+
+  it('takes in what another tab saved', async () => {
+    const { result } = await renderLoaded(2)
+    vi.spyOn(gardenRepository, 'adopt').mockResolvedValue(loaded(6))
+    await fromAnotherTab({ type: 'garden-saved', parts: ['meta'] })
+    await waitFor(() => expect(result.current.state?.seeds).toBe(6))
+  })
+
+  it('pauses and retries when storage stops answering mid-sync', async () => {
+    const { result, load } = await renderLoaded(2)
+    vi.spyOn(gardenRepository, 'adopt').mockResolvedValue(withheld('unavailable'))
+    load.mockResolvedValue(loaded(8))
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      await fromAnotherTab({ type: 'garden-saved', parts: ['meta'] })
+      await waitFor(() => expect(result.current.persistence.reason).toBe('unavailable'))
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      await waitFor(() => expect(result.current.state?.seeds).toBe(8))
+      expect(result.current.persistence.readOnly).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('tells other tabs only about writes that changed something', async () => {
+    const { result } = await renderLoaded(2)
+    const posted: unknown[] = []
+    vi.spyOn(BroadcastChannel.prototype, 'postMessage').mockImplementation((message) => {
+      posted.push(message)
+    })
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValueOnce([])
+    act(() => result.current.toggleTheme())
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(posted).toEqual([])
+
+    save.mockResolvedValueOnce(['meta'])
+    act(() => result.current.toggleTheme())
+    await waitFor(() => expect(posted).toEqual([{ type: 'garden-saved', parts: ['meta'] }]))
+  })
+
+  it('starts again from nothing when a write finds the garden deleted elsewhere', async () => {
+    const { result } = await renderLoaded(2)
+    vi.spyOn(gardenRepository, 'save').mockRejectedValue(new GardenDeletedElsewhereError())
+    act(() => result.current.toggleTheme())
+    await waitFor(() => expect(result.current.state).toBeUndefined())
+    expect(result.current.persistence.notice).toMatch(/deleted in another tab/)
+  })
+
+  it('pauses when another tab wrote first and its garden cannot be read back', async () => {
+    const { result, load } = await renderLoaded(2)
+    vi.spyOn(gardenRepository, 'save').mockRejectedValue(new GardenConflictError())
+    load.mockResolvedValue(withheld('malformed'))
+    act(() => result.current.toggleTheme())
+    await waitFor(() => expect(result.current.persistence.readOnly).toBe(true))
+    expect(result.current.persistence.reason).toBe('malformed')
+    expect(result.current.persistence.notice).toMatch(/another tab/i)
+  })
+
+  it('moves the garden on when the gardener comes back to it', async () => {
+    const { result } = await renderLoaded(2)
+    const before = result.current.state
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    // Nothing was due, so the garden is the same garden.
+    expect(result.current.state).toEqual(before)
+  })
+
+  it('names what a refused backup lacks, and counts what it repaired', async () => {
+    const { result } = await renderLoaded(2)
+    vi.spyOn(gardenRepository, 'replace').mockResolvedValue([])
+    const refused = await result.current.importGarden(JSON.stringify({ garden: { version: 99 } }))
+    expect(refused).toMatchObject({ ok: false, message: expect.stringMatching(/^That backup could not be restored\./) })
+
+    let outcome: { ok: boolean; message: string } | undefined
+    await act(async () => {
+      outcome = await result.current.importGarden(
+        JSON.stringify({
+          format: 'the-butterfly-garden',
+          garden: { ...createInitialState('Robin', 'Mended'), goals: [null] },
+        }),
+      )
+    })
+    expect(outcome?.message).toMatch(/1 damaged entry was repaired/)
+  })
+
+  it('checks a backup’s images before replacing anything', async () => {
+    const { result } = await renderLoaded(2)
+    const replace = vi.spyOn(gardenRepository, 'replace')
+    const outcome = await result.current.importGarden(
+      JSON.stringify({
+        format: 'the-butterfly-garden',
+        garden: {
+          ...createInitialState('Robin', 'Pictured'),
+          customBackdrops: [
+            {
+              id: 'scene',
+              name: 'Not a picture',
+              createdAt: '2026-09-08T00:00:00Z',
+              updatedAt: '2026-09-08T00:00:00Z',
+              mimeType: 'image/png',
+              width: 1,
+              height: 1,
+              byteLength: 3,
+              imageData: 'YWJj',
+              crop: { x: 0.5, y: 0.5, zoom: 1 },
+            },
+          ],
+        },
+      }),
+    )
+    expect(outcome).toEqual({ ok: false, message: 'This file is not a readable JPEG, PNG or WebP image.' })
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('says why a deletion did not happen, and lets other tabs carry on', async () => {
+    const { result } = await renderLoaded(2)
+    const posted: string[] = []
+    vi.spyOn(BroadcastChannel.prototype, 'postMessage').mockImplementation((message) => {
+      posted.push((message as { type: string }).type)
+    })
+    vi.spyOn(gardenRepository, 'clear').mockRejectedValueOnce(new Error('Storage is locked.'))
+    let outcome: { ok: boolean; message?: string } | undefined
+    await act(async () => {
+      outcome = await result.current.deleteAll()
+    })
+    expect(outcome).toEqual({ ok: false, message: 'Storage is locked.' })
+    expect(posted).toEqual(['garden-clearing', 'garden-clear-failed'])
+    expect(result.current.state?.seeds).toBe(2)
+  })
+
+  it('treats a deletion waiting on another tab as done here', async () => {
+    const { result } = await renderLoaded(2)
+    vi.spyOn(gardenRepository, 'clear').mockRejectedValueOnce(new GardenDeletionPendingError())
+    let outcome: { ok: boolean; message?: string } | undefined
+    await act(async () => {
+      outcome = await result.current.deleteAll()
+    })
+    expect(outcome?.ok).toBe(false)
+    expect(result.current.state).toBeUndefined()
+    expect(result.current.persistence.notice).toBe(outcome?.message)
+  })
+})
+
+describe('saving one of the gardener’s images', () => {
+  const image = (id = 'scene') => ({
+    id,
+    name: 'My image',
+    createdAt: '2026-09-08T00:00:00Z',
+    updatedAt: '2026-09-08T00:00:00Z',
+    mimeType: 'image/png' as const,
+    width: 1,
+    height: 1,
+    byteLength: 3,
+    imageData: 'YWJj',
+    crop: { x: 0.5, y: 0.5, zoom: 1 },
+  })
+
+  async function renderWith(overrides: Partial<ReturnType<typeof createInitialState>> = {}) {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: { ...createInitialState('Tester', 'Garden'), ...overrides },
+    })
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const view = renderHook(() => useGardenState())
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    return { ...view, save }
+  }
+
+  it('refuses a fourth image, but replaces one it already holds', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a'), image('b'), image('c')] })
+    expect(await result.current.saveCustomBackdrop(image('d'))).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/Remove one to add another/),
+    })
+    let saved: Promise<{ ok: boolean }> | undefined
+    act(() => {
+      saved = result.current.saveCustomBackdrop({ ...image('b'), name: 'Renamed' })
+    })
+    expect(await saved).toEqual({ ok: true })
+    expect(result.current.state?.customBackdrops.find((entry) => entry.id === 'b')?.name).toBe('Renamed')
+  })
+
+  it('waits for one image before taking another', async () => {
+    const { result, save } = await renderWith()
+    save.mockImplementation(() => new Promise(() => undefined))
+    act(() => {
+      void result.current.saveCustomBackdrop(image('first'))
+    })
+    expect(await result.current.saveCustomBackdrop(image('second'))).toEqual({
+      ok: false,
+      message: 'Another image is still saving. Please wait a moment.',
+    })
+  })
+
+  it('refuses while the garden is read-only', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue(
+      { status: 'withheld', state: createEmptyState(), reason: 'malformed' },
+    )
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect((await result.current.saveCustomBackdrop(image())).message).toMatch(/read-only/)
+  })
+
+  it('refuses when there is no garden any more', async () => {
+    const { result } = await renderWith()
+    const other = new BroadcastChannel('butterfly-garden-sync')
+    other.postMessage({ type: 'garden-cleared' })
+    other.close()
+    await waitFor(() => expect(result.current.state).toBeUndefined())
+    expect(await result.current.saveCustomBackdrop(image())).toEqual({
+      ok: false,
+      message: 'Open your garden first.',
+    })
+    // Actions that change a garden do nothing without one.
+    act(() => result.current.toggleTheme())
+    expect(result.current.state).toBeUndefined()
+  })
+
+  it('chooses an image to show, and goes back to the scene', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a')] })
+    act(() => result.current.selectCustomBackdrop('a'))
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBe('a')
+    act(() => result.current.selectCustomBackdrop(undefined))
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBeUndefined()
+  })
+
+  it('clears a notice when a new garden begins', async () => {
+    const { result } = await renderWith()
+    const other = new BroadcastChannel('butterfly-garden-sync')
+    other.postMessage({ type: 'garden-cleared' })
+    other.close()
+    await waitFor(() => expect(result.current.persistence.notice).toBeDefined())
+    act(() => result.current.onboard('Robin', 'Second Garden'))
+    expect(result.current.persistence.notice).toBeUndefined()
+    expect(result.current.state?.profile?.gardenName).toBe('Second Garden')
   })
 })

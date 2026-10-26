@@ -114,6 +114,16 @@ export default defineConfig(({ mode }) => {
       // has to be tested across a daylight-saving transition, which a zone
       // without one would let pass while proving nothing.
       env: { TZ: 'America/New_York' },
+      // `npm test` measures coverage and fails below these floors. They sit
+      // a little under what the suite reaches, so new code arrives with its
+      // tests rather than quietly lowering the share that is checked.
+      coverage: {
+        provider: 'v8',
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/**/*.d.ts'],
+        reporter: ['text-summary'],
+        thresholds: { lines: 85, statements: 84, functions: 80, branches: 78 },
+      },
     },
   }
 })

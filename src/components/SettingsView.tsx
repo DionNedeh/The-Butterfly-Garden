@@ -14,7 +14,7 @@ import {
   storageStatus,
   type StorageStatus,
 } from '../lib/storage'
-import { MAX_BACKUP_BYTES } from './SafeMode'
+import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
@@ -280,11 +280,12 @@ export function SettingsView({
   const chooseBackup = async (file: File) => {
     setBackupNote(undefined)
     setPendingRestore(undefined)
-    if (file.size > MAX_BACKUP_BYTES) {
-      setBackupNote('That file is too large to be a garden backup.')
+    const chosen = await readBackupFile(file)
+    if (!chosen.ok) {
+      setBackupNote(chosen.message)
       return
     }
-    const text = await file.text()
+    const { text } = chosen
     const preview = previewBackup(text)
     if (!preview.ok) {
       setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)

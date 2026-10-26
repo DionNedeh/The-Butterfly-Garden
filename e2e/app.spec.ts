@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import type { AppState } from '../src/types'
 import { expect, test } from '@playwright/test'
-import AxeBuilder from '@axe-core/playwright'
+import { seriousViolations } from './a11y'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/The-Butterfly-Garden/')
@@ -327,13 +327,7 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   }))
   expect(starLayers.garden).toContain('radial-gradient')
   expect(starLayers.shell).not.toContain('url(')
-  const nightResults = await new AxeBuilder({ page }).analyze()
-  expect(
-    nightResults.violations.filter(
-      (violation) =>
-        violation.impact === 'serious' || violation.impact === 'critical',
-    ),
-  ).toEqual([])
+  expect(await seriousViolations(page, 'Night garden')).toEqual([])
 
   await editGardenRecord(page, (state) => {
     state.profile.createdAt = new Date(
@@ -404,13 +398,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
 
   await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   await page.waitForTimeout(450)
-  const shopA11y = await new AxeBuilder({ page }).analyze()
-  expect(
-    shopA11y.violations.filter(
-      (violation) =>
-        violation.impact === 'serious' || violation.impact === 'critical',
-    ),
-  ).toEqual([])
+  expect(await seriousViolations(page, 'Shop')).toEqual([])
   // Flight patterns live behind their own tab; the shop opens on Supplies.
   await page
     .locator('.shop-tabs')
@@ -448,13 +436,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
     .getByRole('button', { name: 'Flight', exact: true })
     .click()
   await page.waitForTimeout(450)
-  const patternsA11y = await new AxeBuilder({ page }).analyze()
-  expect(
-    patternsA11y.violations.filter(
-      (violation) =>
-        violation.impact === 'serious' || violation.impact === 'critical',
-    ),
-  ).toEqual([])
+  expect(await seriousViolations(page, 'Flight patterns')).toEqual([])
   await page
     .getByRole('button', { name: /Garden Waltz.*Owned - select pattern/i })
     .click()
@@ -577,13 +559,7 @@ test('shows plant details, protects active hosts, and frees a full garden space'
   await expect(
     page.getByRole('button', { name: /remove this plant/i }),
   ).toBeDisabled()
-  const plantA11y = await new AxeBuilder({ page }).analyze()
-  expect(
-    plantA11y.violations.filter(
-      (violation) =>
-        violation.impact === 'serious' || violation.impact === 'critical',
-    ),
-  ).toEqual([])
+  expect(await seriousViolations(page, 'Plant details')).toEqual([])
 
   await page.getByRole('button', { name: /View Aster/i }).click()
   await page.getByRole('button', { name: /remove this plant/i }).click()
@@ -636,12 +612,7 @@ test('has no serious accessibility violations and relaunches offline', async ({
 }) => {
   await enterGarden(page)
   await page.waitForTimeout(450)
-  const results = await new AxeBuilder({ page }).analyze()
-  const seriousViolations = results.violations.filter(
-    (violation) =>
-      violation.impact === 'serious' || violation.impact === 'critical',
-  )
-  expect(seriousViolations).toEqual([])
+  expect(await seriousViolations(page, 'Garden')).toEqual([])
 
   await page.reload()
   await expect(
@@ -678,12 +649,7 @@ test('has no serious accessibility violations on any view', async ({
     await mainNav(page).getByRole('button', { name: view, exact: true }).click()
     // Let entrance animations settle so axe sees final contrast and sizing.
     await page.waitForTimeout(400)
-    const results = await new AxeBuilder({ page }).analyze()
-    for (const violation of results.violations) {
-      if (violation.impact === 'serious' || violation.impact === 'critical') {
-        offenders.push(`${view}: ${violation.id} (${violation.impact})`)
-      }
-    }
+    offenders.push(...(await seriousViolations(page, view)))
   }
   expect(offenders).toEqual([])
 })
@@ -705,12 +671,7 @@ test('every shop tab is reachable and accessible', async ({ page }) => {
       .getByRole('button', { name: tab, exact: true })
       .click()
     await page.waitForTimeout(300)
-    const results = await new AxeBuilder({ page }).analyze()
-    for (const violation of results.violations) {
-      if (violation.impact === 'serious' || violation.impact === 'critical') {
-        offenders.push(`${tab}: ${violation.id} (${violation.impact})`)
-      }
-    }
+    offenders.push(...(await seriousViolations(page, tab)))
   }
   expect(offenders).toEqual([])
 })
@@ -840,13 +801,7 @@ test.describe('rounding out the day', () => {
 
     // The recap is a full view but is deliberately absent from the navigation,
     // so the sweep over every nav destination never reaches it.
-    const recapAudit = await new AxeBuilder({ page }).analyze()
-    expect(
-      recapAudit.violations.filter(
-        (violation) =>
-          violation.impact === 'serious' || violation.impact === 'critical',
-      ),
-    ).toEqual([])
+    expect(await seriousViolations(page, 'Evening recap')).toEqual([])
 
     await page.getByRole('button', { name: 'Continue' }).click()
     await page.getByRole('button', { name: /bright/i }).click()
@@ -907,12 +862,7 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   await editor.getByLabel('Zoom', { exact: true }).fill('1.5')
   await editor.getByRole('button', { name: 'Phone preview' }).click()
   await expect(editor.locator('.custom-scene-image')).toBeVisible()
-  const accessibility = await new AxeBuilder({ page }).analyze()
-  expect(
-    accessibility.violations.filter(
-      (v) => v.impact === 'serious' || v.impact === 'critical',
-    ),
-  ).toEqual([])
+  expect(await seriousViolations(page, 'Backdrop editor')).toEqual([])
   await editor.getByRole('button', { name: 'Save & use backdrop' }).click()
   await expect(editor).not.toBeVisible()
   await page.reload()
@@ -1169,10 +1119,5 @@ test('a garden that cannot be read opens recovery, never onboarding', async ({
   }
   expect(copy.garden.moods).toBe('not a collection')
 
-  const accessibility = await new AxeBuilder({ page }).analyze()
-  expect(
-    accessibility.violations.filter(
-      (v) => v.impact === 'serious' || v.impact === 'critical',
-    ),
-  ).toEqual([])
+  expect(await seriousViolations(page, 'Recovery')).toEqual([])
 })

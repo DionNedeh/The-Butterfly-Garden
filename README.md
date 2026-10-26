@@ -13,7 +13,14 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - One-time, daily, and selected-weekday goals, plus skip, snooze and archive
 - A month planner for scheduling one-time goals onto any upcoming day
 - Optional daily reflections drawn from a rotating set of prompts
-- Sunlight rewards capped at five per day, converting to Nectar
+- Sunlight rewards capped at five per day, converting to Nectar, and a Sunlight
+  streak in the journal: the run of days with at least one act of care
+- Moonlight: from 6 pm (until 4 am on a late night) a short evening recap closes
+  the day, can plan tomorrow's first goal, is kept in the journal, and earns
+  one Stardust, whether or not the day earned any Sunlight
+- Stardust, the rarer currency, from bond levels, emergences and closing the
+  day, spent in the Boutique's Stardust atelier and on the two most graceful
+  flight patterns
 - Host and nectar plants with visible growth across four stages
 - Egg, caterpillar, chrysalis and butterfly stages, advanced by days of care
 - Per-stage care activities, a bond meter, and a shared cosmetics wardrobe
@@ -47,9 +54,13 @@ The production app is configured for:
 ```bash
 npm run lint       # ESLint everywhere; type-aware rules over src/
 npm run typecheck  # app, build config and end-to-end tests
-npm test           # unit and component tests
+npm run knip       # unused files and exports
+npm test           # unit and component tests, failing below the coverage floors
 npm run build
-npm run test:e2e   # Playwright: desktop, mobile and the Android bundle, with an axe sweep
+npm run test:e2e   # Playwright: desktop, mobile and the Android bundle, with axe sweeps
+npm run budgets    # gzipped bundle sizes, after a build
+
+E2E_ALL_BROWSERS=1 npm run test:e2e   # also Safari (desktop, iPhone) and Firefox
 
 npm audit --omit=dev --audit-level=high   # runtime dependencies only
 ```
@@ -60,9 +71,13 @@ Playwright's browser binaries may need to be installed once with:
 npx playwright install chromium
 ```
 
-The lint, typecheck, unit, end-to-end and audit checks run in CI on every push
-and pull request, and a failure blocks the deploy. `npm run build` runs on
-pushes to `main` rather than on pull requests, since only a push can deploy.
+All of these run in CI on every push and pull request, and a failure blocks the
+deploy. Safari and Firefox run in a job of their own, which installs those
+engines. The axe sweeps fail on serious and critical violations and report
+moderate ones as warnings on the run. `npm run build` runs on pushes to `main`
+rather than on pull requests, since only a push can deploy.
+
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) maps how the code fits together.
 
 ## The Android app
 
@@ -123,15 +138,16 @@ set aside untouched, and a banner explains what happened.
 
 ## 3.0 review and the Garden Pass
 
-See [the local 3.0 review](docs/3.0-LOCAL-REVIEW.md) for implementation coverage,
-verification, and remaining physical-device checks. `src/lib/gardenPass.ts`
+[The 3.0 review](docs/3.0-LOCAL-REVIEW.md) is a historical record of how 3.0 was
+built and checked; the code has moved on since. `src/lib/gardenPass.ts`
 keeps the PWA's preview apart from the Android app's verified Google Play
 subscription, so a preview can never pass for a purchase; backups do not confer
 paid access. Purchases are checked on the device, against Google's signature,
 with no server.
 
-Schema 6 / IndexedDB version 5 includes personal image data. Older app builds
-cannot read a garden after this upgrade; keep an exported backup before updates.
+The garden is at schema 6, in IndexedDB version 6, and includes personal image
+data. Builds from before schema 6 cannot read it; keep an exported backup
+before updates.
 
 ## Deployment
 

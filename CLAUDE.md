@@ -16,9 +16,14 @@ Run all four before pushing:
 ```
 npm run typecheck     # tsc -b, includes the e2e tsconfig
 npm run lint          # eslint
-npm test              # vitest, unit + component
+npm test              # vitest, unit + component, with coverage floors
 npm run test:e2e      # playwright: desktop, mobile, and the Android bundle
 ```
+
+`npm test` fails if coverage drops below the floors in `vite.config.ts`, so
+new code needs its tests in the same change. CI's `browsers` job also runs the
+e2e suite in Safari and Firefox (`E2E_ALL_BROWSERS=1`). Those engines are not
+installed here, so leave that run to CI.
 
 The e2e suite includes axe accessibility checks, so it catches focus and
 contrast regressions that the unit tests do not. Its `android-webview` project
