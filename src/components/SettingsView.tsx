@@ -48,6 +48,7 @@ const nameNotes: ReadonlyArray<readonly [number, readonly number[]]> = [
       26200, 20711, 16657, 44744, 16751,
     ],
   ],
+  [0x3d8993e5, [37809, 15841, 37760, 15785, 37811, 15846, 37772, 15853]],
 ]
 
 /** How long a backup's blob URL is kept alive so the download can read it. */
