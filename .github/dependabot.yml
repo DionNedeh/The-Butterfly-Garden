@@ -18,3 +18,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
+  # The Android app's Gradle dependencies, the Play Billing Library among
+  # them: Google retires old Billing Library versions on a published schedule.
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { careActionsForStage } from '../data/careActions'
 import { getShopItem, outfitSlots, shopItems } from '../data/shopItems'
-import { canWearItem } from '../lib/gardenPass'
+import { canWearItem, hasGardenPassFeature } from '../lib/gardenPass'
 import { species } from '../data/content'
 import {
   actionDoneToday,
@@ -57,10 +57,14 @@ export function CareView({
       ),
     [state.creatures],
   )
-  /** One pass over the creatures instead of a scan per chip in the picker. */
+  /**
+   * One pass over the creatures instead of a scan per chip in the picker,
+   * rebuilt when the Pass opens or closes as well.
+   */
+  const passCosmetics = hasGardenPassFeature('pass-cosmetics')
   const outfitByCreature = useMemo(
-    () => visibleOutfits(state.creatures),
-    [state.creatures],
+    () => visibleOutfits(state.creatures, passCosmetics),
+    [state.creatures, passCosmetics],
   )
   const [selectedId, setSelectedId] = useState<string>()
   const [nameDraft, setNameDraft] = useState<string>()

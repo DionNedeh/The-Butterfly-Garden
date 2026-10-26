@@ -11,6 +11,7 @@ import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
 import { activeCustomBackdrop } from '../lib/customBackdrops'
 import { hasGardenPassFeature } from '../lib/gardenPass'
 import { CustomBackdropImage } from './CustomBackdropImage'
+import { isAndroidApp } from '../lib/platform'
 import { availableJars, jarForPlant } from '../lib/jars'
 import {
   DAILY_SEED_REWARD,
@@ -105,10 +106,13 @@ export function GardenView({
    * sprite. Building it per creature scanned the whole list every time, and
    * handed each sprite a fresh object that defeated its memo -- so typing a
    * butterfly's name below re-rendered every butterfly and flower on screen.
+   * Whether Pass outfits show is read here, during render, so the index is
+   * rebuilt when Google Play's answer opens or closes the Pass.
    */
+  const passCosmetics = hasGardenPassFeature('pass-cosmetics')
   const outfitByCreature = useMemo(
-    () => visibleOutfits(state.creatures),
-    [state.creatures],
+    () => visibleOutfits(state.creatures, passCosmetics),
+    [state.creatures, passCosmetics],
   )
   const emerged = state.creatures.filter(
     (creature) => creature.stage === 'butterfly',
@@ -355,7 +359,13 @@ export function GardenView({
         </div>
       </section>
 
-      {sceneUnavailable && <p role="status">This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.</p>}
+      {sceneUnavailable && (
+        <p role="status">
+          {isAndroidApp()
+            ? 'This scene could not be opened. Sunlit Meadow is shown instead.'
+            : 'This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.'}
+        </p>
+      )}
       {state.profile?.selectedCustomBackdropId && !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
       {failedImage && (
         <p role="status">

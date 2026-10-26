@@ -11,6 +11,7 @@ import {
 } from '../lib/progression'
 import type { IconName } from '../types'
 import { Icon } from './Icons'
+import { isAndroidApp } from '../lib/platform'
 
 interface GuideSection {
   icon: IconName
@@ -99,7 +100,9 @@ const sections: GuideSection[] = [
     eyebrow: 'Something to look forward to',
     title: 'The Garden Pass',
     paragraphs: [
-      'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. They are included free in the current PWA preview. Try them from the Care wardrobe; no subscription or payment is active.',
+      isAndroidApp()
+        ? 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape — beside extra scenes and your own images as backdrops. They come with the optional Garden Pass subscription from Google Play; you can try any outfit on first, and everything else in the garden is free.'
+        : 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. They are included free in the current PWA preview. Try them from the Care wardrobe; no subscription or payment is active.',
     ],
   },
   {
@@ -165,9 +168,11 @@ const sections: GuideSection[] = [
   {
     icon: 'settings',
     eyebrow: 'Take it with you',
-    title: 'Install, offline, and updates',
+    title: isAndroidApp() ? 'Offline and updates' : 'Install, offline, and updates',
     paragraphs: [
-      'After the first successful load, the whole garden works offline. Supported browsers offer an Install button in the header for a standalone home-screen app, and when a new version is ready the app always asks before refreshing to apply it.',
+      isAndroidApp()
+        ? 'The whole garden is inside the app, so it works offline from the moment it is installed. New versions arrive through Google Play.'
+        : 'After the first successful load, the whole garden works offline. Supported browsers offer an Install button in the header for a standalone home-screen app, and when a new version is ready the app always asks before refreshing to apply it.',
     ],
   },
   {
@@ -177,7 +182,9 @@ const sections: GuideSection[] = [
     paragraphs: [
       'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Reduce garden motion in Settings pauses decorative animation.',
       'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme.',
-      'Delete all local data in Settings permanently removes this garden from the current browser; clearing site storage does the same. There is no undo, so treat it kindly.',
+      isAndroidApp()
+        ? 'Delete all local data in Settings permanently removes this garden from this phone; clearing the app\'s storage or uninstalling it does the same. There is no undo, so treat it kindly.'
+        : 'Delete all local data in Settings permanently removes this garden from the current browser; clearing site storage does the same. There is no undo, so treat it kindly.',
     ],
   },
 ]
