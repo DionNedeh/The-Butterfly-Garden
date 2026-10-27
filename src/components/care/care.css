@@ -19,8 +19,10 @@
   font-weight: 700;
 }
 
+/* The full width, as other selects have: at its own width it is as wide as
+   the longest goal title, which pushed Care's whole panel off a phone. */
 .grow-alongside select {
-  width: auto;
+  width: 100%;
   max-width: 100%;
   font-weight: 400;
 }

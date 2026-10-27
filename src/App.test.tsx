@@ -643,7 +643,8 @@ describe('the garden pace', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     const user = await openGarden(bloomed)
     await user.click(await screen.findByRole('button', { name: /^Milkweed 1/ }))
     // Classic: a plant blooms once, so there is no next bloom to speak of.
-    expect(await screen.findByText('Growth stage')).toBeInTheDocument()
+    // The plant's panel is a lazy chunk, first loaded here.
+    expect(await screen.findByText('Growth stage', {}, { timeout: LAZY_PAGE_MS })).toBeInTheDocument()
     expect(screen.queryByText('Next bloom')).toBeNull()
 
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))

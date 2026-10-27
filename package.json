@@ -2,7 +2,7 @@
   "name": "the-butterfly-garden",
   "private": true,
   "license": "UNLICENSED",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -152,6 +152,33 @@ export type MetaField = (typeof META_FIELDS)[number]
 export type GardenPart = GardenCollection | 'meta'
 
 /**
+ * What the stored garden is known to hold, once it has been read as `migrated`.
+ *
+ * Usually exactly that. But reading can let a companion go from a goal it was
+ * grown alongside (validateGarden drops the link once the goal is archived or
+ * gone), and an older build, which archives without letting go, leaves such a
+ * link in storage. The release then lives only in memory: restoring the goal
+ * would bring the link back on the next launch. Copies of the companions mark
+ * them as not yet written, so the next save stores the release.
+ */
+export function storedBaseline(candidate: unknown, migrated: AppState): AppState {
+  const stored = (candidate as { creatures?: unknown } | undefined)?.creatures
+  if (!Array.isArray(stored)) return migrated
+  const read = new Map(migrated.creatures.map((creature) => [creature.id, creature]))
+  const released = stored.some((raw) => {
+    const { id, adoptedGoalId } = (raw ?? {}) as { id?: unknown; adoptedGoalId?: unknown }
+    return (
+      typeof id === 'string' &&
+      typeof adoptedGoalId === 'string' &&
+      read.get(id)?.adoptedGoalId === undefined
+    )
+  })
+  return released
+    ? { ...migrated, creatures: migrated.creatures.map((creature) => ({ ...creature })) }
+    : migrated
+}
+
+/**
  * Whether two collections hold the same elements, compared by reference.
  *
  * Plain `a === b` is not enough: `awardSunlight` maps over `plants` on every
@@ -879,7 +906,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         typeof storedVersion === 'number' &&
         storedVersion < LATEST_COLLECTION_VERSION
       if (!behind) {
-        persisted = migrated
+        persisted = storedBaseline(candidate, migrated)
         return { status: 'loaded', state: migrated }
       }
 
@@ -1067,7 +1094,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
 
       const migrated = migrateState(candidate)
       if (!migrated) return await repository.load()
-      persisted = migrated
+      persisted = storedBaseline(candidate, migrated)
       persistedRevision = revision
       withheld = false
       return { status: 'loaded', state: migrated }

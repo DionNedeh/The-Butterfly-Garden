@@ -69,18 +69,48 @@ describe('letters, through the hook', () => {
     expect(save).toHaveBeenCalledTimes(1)
   })
 
-  it('says nothing when another tab wrote first: a letter read holds nothing to lose', async () => {
+  it('marks a letter read again, quietly, when another tab wrote first', async () => {
+    // The other tab has not read it: a conflict must not undo "Put away".
     const other = visitedToday({ seeds: 9 })
     const load = vi
       .spyOn(gardenRepository, 'load')
       .mockResolvedValueOnce({ status: 'loaded', state: visitedToday() })
       .mockResolvedValue({ status: 'loaded', state: other })
-    vi.spyOn(gardenRepository, 'save').mockRejectedValue(new GardenConflictError())
+    const save = vi
+      .spyOn(gardenRepository, 'save')
+      .mockRejectedValueOnce(new GardenConflictError())
+      .mockResolvedValue(['meta'])
     const { result } = renderHook(() => useGardenState())
     await waitFor(() => expect(result.current.loading).toBe(false))
     act(() => result.current.readLetter('2026-10-25'))
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(result.current.state).toEqual(other))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        seeds: 9,
+        profile: expect.objectContaining({ lastLetterRead: '2026-10-25' }),
+      }),
+    )
+    expect(result.current.state?.profile?.lastLetterRead).toBe('2026-10-25')
+    expect(result.current.persistence.notice).toBeUndefined()
+  })
+
+  it('stops marking it again after a few refusals', async () => {
+    const other = visitedToday({ seeds: 9 })
+    const load = vi
+      .spyOn(gardenRepository, 'load')
+      .mockResolvedValueOnce({ status: 'loaded', state: visitedToday() })
+      .mockResolvedValue({ status: 'loaded', state: other })
+    const save = vi.spyOn(gardenRepository, 'save').mockRejectedValue(new GardenConflictError())
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() => result.current.readLetter('2026-10-25'))
+    // The first write and three tries, each refused and reloaded.
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(5))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(save).toHaveBeenCalledTimes(4)
+    expect(load).toHaveBeenCalledTimes(5)
+    expect(result.current.state).toEqual(other)
     expect(result.current.persistence.notice).toBeUndefined()
   })
 })

@@ -1280,6 +1280,21 @@ test('a companion grown alongside a goal is cared for when the goal is done, and
   )
   expect(Math.abs(heights[0] - heights[1])).toBeLessThanOrEqual(1)
   expect(await seriousViolations(page, 'Today with a goal growing a companion')).toEqual([])
+  // At the largest text the badge may take a line of its own, but the
+  // schedule is never cut short. As Settings sets it (lib/textSize).
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '125%'
+    document.documentElement.dataset.textSize = 'largest'
+  })
+  const schedule = walk.locator('.goal-schedule')
+  await expect(schedule).toHaveText('Every day')
+  expect(
+    await schedule.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+  ).toBe(true)
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('font-size')
+    delete document.documentElement.dataset.textSize
+  })
 
   // Done today: Sol's third day of care, and a chrysalis, celebrated. The
   // same Sunlight brings the milkweed into bloom, with an egg.

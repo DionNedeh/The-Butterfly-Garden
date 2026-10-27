@@ -97,6 +97,9 @@ export type StarterGoal = Pick<Goal, 'title' | 'tinyTitle'>
  * What is left here is the wiring: reading the clock, routing each action
  * through `update`, and marking the moments the gardener brought about.
  */
+/** How many times a letter read is marked again after another tab wrote first. */
+const LETTER_READ_TRIES = 3
+
 export function useGardenState() {
   const media = useMediaSaves()
   const { state, setState, loading, persistence, setPersistence, readOnlyRef, lifecycle } =
@@ -164,6 +167,24 @@ export function useGardenState() {
       document.removeEventListener('visibilitychange', visit)
     }
   }, [loading, hasGarden, setState, readOnlyRef])
+
+  // The newest letter this tab read or put away. Marking it is a quiet write
+  // (lib/quietWrites), which a conflict with another tab drops without a word
+  // and replaces with that tab's garden. Unlike a visit, the other tab has not
+  // done this for us, so the mark is made again on the garden that arrived. A
+  // few tries at most: a write refused every time must not loop.
+  const letterRead = useRef<{ sunday: string; tries: number } | undefined>(undefined)
+  useEffect(() => {
+    const read = letterRead.current
+    if (!read || !state?.profile || readOnlyRef.current) return
+    if ((state.profile.lastLetterRead ?? '') >= read.sunday || read.tries >= LETTER_READ_TRIES) return
+    read.tries += 1
+    setState((current) => {
+      if (!current) return current
+      const next = readLetter(current, read.sunday)
+      return next === current ? current : markQuietWrite(next)
+    })
+  }, [state, setState, readOnlyRef])
 
   /**
    * Every action keeps a stable identity so memoized views (the month
@@ -482,6 +503,8 @@ export function useGardenState() {
        */
       readLetter: (sunday: string) => {
         if (readOnlyRef.current) return
+        if (!letterRead.current || sunday > letterRead.current.sunday)
+          letterRead.current = { sunday, tries: 0 }
         setState((current) => {
           if (!current) return current
           const next = readLetter(current, sunday)

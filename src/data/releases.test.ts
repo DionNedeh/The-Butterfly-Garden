@@ -30,6 +30,15 @@ describe('release notes', () => {
     expect(currentRelease.version).toBe(__APP_VERSION__)
   })
 
+  it('keeps the 3.1 notes as they went out', () => {
+    // 3.1 has been read on the live site; a later release adds an entry of
+    // its own, so What's new opens again for gardeners who read 3.1.
+    const three = getRelease('release-3-1')
+    expect(three?.version).toBe('3.1.0')
+    expect(three?.releasedOn).toBe('2026-10-27')
+    expect(three?.sections.map((section) => section.title)).not.toContain('In the garden')
+  })
+
   it('keeps the 3.0 notes as they were', () => {
     const three = getRelease('release-3-0')
     expect(three?.version).toBe('3.0.0')

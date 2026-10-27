@@ -72,35 +72,34 @@
   min-height: 44px;
 }
 
-/* The companions a goal is grown alongside, named in a small badge at the
-   end of the row's quieter line. That line then keeps to one line, so the
-   compact row never grows: the names give way first, then the schedule,
-   each cut short with an ellipsis (the whole of both is still read out). */
+/* The companions a goal is grown alongside, named in a small badge after
+   the row's quieter line. Where both fit, they share one line; where they do
+   not (a narrow phone, larger text), the badge moves to a line of its own.
+   The schedule and "skipped today" always wrap as they did before and are
+   never cut short; only a badge too long even for its own line gives way,
+   with an ellipsis (the whole of it is still read out). */
 .goal-copy > small.with-companions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  column-gap: 0.4rem;
   min-width: 0;
-  white-space: nowrap;
-}
-.goal-schedule,
-.goal-companions {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .goal-schedule {
-  flex: 0 1 auto;
+  min-width: 0;
 }
 .goal-companions {
-  flex: 0 4 auto;
-  min-width: 3rem;
-  max-width: 11rem;
-  margin-left: 0.4rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   border-radius: 999px;
   background: rgba(49, 92, 75, 0.1);
   padding: 0 0.45rem;
   color: var(--forest-dark);
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .goal-companions svg {
   margin-right: 0.2rem;
