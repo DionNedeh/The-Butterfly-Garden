@@ -127,6 +127,30 @@ describe('the journal', () => {
     expect(rewritten.sunlight).toHaveLength(1)
   })
 
+  it('keeps the feelings and energy given with a check-in, and only those', () => {
+    const tagged = act.saveMood(garden(), 2, '', NOW, {
+      feelings: ['tired', 'hopeful', 'tired', 'ecstatic'],
+      energy: 'low',
+    })
+    expect(tagged.moods[0]).toMatchObject({ feelings: ['hopeful', 'tired'], energy: 'low' })
+
+    // Rewritten without them, the check-in keeps none behind, and an empty
+    // list is never stored.
+    const later = new Date(2026, 9, 26, 18)
+    const plain = act.saveMood(tagged, 2, '', later, { feelings: [] })
+    expect(plain.moods[0]).not.toHaveProperty('feelings')
+    expect(plain.moods[0]).not.toHaveProperty('energy')
+  })
+
+  it('earns the same Sunlight whatever the feelings and energy', () => {
+    const before = garden()
+    const plain = act.saveMood(before, 3, '', NOW)
+    const tagged = act.saveMood(before, 3, '', NOW, { feelings: ['joyful'], energy: 'bright' })
+    expect(tagged.sunlight).toHaveLength(plain.sunlight.length)
+    expect(tagged.seeds).toBe(plain.seeds)
+    expect(tagged.plants).toEqual(plain.plants)
+  })
+
   it('writes today’s reflection once and rewrites it after', () => {
     const first = act.saveReflection(garden(), 'notice', 'The light', NOW)
     const again = act.saveReflection(first, 'notice', 'The rain', NOW)

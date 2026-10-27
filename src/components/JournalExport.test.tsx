@@ -89,7 +89,7 @@ describe('JournalExport', () => {
       button: 'Check-ins as CSV',
       file: 'check-ins.csv',
       mimeType: 'text/csv',
-      start: /^\uFEFF"date","weather","note"\r\n/,
+      start: /^\uFEFF"date","weather","note","feelings","energy"\r\n/,
       outcome: 'cancelled' as const,
       said: 'Nothing was saved.',
     },

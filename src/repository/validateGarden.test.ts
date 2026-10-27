@@ -204,6 +204,68 @@ describe('validating a garden', () => {
     })
   })
 
+  describe('the feelings and energy of a check-in', () => {
+    const mood = (overrides: Record<string, unknown>) => ({
+      id: 'm1',
+      localDate: '2026-10-20',
+      level: 2,
+      note: 'Long day',
+      createdAt: '2026-10-20T09:00:00.000Z',
+      updatedAt: '2026-10-20T09:00:00.000Z',
+      ...overrides,
+    })
+
+    it('keeps them as they are when well formed, the entry untouched', () => {
+      const stored = garden({
+        moods: [mood({ feelings: ['hopeful', 'tired'], energy: 'low' }), mood({ id: 'm2', localDate: '2026-10-21' })],
+      })
+      const result = validateGarden(stored)
+      expect(result.repaired).toBe(0)
+      // Same identity, so an undamaged garden costs no extra write.
+      expect(result.state?.moods).toBe(stored.moods)
+    })
+
+    it('drops unknown words, repeats and anything that is not a word', () => {
+      const result = validateGarden(
+        garden({ moods: [mood({ feelings: ['tired', 'ecstatic', 'tired', 4, null, 'calm'] })] }),
+      )
+      expect(result.state?.moods[0].feelings).toEqual(['calm', 'tired'])
+      expect(result.state?.moods[0].note).toBe('Long day')
+    })
+
+    it('stores no list rather than an empty or a broken one', () => {
+      for (const feelings of [[], ['ecstatic'], 'tired', { tired: true }, 7]) {
+        const [entry] = validateGarden(garden({ moods: [mood({ feelings })] })).state!.moods
+        expect(entry).not.toHaveProperty('feelings')
+        expect(entry.level).toBe(2)
+      }
+    })
+
+    it('keeps energy only as one of its three steps', () => {
+      for (const energy of ['high', 3, true, '']) {
+        const [entry] = validateGarden(garden({ moods: [mood({ energy })] })).state!.moods
+        expect(entry).not.toHaveProperty('energy')
+      }
+      const [kept] = validateGarden(garden({ moods: [mood({ energy: 'steady' })] })).state!.moods
+      expect(kept.energy).toBe('steady')
+    })
+
+    it('tidies them on a check-in that needed repair too', () => {
+      const [entry] = validateGarden(
+        garden({ moods: [{ localDate: '2026-10-20', level: 9, note: 'x', feelings: [], energy: 'loud' }] }),
+      ).state!.moods
+      expect(entry.level).toBe(5)
+      expect(entry).not.toHaveProperty('feelings')
+      expect(entry).not.toHaveProperty('energy')
+    })
+
+    it('does not count a dropped answer as damage', () => {
+      const result = validateGarden(garden({ moods: [mood({ feelings: ['ecstatic'], energy: 'loud' })] }))
+      expect(result.repaired).toBe(0)
+      expect(result.refused).toBeUndefined()
+    })
+  })
+
   it('keeps calm motion only as a true or false choice', () => {
     const base = createInitialState('Tester', 'Test Garden').profile!
     const calm = validateGarden(garden({ profile: { ...base, calmMotion: true } }))

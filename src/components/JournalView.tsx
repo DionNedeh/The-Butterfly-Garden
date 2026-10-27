@@ -6,6 +6,7 @@ import {
 } from '../data/content'
 import { formatJournalDate } from '../lib/date'
 import { useLocalDate } from '../hooks/useLocalDate'
+import { describeCheckInDetails } from '../lib/feelings'
 import { moodChoiceOf, moodName, UNSURE_MOOD_NAME, withMoodChoice } from '../lib/mood'
 import { counted, listed } from '../lib/plural'
 import { TOMORROW_TEXT_LENGTH } from '../lib/gardenActions'
@@ -297,6 +298,8 @@ export function JournalView({
           <div className="timeline">
             {visibleDates.map((date) => {
               const mood = moodByDate.get(date)
+              // "Feeling tired, hopeful · Energy low", or nothing when not answered.
+              const moodDetails = mood ? describeCheckInDetails(mood) : ''
               const reflection = reflectionByDate.get(date)
               const recap = recapByDate.get(date)
               // Every note planned as a goal; an older recap names only one.
@@ -384,6 +387,11 @@ export function JournalView({
                             />
                             <div>
                               <strong>{moodName(moodChoiceOf(mood))}</strong>
+                              {moodDetails && (
+                                <p>
+                                  <small>{moodDetails}</small>
+                                </p>
+                              )}
                               {mood.note && <p>{mood.note}</p>}
                             </div>
                           </div>

@@ -27,6 +27,7 @@ import type {
   AmbientTrackId,
   AppearanceTheme,
   AppState,
+  CheckInDetails,
   CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
@@ -158,9 +159,9 @@ export function useGardenState() {
         update((current) => act.uncompleteGoal(current, goalId, localDate)),
       restoreGoal: (goal: Goal, index: number, completions: AppState['completions']) =>
         update((current) => act.restoreGoal(current, goal, index, completions)),
-      saveMood: (choice: MoodChoice, note: string) => {
+      saveMood: (choice: MoodChoice, note: string, details?: CheckInDetails) => {
         const now = new Date()
-        update((current) => act.saveMood(current, choice, note, now))
+        update((current) => act.saveMood(current, choice, note, now, details))
         // The first thing written in the journal is the other moment to ask.
         void requestPersistentStorage()
       },

@@ -252,12 +252,27 @@ export interface MoodEntry {
    */
   unsure?: true
   note: string
+  /**
+   * Feeling words chosen beside the weather: ids from data/feelings, each
+   * once, in that list's order, at most MAX_FEELINGS. Absent when none were
+   * chosen; an empty list is never stored. Optional, so an older build reads
+   * an ordinary check-in.
+   */
+  feelings?: string[]
+  /** How much energy the day had, when the gardener said. Absent means not answered. */
+  energy?: EnergyLevel
   createdAt: string
   updatedAt: string
 }
 
+/** The three steps of the check-in's optional energy question. */
+export type EnergyLevel = 'low' | 'steady' | 'bright'
+
 /** A check-in answer: one of the five weathers, or not sure. */
 export type MoodChoice = MoodEntry['level'] | 'unsure'
+
+/** The optional extras a check-in may carry beside its weather and note. */
+export type CheckInDetails = Pick<MoodEntry, 'feelings' | 'energy'>
 
 export interface ReflectionEntry {
   id: string

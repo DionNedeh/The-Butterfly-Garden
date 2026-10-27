@@ -5,7 +5,7 @@ import { recapOpensAt } from '../lib/date'
 import { resetDrafts } from '../lib/drafts'
 import { createInitialState, MAX_PLANT_GROWTH } from '../lib/progression'
 import { promptForDay } from '../lib/prompts'
-import type { AppState, Goal, PlantInstance, Profile } from '../types'
+import type { AppState, Goal, MoodEntry, PlantInstance, Profile } from '../types'
 import { NO_DAYS_CHOSEN } from './GoalEditor'
 import { TodayView } from './TodayView'
 import { UNDO_MS } from './UndoToast'
@@ -288,7 +288,8 @@ describe('checking in', () => {
     await user.click(screen.getByRole('button', { name: 'Not sure today' }))
     expect(screen.getByRole('button', { name: 'Not sure today' })).toHaveAttribute('aria-pressed', 'true')
     await user.click(save)
-    expect(onSaveMood).toHaveBeenCalledWith('unsure', '')
+    // Nothing beside the weather was answered, so nothing beside it is passed on.
+    expect(onSaveMood).toHaveBeenCalledWith('unsure', '', {})
   })
 
   it('starts at the weather question when opened by the "Check in" shortcut', () => {
@@ -827,5 +828,244 @@ describe('the goal editor on Today', () => {
     expect(props.onUpdateGoal).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'a', title: 'Alpha!', skippedDates: [TODAY] }),
     )
+  })
+})
+
+/** Today's check-in as stored, Bright unless told otherwise. */
+function checkIn(overrides: Partial<MoodEntry> = {}): MoodEntry {
+  return {
+    id: 'm',
+    localDate: TODAY,
+    level: 4,
+    note: '',
+    createdAt: `${TODAY}T08:00:00.000Z`,
+    updatedAt: `${TODAY}T08:00:00.000Z`,
+    ...overrides,
+  }
+}
+
+describe('feelings and energy on Today', () => {
+  // The choices are drafts beside the note; none may reach the next test.
+  // Unmounted first, so forgetting the drafts redraws nothing.
+  afterEach(() => {
+    cleanup()
+    resetDrafts()
+  })
+
+  const openExtras = (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'Add feelings or energy' }))
+
+  it('offers them, and welcomes the weather, only once a weather is chosen', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    expect(screen.queryByText('All weather is welcome.')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add feelings or energy' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /^Rainy/ }))
+    expect(screen.getByText('All weather is welcome.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add feelings or energy' })).toBeInTheDocument()
+  })
+
+  it('saves the feelings and energy chosen with the check-in', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: /^Bright/ }))
+    await openExtras(user)
+    await user.click(screen.getByRole('button', { name: 'tired' }))
+    await user.click(screen.getByRole('button', { name: 'hopeful' }))
+    await user.click(screen.getByRole('radio', { name: 'low' }))
+    await user.click(screen.getByRole('button', { name: 'Save check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith(4, '', { feelings: ['hopeful', 'tired'], energy: 'low' })
+  })
+
+  it('lets "Not sure today" carry them too', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: 'Not sure today' }))
+    await openExtras(user)
+    await user.click(screen.getByRole('button', { name: 'numb' }))
+    await user.click(screen.getByRole('button', { name: 'Save check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith('unsure', '', { feelings: ['numb'] })
+  })
+
+  it('keeps unsaved choices through a reload, beside the note', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: /^Overcast/ }))
+    await openExtras(user)
+    await user.click(screen.getByRole('button', { name: 'restless' }))
+    await user.click(screen.getByRole('radio', { name: 'steady' }))
+    cleanup()
+
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: /^Overcast/ }))
+    expect(screen.getByText('Feeling restless · Energy steady')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith(3, '', { feelings: ['restless'], energy: 'steady' })
+  })
+
+  it('opens on what was saved today, and lets it change', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(
+      gardenWith({}, { moods: [checkIn({ feelings: ['calm'], energy: 'steady' })] }),
+    )
+    expect(screen.getByText('Feeling calm · Energy steady')).toBeInTheDocument()
+    await openExtras(user)
+    expect(screen.getByRole('button', { name: 'calm' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'calm' }))
+    await user.click(screen.getByRole('button', { name: 'proud' }))
+    await user.click(screen.getByRole('button', { name: 'Clear energy' }))
+    await user.click(screen.getByRole('button', { name: 'Update check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith(4, '', { feelings: ['proud'] })
+  })
+})
+
+describe('the next step after a check-in', () => {
+  // Putting the offer away is a draft for the day; none may reach the next test.
+  // Unmounted first, so forgetting the drafts redraws nothing.
+  afterEach(() => {
+    cleanup()
+    resetDrafts()
+  })
+
+  const offer = () => screen.queryByRole('group', { name: /One small thing/ })
+  const everything = { onSetGentleDay: vi.fn(), onOpenCare: vi.fn() }
+
+  it('offers a gentle day, one line or a companion after heavy weather', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 2 })] }), everything)
+    const group = screen.getByRole('group', {
+      name: 'Heavy weather can make everything harder. One small thing, if it helps:',
+    })
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Make today a gentle day',
+      'Write one line',
+      'Visit your companion',
+      'Not now',
+    ])
+  })
+
+  it('offers the same after a day low on energy, whatever its weather', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 5, energy: 'low' })] }), everything)
+    const group = screen.getByRole('group', {
+      name: 'A low-energy day can ask for less. One small thing, if it helps:',
+    })
+    expect(within(group).getByRole('button', { name: 'Make today a gentle day' })).toBeInTheDocument()
+    expect(within(group).queryByRole('button', { name: 'Try today’s reflection' })).toBeNull()
+  })
+
+  it('offers today’s reflection after anything else, "not sure" included', () => {
+    for (const mood of [checkIn(), checkIn({ level: 3, unsure: true, energy: 'steady' })]) {
+      renderToday(gardenWith({}, { moods: [mood] }), everything)
+      const group = screen.getByRole('group', { name: 'One small thing next, if you like:' })
+      expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+        'Try today’s reflection',
+        'Not now',
+      ])
+      cleanup()
+    }
+  })
+
+  it('takes focus to the reflection, and puts itself away', async () => {
+    const user = userEvent.setup()
+    renderToday(gardenWith({}, { moods: [checkIn()] }), everything)
+    await user.click(screen.getByRole('button', { name: 'Try today’s reflection' }))
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveFocus()
+    expect(offer()).toBeNull()
+  })
+
+  it('starts one line of writing after heavy weather', async () => {
+    const user = userEvent.setup()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 1 })] }), everything)
+    await user.click(screen.getByRole('button', { name: 'Write one line' }))
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveFocus()
+    expect(offer()).toBeNull()
+  })
+
+  it('makes today a gentle day, handing focus to the switch it set', async () => {
+    const user = userEvent.setup()
+    const onSetGentleDay = vi.fn()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 2 })] }), { ...everything, onSetGentleDay })
+    await user.click(screen.getByRole('button', { name: 'Make today a gentle day' }))
+    expect(onSetGentleDay).toHaveBeenCalledWith(true)
+    expect(screen.getByRole('checkbox', { name: /gentle day/i })).toHaveFocus()
+    expect(offer()).toBeNull()
+  })
+
+  it('leaves out a gentle day once today is one', () => {
+    renderToday(gardenWith({ gentleDay: TODAY }, { moods: [checkIn({ level: 2 })] }), everything)
+    expect(screen.queryByRole('button', { name: 'Make today a gentle day' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Write one line' })).toBeInTheDocument()
+  })
+
+  it('goes to the companions for free care', async () => {
+    const user = userEvent.setup()
+    const onOpenCare = vi.fn()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 2 })] }), { ...everything, onOpenCare })
+    await user.click(screen.getByRole('button', { name: 'Visit your companion' }))
+    expect(onOpenCare).toHaveBeenCalledOnce()
+  })
+
+  it('suggests nothing already done', () => {
+    const written = {
+      id: 'r',
+      localDate: TODAY,
+      promptId: promptForDay(TODAY).id,
+      body: 'A line.',
+      createdAt: '',
+      updatedAt: '',
+    }
+    renderToday(gardenWith({}, { moods: [checkIn()], reflections: [written] }), everything)
+    expect(offer()).toBeNull()
+  })
+
+  it('goes for the day on "Not now", with focus on the check-in, until it is rewritten', async () => {
+    const user = userEvent.setup()
+    const state = gardenWith({}, { moods: [checkIn()] })
+    renderToday(state, everything)
+    await user.click(screen.getByRole('button', { name: 'Not now' }))
+    expect(offer()).toBeNull()
+    expect(screen.getByRole('button', { name: 'Update check-in' })).toHaveFocus()
+
+    cleanup()
+    renderToday(state, everything)
+    expect(offer()).toBeNull()
+
+    // A rewritten check-in is a new answer, with an offer of its own.
+    cleanup()
+    renderToday(
+      gardenWith({}, { moods: [checkIn({ level: 1, updatedAt: `${TODAY}T18:00:00.000Z` })] }),
+      everything,
+    )
+    expect(offer()).not.toBeNull()
+  })
+
+  it('says the check-in was kept, and offers the step without taking focus', async () => {
+    const user = userEvent.setup()
+    const empty = gardenWith({})
+    const props = todayProps(empty, everything)
+    const { rerender } = render(<TodayView {...props} />)
+    expect(screen.queryByText('Kept in your journal.')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /^Bright/ }))
+    const save = screen.getByRole('button', { name: 'Save check-in' })
+    await user.click(save)
+    rerender(<TodayView {...props} state={{ ...empty, moods: [checkIn()] }} />)
+
+    expect(screen.getByText('Kept in your journal.')).toBeInTheDocument()
+    expect(offer()).not.toBeNull()
+    // Both arrive in a polite live region, and focus stays where it was.
+    expect(screen.getByText('Kept in your journal.').closest('[aria-live="polite"]')).toContainElement(
+      offer(),
+    )
+    expect(screen.getByRole('button', { name: 'Update check-in' })).toHaveFocus()
+  })
+
+  it('keeps the support line after a stormy check-in, below the offer', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 1 })] }), {
+      ...everything,
+      onOpenSupport: vi.fn(),
+    })
+    const support = screen.getByRole('button', { name: 'If you need support now' })
+    expect(offer()!.compareDocumentPosition(support) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

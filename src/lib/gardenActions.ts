@@ -2,6 +2,7 @@ import type {
   AmbientTrackId,
   AppearanceTheme,
   AppState,
+  CheckInDetails,
   GardenBackdropId,
   Goal,
   GoalSchedule,
@@ -20,6 +21,7 @@ import {
   toLocalDate,
   type RecapHours,
 } from './date'
+import { checkInDetails } from './feelings'
 import { createId } from './id'
 import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
@@ -233,13 +235,16 @@ export function completeGoal(state: AppState, goalId: string, now: Date): AppSta
  * Today's check-in, written or rewritten, and its Sunlight.
  *
  * The Sunlight is the same whatever the answer, "not sure" included: it is
- * for checking in, never for the weather chosen.
+ * for checking in, never for the weather chosen, and never for the feelings
+ * or energy beside it. Those are stored only when answered, so a rewrite
+ * that unchooses them leaves none behind.
  */
 export function saveMood(
   state: AppState,
   choice: MoodChoice,
   note: string,
   now: Date,
+  details: CheckInDetails = {},
 ): AppState {
   const localDate = toLocalDate(now)
   const existing = state.moods.find((item) => item.localDate === localDate)
@@ -248,6 +253,7 @@ export function saveMood(
     localDate,
     ...moodFields(choice),
     note: note.trim(),
+    ...checkInDetails(details),
     createdAt: existing?.createdAt ?? now.toISOString(),
     updatedAt: now.toISOString(),
   }

@@ -3,6 +3,7 @@ import { flightPatterns } from '../data/flightPatterns'
 import { jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
+import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
 import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES } from '../lib/date'
 import type { AmbientTrackId, AppState, OutfitSlot } from '../types'
@@ -216,6 +217,34 @@ function stamp(value: unknown): string {
   return typeof value === 'string' ? value : EPOCH
 }
 
+/**
+ * A check-in's optional feelings and energy, kept only when well formed:
+ * feelings as known ids, each once, in the list's order, never an empty list;
+ * energy as one of its three steps. Anything else is left out, like any
+ * later optional field, and not counted as damage: the check-in itself, its
+ * weather and its words, is untouched. Hands back the same entry when there
+ * is nothing to tidy, so an undamaged garden costs no extra write.
+ */
+function withCheckInDetails(entry: UnknownRecord): UnknownRecord {
+  const stored = entry.feelings
+  const feelings = cleanFeelings(stored)
+  // Clean already when cleaning it changes nothing, item for item.
+  const feelingsOk =
+    stored === undefined ||
+    (Array.isArray(stored) &&
+      stored.length === feelings?.length &&
+      feelings.every((id, index) => stored[index] === id))
+  const energyOk = entry.energy === undefined || isEnergyLevel(entry.energy)
+  if (feelingsOk && energyOk) return entry
+  const tidy = { ...entry }
+  if (!feelingsOk) {
+    if (feelings) tidy.feelings = feelings
+    else delete tidy.feelings
+  }
+  if (!energyOk) delete tidy.energy
+  return tidy
+}
+
 function checkMood(raw: unknown, ctx: Context) {
   if (!isRecord(raw)) {
     ctx.repaired += 1
@@ -236,21 +265,21 @@ function checkMood(raw: unknown, ctx: Context) {
     typeof raw.createdAt === 'string' &&
     typeof raw.updatedAt === 'string'
   ) {
-    return raw as unknown as AppState['moods'][number]
+    return withCheckInDetails(raw) as unknown as AppState['moods'][number]
   }
   ctx.repaired += 1
   const level =
     typeof raw.level === 'number' && Number.isFinite(raw.level)
       ? Math.min(5, Math.max(1, Math.round(raw.level)))
       : 3
-  return {
+  return withCheckInDetails({
     ...raw,
     id: typeof raw.id === 'string' ? raw.id : createId(),
     level,
     note: asText(raw.note, ctx),
     createdAt: stamp(raw.createdAt),
     updatedAt: stamp(raw.updatedAt),
-  } as AppState['moods'][number]
+  }) as unknown as AppState['moods'][number]
 }
 
 function checkReflection(raw: unknown, ctx: Context) {

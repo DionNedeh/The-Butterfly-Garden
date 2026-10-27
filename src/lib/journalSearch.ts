@@ -1,4 +1,5 @@
 import type { MoodChoice, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
+import { describeCheckInDetails } from './feelings'
 import { moodChoiceOf } from './mood'
 
 /** The three things a journal day can hold. */
@@ -106,9 +107,17 @@ function entriesOf(days: JournalDays, kind: JournalKind): ReadonlyMap<string, un
   return days.recapByDate
 }
 
-/** A day's writing of one kind, as written; undefined without an entry. */
+/**
+ * A day's writing of one kind, as written; undefined without an entry. A
+ * check-in's feelings and energy are found by the same words the journal
+ * shows them in, so "hopeful" finds a day tagged hopeful.
+ */
 function writingOf(days: JournalDays, kind: JournalKind, date: string): string | undefined {
-  if (kind === 'check-in') return days.moodByDate.get(date)?.note
+  if (kind === 'check-in') {
+    const mood = days.moodByDate.get(date)
+    // On separate lines, so a word cannot run from the note into the tags.
+    return mood && `${mood.note}\n${describeCheckInDetails(mood)}`
+  }
   if (kind === 'reflection') return days.reflectionByDate.get(date)?.body
   const recap = days.recapByDate.get(date)
   // On separate lines, so a word cannot run from one answer into the next.

@@ -1,0 +1,223 @@
+/* The check-in's optional extras and the next step offered after it. The
+   components that draw them import this file, so it arrives with Today
+   rather than in the stylesheet every page waits for. Colours come from the
+   theme's tokens, which the night theme redefines; each rule that names a
+   colour of its own has its .theme-night twin beside it. */
+
+.check-in-extras {
+  display: grid;
+  justify-items: start;
+  gap: 0.25rem;
+  margin: 0 0 1rem;
+}
+
+.weather-welcome {
+  margin: 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+.check-in-extras-toggle {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* A chevron that points down while folded and up while open. */
+.check-in-extras-toggle::after {
+  width: 0.45rem;
+  height: 0.45rem;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-2px) rotate(45deg);
+  content: '';
+}
+
+.check-in-extras-toggle[aria-expanded='true']::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+.check-in-extras-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.check-in-extras-panel {
+  display: grid;
+  width: 100%;
+  gap: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+/* `display: grid` would otherwise outrank the hidden attribute. */
+.check-in-extras-panel[hidden] {
+  display: none;
+}
+
+/* The fieldset is there for the group's name, not for the browser's frame. */
+.check-in-choice {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.check-in-choice legend {
+  margin-bottom: 0.4rem;
+  padding: 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+.feeling-chips,
+.energy-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Every feeling looks the same: no word is coloured as better or worse. */
+.feeling-chip,
+.energy-option {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  padding: 0.4rem 0.85rem 0.4rem 0.6rem;
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feeling-chip:hover,
+.energy-option:hover {
+  border-color: var(--forest);
+}
+
+.feeling-chip[aria-pressed='true'],
+.energy-option.selected {
+  border-color: var(--forest);
+  background: #e6eddd;
+  color: var(--forest-dark);
+}
+
+/* An empty ring that fills with a tick when chosen, so the state can be read
+   from the shape alone, without telling two greens apart. */
+.feeling-chip-check {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+}
+
+.feeling-chip[aria-pressed='true'] .feeling-chip-check {
+  border-color: var(--forest);
+  background: var(--forest);
+}
+
+.feeling-chip[aria-pressed='true'] .feeling-chip-check::after {
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  content: '';
+}
+
+/* At the limit the rest stay readable, just quieter; the line below the
+   chips says why they no longer choose. */
+.feeling-chip[aria-disabled='true'] {
+  border-style: dashed;
+  color: var(--muted);
+  cursor: default;
+}
+
+.feeling-chip[aria-disabled='true']:hover {
+  border-color: var(--line);
+}
+
+.feeling-limit {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* The app's text fields are full width with padding; a radio is neither. */
+.energy-option input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--forest);
+}
+
+.energy-clear {
+  min-height: 44px;
+}
+
+.theme-night .feeling-chip,
+.theme-night .energy-option {
+  border-color: #385463;
+  background: #152f3e;
+  color: var(--ink);
+}
+
+.theme-night .feeling-chip:hover,
+.theme-night .energy-option:hover {
+  border-color: var(--forest);
+}
+
+.theme-night .feeling-chip[aria-pressed='true'],
+.theme-night .energy-option.selected {
+  border-color: var(--forest);
+  background: #254b4b;
+  color: var(--forest-dark);
+}
+
+.theme-night .feeling-chip[aria-disabled='true'] {
+  border-color: #385463;
+  color: var(--muted);
+}
+
+/* "Kept in your journal.", once a check-in is saved on this visit. */
+.check-in-saved {
+  margin: 0.75rem 0 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+/* The one gentle next step: part of the card, never over it. */
+.next-step {
+  margin: 0.75rem 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+.next-step-lead {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}
+
+.next-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.next-step-dismiss {
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+}
