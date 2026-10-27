@@ -267,16 +267,25 @@ export function BreathingView({
   // Arriving, focus is on the page's name; then on whatever replaced the
   // button just pressed, so it never falls to the page.
   //
-  // A session starting moves the page as little as it can: the count is
-  // brought out from under the header, then Stop clear of the dock (the
-  // page's scroll-padding, breathe.css), each only if it is not already in
-  // view. Focus alone would centre Stop, which on a short screen can take the
-  // count, the only pacer with the wings still, up under the header.
+  // A session starting moves the page as little as it can: Stop is brought
+  // clear of the dock (the page's scroll-padding, breathe.css), then the
+  // count out from under the header, each only if it is not already in view.
+  // The count goes last, so that where a screen cannot hold both it is the
+  // count, the only pacer with the wings still, that stays in view. Focus
+  // alone would centre Stop, which on a short screen can take the count up
+  // under the header.
   useEffect(() => {
     if (status === 'running') {
       stopButton.current?.focus({ preventScroll: true })
-      countBox.current?.scrollIntoView({ block: 'nearest' })
       stopButton.current?.scrollIntoView({ block: 'nearest' })
+      const count = countBox.current
+      if (count) {
+        // Clear of the header as it is now: it grows with the text size and,
+        // in the Android app, with the status bar above it.
+        const header = document.querySelector('.app-header')?.getBoundingClientRect().height
+        if (header) count.style.scrollMarginTop = `${Math.ceil(header) + 8}px`
+        count.scrollIntoView({ block: 'nearest' })
+      }
     } else if (status === 'stopped') startButton.current?.focus()
     else if (status === 'done') doneHeading.current?.focus()
     else heading.current?.focus()

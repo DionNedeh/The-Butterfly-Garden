@@ -194,9 +194,19 @@ test('Start does not jump the page: the count stays in view below the header', a
   await expect(stop).toBeFocused()
   const count = await box(page.locator('.breath-count'))
   const header = await box(page.locator('.app-header'))
+  const dock = await box(page.locator('.bottom-nav'))
   expect(count.y).toBeGreaterThanOrEqual(header.y + header.height - 0.5)
-  expect(count.y + count.height).toBeLessThanOrEqual(390)
+  expect(count.y + count.height).toBeLessThanOrEqual(dock.y + 0.5)
   expect(overlap(await box(stop), count)).toBe(false)
+  // The page keeps still by itself, not only because Start's scroll put it
+  // back: anchoring is off on this page wherever a browser does it.
+  expect(
+    await page.evaluate(() =>
+      CSS.supports('overflow-anchor', 'none')
+        ? getComputedStyle(document.documentElement).overflowAnchor
+        : 'none',
+    ),
+  ).toBe('none')
 })
 
 test('at the largest text on a short screen, Stop never covers the count', async ({ page }) => {
@@ -216,6 +226,7 @@ test('at the largest text on a short screen, Stop never covers the count', async
   for (const viewport of [
     { width: 1024, height: 600 },
     { width: 844, height: 390 },
+    { width: 667, height: 375 },
   ]) {
     await page.setViewportSize(viewport)
     // By keyboard from the top of the page, where Start begins behind the dock.
@@ -223,14 +234,13 @@ test('at the largest text on a short screen, Stop never covers the count', async
     await start.focus()
     await page.keyboard.press('Enter')
     await expect(stop).toBeFocused()
-    if (viewport.height === 600) {
-      // Room for both: the count below the header, Stop above the dock.
-      const header = await box(page.locator('.app-header'))
-      const dock = await box(page.locator('.bottom-nav'))
-      expect((await box(count)).y).toBeGreaterThanOrEqual(header.y + header.height - 0.5)
-      const stopBox = await box(stop)
-      expect(stopBox.y + stopBox.height).toBeLessThanOrEqual(dock.y + 0.5)
-    }
+    // Room for both, even on a phone on its side: the count below the
+    // header, Stop above the dock.
+    const header = await box(page.locator('.app-header'))
+    const dock = await box(page.locator('.bottom-nav'))
+    expect((await box(count)).y).toBeGreaterThanOrEqual(header.y + header.height - 0.5)
+    const stopBox = await box(stop)
+    expect(stopBox.y + stopBox.height).toBeLessThanOrEqual(dock.y + 0.5)
     // Wherever the page is scrolled while it runs, Stop is never over the count.
     for (const top of [0, 120, 10_000]) {
       await page.evaluate((y) => window.scrollTo(0, y), top)

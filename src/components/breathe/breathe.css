@@ -38,13 +38,13 @@ html:has(.breathe-view) {
 
 @media (max-width: 620px), (max-height: 520px) and (max-width: 1180px) {
   html:has(.breathe-view) {
-    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    scroll-padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
 @media (max-width: 1180px) {
   html.android-app:has(.breathe-view) {
-    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    scroll-padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -67,8 +67,22 @@ html:has(.breathe-view) {
 .breath-count-box {
   flex: 0 0 16rem;
   text-align: start;
-  /* Brought into view as a session starts, below the sticky header. */
+  /* Brought into view as a session starts, below the sticky header; the
+     session sets this from the header's own height. */
   scroll-margin-top: 6rem;
+}
+
+/* On a short screen (a phone on its side) the count sits at the foot of the
+   butterfly, just above Stop, so the two fit together between the header
+   and the dock. */
+@media (max-height: 520px) {
+  .breath-stage {
+    align-items: flex-end;
+  }
+
+  .breath-actions {
+    margin-top: 0.5rem;
+  }
 }
 
 @media (max-width: 560px) {

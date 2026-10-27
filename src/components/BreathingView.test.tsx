@@ -146,19 +146,27 @@ describe('breathing with a butterfly', () => {
     expect(count()).toBe('In… 1')
   })
 
-  it('brings the count, then Stop, into view as it starts, and no further', () => {
+  it('brings Stop, then the count, into view as it starts, and no further', () => {
+    const header = document.createElement('header')
+    header.className = 'app-header'
+    header.getBoundingClientRect = () => ({ height: 124.4 }) as DOMRect
+    document.body.append(header)
     renderView()
     const focus = vi.spyOn(HTMLElement.prototype, 'focus')
     start()
     const stop = screen.getByRole('button', { name: 'Stop' })
     // Focus alone would centre Stop, which can take the count up under the
-    // header; it is only moved as far as each needs, the count first.
+    // header; it is only moved as far as each needs, the count last, so the
+    // count is what stays in view, clear of the header as tall as it is.
     expect(focus).toHaveBeenCalledWith({ preventScroll: true })
     expect(stop).toHaveFocus()
+    const countBox = document.querySelector<HTMLElement>('.breath-count-box')!
     expect(scrolledTo).toEqual([
-      { element: document.querySelector('.breath-count-box'), options: { block: 'nearest' } },
       { element: stop, options: { block: 'nearest' } },
+      { element: countBox, options: { block: 'nearest' } },
     ])
+    expect(countBox.style.scrollMarginTop).toBe('133px')
+    header.remove()
     // Nothing more is moved while it runs, or when it stops.
     wait(5000)
     fireEvent.click(stop)
