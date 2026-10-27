@@ -36,9 +36,18 @@ import { clampVolume } from '../lib/sound'
 import { isRegionId } from '../lib/region'
 import { isSunday } from '../lib/letters'
 import { isReminderTime } from '../lib/reminderTime'
+import {
+  COMFORT_ITEMS,
+  COMFORT_SECTIONS,
+  comfortText,
+  phoneNumber,
+} from '../lib/comfortPlan'
 import type {
   AmbientTrackId,
   AppState,
+  ComfortItem,
+  ComfortPlan,
+  ComfortSection,
   GrownAlongside,
   OutfitPreset,
   OutfitSlot,
@@ -792,6 +801,50 @@ function checkOutfitPresets(value: unknown): OutfitPreset[] | undefined {
   return changed ? presets : (value as OutfitPreset[])
 }
 
+/**
+ * The comfort plan (lib/comfortPlan), kept in the profile: its known lists,
+ * each line's words trimmed and cut to what the page keeps, a number only
+ * for a person and only in the characters a number has, and no more lines
+ * than a list keeps. Anything that is not a line with words is dropped. A
+ * line with no id of its own, or a twin's, is given one rather than lost.
+ * The very same plan when nothing needed changing; undefined when nothing is
+ * left, or there never was a plan, so a garden without one stays as it was.
+ */
+function checkComfortPlan(value: unknown): ComfortPlan | undefined {
+  if (!isRecord(value)) return undefined
+  const plan: ComfortPlan = {}
+  const ids = new Set<string>()
+  let changed = false
+  for (const [section, list] of Object.entries(value)) {
+    const known = COMFORT_SECTIONS.includes(section as ComfortSection) && Array.isArray(list)
+    const items: ComfortItem[] = []
+    for (const raw of known ? (list as unknown[]) : []) {
+      if (!isRecord(raw) || typeof raw.text !== 'string') continue
+      const text = comfortText(raw.text)
+      if (!text || items.length === COMFORT_ITEMS) continue
+      const id = typeof raw.id === 'string' && raw.id && !ids.has(raw.id) ? raw.id : createId()
+      ids.add(id)
+      const phone =
+        section === 'people' && typeof raw.phone === 'string' ? phoneNumber(raw.phone) : ''
+      const item: ComfortItem = phone ? { id, text, phone } : { id, text }
+      if (
+        id !== raw.id ||
+        text !== raw.text ||
+        phone !== (raw.phone ?? '') ||
+        Object.keys(raw).length !== Object.keys(item).length
+      ) {
+        changed = true
+      }
+      items.push(item)
+    }
+    if (items.length > 0) plan[section as ComfortSection] = items
+    // A list cut short, emptied or dropped is a change; an empty one is kept as none.
+    if (items.length === 0 || items.length !== (list as unknown[]).length) changed = true
+  }
+  if (Object.keys(plan).length === 0) return undefined
+  return changed ? plan : value
+}
+
 /** Counts that can be earned again: whole, finite, never negative. */
 function balance(value: unknown, ctx: Context): number {
   if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
@@ -989,6 +1042,10 @@ function checkProfile(
   const outfitPresets = checkOutfitPresets(value.outfitPresets)
   if (outfitPresets) profile.outfitPresets = outfitPresets
   else delete profile.outfitPresets
+  // The comfort plan lives here too, for the same reason (Profile.comfortPlan).
+  const comfortPlan = checkComfortPlan(value.comfortPlan)
+  if (comfortPlan) profile.comfortPlan = comfortPlan
+  else delete profile.comfortPlan
   return profile
 }
 

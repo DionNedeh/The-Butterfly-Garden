@@ -54,6 +54,7 @@ import {
   type GoalEdit,
 } from './GoalEditor'
 import { GoalIdeas } from './GoalIdeas'
+import { ComfortLink } from './ComfortLink'
 import { GuideLink } from './GuideLink'
 import { GoalRow } from './GoalRow'
 import { MonthPlanner } from './MonthPlanner'
@@ -102,6 +103,7 @@ export function TodayView({
   onUncompleteGoal,
   onRestoreGoal,
   onOpenSupport,
+  onOpenComfort,
   onSetGentleDay,
   onOpenCare,
   onChooseNextPlant,
@@ -137,6 +139,8 @@ export function TodayView({
   /** Put back a goal just deleted, where it was, with its completions. */
   onRestoreGoal: (goal: Goal, index: number, completions: AppState['completions']) => void
   onOpenSupport?: () => void
+  /** The comfort plan: one quiet link while the day is gentle, and only then. */
+  onOpenComfort?: () => void
   /** Make today a gentle day, or an ordinary one again. */
   onSetGentleDay?: (gentle: boolean) => void
   onOpenCare?: () => void
@@ -603,6 +607,12 @@ export function TodayView({
                 </button>
               </>
             )}
+          </p>
+        )}
+        {gentle && onOpenComfort && (
+          <p className="gentle-note">
+            <ComfortLink onOpen={onOpenComfort}>Your comfort plan</ComfortLink> is here if you
+            want it.
           </p>
         )}
         <div className="goal-list" ref={goalList}>

@@ -612,6 +612,26 @@ describe('a gentle day on Today', () => {
     expect(onSetGentleDay).toHaveBeenCalledWith(false)
   })
 
+  it('offers the comfort plan quietly while the day is gentle, and only then', async () => {
+    const onOpenComfort = vi.fn()
+    renderToday(withGoals(), { onSetGentleDay: vi.fn(), onOpenComfort })
+    expect(screen.queryByRole('link', { name: /comfort plan/i })).toBeNull()
+    cleanup()
+
+    renderToday(withGoals(TODAY), { onSetGentleDay: vi.fn(), onOpenComfort })
+    const link = screen.getByRole('link', { name: 'Your comfort plan' })
+    expect(link).toHaveAttribute('href', '#/comfort')
+    expect(link.closest('p')).toHaveTextContent('Your comfort plan is here if you want it.')
+    await userEvent.setup().click(link)
+    expect(onOpenComfort).toHaveBeenCalledOnce()
+  })
+
+  it('offers no comfort plan where it cannot be opened', () => {
+    renderToday(withGoals(TODAY), { onSetGentleDay: vi.fn() })
+    expect(screen.getByText(/Today asks for very little/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /comfort plan/i })).toBeNull()
+  })
+
   it('offers no toggle when the day cannot be changed', () => {
     renderToday(withGoals())
     expect(screen.queryByRole('checkbox', { name: /gentle day/i })).toBeNull()
