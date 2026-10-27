@@ -1,2 +1,4 @@
 # Calendar files are CRLF by their format (RFC 5545); never convert them.
 *.ics -text
+# Patches kept for later work are applied with git am; keep them byte for byte.
+docs/future-work/patches/*.patch -text
