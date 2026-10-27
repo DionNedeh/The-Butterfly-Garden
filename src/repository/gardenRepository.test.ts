@@ -224,6 +224,24 @@ describe('garden repository', () => {
     })
   })
 
+  it('settles only once the writes already asked for are done, kept or refused', async () => {
+    await expect(gardenRepository.settled()).resolves.toBeUndefined()
+    const order: string[] = []
+    const saving = gardenRepository
+      .save({ ...createEmptyState(), seeds: 7 })
+      .then(() => order.push('saved'))
+    await gardenRepository.settled().then(() => order.push('settled'))
+    await saving
+    expect(order).toEqual(['saved', 'settled'])
+    // A refused write still lets it settle.
+    const stale = createGardenRepository()
+    await stale.load()
+    await gardenRepository.save({ ...createEmptyState(), seeds: 8 })
+    const refused = stale.save({ ...createEmptyState(), seeds: 9 }).catch(() => 'refused')
+    await stale.settled()
+    await expect(refused).resolves.toBe('refused')
+  })
+
   it('keeps saved looks and a companion’s diary through a save and a load', async () => {
     const seed = createInitialState('Dresser', 'Closet Garden')
     const looks = [{ id: 'look-1', name: 'Sunday best', outfit: { accessory: 'silk-bow' } }]

@@ -50,10 +50,16 @@ import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
 import { welcomeBackToday } from '../lib/visits'
+import { useDraft, useDraftsLoaded } from '../lib/drafts'
+import { HOME_SCREEN_GUIDE_DRAFT, homeScreenAdvice } from '../lib/install'
 
 /** Only on a return after a few days away, so the first load carries none of it. */
 const WelcomeBack = lazy(() =>
   import('./garden/WelcomeBack').then((m) => ({ default: m.WelcomeBack })),
+)
+/** Only on an iPhone or iPad in a browser, until put away. */
+const HomeScreenGuide = lazy(() =>
+  import('./garden/HomeScreenGuide').then((m) => ({ default: m.HomeScreenGuide })),
 )
 
 /** Catalogs are static, so index them once at module load instead of scanning
@@ -332,6 +338,15 @@ export function GardenView({
   const today = toLocalDate()
   const welcomeBack =
     onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
+  // On an iPhone or iPad in a browser, how to keep the garden on the Home
+  // Screen (lib/install), until put away. The answer cannot change while the
+  // page is open, so it is asked once. Put away is a draft, kept on this
+  // device alone: a backup carried to another iPhone still offers it there.
+  // It waits for the drafts to be read, or a card put away long ago would
+  // flash up on every visit.
+  const [homeScreen] = useState(homeScreenAdvice)
+  const draftsLoaded = useDraftsLoaded()
+  const [homeScreenGuidePutAway, putAwayHomeScreenGuide] = useDraft(HOME_SCREEN_GUIDE_DRAFT, '')
 
   return (
     <div className="view garden-view">
@@ -480,6 +495,19 @@ export function GardenView({
           </Suspense>
         )}
       </div>
+
+      {homeScreen && draftsLoaded && !homeScreenGuidePutAway && (
+        <Suspense fallback={null}>
+          <HomeScreenGuide
+            advice={homeScreen}
+            onPutAway={() => {
+              // The card leaves with its button; focus goes to the garden's name.
+              gardenTitle.current?.focus()
+              putAwayHomeScreenGuide('put away')
+            }}
+          />
+        </Suspense>
+      )}
 
       {sceneUnavailable && (
         <p role="status">

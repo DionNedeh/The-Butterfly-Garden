@@ -1,7 +1,15 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { gardenRepository } from '../repository/gardenRepository'
-import { clearDraft, flushDrafts, getDraft, loadDrafts, resetDrafts, useDraft } from './drafts'
+import {
+  clearDraft,
+  flushDrafts,
+  getDraft,
+  loadDrafts,
+  resetDrafts,
+  useDraft,
+  useDraftsLoaded,
+} from './drafts'
 
 afterEach(() => {
   resetDrafts()
@@ -20,8 +28,42 @@ describe('drafts', () => {
     expect(result.current[0]).toBe('Half a thought')
     expect(getDraft('reflection:2026-10-26')).toBe('Half a thought')
 
-    flushDrafts()
+    void flushDrafts()
     expect(write).toHaveBeenCalledWith({ 'reflection:2026-10-26': 'Half a thought' })
+  })
+
+  it('lets a reload wait until the pending draft is written', async () => {
+    let written: () => void = () => undefined
+    const write = vi.spyOn(gardenRepository, 'writeDrafts').mockReturnValue(
+      new Promise<void>((resolve) => {
+        written = resolve
+      }),
+    )
+    const { result } = renderHook(() => useDraft('reflection:2026-10-26', ''))
+    act(() => result.current[1]('Nearly there'))
+    let settled = false
+    const flushed = flushDrafts().then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    written()
+    await flushed
+    expect(settled).toBe(true)
+    // Nothing waiting: settles at once, writing nothing.
+    await expect(flushDrafts()).resolves.toBeUndefined()
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('says when the stored drafts have been read, and forgets it with them', async () => {
+    vi.spyOn(gardenRepository, 'readDrafts').mockResolvedValue({ 'home-screen-guide': 'put away' })
+    const { result } = renderHook(() => useDraftsLoaded())
+    expect(result.current).toBe(false)
+    await act(() => loadDrafts())
+    expect(result.current).toBe(true)
+    expect(getDraft('home-screen-guide')).toBe('put away')
+    act(() => resetDrafts())
+    expect(result.current).toBe(false)
   })
 
   it('follows the saved entry while nothing has been typed', () => {

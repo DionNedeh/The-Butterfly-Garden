@@ -41,6 +41,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   window.history.replaceState(null, '', '/')
+  Reflect.deleteProperty(document, 'visibilityState')
 })
 
 // Each test renders the whole app; the first walks into every lazily loaded
@@ -140,7 +141,10 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
   })
 
   it('offers the release notes once, and remembers they were read', async () => {
-    // A garden from before this release; new ones start having seen it.
+    // A garden from before this release; new ones start having seen it. The
+    // tab opens unseen, so the notes wait on the garden's notice rather than
+    // opening by themselves (App.update.test.tsx).
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
     const seed = stored()
     const user = await openGarden({
       ...seed,

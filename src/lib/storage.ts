@@ -75,24 +75,3 @@ export function formatBytes(bytes: number): string {
   }
   return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`
 }
-
-/** iPhone and iPad Safari, where installing is what protects the garden. */
-export function isAppleMobileBrowser(): boolean {
-  if (typeof navigator === 'undefined') return false
-  const agent = navigator.userAgent
-  const iPadOnDesktopAgent =
-    /Macintosh/.test(agent) && navigator.maxTouchPoints > 1
-  return /iPhone|iPad|iPod/.test(agent) || iPadOnDesktopAgent
-}
-
-/** Whether the app is running from the Home Screen or as an installed app. */
-export function isInstalledApp(): boolean {
-  if (typeof window === 'undefined') return false
-  const standalone = (navigator as Navigator & { standalone?: boolean })
-    .standalone
-  return (
-    standalone === true ||
-    (typeof window.matchMedia === 'function' &&
-      window.matchMedia('(display-mode: standalone)').matches)
-  )
-}
