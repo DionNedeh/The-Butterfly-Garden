@@ -1,0 +1,24 @@
+BEGIN:VCALENDAR
+PRODID:-//The Butterfly Garden//Garden time//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:7ea10d3f-40b1-448e-bc72-166f4bfdac95
+DTSTAMP:20261027T000000Z
+DTSTART:20261027T200000
+DURATION:PT10M
+RRULE:FREQ=DAILY
+SUMMARY:Garden time 🦋
+DESCRIPTION:Open The Butterfly Garden: https://dionnedeh.github.io/The-Butt
+ erfly-Garden/\nTo stop these reminders\, delete the event from your calend
+ ar.
+URL:https://dionnedeh.github.io/The-Butterfly-Garden/
+TRANSP:TRANSPARENT
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Garden time 🦋
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+END:VCALENDAR

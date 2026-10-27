@@ -44,6 +44,7 @@ import { soundVolumeOf } from '../lib/sound'
 import { SoundSwitches, SoundVolume } from './SoundControls'
 import { GuideLink } from './GuideLink'
 import { RegionSetting } from './RegionSetting'
+import { ReminderSetting } from './ReminderSetting'
 import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
@@ -266,6 +267,7 @@ export function SettingsView({
   onSetRegion,
   onOpenGuide,
   onChooseNightBackdrop,
+  onSetReminderTime,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -326,6 +328,8 @@ export function SettingsView({
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
   onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
+  /** Remember the time of the daily visit just added to the calendar. */
+  onSetReminderTime?: (time: string) => void
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -814,6 +818,12 @@ export function SettingsView({
           )}
         </section>
       )}
+
+      <ReminderSetting
+        savedTime={profile?.reminderTime}
+        eveningHour={recapHours.opensHour}
+        onChooseTime={onSetReminderTime}
+      />
 
       {onSetGardenPace && (
         <section className="card" aria-labelledby="pace-settings-title">

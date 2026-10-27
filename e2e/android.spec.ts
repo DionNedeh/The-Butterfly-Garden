@@ -320,3 +320,25 @@ test('the Garden Pass speaks of Google Play, and says when Play cannot be reache
   ).toBeVisible()
   expect(errors).toEqual([])
 })
+
+test('a calendar reminder goes through the app, which carries no calendar files of its own', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const card = page.locator('section', {
+    has: page.getByRole('heading', { name: 'A daily garden visit' }),
+  })
+  await expect(card.getByLabel('Remind me at')).toHaveValue('08:00')
+  // No link, whatever the time: the file goes to Android's own save screen,
+  // through the app's native plugin. A browser has none, so the app says the
+  // file could not be saved rather than claiming it was.
+  await expect(card.getByRole('link', { name: /calendar/ })).toHaveCount(0)
+  await card.getByRole('button', { name: 'Add a daily garden visit to my calendar' }).click()
+  await expect(card.getByRole('status')).toHaveText(
+    'The calendar file could not be saved there. Try choosing another place.',
+  )
+  // The files for common times are the PWA's alone.
+  const response = await page.request.get('/reminders/morning-0800.ics')
+  expect(response.headers()['content-type'] ?? '').not.toMatch(/text\/calendar/)
+})
