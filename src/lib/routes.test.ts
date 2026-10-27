@@ -16,6 +16,7 @@ const EVERY_VIEW: AppView[] = [
   'notices',
   'support',
   'breathe',
+  'year',
 ]
 
 describe('pages in the address bar', () => {
@@ -55,6 +56,18 @@ describe('pages in the address bar', () => {
   it('gives breathing with a butterfly an address of its own, without where it came from', () => {
     expect(hashForRoute({ view: 'breathe', from: 'today' })).toBe('#/breathe')
     expect(routeFromHash('#/breathe')).toEqual({ view: 'breathe' })
+  })
+
+  it('gives the year looked back on an address, this year’s plain and another’s by number', () => {
+    expect(hashForRoute({ view: 'year' })).toBe('#/year')
+    expect(hashForRoute({ view: 'year', year: 2025, from: 'journal' })).toBe('#/year/2025')
+    expect(routeFromHash('#/year/2025')).toEqual({ view: 'year', year: 2025 })
+    expect(routeFromHash('#/year/2025/')).toEqual({ view: 'year', year: 2025 })
+    // Only four digits name a year; anything else names no page.
+    expect(routeFromHash('#/year/25')).toBeUndefined()
+    expect(routeFromHash('#/year/twenty')).toBeUndefined()
+    // Only the year's page has a year in its address.
+    expect(hashForRoute({ view: 'journal', year: 2025 })).toBe('#/journal')
   })
 
   it('sends a reloaded recap to Today, where tonight’s is offered', () => {

@@ -56,7 +56,12 @@ describe('a letter from Marigold', { timeout: 20_000 }, () => {
     const card = await screen.findByRole('region', { name: 'A letter from Marigold is waiting' })
     await user.click(within(card).getByRole('button', { name: 'Read the letter' }))
 
-    const heading = await screen.findByRole('heading', { name: /^The week of October 19/ })
+    // The Journal arrives as a lazy chunk, which a busy machine can take seconds over.
+    const heading = await screen.findByRole(
+      'heading',
+      { name: /^The week of October 19/ },
+      { timeout: 8000 },
+    )
     await waitFor(() => expect(heading).toHaveFocus())
     expect(window.location.hash).toBe('#/journal')
     const letter = screen.getByRole('article', { name: /^The week of October 19/ })

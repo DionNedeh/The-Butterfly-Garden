@@ -71,6 +71,9 @@ const SupportView = lazy(() =>
 const BreathingView = lazy(() =>
   import('./components/BreathingView').then((m) => ({ default: m.BreathingView })),
 )
+const YearView = lazy(() =>
+  import('./components/YearView').then((m) => ({ default: m.YearView })),
+)
 // Only ever shown on the address the garden moved from, never in the app.
 const MovedBanner = lazy(() =>
   import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
@@ -353,7 +356,10 @@ function App() {
           // Out of the Guide, back does what its Back button does: the same
           // companion on Care, and the gardener where they were on the page.
           const back = returnFromGuide(current)
-          const next = back?.view === action.view ? back : { view: action.view }
+          const next: Route = back?.view === action.view ? back : { view: action.view }
+          // Out of a year looked back on, the Journal puts focus back on the
+          // link that opened it, as the page's own Back button does.
+          if (current.view === 'year') next.from = 'year'
           // Android's back walks up a fixed ladder (lib/backNavigation), not
           // through history, so each step replaces the address.
           if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
@@ -970,6 +976,17 @@ function App() {
               openLetter={route.letter}
               onReadLetter={garden.readLetter}
               onSetStarred={garden.setStarred}
+              onOpenYear={(year) => navigate({ view: 'year', year, from: 'journal' })}
+              returnedFromYear={route.from === 'year'}
+            />
+          )}
+          {activeView === 'year' && (
+            <YearView
+              state={state}
+              today={today}
+              year={route.year}
+              onChooseYear={(year) => navigate({ ...route, year }, { replace: true })}
+              onBack={() => navigate({ view: route.from ?? 'journal', from: 'year' })}
             />
           )}
           {activeView === 'settings' && (

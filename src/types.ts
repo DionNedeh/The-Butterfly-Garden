@@ -44,6 +44,8 @@ export type AppView =
   | 'support'
   /** Breathing with a butterfly: from Today, the recap and the support page. */
   | 'breathe'
+  /** "Your garden's year", a look back on a year: from the Journal. */
+  | 'year'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'

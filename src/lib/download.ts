@@ -31,7 +31,15 @@ export async function saveTextFile(
       ? 'saved'
       : 'cancelled'
   }
-  const blob = new Blob([text], { type: mimeType })
+  return downloadBlob(new Blob([text], { type: mimeType }), fileName)
+}
+
+/**
+ * A browser download of a blob: `started`, since the browser will not say
+ * whether it finished. A postcard's image is saved this way too
+ * (lib/saveImage), which keeps its Android path out of the first load.
+ */
+export function downloadBlob(blob: Blob, fileName: string): SaveOutcome {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
