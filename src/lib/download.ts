@@ -1,3 +1,4 @@
+import { toLocalDate } from './date'
 import { saveTextDocument } from './native'
 
 /** How long a download's blob URL is kept alive so the browser can read it. */
@@ -48,8 +49,12 @@ export async function saveTextFile(
   return 'started'
 }
 
-/** `butterfly-garden-<what>-2026-10-26.json` */
-export function datedFileName(what: string, extension = 'json'): string {
-  const day = new Date().toISOString().slice(0, 10)
+/**
+ * `butterfly-garden-<what>-2026-10-26.json`, dated by the gardener's own
+ * calendar day, the date written inside a journal copy too. A UTC date
+ * would name an evening's copy in the Americas after tomorrow.
+ */
+export function datedFileName(what: string, extension = 'json', now = new Date()): string {
+  const day = toLocalDate(now)
   return `butterfly-garden-${what ? `${what}-` : ''}${day}.${extension}`
 }

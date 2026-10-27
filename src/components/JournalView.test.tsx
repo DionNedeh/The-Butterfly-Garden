@@ -1,7 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { addDaysToLocalDate, formatJournalDate, toLocalDate } from '../lib/date'
 import { createInitialState } from '../lib/progression'
+import { dayWeatherLabel } from '../lib/weatherCalendar'
 import type { AppState, Goal, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
 import { JournalView } from './JournalView'
 
@@ -422,7 +424,7 @@ describe('a check-in that was not sure', () => {
     const user = userEvent.setup()
     const unsure: MoodEntry = { ...mood('2026-03-01', 'Hard to say'), level: 3, unsure: true }
     const { onUpdateMood } = renderJournal({ ...createInitialState('Tester', 'Test Garden'), moods: [unsure] })
-    expect(screen.getByText('Not sure')).toBeInTheDocument()
+    expect(within(document.getElementById('day-2026-03-01')!).getByText('Not sure')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     const select = screen.getByLabelText('Inner weather')
@@ -432,5 +434,70 @@ describe('a check-in that was not sure', () => {
     const saved = onUpdateMood.mock.calls[0][0] as MoodEntry
     expect(saved.level).toBe(5)
     expect(saved.unsure).toBeUndefined()
+  })
+})
+
+describe('finding a day in the journal', () => {
+  // Real days, ending today: the calendar opens on the month the clock says.
+  const today = toLocalDate(new Date())
+  const days = Array.from({ length: 35 }, (_, index) => addDaysToLocalDate(today, -index))
+  const journal = (): AppState => ({
+    ...createInitialState('Tester', 'Test Garden'),
+    moods: days.map((day, index) => mood(day, index === 3 ? 'Walked by the río' : 'Quiet')),
+  })
+  const shownDays = () => document.querySelectorAll('.timeline-entry').length
+
+  it('narrows the timeline to the days whose words match', async () => {
+    const user = userEvent.setup()
+    renderJournal(journal())
+    expect(shownDays()).toBe(30)
+    // Accents and case are forgiven.
+    await user.type(screen.getByRole('searchbox', { name: 'Search your journal' }), 'RIO')
+    await waitFor(() => expect(shownDays()).toBe(1))
+    expect(document.getElementById(`day-${days[3]}`)).toBeInTheDocument()
+    expect(screen.getByText('1 day matches')).toHaveAttribute('role', 'status')
+
+    await user.clear(screen.getByRole('searchbox', { name: 'Search your journal' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search your journal' }), 'nowhere')
+    await waitFor(() => expect(screen.getByText('Nothing in the journal matches that yet.')).toBeInTheDocument())
+  })
+
+  it('opens a day from the calendar, past the first page, and gives it focus', async () => {
+    const user = userEvent.setup()
+    renderJournal(journal())
+    const oldest = days[days.length - 1]
+    expect(document.getElementById(`day-${oldest}`)).toBeNull()
+    if (oldest.slice(0, 7) !== today.slice(0, 7)) {
+      await user.click(screen.getByRole('button', { name: 'Previous month' }))
+    }
+    await user.click(
+      screen.getByRole('button', { name: dayWeatherLabel(oldest, journal().moods[days.length - 1]) }),
+    )
+    const entry = document.getElementById(`day-${oldest}`)
+    expect(entry).toBeInTheDocument()
+    expect(within(entry!).getByText(formatJournalDate(oldest))).toHaveFocus()
+  })
+
+  it('opens a day already on the first page at once, and takes no focus later', async () => {
+    const user = userEvent.setup()
+    renderJournal(journal())
+    await user.click(
+      // Today: always in the month the calendar opens on.
+      screen.getByRole('button', { name: dayWeatherLabel(days[0], journal().moods[0]) }),
+    )
+    const entry = document.getElementById(`day-${days[0]}`)!
+    expect(within(entry).getByText(formatJournalDate(days[0]))).toHaveFocus()
+
+    // Typing in the search afterwards stays in the search.
+    const search = screen.getByRole('searchbox', { name: 'Search your journal' })
+    await user.click(search)
+    await user.type(search, 'quiet')
+    expect(search).toHaveValue('quiet')
+    expect(search).toHaveFocus()
+  })
+
+  it('offers readable copies of the journal', () => {
+    renderJournal(journal())
+    expect(screen.getByRole('heading', { name: 'Take your words with you' })).toBeInTheDocument()
   })
 })
