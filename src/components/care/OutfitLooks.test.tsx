@@ -11,20 +11,23 @@ import {
 } from '../../lib/outfitPresets'
 import { createInitialState } from '../../lib/progression'
 import { equipOutfitItem, wearOutfitPreset } from '../../lib/wardrobe'
-import type { AppState, CreatureInstance } from '../../types'
+import type { AppState, CreatureInstance, OutfitPreset } from '../../types'
 import { UNDO_MS } from '../UndoToast'
 import { OutfitLooks } from './OutfitLooks'
 
-/** Sol, a caterpillar in a cap, and Fern, an egg, sharing one closet. */
-function garden(overrides: Partial<AppState> = {}): AppState {
+/**
+ * Sol, a caterpillar in a cap, and Fern, an egg, sharing one closet, with
+ * these looks kept in the profile, where they are stored.
+ */
+function garden(looks?: OutfitPreset[]): AppState {
   const base = createInitialState('Tester', 'Test Garden')
   const sol: CreatureInstance = { ...base.creatures[0], id: 'sol', outfit: { headwear: 'sprout-cap' } }
   const fern: CreatureInstance = { ...sol, id: 'fern', name: 'Fern', stage: 'egg', outfit: {} }
   return {
     ...base,
+    profile: looks ? { ...base.profile!, outfitPresets: looks } : base.profile,
     creatures: [sol, fern],
     ownedItemIds: ['sprout-cap', 'silk-bow'],
-    ...overrides,
   }
 }
 
@@ -39,7 +42,7 @@ function Looks({ initial, creatureId = 'sol' }: { initial: AppState; creatureId?
       </button>
       <OutfitLooks
         creature={creature}
-        presets={state.outfitPresets ?? []}
+        presets={state.profile?.outfitPresets ?? []}
         onSave={(id, name) => setState((current) => saveOutfitPreset(current, id, name))}
         onWear={(id, presetId) => {
           const { state: next, ...outcome } = wearOutfitPreset(state, id, presetId)
@@ -141,7 +144,7 @@ describe('saving a look', () => {
       name: `Look ${index}`,
       outfit: { aura: 'sparkle-aura' },
     }))
-    render(<Looks initial={garden({ outfitPresets: looks })} />)
+    render(<Looks initial={garden(looks)} />)
     const save = screen.getByRole('button', { name: 'Save this look' })
     expect(save).toHaveAttribute('aria-disabled', 'true')
     expect(save).toHaveAccessibleDescription(
@@ -170,7 +173,7 @@ describe('saving a look', () => {
 describe('wearing a saved look', () => {
   it('puts it on, naming what was left off and why', async () => {
     const user = userEvent.setup()
-    render(<Looks initial={garden({ outfitPresets: [sunday] })} creatureId="fern" />)
+    render(<Looks initial={garden([sunday])} creatureId="fern" />)
     const wear = screen.getByRole('button', { name: 'Wear Sunday best' })
     expect(wear).toHaveTextContent(/^Wear$/)
     await user.click(wear)
@@ -183,7 +186,7 @@ describe('wearing a saved look', () => {
 
   it('says it plainly when every piece goes on', async () => {
     const user = userEvent.setup()
-    render(<Looks initial={garden({ outfitPresets: [sunday] })} />)
+    render(<Looks initial={garden([sunday])} />)
     await user.click(screen.getByRole('button', { name: 'Wear Sunday best' }))
     expect(status()).toHaveTextContent('Sol is wearing Sunday best.')
     expect(screen.getByText('Sol’s outfit is saved as Sunday best.')).toBeInTheDocument()
@@ -193,7 +196,7 @@ describe('wearing a saved look', () => {
 describe('renaming and deleting a look', () => {
   it('renames in place and hands focus back to Rename', async () => {
     const user = userEvent.setup()
-    render(<Looks initial={garden({ outfitPresets: [sunday] })} />)
+    render(<Looks initial={garden([sunday])} />)
     await user.click(screen.getByRole('button', { name: 'Rename Sunday best' }))
     const field = screen.getByRole('textbox', { name: 'New name for Sunday best' })
     expect(field).toHaveFocus()
@@ -211,7 +214,7 @@ describe('renaming and deleting a look', () => {
   it('deletes at once, and Undo puts the look back where it was', async () => {
     const user = userEvent.setup()
     const party = { ...sunday, id: 'party', name: 'Party' }
-    render(<Looks initial={garden({ outfitPresets: [sunday, party] })} />)
+    render(<Looks initial={garden([sunday, party])} />)
     await user.click(screen.getByRole('button', { name: 'Delete Sunday best' }))
     expect(screen.queryByText('Sunday best')).toBeNull()
     expect(heading()).toHaveFocus()
@@ -227,7 +230,7 @@ describe('renaming and deleting a look', () => {
 
   it('lets the undo pass after a while', () => {
     vi.useFakeTimers()
-    render(<Looks initial={garden({ outfitPresets: [sunday] })} />)
+    render(<Looks initial={garden([sunday])} />)
     act(() => screen.getByRole('button', { name: 'Delete Sunday best' }).click())
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument()
     act(() => {
@@ -241,7 +244,7 @@ describe('renaming and deleting a look', () => {
 describe('a look’s outfit, changed under it', () => {
   it('offers to save again once the outfit differs from every look', async () => {
     const user = userEvent.setup()
-    render(<Looks initial={garden({ outfitPresets: [{ ...sunday, outfit: { headwear: 'sprout-cap' } }] })} />)
+    render(<Looks initial={garden([{ ...sunday, outfit: { headwear: 'sprout-cap' } }])} />)
     expect(screen.queryByRole('button', { name: 'Save this look' })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Put on the bow' }))
     expect(screen.getByRole('button', { name: 'Save this look' })).toBeInTheDocument()

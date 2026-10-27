@@ -10,7 +10,7 @@ import {
   saveOutfitPreset,
   suggestPresetName,
 } from './outfitPresets'
-import { createEmptyState } from './progression'
+import { createEmptyState, createInitialState } from './progression'
 
 function creature(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   return {
@@ -32,14 +32,26 @@ function look(id: string, name = id, outfit: OutfitPreset['outfit'] = { aura: 's
   return { id, name, outfit }
 }
 
-function garden(overrides: Partial<AppState> = {}): AppState {
-  return { ...createEmptyState(), creatures: [creature()], ...overrides }
+/** A garden with Sol in it, and these looks kept in its profile, where they are stored. */
+function garden({ looks, ...overrides }: Partial<AppState> & { looks?: OutfitPreset[] } = {}): AppState {
+  const { profile } = createInitialState('Tester', 'Test Garden')
+  return {
+    ...createEmptyState(),
+    profile: looks ? { ...profile!, outfitPresets: looks } : profile,
+    creatures: [creature()],
+    ...overrides,
+  }
+}
+
+/** The looks a garden keeps, read where they are stored. */
+function looksOf(state: AppState): OutfitPreset[] | undefined {
+  return state.profile?.outfitPresets
 }
 
 describe('saving a look', () => {
   it('keeps the companion’s outfit under the name given, trimmed', () => {
     const saved = saveOutfitPreset(garden(), 'sol', '  Sunday best  ')
-    expect(saved.outfitPresets).toEqual([
+    expect(looksOf(saved)).toEqual([
       {
         id: expect.any(String),
         name: 'Sunday best',
@@ -50,12 +62,12 @@ describe('saving a look', () => {
 
   it('takes the suggested name when none is given', () => {
     const saved = saveOutfitPreset(garden(), 'sol', '   ')
-    expect(saved.outfitPresets?.[0].name).toBe('Sol’s look')
+    expect(looksOf(saved)?.[0].name).toBe('Sol’s look')
   })
 
   it('keeps only the pieces, not the empty slots', () => {
     const state = garden({ creatures: [creature({ outfit: { headwear: 'sprout-cap', aura: '' } })] })
-    expect(saveOutfitPreset(state, 'sol', 'Cap').outfitPresets?.[0].outfit).toEqual({
+    expect(looksOf(saveOutfitPreset(state, 'sol', 'Cap'))?.[0].outfit).toEqual({
       headwear: 'sprout-cap',
     })
   })
@@ -66,7 +78,7 @@ describe('saving a look', () => {
     const unknown = garden()
     expect(saveOutfitPreset(unknown, 'nobody', 'Look')).toBe(unknown)
     const full = garden({
-      outfitPresets: Array.from({ length: MAX_OUTFIT_PRESETS }, (_, index) => look(`look-${index}`)),
+      looks: Array.from({ length: MAX_OUTFIT_PRESETS }, (_, index) => look(`look-${index}`)),
     })
     expect(saveOutfitPreset(full, 'sol', 'One more')).toBe(full)
     const saved = saveOutfitPreset(garden(), 'sol', 'Sunday best')
@@ -103,44 +115,73 @@ describe('saving a look', () => {
   })
 })
 
+describe('where the looks are kept', () => {
+  it('keeps them in the profile, beside everything else it holds', () => {
+    const before = garden()
+    const saved = saveOutfitPreset(before, 'sol', 'Sunday best')
+    // In the profile, which every older build carries through whole, and
+    // never beside it, where an older build's save would leave it behind.
+    expect(saved).not.toHaveProperty('outfitPresets')
+    expect(looksOf(saved)).toHaveLength(1)
+    expect(saved.profile).toEqual({ ...before.profile, outfitPresets: looksOf(saved) })
+    // Updates replace, never mutate: the garden saved from is as it was.
+    expect(before.profile).not.toHaveProperty('outfitPresets')
+  })
+
+  it('leaves no list behind when the last look is deleted', () => {
+    const state = garden({ looks: [look('a')] })
+    const emptied = deleteOutfitPreset(state, 'a')
+    expect(emptied.profile).not.toHaveProperty('outfitPresets')
+    expect(emptied.profile?.gardenName).toBe('Test Garden')
+    expect(looksOf(restoreOutfitPreset(emptied, look('a'), 0))).toEqual([look('a')])
+  })
+
+  it('keeps nothing in a garden with no profile yet to keep it in', () => {
+    const unmade = garden({ profile: undefined })
+    expect(saveOutfitPreset(unmade, 'sol', 'Sunday best')).toBe(unmade)
+    expect(restoreOutfitPreset(unmade, look('a'), 0)).toBe(unmade)
+  })
+})
+
 describe('renaming, deleting and putting back a look', () => {
   const looks = [look('a', 'Sunday best'), look('b', 'Rainy day')]
 
   it('renames a look, trimmed', () => {
-    const state = garden({ outfitPresets: looks })
+    const state = garden({ looks })
     const renamed = renameOutfitPreset(state, 'b', '  Puddles  ')
-    expect(renamed.outfitPresets?.map((preset) => preset.name)).toEqual(['Sunday best', 'Puddles'])
-    expect(renamed.outfitPresets?.[0]).toBe(looks[0])
+    expect(looksOf(renamed)?.map((preset) => preset.name)).toEqual(['Sunday best', 'Puddles'])
+    expect(looksOf(renamed)?.[0]).toBe(looks[0])
   })
 
   it('changes nothing for an empty, unchanged or unknown name', () => {
-    const state = garden({ outfitPresets: looks })
+    const state = garden({ looks })
     expect(renameOutfitPreset(state, 'a', '   ')).toBe(state)
     expect(renameOutfitPreset(state, 'a', 'Sunday best ')).toBe(state)
     expect(renameOutfitPreset(state, 'nope', 'New')).toBe(state)
-    expect(renameOutfitPreset(garden(), 'a', 'New').outfitPresets).toBeUndefined()
+    expect(looksOf(renameOutfitPreset(garden(), 'a', 'New'))).toBeUndefined()
   })
 
   it('deletes a look, and puts it back where it was', () => {
-    const state = garden({ outfitPresets: [...looks, look('c', 'Party')] })
+    const state = garden({ looks: [...looks, look('c', 'Party')] })
     const deleted = deleteOutfitPreset(state, 'b')
-    expect(deleted.outfitPresets?.map((preset) => preset.id)).toEqual(['a', 'c'])
+    expect(looksOf(deleted)?.map((preset) => preset.id)).toEqual(['a', 'c'])
     expect(deleteOutfitPreset(deleted, 'b')).toBe(deleted)
 
     const back = restoreOutfitPreset(deleted, looks[1], 1)
-    expect(back.outfitPresets?.map((preset) => preset.id)).toEqual(['a', 'b', 'c'])
+    expect(looksOf(back)?.map((preset) => preset.id)).toEqual(['a', 'b', 'c'])
     // Once back, it is not doubled.
     expect(restoreOutfitPreset(back, looks[1], 1)).toBe(back)
   })
 
   it('puts a look back at the end when the list has shrunk, and not into a full closet', () => {
-    const state = garden({ outfitPresets: [looks[0]] })
-    expect(
-      restoreOutfitPreset(state, looks[1], 5).outfitPresets?.map((preset) => preset.id),
-    ).toEqual(['a', 'b'])
-    expect(restoreOutfitPreset(garden(), looks[1], 3).outfitPresets).toEqual([looks[1]])
+    const state = garden({ looks: [looks[0]] })
+    expect(looksOf(restoreOutfitPreset(state, looks[1], 5))?.map((preset) => preset.id)).toEqual([
+      'a',
+      'b',
+    ])
+    expect(looksOf(restoreOutfitPreset(garden(), looks[1], 3))).toEqual([looks[1]])
     const full = garden({
-      outfitPresets: Array.from({ length: MAX_OUTFIT_PRESETS }, (_, index) => look(`look-${index}`)),
+      looks: Array.from({ length: MAX_OUTFIT_PRESETS }, (_, index) => look(`look-${index}`)),
     })
     expect(restoreOutfitPreset(full, looks[1], 0)).toBe(full)
   })

@@ -627,10 +627,12 @@ function checkPresetOutfit(value: unknown): OutfitPreset['outfit'] {
 }
 
 /**
- * Saved looks (lib/outfitPresets): each with an id of its own, a name as the
- * wardrobe keeps names, and at least one piece the catalogue knows; no more
- * than the closet keeps. Undefined when there were never any, so an older
- * garden stays exactly as it was.
+ * Saved looks (lib/outfitPresets), kept in the profile: each with an id of
+ * its own, a name as the wardrobe keeps names, and at least one piece the
+ * catalogue knows; no more than the closet keeps. The very same list when
+ * nothing needed changing. Undefined when none are left, or there never were
+ * any: no looks are stored as no field, so an older garden stays exactly as
+ * it was.
  */
 function checkOutfitPresets(value: unknown): OutfitPreset[] | undefined {
   if (!Array.isArray(value)) return undefined
@@ -662,6 +664,7 @@ function checkOutfitPresets(value: unknown): OutfitPreset[] | undefined {
       presets.push({ id: raw.id, name, outfit })
     }
   }
+  if (presets.length === 0) return undefined
   if (presets.length > MAX_OUTFIT_PRESETS) {
     changed = true
     presets.length = MAX_OUTFIT_PRESETS
@@ -813,6 +816,13 @@ function checkProfile(
     const date = value[field]
     if (date !== undefined && !(isLocalDate(date) && date <= today)) delete profile[field]
   }
+  // Saved looks live here, in the profile, because every older build carries
+  // the profile through whole (see Profile.outfitPresets). A look dropped is
+  // not damage: it is only an arrangement of pieces, and nothing is lost
+  // from the closet with it.
+  const outfitPresets = checkOutfitPresets(value.outfitPresets)
+  if (outfitPresets) profile.outfitPresets = outfitPresets
+  else delete profile.outfitPresets
   return profile
 }
 
@@ -1012,9 +1022,6 @@ export function validateGarden(value: unknown): GardenValidation {
     jars,
     jarPlacements,
   }
-  const outfitPresets = checkOutfitPresets(candidate.outfitPresets)
-  if (outfitPresets) state.outfitPresets = outfitPresets
-  else delete state.outfitPresets
   return { state, repaired: ctx.repaired }
 }
 

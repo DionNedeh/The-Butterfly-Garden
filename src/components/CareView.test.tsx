@@ -387,8 +387,12 @@ describe('the bond and the companion’s story', () => {
     const sol = { ...state.creatures[0], outfit: { headwear: 'sprout-cap' } }
     const handlers = renderCare({
       ...state,
+      // Where the garden keeps its looks: in the profile.
+      profile: {
+        ...state.profile!,
+        outfitPresets: [{ id: 'bow', name: 'Bow', outfit: { accessory: 'silk-bow' } }],
+      },
       creatures: [sol],
-      outfitPresets: [{ id: 'bow', name: 'Bow', outfit: { accessory: 'silk-bow' } }],
     })
     await user.click(screen.getByRole('button', { name: 'Save this look' }))
     await user.click(screen.getByRole('button', { name: 'Save look' }))

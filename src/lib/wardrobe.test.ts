@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getShopItem, shopItems } from '../data/shopItems'
-import type { AppState, CreatureInstance, ShopItemDefinition } from '../types'
+import type { AppState, CreatureInstance, OutfitPreset, ShopItemDefinition } from '../types'
 import { previewProvider } from './gardenPass'
 import { createEmptyState, createInitialState } from './progression'
 import {
@@ -32,12 +32,15 @@ function creature(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   }
 }
 
-/** A garden made before the diary, owning a few ordinary pieces. */
-function garden(overrides: Partial<AppState> = {}): AppState {
+/**
+ * A garden made before the diary, owning a few ordinary pieces, with these
+ * looks kept in its profile, where they are stored.
+ */
+function garden({ looks, ...overrides }: Partial<AppState> & { looks?: OutfitPreset[] } = {}): AppState {
   const made = createInitialState('Tester', 'Test Garden')
   return {
     ...createEmptyState(),
-    profile: { ...made.profile!, diarySince: undefined },
+    profile: { ...made.profile!, diarySince: undefined, ...(looks ? { outfitPresets: looks } : {}) },
     creatures: [creature()],
     ownedItemIds: ['sprout-cap', 'silk-bow', 'sparkle-aura', 'star-diadem'],
     ...overrides,
@@ -89,7 +92,7 @@ describe('wearing a saved look', () => {
   it('puts on every piece, empties what the look leaves empty, and notes them', () => {
     const state = garden({
       creatures: [creature({ outfit: { aura: 'sparkle-aura' } })],
-      outfitPresets: [sunday],
+      looks: [sunday],
     })
     const result = wearOutfitPreset(state, 'sol', 'sunday', undefined, NOW)
     expect(result.worn).toEqual(['sprout-cap', 'silk-bow'])
@@ -97,7 +100,8 @@ describe('wearing a saved look', () => {
     expect(result.state.creatures[0].outfit).toEqual({ headwear: 'sprout-cap', accessory: 'silk-bow' })
     expect(result.state.creatures[0].outfitsWorn).toEqual(['sprout-cap', 'silk-bow'])
     expect(result.state.profile?.diarySince).toBe(NOW.toISOString())
-    // Nothing else of the garden moves.
+    // Nothing else of the garden moves, the looks in the profile among it.
+    expect(result.state.profile?.outfitPresets).toBe(state.profile?.outfitPresets)
     expect(result.state.ownedItemIds).toBe(state.ownedItemIds)
   })
 
@@ -105,7 +109,7 @@ describe('wearing a saved look', () => {
     const state = garden({
       creatures: [creature({ stage: 'chrysalis', outfit: { headwear: 'moonlit-halo' } })],
       ownedItemIds: ['sprout-cap', 'silk-bow', 'moonlit-halo'],
-      outfitPresets: [sunday],
+      looks: [sunday],
     })
     const result = wearOutfitPreset(state, 'sol', 'sunday', undefined, NOW)
     expect(result.worn).toEqual(['silk-bow'])
@@ -122,7 +126,7 @@ describe('wearing a saved look', () => {
       name: 'Mixed',
       outfit: { headwear: passHat.id, accessory: 'leaf-scarf', aura: 'sparkle-aura' },
     }
-    const state = garden({ outfitPresets: [look] })
+    const state = garden({ looks: [look] })
     const closed = wearOutfitPreset(state, 'sol', 'mixed', null, NOW)
     expect(closed.worn).toEqual(['sparkle-aura'])
     expect(closed.skipped).toEqual([
@@ -139,7 +143,7 @@ describe('wearing a saved look', () => {
     const cap = { id: 'cap', name: 'Cap', outfit: { headwear: 'sprout-cap' } }
     const state = garden({
       creatures: [creature({ stage: 'egg', outfit: { aura: 'sparkle-aura' } })],
-      outfitPresets: [cap],
+      looks: [cap],
     })
     const result = wearOutfitPreset(state, 'sol', 'cap', undefined, NOW)
     expect(result.state).toBe(state)
@@ -148,7 +152,7 @@ describe('wearing a saved look', () => {
   })
 
   it('hands back the same garden when the look is already on and noted', () => {
-    const state = garden({ outfitPresets: [sunday] })
+    const state = garden({ looks: [sunday] })
     const once = wearOutfitPreset(state, 'sol', 'sunday', undefined, NOW).state
     const twice = wearOutfitPreset(once, 'sol', 'sunday', undefined, NOW)
     expect(twice.state).toBe(once)
@@ -157,7 +161,7 @@ describe('wearing a saved look', () => {
 
   it('passes over a look or a companion that is not there, and a piece the catalogue lost', () => {
     const state = garden({
-      outfitPresets: [{ id: 'old', name: 'Old', outfit: { headwear: 'retired-hat', aura: 'sparkle-aura' } }],
+      looks: [{ id: 'old', name: 'Old', outfit: { headwear: 'retired-hat', aura: 'sparkle-aura' } }],
     })
     expect(wearOutfitPreset(state, 'sol', 'nope').state).toBe(state)
     expect(wearOutfitPreset(state, 'nobody', 'old').state).toBe(state)
