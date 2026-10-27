@@ -1,19 +1,6 @@
 import { gardenRepository } from '../repository/gardenRepository'
 import type { FileCopy } from './sightingPhotos'
-
-/**
- * Bytes as base64. A locked garden is stored as sealed bytes (repository/
- * sealedStores), which JSON would write as a long list of numbers; a file
- * holds them far more compactly as text, exactly as they are.
- */
-function base64Of(bytes: ArrayBufferView): string {
-  const view = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  let binary = ''
-  for (let start = 0; start < view.length; start += 0x8000) {
-    binary += String.fromCharCode(...view.subarray(start, start + 0x8000))
-  }
-  return btoa(binary)
-}
+import { bytesAsBase64 } from './storedBytes'
 
 /**
  * Everything the app has stored, as the text of a file the gardener can keep
@@ -22,24 +9,21 @@ function base64Of(bytes: ArrayBufferView): string {
  * bytes cannot be read is left out, and said so. Should that module not
  * load, everything else still goes: each photo is marked as left out rather
  * than written as `{}`, which no restore would take. Under the garden lock
- * what is stored is sealed, and the copy is too, its bytes as base64.
+ * what is stored is sealed, and the copy is too, its bytes as base64
+ * (lib/storedBytes), the lock's record with them: such a copy is known by
+ * that record (lib/backupFile's `sealedKind`), and opens again only with
+ * the lock's passcode or recovery code (lib/lockedCopy).
  */
 export async function storedCopy(): Promise<FileCopy> {
   const raw = await gardenRepository.readRaw()
-  const bytes = (_key: string, value: unknown) =>
-    ArrayBuffer.isView(value) ? { base64: base64Of(value) } : value
   return import('./sightingPhotos').then(
-    async ({ withPhotosAsText, photosLeftOut }) => {
-      const { value, unreadable } = await withPhotosAsText(raw)
-      const text = JSON.stringify(value, bytes, 2)
-      return unreadable ? { text, leftOut: photosLeftOut(unreadable) } : { text }
-    },
+    ({ fileCopy }) => fileCopy(raw, true),
     () => {
       let left = 0
       const text = JSON.stringify(
         raw,
         (key, value: unknown) => {
-          if (!(value instanceof Blob)) return bytes(key, value)
+          if (!(value instanceof Blob)) return bytesAsBase64(key, value)
           left += 1
           return { unreadable: true }
         },

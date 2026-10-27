@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { PersistenceStatus } from '../hooks/useGardenState'
-import { isSealedBackup, readBackupFile } from '../lib/backupFile'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
 import type { FileCopy } from '../lib/sightingPhotos'
@@ -75,8 +75,9 @@ export function RecoveryScreen({
       setNote(chosen.message)
       return
     }
-    // A protected backup asks for its passphrase, then restores as any other.
-    if (isSealedBackup(chosen.text)) setSealedChoice(chosen.text)
+    // A protected backup asks for its passphrase, and a locked garden's copy
+    // for its passcode or recovery code; then each restores as any other.
+    if (sealedKind(chosen.text)) setSealedChoice(chosen.text)
     else await restoreText(chosen.text)
   }
 
@@ -120,6 +121,7 @@ export function RecoveryScreen({
         {sealedChoice !== undefined && (
           <ProtectedRestore
             text={sealedChoice}
+            next="replace"
             returnFocus={() => fileInput.current}
             onOpened={(plain) => {
               setSealedChoice(undefined)

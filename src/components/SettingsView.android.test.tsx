@@ -150,8 +150,8 @@ describe('SettingsView in the Android app', () => {
     const [fileName, mimeType, text] = save.mock.lastCall!
     expect(fileName).toMatch(/^butterfly-garden-protected-\d{4}-\d{2}-\d{2}\.json$/)
     expect(mimeType).toBe('application/json')
-    const { isSealedBackup } = await import('../lib/backupFile')
-    expect(isSealedBackup(text)).toBe(true)
+    const { sealedKind } = await import('../lib/backupFile')
+    expect(sealedKind(text)).toBe('backup')
     // Written at the full count: nothing in the app asks for fewer.
     expect((JSON.parse(text) as { kdf: { iterations: number } }).kdf.iterations).toBe(600_000)
     expect(onBackupMade).toHaveBeenCalledOnce()

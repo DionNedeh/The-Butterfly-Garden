@@ -2,8 +2,9 @@ import { Blob as NodeBlob } from 'node:buffer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { inspectImportedState, readImportedState } from '../repository/gardenRepository'
 import { migrateState } from '../repository/validateGarden'
+import { ArrayBufferFileReader } from '../test/fileReader'
 import type { AppState, Sighting } from '../types'
-import { isSealedBackup, SEALED_BACKUP_FORMAT } from './backupFile'
+import { SEALED_BACKUP_FORMAT, sealedKind } from './backupFile'
 import { previewBackup } from './backupPreview'
 import { createInitialState } from './progression'
 import {
@@ -122,7 +123,7 @@ describe('a protected backup', () => {
   it('is written with its format first, the cipher’s settings readable, and nothing else in the clear', async () => {
     const file = await sealed('{"format":"the-butterfly-garden"}', PASSPHRASE)
     expect(file.startsWith(`{\n  "format": "${SEALED_BACKUP_FORMAT}",`)).toBe(true)
-    expect(isSealedBackup(file)).toBe(true)
+    expect(sealedKind(file)).toBe('backup')
     // ASCII throughout, so its length is its size.
     expect(/^[\x20-\x7e\n]*$/.test(file)).toBe(true)
     const value = JSON.parse(file) as Record<string, unknown>

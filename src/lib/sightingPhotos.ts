@@ -8,6 +8,7 @@
 // set-aside copy.
 
 import type { QuarantineRecord } from '../repository/gardenRepository'
+import { bytesAsBase64 } from './storedBytes'
 
 /** A photo as a file carries it. */
 export interface PhotoAsText {
@@ -127,11 +128,14 @@ export function photosLeftOut(count: number): string {
 
 /**
  * The text of a file holding `value`, its photos written as text: a backup,
- * the set-aside copy, or everything stored.
+ * the set-aside copy, or everything stored. A copy of what is stored
+ * (`stored`) may hold a locked garden's sealed bytes, which go in as base64
+ * (lib/storedBytes), the same in both such copies; a backup never holds
+ * any, and is written without looking for them.
  */
-export async function fileCopy(value: unknown): Promise<FileCopy> {
+export async function fileCopy(value: unknown, stored = false): Promise<FileCopy> {
   const { value: portable, unreadable } = await withPhotosAsText(value)
-  const text = JSON.stringify(portable, null, 2)
+  const text = JSON.stringify(portable, stored ? bytesAsBase64 : undefined, 2)
   return unreadable ? { text, leftOut: photosLeftOut(unreadable) } : { text }
 }
 
@@ -139,12 +143,17 @@ export async function fileCopy(value: unknown): Promise<FileCopy> {
 export function setAsideCopy(
   setAside: Pick<QuarantineRecord, 'reason' | 'storedAt' | 'raw'>,
 ): Promise<FileCopy> {
-  return fileCopy({
-    format: 'the-butterfly-garden-set-aside',
-    exportedAt: new Date().toISOString(),
-    appVersion: __APP_VERSION__,
-    reason: setAside.reason,
-    storedAt: setAside.storedAt,
-    garden: setAside.raw,
-  })
+  // Set aside under the lock, a garden that would not open is its sealed
+  // parts, bytes and all.
+  return fileCopy(
+    {
+      format: 'the-butterfly-garden-set-aside',
+      exportedAt: new Date().toISOString(),
+      appVersion: __APP_VERSION__,
+      reason: setAside.reason,
+      storedAt: setAside.storedAt,
+      garden: setAside.raw,
+    },
+    true,
+  )
 }

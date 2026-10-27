@@ -55,7 +55,7 @@ tells other tabs which parts it wrote.
 | Unsaved text that survives a reload | `lib/drafts.ts`, `hooks/useSyncedDraft.ts` |
 | A check-in's feelings and energy, and the one next step offered after it | `data/feelings.ts`, `lib/feelings.ts` (what is stored, and in what words), `lib/nextStep.ts`, `components/checkin/` |
 | Ideas for goals, their two-minute versions, a balanced mix | `data/goalSuggestions.ts` (loaded with Today and onboarding only), `lib/goalSuggestions.ts` |
-| Restoring a chosen file | `lib/backupFile.ts` (size and read), `lib/backupPreview.ts` (what it holds) |
+| Restoring a chosen file | `lib/backupFile.ts` (size and read, and `sealedKind`: a protected backup or a locked garden's copy, each opened first in `components/backup/`), `lib/backupPreview.ts` (what it holds), `lib/lockedCopy.ts` (safe mode's copy of a locked garden, opened with the lock's own passcode or recovery code) |
 | Suggesting a fresh backup | `lib/backupReminder.ts` (when, and in what words); `lib/shareFile.ts` (*Share backup…* in a browser that can) |
 | A gardener's own images, by day and by night | `lib/imageImport.ts` (the checks before decoding; resizing and quarter turns in one draw), `lib/customBackdrops.ts` (limits, crop, which image shows by day and which by night), `lib/backdropEdits.ts` (the editor's turns and brightness) |
 | The Garden Pass: who may use what | `lib/gardenPass.ts`, the only access boundary; `lib/passEntitlement.ts`, `lib/playBilling.ts` behind it |

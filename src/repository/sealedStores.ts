@@ -162,7 +162,7 @@ function isBytes(value: unknown): value is { [BYTES]: string } {
  */
 async function revive(
   value: unknown,
-  photoAt: (place: PhotoPlace) => Promise<Blob>,
+  photoAt: (place: PhotoPlace) => Promise<unknown>,
 ): Promise<unknown> {
   if (isPhotoPlace(value)) return photoAt(value)
   if (isBytes(value)) return fromBase64(value[BYTES])
@@ -183,11 +183,17 @@ async function revive(
  * Open what `sealValue` sealed. Throws when the key is wrong, the label is
  * not the one it was sealed under, or anything in it was changed: a photo's
  * IV is inside the sealed text, so photos swapped between places fail too.
+ *
+ * A sealed photo that is missing altogether fails it too, unless `leftOut`
+ * says what stands in its place: a copy in a file (lib/lockedCopy) can be
+ * missing one whose bytes could not be read when it was made, and keeps its
+ * sighting without it, as a plain copy does. What is stored never is.
  */
 export async function openValue(
   key: CryptoKey,
   label: string,
   sealed: SealedValue,
+  leftOut?: (type: string) => unknown,
 ): Promise<unknown> {
   if (!ArrayBuffer.isView(sealed.iv) || !ArrayBuffer.isView(sealed.data)) {
     throw new Error('A sealed value is damaged.')
@@ -202,7 +208,10 @@ export async function openValue(
   const photoLabel = encoder.encode(`${label}/photo`)
   return revive(value, async (place) => {
     const stored = sealed.blobs?.[place[PHOTO]]
-    if (!(stored instanceof Blob)) throw new Error('A sealed photo is missing.')
+    if (!(stored instanceof Blob)) {
+      if (leftOut) return leftOut(place.type)
+      throw new Error('A sealed photo is missing.')
+    }
     const iv = fromBase64(place.iv)
     const photoBytes = await open(
       key,
@@ -311,15 +320,22 @@ export async function sealGarden(key: CryptoKey, garden: unknown): Promise<Recor
   return { version: SEALED_META_VERSION, ...(await sealValue(key, 'meta', whole)), ...sealed }
 }
 
-/** Open a garden `sealGarden` (or a snapshot taken under the lock) sealed. */
-export async function openGarden(key: CryptoKey, garden: unknown): Promise<Record<string, unknown>> {
+/**
+ * Open a garden `sealGarden` (or a snapshot taken under the lock) sealed:
+ * or, with `leftOut` (see openValue), one in a copy of what was stored.
+ */
+export async function openGarden(
+  key: CryptoKey,
+  garden: unknown,
+  leftOut?: (type: string) => unknown,
+): Promise<Record<string, unknown>> {
   const record = garden as Record<string, unknown>
-  const whole = { ...((await openValue(key, 'meta', sealedOf(record))) as Record<string, unknown>) }
+  const whole = { ...((await openValue(key, 'meta', sealedOf(record), leftOut)) as Record<string, unknown>) }
   for (const collection of GARDEN_COLLECTIONS) {
     const value = record[collection]
     if (value !== undefined) {
       if (!isSealed(value)) throw new Error(`The ${collection} part is not sealed.`)
-      whole[collection] = await openValue(key, collection, value)
+      whole[collection] = await openValue(key, collection, value, leftOut)
     }
   }
   return whole

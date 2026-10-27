@@ -3,7 +3,7 @@ import type { GoalSuggestion } from '../data/goalSuggestions'
 import type { StarterGoal } from '../hooks/useGardenState'
 import { ARRIVAL_HASH } from '../lib/hosting'
 import { Butterfly } from './Butterfly'
-import { isSealedBackup, readBackupFile } from '../lib/backupFile'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { balancedSuggestions } from '../lib/goalSuggestions'
 import { isAndroidApp } from '../lib/platform'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
@@ -89,8 +89,9 @@ export function Onboarding({
       setRestoreNote(chosen.message)
       return
     }
-    // A protected backup asks for its passphrase, then restores as any other.
-    if (isSealedBackup(chosen.text)) setSealedChoice(chosen.text)
+    // A protected backup asks for its passphrase, and a locked garden's copy
+    // for its passcode or recovery code; then each restores as any other.
+    if (sealedKind(chosen.text)) setSealedChoice(chosen.text)
     else await restoreText(chosen.text)
   }
 
@@ -154,6 +155,7 @@ export function Onboarding({
                   {sealedChoice !== undefined && (
                     <ProtectedRestore
                       text={sealedChoice}
+                      next="arrive"
                       returnFocus={() => restoreInput.current}
                       onOpened={(plain) => {
                         setSealedChoice(undefined)

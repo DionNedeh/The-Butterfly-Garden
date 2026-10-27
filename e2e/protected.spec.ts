@@ -75,8 +75,14 @@ test('a protected backup is downloaded, then restored on another device with its
   await expect(dialog.getByRole('alert')).toHaveText('Use at least 8 characters for the passphrase.')
   await expect(first).toBeFocused()
 
+  // The garden's own name, run together and dressed up, is weak; the
+  // passphrase of unrelated words reads as good, and humbly.
+  await first.fill('ButterflyGarden1')
+  await expect(dialog.getByText(/^Weak: /)).toBeVisible()
   await first.fill(PASSPHRASE)
-  await expect(dialog.getByText('Strong: long, and not an obvious pattern.')).toBeVisible()
+  await expect(
+    dialog.getByText('Good: long, with no pattern this check can see. Longer and less guessable is stronger still.'),
+  ).toBeVisible()
   await second.fill('quiet meadow lanterns')
   await dialog.getByRole('button', { name: 'Lock the backup' }).click()
   await expect(dialog.getByRole('alert')).toHaveText('The two passphrases are not the same. Type the second one again.')

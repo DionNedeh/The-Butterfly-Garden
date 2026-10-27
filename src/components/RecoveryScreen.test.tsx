@@ -1,14 +1,27 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
 import { saveTextFile } from '../lib/download'
+import { turnLockOn } from '../lib/gardenLockActions'
+import { createInitialState } from '../lib/progression'
+import { newRecoveryCode } from '../lib/recoveryCode'
 import { reloadApp } from '../lib/reload'
 import type { FileCopy } from '../lib/sightingPhotos'
 import { sealBackup } from '../lib/sealedBackup'
+import { storedCopy } from '../lib/storedCopy'
+import { gardenRepository, readImportedState } from '../repository/gardenRepository'
 import { RecoveryScreen } from './RecoveryScreen'
 
+// The real lock, quick: the count is the tests' only change.
+vi.mock('../lib/sealing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/sealing')>()
+  return {
+    ...actual,
+    deriveKey: (secret: string, salt: Uint8Array) => actual.deriveKey(secret, salt, 1_000),
+  }
+})
 vi.mock('../lib/download', async (original) => ({
   ...(await original<typeof import('../lib/download')>()),
   saveTextFile: vi.fn(),
@@ -39,6 +52,12 @@ afterEach(() => {
   save.mockReset()
   vi.mocked(reloadApp).mockReset()
   vi.unstubAllEnvs()
+})
+
+// The prompt's code is fetched when a sealed file is chosen; fetched once
+// here, so no test's first wait is spent compiling it on a busy machine.
+beforeAll(async () => {
+  await import('./backup/SealedBackupPrompt')
 })
 
 describe('explaining what happened', () => {
@@ -150,6 +169,11 @@ describe('putting a protected backup back', () => {
     await user.upload(screen.getByLabelText('Restore a backup'), await protectedFile('{"a":1}'))
     const dialog = await screen.findByRole('dialog', { name: 'This backup is protected' })
     expect(onRestore).not.toHaveBeenCalled()
+    // No look at it comes first here, so none is promised: it is restored at once.
+    expect(dialog).toHaveAccessibleDescription(
+      /Once it opens, it is restored straight away, in place of what is stored here\.$/,
+    )
+    expect(dialog).not.toHaveAccessibleDescription(/Nothing is replaced until/)
 
     await user.type(within(dialog).getByLabelText('Passphrase'), 'not it at all')
     await user.click(within(dialog).getByRole('button', { name: 'Open the backup' }))
@@ -171,6 +195,35 @@ describe('putting a protected backup back', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(onRestore).not.toHaveBeenCalled()
     expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+describe('putting back safe mode’s copy of a locked garden', () => {
+  it('asks for the lock’s recovery code, then restores the garden inside as any backup', async () => {
+    const words = newRecoveryCode()
+    await gardenRepository.save(createInitialState('Robin', 'Quiet Corner'))
+    await turnLockOn('kingfisher at dawn', words)
+    const { text } = await storedCopy()
+    await gardenRepository.clear()
+
+    const { onRestore, user } = renderRecovery()
+    await user.upload(
+      screen.getByLabelText('Restore a backup'),
+      new File([text], 'butterfly-garden-everything-stored.json', { type: 'application/json' }),
+    )
+    const dialog = await screen.findByRole('dialog', { name: 'This copy is locked' })
+    expect(dialog).toHaveAccessibleDescription(
+      /Once it opens, it is restored straight away, in place of what is stored here\./,
+    )
+    expect(onRestore).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Use the recovery code instead' }))
+    await user.type(within(dialog).getByLabelText('Recovery code'), words.join(' '))
+    await user.click(within(dialog).getByRole('button', { name: 'Open the copy' }))
+    await waitFor(() => expect(onRestore).toHaveBeenCalledOnce())
+    const [plain] = onRestore.mock.calls[0]
+    expect(readImportedState(JSON.parse(plain))?.profile?.gardenName).toBe('Quiet Corner')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(note()).toHaveTextContent(/^Restored \d+ characters\.$/)
   })
 })
 

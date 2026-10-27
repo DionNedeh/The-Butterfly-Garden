@@ -1,14 +1,20 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { openSealedBackup, sealBackup } from '../../lib/sealedBackup'
-import { ProtectedRestore } from './ProtectedRestore'
+import { ProtectedRestore, type ProtectedRestoreProps } from './ProtectedRestore'
 
 // The real lock and open, watched, so a test can hold one mid-way.
 vi.mock('../../lib/sealedBackup', async (original) => {
   const actual = await original<typeof import('../../lib/sealedBackup')>()
   return { ...actual, openSealedBackup: vi.fn(actual.openSealedBackup) }
+})
+
+// The prompt's code is fetched when a sealed file is chosen; fetched once
+// here, so no test's first wait is spent compiling it on a busy machine.
+beforeAll(async () => {
+  await import('./SealedBackupPrompt')
 })
 
 const PASSPHRASE = 'quiet meadow lantern'
@@ -20,14 +26,14 @@ async function sealedFile(text = PLAIN): Promise<string> {
   return outcome.text
 }
 
-async function renderPrompt(text: string) {
+async function renderPrompt(text: string, next: ProtectedRestoreProps['next'] = 'preview') {
   const onOpened = vi.fn()
   const onClose = vi.fn()
   const opener = document.createElement('button')
   opener.textContent = 'Restore a backup'
   document.body.append(opener)
   opener.focus()
-  render(<ProtectedRestore text={text} onOpened={onOpened} onClose={onClose} />)
+  render(<ProtectedRestore text={text} next={next} onOpened={onOpened} onClose={onClose} />)
   const dialog = await screen.findByRole('dialog', { name: /protected/ })
   return { dialog, onOpened, onClose, opener, user: userEvent.setup() }
 }
@@ -48,7 +54,7 @@ describe('asking for a protected backup’s passphrase', () => {
 
     await user.type(field, PASSPHRASE)
     await user.click(screen.getByRole('button', { name: 'Open the backup' }))
-    await waitFor(() => expect(onOpened).toHaveBeenCalledWith(PLAIN))
+    await waitFor(() => expect(onOpened).toHaveBeenCalledWith(PLAIN, 'passphrase'))
     expect(onClose).not.toHaveBeenCalled()
     // Nothing of the passphrase is kept anywhere the page could find again.
     expect(window.localStorage.length).toBe(0)
@@ -66,16 +72,38 @@ describe('asking for a protected backup’s passphrase', () => {
     expect(field).toHaveAttribute('aria-invalid', 'true')
     expect(field).toHaveAccessibleDescription('Passphrases are exact: capitals, spaces and punctuation all count.')
 
-    // Tried again, the same words are cleared and said again, so they are heard again.
+    // Tried again, the same words are cleared and said again, so they are
+    // heard again: in a new alert, once the slow open has finished, never
+    // the empty one put up as it starts.
     await user.click(screen.getByRole('button', { name: 'Open the backup' }))
     await waitFor(() => expect(openSealedBackup).toHaveBeenCalledTimes(2))
-    expect(await screen.findByRole('alert')).toHaveTextContent('That passphrase does not open this backup.')
+    await waitFor(() => {
+      const again = screen.getByRole('alert')
+      expect(again).not.toBe(alert)
+      expect(again).toHaveTextContent('That passphrase does not open this backup. Check it and try again.')
+    })
     expect(onOpened).not.toHaveBeenCalled()
 
     await user.clear(field)
     await user.type(field, PASSPHRASE)
     await user.click(screen.getByRole('button', { name: 'Open the backup' }))
-    await waitFor(() => expect(onOpened).toHaveBeenCalledWith(PLAIN))
+    await waitFor(() => expect(onOpened).toHaveBeenCalledWith(PLAIN, 'passphrase'))
+  })
+
+  it('promises a look before anything is replaced only where one follows', async () => {
+    const said = {
+      preview: 'Nothing is replaced until you have seen what the backup holds.',
+      replace: 'Once it opens, it is restored straight away, in place of what is stored here.',
+      arrive: 'Once it opens, the garden it holds is restored here straight away.',
+    }
+    for (const next of ['preview', 'replace', 'arrive'] as const) {
+      const { dialog } = await renderPrompt(await sealedFile(), next)
+      expect(dialog).toHaveAccessibleDescription(
+        `Enter the passphrase it was saved with. It is used only here, to open the file, and is not kept. ${said[next]}`,
+      )
+      cleanup()
+      document.body.replaceChildren()
+    }
   })
 
   it('asks for the passphrase before trying anything', async () => {
@@ -114,7 +142,7 @@ describe('asking for a protected backup’s passphrase', () => {
       finish(PLAIN)
       await Promise.resolve()
     })
-    expect(onOpened).toHaveBeenCalledWith(PLAIN)
+    expect(onOpened).toHaveBeenCalledWith(PLAIN, 'passphrase')
   })
 
   it('says so when the browser cannot open it at all', async () => {
@@ -159,6 +187,7 @@ describe('where focus goes as the prompt goes', () => {
     return open ? (
       <ProtectedRestore
         text={text}
+        next="replace"
         returnFocus={returnTo && (() => returnTo)}
         onOpened={(plain) => {
           setOpen(false)

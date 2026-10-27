@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isSealedBackup } from '../../lib/backupFile'
+import { sealedKind } from '../../lib/backupFile'
 import { saveTextFile } from '../../lib/download'
 import {
   openSealedBackup,
@@ -58,7 +58,7 @@ async function choose(user: ReturnType<typeof userEvent.setup>, first: string, s
 /** The text handed to the save path, checked to be a protected backup. */
 function savedText(): string {
   const [, , text] = save.mock.calls[0]
-  expect(isSealedBackup(text)).toBe(true)
+  expect(sealedKind(text)).toBe('backup')
   return text
 }
 
@@ -92,8 +92,13 @@ describe('choosing a passphrase', () => {
     await user.type(field, 'word')
     expect(field).toHaveAccessibleDescription(/^Weak: /)
     await user.clear(field)
+    await user.type(field, 'butterflygarden1')
+    expect(field).toHaveAccessibleDescription(/^Weak: /)
+    await user.clear(field)
     await user.type(field, PASSPHRASE)
-    expect(field).toHaveAccessibleDescription('Strong: long, and not an obvious pattern.')
+    expect(field).toHaveAccessibleDescription(
+      'Good: long, with no pattern this check can see. Longer and less guessable is stronger still.',
+    )
   })
 
   it('asks for at least eight characters before doing anything', async () => {
@@ -336,7 +341,7 @@ describe('sharing', () => {
     const [fileName, mimeType, text, title] = share.mock.calls[2]
     expect(fileName).toMatch(/^butterfly-garden-protected-\d{4}-\d{2}-\d{2}\.json$/)
     expect(mimeType).toBe('application/json')
-    expect(isSealedBackup(text)).toBe(true)
+    expect(sealedKind(text)).toBe('backup')
     expect(title).toBe('The Butterfly Garden protected backup')
   })
 })

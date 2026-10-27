@@ -8,16 +8,16 @@ vi.mock('./SealedBackupPrompt', () => {
   throw new Error('Failed to fetch dynamically imported module')
 })
 
-describe('a passphrase prompt that cannot be fetched', () => {
+describe('a sealed file’s prompt that cannot be fetched', () => {
   it('says so, and leaves the screen that asked for it standing', async () => {
     const onClose = vi.fn()
     const onOpened = vi.fn()
     const { container } = render(
-      <ProtectedRestore text="{}" onOpened={onOpened} onClose={onClose} />,
+      <ProtectedRestore text="{}" next="replace" onOpened={onOpened} onClose={onClose} />,
     )
     await waitFor(() =>
       expect(onClose).toHaveBeenCalledWith(
-        'This protected backup could not be opened just now. Please try again.',
+        'That file could not be opened just now. Please try again.',
       ),
     )
     expect(onOpened).not.toHaveBeenCalled()
