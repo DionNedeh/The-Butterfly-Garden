@@ -41,7 +41,13 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   flight patterns
 - Host and nectar plants with visible growth across four stages
 - Egg, caterpillar, chrysalis and butterfly stages, advanced by days of care
-- Per-stage care activities, a bond meter, and a shared cosmetics wardrobe
+- Per-stage care activities, a bond meter that says what the next level
+  brings, a shared cosmetics wardrobe with saved looks, and each companion's
+  story
+- Butterflies spread across the sky, each able to fly its own pattern, and a
+  card to meet any of them with a tap
+- An optional "Keep giving" pace, where a plant in bloom blooms again, and a
+  small welcome back after a few days away
 - A searchable shop with outfit previews, coloured glass jars, and twelve flight
   patterns, which says plainly what each purchase did or why it did not
 - New eggs arrive with a name of their own, and can be given another
