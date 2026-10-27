@@ -159,6 +159,17 @@ describe('WeatherCalendar, month view', () => {
     expect(screen.getByText('28')).toHaveClass('cal-plain', 'cal-future')
   })
 
+  it('colours a day by a check-in written later, and says it was written later', async () => {
+    const user = userEvent.setup()
+    const later: MoodEntry = { ...mood('2026-10-08', 2), writtenLater: true }
+    const { onOpenDay } = renderCalendar({ moods: [...MOODS, later] })
+
+    const day = screen.getByRole('button', { name: 'Thursday, October 8: Rainy, written later' })
+    expect(day.querySelector('.cal-tile')).toHaveClass('cal-weather-2')
+    await user.click(day)
+    expect(onOpenDay).toHaveBeenCalledWith('2026-10-08')
+  })
+
   it('names every weather in a visible key, so colour is never the only sign', () => {
     renderCalendar()
 

@@ -320,6 +320,19 @@ function checkReflection(raw: unknown, ctx: Context) {
 }
 
 /**
+ * An entry written later for an earlier day says so with `writtenLater: true`,
+ * and only ever with true. Any other value is no mark at all, so a hand-edited
+ * "yes" or false can neither make an entry read as written later nor reach
+ * the timeline as something React cannot draw. The entry itself is kept.
+ */
+function writtenLaterChecked<T extends { writtenLater?: true }>(entry: T | undefined): T | undefined {
+  if (!entry || !('writtenLater' in entry) || entry.writtenLater === true) return entry
+  const fixed = { ...entry }
+  delete fixed.writtenLater
+  return fixed
+}
+
+/**
  * Recaps that survive validation, at most one per local date.
  *
  * A recap with words but no valid day refuses the garden like any other
@@ -798,8 +811,10 @@ export function validateGarden(value: unknown): GardenValidation {
 
   const goals = sanitise(candidate.goals, ctx, checkGoal)
   const completions = sanitise(candidate.completions, ctx, checkCompletion)
-  const moods = sanitise(candidate.moods, ctx, checkMood)
-  const reflections = sanitise(candidate.reflections, ctx, checkReflection)
+  const moods = sanitise(candidate.moods, ctx, (raw, c) => writtenLaterChecked(checkMood(raw, c)))
+  const reflections = sanitise(candidate.reflections, ctx, (raw, c) =>
+    writtenLaterChecked(checkReflection(raw, c)),
+  )
   const sunlight = sanitise(candidate.sunlight, ctx, checkSunlight)
   const creatures = sanitise(candidate.creatures, ctx, checkCreature)
   // Absent in every garden written before version 5, which is why these are

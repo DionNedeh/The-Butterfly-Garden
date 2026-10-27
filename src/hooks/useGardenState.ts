@@ -201,6 +201,18 @@ export function useGardenState() {
       },
       deleteReflection: (id: string) =>
         update((current) => act.deleteReflection(current, id)),
+      /** A check-in for a day that has passed, marked as written later; it earns nothing. */
+      addEarlierMood: (localDate: string, choice: MoodChoice, note: string) => {
+        const now = new Date()
+        update((current) => act.addEarlierMood(current, localDate, choice, note, now))
+        void requestPersistentStorage()
+      },
+      /** A reflection for a day that has passed, marked as written later; it earns nothing. */
+      addEarlierReflection: (localDate: string, body: string) => {
+        const now = new Date()
+        update((current) => act.addEarlierReflection(current, localDate, body, now))
+        void requestPersistentStorage()
+      },
       collectMoonlight: (
         localDate: string,
         draft: RecapDraft & { tomorrow?: readonly act.TomorrowNote[] } = {},

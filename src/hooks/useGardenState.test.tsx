@@ -14,6 +14,7 @@ import {
   gardenRepository,
 } from '../repository/gardenRepository'
 import { onAnnouncement } from '../lib/announcer'
+import { toLocalDate } from '../lib/date'
 import { createEmptyState, createInitialState } from '../lib/progression'
 import type { PurchaseOutcome } from '../lib/purchase'
 import { useGardenState } from './useGardenState'
@@ -633,6 +634,30 @@ describe('every action, through the hook', () => {
     expect(garden().recaps[0].wentWell).toBe('Coffee')
     act(() => result.current.deleteRecap(garden().recaps[0].id))
     expect(garden().recaps).toEqual([])
+  })
+
+  it('writes for an earlier day, earning nothing and announcing nothing', async () => {
+    const planted = createInitialState('Tester', 'Test Garden', new Date(Date.now() - 20 * 86_400_000))
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({ status: 'loaded', state: planted })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const heard: string[] = []
+    const stop = onAnnouncement((events) => heard.push(...events.map((event) => event.kind)))
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const garden = () => result.current.state!
+    const day = toLocalDate(new Date(Date.now() - 3 * 86_400_000))
+
+    act(() => result.current.addEarlierMood(day, 2, 'Caught up'))
+    act(() => result.current.addEarlierReflection(day, 'Remembered'))
+    expect(garden().moods[0]).toMatchObject({ localDate: day, writtenLater: true })
+    expect(garden().reflections[0]).toMatchObject({ localDate: day, writtenLater: true })
+    expect(garden().sunlight).toEqual([])
+    expect(garden().plants).toBe(planted.plants)
+    // Today is never written for here, whatever is asked.
+    act(() => result.current.addEarlierMood(toLocalDate(), 4, ''))
+    expect(garden().moods).toHaveLength(1)
+    expect(heard).toEqual([])
+    stop()
   })
 
   it('tends the garden: plants, care, shop, flight, jars and companions', async () => {

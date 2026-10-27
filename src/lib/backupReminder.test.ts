@@ -168,3 +168,24 @@ describe('when to suggest a fresh copy', () => {
     expect(isBackupDue(empty, NOW)).toBe(false)
   })
 })
+
+describe('entries written later', () => {
+  it('count as new writing, since they are not in any copy yet', () => {
+    const lastBackupAt = daysBefore(5)
+    const written = daysBefore(1)
+    const later = <T extends MoodEntry | ReflectionEntry>(entry: T): T => ({
+      ...entry,
+      localDate: '2026-02-01',
+      writtenLater: true,
+    })
+    const state = garden(lastBackupAt, {
+      moods: Array.from({ length: BACKUP_REMINDER_ENTRIES / 2 }, (_, index) =>
+        later(mood(written, index)),
+      ),
+      reflections: Array.from({ length: BACKUP_REMINDER_ENTRIES / 2 }, (_, index) =>
+        later(reflection(written, index)),
+      ),
+    })
+    expect(backupReminder(state, NOW)?.reason).toBe('entries')
+  })
+})

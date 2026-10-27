@@ -266,6 +266,48 @@ describe('validating a garden', () => {
     })
   })
 
+  it('keeps the mark on an entry written later only when it is stored as true', () => {
+    const check = (id: string, writtenLater?: unknown) => ({
+      id,
+      localDate: '2026-10-20',
+      level: 3,
+      note: 'Words',
+      createdAt: '2026-10-26T09:00:00.000Z',
+      updatedAt: '2026-10-26T09:00:00.000Z',
+      ...(writtenLater === undefined ? {} : { writtenLater }),
+    })
+    const reflection = (id: string, writtenLater?: unknown) => ({
+      id,
+      localDate: '2026-10-20',
+      promptId: 'free',
+      body: 'Words',
+      createdAt: '2026-10-26T09:00:00.000Z',
+      updatedAt: '2026-10-26T09:00:00.000Z',
+      ...(writtenLater === undefined ? {} : { writtenLater }),
+    })
+    const odd = ['yes', false, 1, null, {}]
+    const moods = [check('kept', true), check('on-the-day'), ...odd.map((value, index) => check(`odd-${index}`, value))]
+    const reflections = [
+      reflection('kept', true),
+      reflection('on-the-day'),
+      ...odd.map((value, index) => reflection(`odd-${index}`, value)),
+    ]
+    const result = validateGarden(garden({ moods, reflections }))
+    for (const entries of [result.state!.moods, result.state!.reflections]) {
+      const [kept, ...rest] = entries
+      expect(kept.writtenLater).toBe(true)
+      for (const entry of rest) expect(entry).not.toHaveProperty('writtenLater')
+      // Every entry is still there, words and all.
+      expect(entries).toHaveLength(moods.length)
+      expect(entries.every((entry) => 'note' in entry ? entry.note === 'Words' : entry.body === 'Words')).toBe(true)
+    }
+    // An undamaged garden with the mark keeps its collections as they were.
+    const clean = garden({ moods: [check('kept', true)], reflections: [reflection('kept', true)] })
+    const cleanResult = validateGarden(clean)
+    expect(cleanResult.state?.moods).toBe(clean.moods)
+    expect(cleanResult.state?.reflections).toBe(clean.reflections)
+  })
+
   it('keeps calm motion only as a true or false choice', () => {
     const base = createInitialState('Tester', 'Test Garden').profile!
     const calm = validateGarden(garden({ profile: { ...base, calmMotion: true } }))

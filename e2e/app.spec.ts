@@ -508,8 +508,80 @@ test('the journal finds words, opens a day from its calendar, and gives readable
   const csvDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Check-ins as CSV' }).click()
   const csv = await readFile(await (await csvDownload).path(), 'utf8')
-  expect(csv.startsWith('﻿"date","weather","note","feelings","energy"\r\n')).toBe(true)
+  expect(csv.startsWith('﻿"date","weather","note","feelings","energy","written later"\r\n')).toBe(true)
   expect(csv).toContain('"Bright","Walked by the río"')
+})
+
+/** A local calendar date, as the app keys every entry: days ago by this machine's clock. */
+function localDateDaysAgo(days: number, from = new Date()): string {
+  const day = new Date(from.getFullYear(), from.getMonth(), from.getDate() - days, 12)
+  return [day.getFullYear(), day.getMonth() + 1, day.getDate()]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0'))
+    .join('-')
+}
+
+/** The same date a month ago, or undefined on a day the month before lacks (the 31st, say). */
+function sameDateLastMonth(now = new Date()): string | undefined {
+  const back = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 12)
+  if (back.getDate() !== now.getDate()) return undefined
+  return localDateDaysAgo(0, back)
+}
+
+test('an entry for an earlier day is kept with its day, marked, and earns nothing', async ({
+  page,
+}) => {
+  // Two accessibility sweeps and a reload.
+  test.slow()
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    state.profile.createdAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
+  })
+  await page.reload()
+  await goTo(page, 'Journal')
+  await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
+
+  const monthAgo = sameDateLastMonth()
+  const day = monthAgo ?? localDateDaysAgo(30)
+  const opener = page.getByRole('button', { name: 'Add an entry for an earlier day' })
+  const form = page.getByRole('form', { name: 'Add an entry for an earlier day' })
+  await opener.click()
+  await expect(form.getByLabel('Which day?')).toBeFocused()
+  expect(await seriousViolations(page, 'Journal, writing for an earlier day')).toEqual([])
+  await form.getByLabel('Which day?').fill(day)
+  await form.getByLabel('Inner weather that day').selectOption({ label: 'Rainy' })
+  await form.getByLabel('A note about that day, if you want').fill('Caught up on it later')
+  await form.getByRole('button', { name: 'Save entry' }).click()
+
+  // The day opens in the timeline, marked as written later.
+  const entry = page.locator(`#day-${day}`)
+  await expect(entry.locator('time')).toBeFocused()
+  await expect(entry.getByText('Written later')).toBeVisible()
+  await expect(entry.getByText('Caught up on it later')).toBeVisible()
+  // The care happened today, not then: the rhythm is as it was.
+  await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
+
+  // The journal keeps one check-in a day, so that day is offered instead.
+  await opener.click()
+  await form.getByLabel('Which day?').fill(day)
+  await expect(form.getByText(/already has a check-in/)).toBeVisible()
+  await form.getByRole('button', { name: 'Cancel' }).click()
+  await expect(opener).toBeFocused()
+
+  // Kept through a reload, still marked.
+  await reloadAfterSave(page)
+  await expect(page.locator(`#day-${day}`).getByText('Written later')).toBeVisible()
+
+  // A month on, the day comes back at the top of the Journal, unless today
+  // is a date last month did not have.
+  if (monthAgo) {
+    const card = page.getByRole('region', { name: 'A month ago today' })
+    await expect(card).toBeVisible()
+    await expect(card.getByText('Caught up on it later')).toBeVisible()
+    expect(await seriousViolations(page, 'Journal with a day from a month ago')).toEqual([])
+    await card.getByRole('button', { name: 'Put away for today' }).click()
+    await expect(card).toHaveCount(0)
+    await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeFocused()
+  }
 })
 
 test('supports plant selection and permanent local reset confirmation', async ({

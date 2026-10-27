@@ -415,7 +415,7 @@ describe('journalHtml', () => {
 
 describe('checkInsCsv', () => {
   it('starts with a byte order mark and a header row, and ends every record with CRLF', () => {
-    expect(checkInsCsv(garden())).toBe('\uFEFF"date","weather","note","feelings","energy"\r\n')
+    expect(checkInsCsv(garden())).toBe('\uFEFF"date","weather","note","feelings","energy","written later"\r\n')
   })
 
   it('writes one quoted row per check-in, newest first, with the date as stored', () => {
@@ -432,10 +432,10 @@ describe('checkInsCsv', () => {
     expect(csv).toBe(
       '\uFEFF' +
         [
-          '"date","weather","note","feelings","energy"',
-          '"2026-01-03","Not sure","","",""',
-          '"2026-01-02","Radiant","Café with Zoë 🌼","",""',
-          '"2026-01-01","Stormy","Heavy day","",""',
+          '"date","weather","note","feelings","energy","written later"',
+          '"2026-01-03","Not sure","","","",""',
+          '"2026-01-02","Radiant","Café with Zoë 🌼","","",""',
+          '"2026-01-01","Stormy","Heavy day","","",""',
           '',
         ].join('\r\n'),
     )
@@ -462,7 +462,7 @@ describe('checkInsCsv', () => {
     )
 
     expect(csv.split('\r\n')[1]).toBe(
-      '"2026-01-01","Bright","She said ""rest"", so I did,\nfinally.","",""',
+      '"2026-01-01","Bright","She said ""rest"", so I did,\nfinally.","","",""',
     )
   })
 
@@ -494,7 +494,7 @@ describe('checkInsCsv', () => {
       csv
         .split('\r\n')
         .slice(1, -1)
-        .map((record) => record.slice('"2026-01-01","Bright",'.length, -',"",""'.length)),
+        .map((record) => record.slice('"2026-01-01","Bright",'.length, -',"","",""'.length)),
     ).toEqual(notes.map(([, field]) => field))
   })
 
@@ -505,6 +505,34 @@ describe('checkInsCsv', () => {
       }),
     )
 
-    expect(csv.split('\r\n').slice(1)).toEqual(['"2026-01-01","Bright","Rewritten","",""', ''])
+    expect(csv.split('\r\n').slice(1)).toEqual(['"2026-01-01","Bright","Rewritten","","",""', ''])
+  })
+})
+
+describe('entries written later', () => {
+  const later = garden({
+    moods: [mood('2026-01-02', { writtenLater: true, note: 'Caught up.' }), mood('2026-01-01')],
+    reflections: [reflection('2026-01-02', { promptId: 'free', body: 'Remembered.', writtenLater: true })],
+  })
+
+  it('are marked in Markdown under their heading, and only they', () => {
+    const markdown = journalMarkdown(later, NOW)
+    expect(markdown).toContain('### Check-in: Bright\n\n*Written later*\n\nCaught up.')
+    expect(markdown).toContain('### Reflection\n\n*Written later*\n\n*Written freely*\n\nRemembered.')
+    expect(markdown.match(/Written later/g)).toHaveLength(2)
+  })
+
+  it('are marked on the printable page', () => {
+    const document = parse(journalHtml(later, NOW))
+    expect(texts(document, '.later')).toEqual(['Written later', 'Written later'])
+    const first = document.querySelector('article section')
+    expect(first?.querySelector('.later')?.textContent).toBe('Written later')
+  })
+
+  it('say "yes" in the spreadsheet’s last column, and nothing for the others', () => {
+    expect(checkInsCsv(later).split('\r\n').slice(1, -1)).toEqual([
+      '"2026-01-02","Bright","Caught up.","","","yes"',
+      '"2026-01-01","Bright","Felt calm after the walk.","","",""',
+    ])
   })
 })

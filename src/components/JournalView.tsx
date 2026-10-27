@@ -7,6 +7,9 @@ import {
 import { formatJournalDate } from '../lib/date'
 import { useLocalDate } from '../hooks/useLocalDate'
 import { describeCheckInDetails } from '../lib/feelings'
+import { useDraft } from '../lib/drafts'
+import { gardenStartDate } from '../lib/earlierDay'
+import { fieldNotesBySpecies, formatWelcomedOn } from '../lib/fieldNotes'
 import { moodChoiceOf, moodName, UNSURE_MOOD_NAME, withMoodChoice } from '../lib/mood'
 import { counted, listed } from '../lib/plural'
 import { TOMORROW_TEXT_LENGTH } from '../lib/gardenActions'
@@ -17,6 +20,7 @@ import {
   isFilterActive,
   type JournalFilter,
 } from '../lib/journalSearch'
+import { onThisDay } from '../lib/onThisDay'
 import { promptById } from '../lib/prompts'
 import { careRhythm } from '../lib/rhythm'
 import type {
@@ -31,6 +35,9 @@ import { Icon } from './Icons'
 import { JournalExport } from './JournalExport'
 import { JournalSearch } from './JournalSearch'
 import { WeatherCalendar } from './WeatherCalendar'
+import { EarlierEntry } from './journal/EarlierEntry'
+import { OnThisDayCard } from './journal/OnThisDayCard'
+import './journal/journal.css'
 
 /** The timeline grows for as long as the garden is kept, so it is paged. */
 const TIMELINE_PAGE_SIZE = 30
@@ -43,6 +50,8 @@ export function JournalView({
   onDeleteReflection,
   onUpdateRecap,
   onDeleteRecap,
+  onAddEarlierMood,
+  onAddEarlierReflection,
 }: {
   state: AppState
   onUpdateMood: (entry: MoodEntry) => void
@@ -51,6 +60,10 @@ export function JournalView({
   onDeleteReflection: (id: string) => void
   onUpdateRecap: (entry: RecapEntry) => void
   onDeleteRecap: (id: string) => void
+  /** A check-in for a day that has passed, written later. Without both, it is not offered. */
+  onAddEarlierMood?: (localDate: string, choice: MoodChoice, note: string) => void
+  /** A reflection for a day that has passed, written later. */
+  onAddEarlierReflection?: (localDate: string, body: string) => void
 }) {
   const [editingRecap, setEditingRecap] = useState<RecapEntry>()
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
@@ -148,14 +161,24 @@ export function JournalView({
     answeredRequest.current = openRequest.serial
     entry.querySelector<HTMLElement>('time')?.focus()
   }, [openRequest, visibleDates])
-  const emerged = useMemo(
-    () => state.creatures.filter((creature) => creature.stage === 'butterfly'),
-    [state.creatures],
+  // Counted by species, not by creature (a.4 A4), with the companions said
+  // alongside; each card names the first of its species to arrive.
+  const fieldNotes = useMemo(() => fieldNotesBySpecies(state.creatures), [state.creatures])
+  const butterfliesWelcomed = useMemo(
+    () => Array.from(fieldNotes.values()).reduce((sum, note) => sum + note.count, 0),
+    [fieldNotes],
   )
-  const emergedBySpecies = useMemo(
-    () => new Map(emerged.map((creature) => [creature.speciesId, creature])),
-    [emerged],
+  // A day from a month or a year ago, unless it was put away for today.
+  const gardenStart = gardenStartDate(state.profile)
+  const offered = useMemo(
+    () =>
+      dates.length === 0
+        ? undefined
+        : onThisDay({ moodByDate, reflectionByDate, recapByDate }, today, gardenStart),
+    [dates, moodByDate, reflectionByDate, recapByDate, today, gardenStart],
   )
+  const [putAway, setPutAway] = useDraft(`on-this-day:${today}`, '')
+  const pageHeading = useRef<HTMLHeadingElement>(null)
   const rhythm = useMemo(() => careRhythm(state.sunlight, today), [state.sunlight, today])
   const hideCounts = state.profile?.hideDayCounts === true
 
@@ -164,12 +187,27 @@ export function JournalView({
       <header className="page-header">
         <div>
           <p className="eyebrow">Private to this device</p>
-          <h1>Journal</h1>
+          {/* Focusable from code alone, for when the card below is put away. */}
+          <h1 ref={pageHeading} tabIndex={-1}>
+            Journal
+          </h1>
           <p>
             Your words are kept as you wrote them, without scores or analysis.
           </p>
         </div>
       </header>
+
+      {offered && putAway === '' && (
+        <OnThisDayCard
+          day={offered}
+          onOpenDay={openDay}
+          onPutAway={() => {
+            // The card leaves with its button; focus goes to the page's top.
+            pageHeading.current?.focus()
+            setPutAway('put-away')
+          }}
+        />
+      )}
 
       <details
         className="card field-notes"
@@ -180,15 +218,23 @@ export function JournalView({
           <span>
             <span className="eyebrow">Field notes</span>
             <strong id="species-journal-title">Butterflies welcomed</strong>
+            {butterfliesWelcomed > 0 && (
+              <small className="field-notes-counts">
+                {counted(fieldNotes.size, 'species', 'species')} ·{' '}
+                {counted(butterfliesWelcomed, 'companion', 'companions')}
+              </small>
+            )}
           </span>
           <span className="count-badge">
-            {emergedBySpecies.size} / {species.length}
+            {fieldNotes.size} / {species.length}
           </span>
         </summary>
         <div className="species-grid" aria-labelledby="species-journal-title">
           {fieldNotesOpen &&
             species.map((definition) => {
-              const creature = emergedBySpecies.get(definition.id)
+              const note = fieldNotes.get(definition.id)
+              const creature = note?.first
+              const welcomedOn = creature && formatWelcomedOn(creature)
               return (
                 <article
                   className={`species-card ${creature ? '' : 'undiscovered'}`}
@@ -216,7 +262,14 @@ export function JournalView({
                         ? definition.scientificName
                         : 'Not yet welcomed'}
                     </em>
-                    {creature && <small>Welcomed as {creature.name}</small>}
+                    {welcomedOn && <small>Welcomed on {welcomedOn}</small>}
+                    {creature && note && (
+                      <small>
+                        {note.count > 1
+                          ? `Welcomed as ${creature.name}, the first of ${note.count}`
+                          : `Welcomed as ${creature.name}`}
+                      </small>
+                    )}
                     {creature && <p>{definition.fact}</p>}
                   </div>
                 </article>
@@ -275,6 +328,15 @@ export function JournalView({
             <h2 id="timeline-title">Journal timeline</h2>
           </div>
         </div>
+        {onAddEarlierMood && onAddEarlierReflection && (
+          <EarlierEntry
+            state={state}
+            today={today}
+            onAddMood={onAddEarlierMood}
+            onAddReflection={onAddEarlierReflection}
+            onOpenDay={openDay}
+          />
+        )}
         <JournalSearch
           filter={filter}
           onChange={(next) => {
@@ -387,6 +449,8 @@ export function JournalView({
                             />
                             <div>
                               <strong>{moodName(moodChoiceOf(mood))}</strong>
+                              {mood.writtenLater && (
+                                <small className="written-later">Written later</small>
                               {moodDetails && (
                                 <p>
                                   <small>{moodDetails}</small>
@@ -479,6 +543,9 @@ export function JournalView({
                           <div>
                             <div>
                               <small>{prompt?.family === 'free' ? 'Written freely' : prompt?.text}</small>
+                              {reflection.writtenLater && (
+                                <small className="written-later">Written later</small>
+                              )}
                               <p>{reflection.body}</p>
                             </div>
                           </div>
