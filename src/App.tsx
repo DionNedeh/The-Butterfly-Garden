@@ -460,11 +460,17 @@ function App() {
     }
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
-    window.addEventListener('beforeinstallprompt', handleInstall)
+    // The Android app is installed already and is never offered an install;
+    // the check is inline so its build leaves the prompt out.
+    if (import.meta.env.VITE_PLATFORM !== 'android') {
+      window.addEventListener('beforeinstallprompt', handleInstall)
+    }
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
-      window.removeEventListener('beforeinstallprompt', handleInstall)
+      if (import.meta.env.VITE_PLATFORM !== 'android') {
+        window.removeEventListener('beforeinstallprompt', handleInstall)
+      }
     }
   }, [])
 
@@ -671,7 +677,7 @@ function App() {
             <Icon name="stardust" size={19} />
             <strong>{state.stardust}</strong> <span>Stardust</span>
           </span>
-          {installPrompt && (
+          {import.meta.env.VITE_PLATFORM !== 'android' && installPrompt && (
             <button
               className="install-button"
               onClick={() => {
