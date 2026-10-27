@@ -3,6 +3,7 @@ import type { PersistenceStatus } from '../hooks/useGardenState'
 import { readBackupFile } from '../lib/backupFile'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
+import type { FileCopy } from '../lib/sightingPhotos'
 
 /**
  * Shown instead of onboarding when a garden is stored but could not be read.
@@ -19,7 +20,7 @@ export function RecoveryScreen({
 }: {
   reason: PersistenceStatus['reason']
   onRestore: (text: string) => Promise<{ ok: boolean; message: string }>
-  onDownloadSetAside: () => Promise<string | undefined>
+  onDownloadSetAside: () => Promise<FileCopy | undefined>
   onStartFresh: () => Promise<{ ok: boolean; message?: string }>
 }) {
   const [note, setNote] = useState<string>()
@@ -39,20 +40,20 @@ export function RecoveryScreen({
   const downloadSetAside = async () => {
     setNote(undefined)
     try {
-      const text = await onDownloadSetAside()
-      if (!text) {
+      const copy = await onDownloadSetAside()
+      if (!copy) {
         setNote('There is no set-aside copy to download yet.')
         return
       }
       const outcome = await saveTextFile(
         datedFileName('set-aside-copy'),
         'application/json',
-        text,
+        copy.text,
       )
       setNote(
         outcome === 'cancelled'
           ? 'Nothing was saved.'
-          : 'Keep that file safe: it is the garden exactly as it was stored.',
+          : `Keep that file safe: it is the garden exactly as it was stored.${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
       setNote('The set-aside copy could not be saved there.')

@@ -20,16 +20,6 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('an image as base64', () => {
-  it('is the bytes, however many slices it takes', async () => {
-    const { base64Of } = await loadSaveImage()
-    expect(await base64Of(IMAGE)).toBe(btoa(String.fromCharCode(255, 216, 255, 0, 1, 2)))
-    const large = new Uint8Array(100_000).map((_, index) => index % 251)
-    const decoded = atob(await base64Of(new Blob([large])))
-    expect(Uint8Array.from(decoded, (letter) => letter.charCodeAt(0))).toEqual(large)
-  })
-})
-
 describe('saving an image in a browser', () => {
   it('starts a download of the image under its name, and keeps it alive while it is read', async () => {
     vi.useFakeTimers()

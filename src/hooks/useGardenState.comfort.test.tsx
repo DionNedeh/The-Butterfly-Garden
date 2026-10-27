@@ -82,7 +82,7 @@ describe('the comfort plan, through the hook', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.state?.profile?.comfortPlan).toEqual(plan)
 
-    const file = (await result.current.exportGarden())!
+    const file = (await result.current.exportGarden())!.text
     const { garden } = JSON.parse(file) as { garden: Record<string, unknown> & { profile: object } }
     // Inside the profile, which an older build restoring this file carries
     // through whole, and not beside it, where that build would drop it.

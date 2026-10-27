@@ -25,10 +25,11 @@ export function SafeMode({ error }: { error: Error }) {
   const downloadStored = async () => {
     setNote(undefined)
     try {
+      const copy = await storedCopy()
       const outcome = await saveTextFile(
         datedFileName('everything-stored'),
         'application/json',
-        await storedCopy(),
+        copy.text,
       )
       if (outcome === 'cancelled') {
         setNote('Nothing was saved.')
@@ -36,9 +37,11 @@ export function SafeMode({ error }: { error: Error }) {
       }
       setDownloaded(true)
       setNote(
-        outcome === 'saved'
-          ? 'Saved. Keep this file: it holds everything this app had stored, and can be restored later.'
-          : 'Download started. Keep this file: it holds everything this app had stored, and can be restored later.',
+        `${
+          outcome === 'saved'
+            ? 'Saved. Keep this file: it holds everything this app had stored, and can be restored later.'
+            : 'Download started. Keep this file: it holds everything this app had stored, and can be restored later.'
+        }${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
       setNote('What is stored could not be read just now.')

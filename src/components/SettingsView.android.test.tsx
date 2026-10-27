@@ -21,7 +21,7 @@ async function renderAndroidSettings(
   vi.resetModules()
   const { SettingsView } = await import('./SettingsView')
   const native = await import('../lib/native')
-  const onExportGarden = vi.fn(() => '{"format":"the-butterfly-garden"}')
+  const onExportGarden = vi.fn(() => ({ text: '{"format":"the-butterfly-garden"}' }))
   const onBackupMade = vi.fn()
   render(
     <SettingsView

@@ -7,6 +7,7 @@ import { verifyGardenImages } from '../lib/imageImport'
 import { createInitialState } from '../lib/progression'
 import { reloadApp } from '../lib/reload'
 import { gardenRepository } from '../repository/gardenRepository'
+import { ArrayBufferFileReader, unreadablePhoto } from '../test/fileReader'
 import type { AppState } from '../types'
 import { SafeMode } from './SafeMode'
 
@@ -67,6 +68,37 @@ describe('safe mode', () => {
     save.mockResolvedValueOnce('saved')
     await user.click(screen.getByRole('button', { name: "Download what's stored" }))
     await waitFor(() => expect(note()).toHaveTextContent(/^Saved\./))
+  })
+
+  it('keeps everything stored when a photo cannot be read, leaving out that photo alone, and says so', async () => {
+    vi.stubGlobal('FileReader', ArrayBufferFileReader)
+    const sound = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' })
+    readRaw.mockResolvedValueOnce({
+      stores: {
+        moods: { current: [{ id: 'm', note: 'Still here.' }] },
+        sightings: { current: [{ id: 'lost', photo: unreadablePhoto() }, { id: 'kept', photo: sound }] },
+      },
+    })
+    const user = renderSafeMode()
+    save.mockResolvedValueOnce('started')
+    await user.click(screen.getByRole('button', { name: "Download what's stored" }))
+    await waitFor(() =>
+      expect(note()).toHaveTextContent(
+        /^Download started\..* One photo in the field book could not be read on this device, so the file keeps its sighting without it\.$/,
+      ),
+    )
+    const written = JSON.parse(save.mock.calls[0][2]) as {
+      stores: { moods: unknown; sightings: { current: Array<{ photo: unknown }> } }
+    }
+    expect(written.stores.moods).toEqual({ current: [{ id: 'm', note: 'Still here.' }] })
+    expect(written.stores.sightings.current.map((item) => item.photo)).toEqual([
+      { mimeType: 'image/webp', unreadable: true },
+      { mimeType: 'image/webp', imageData: 'AQID' },
+    ])
+    // A copy was kept, so starting again is allowed.
+    await user.click(screen.getByRole('button', { name: 'Start a new garden instead…' }))
+    expect(screen.getByRole('button', { name: 'Delete and start again' })).toBeEnabled()
+    vi.unstubAllGlobals()
   })
 
   it('says so when nothing was saved, or the store could not be read', async () => {

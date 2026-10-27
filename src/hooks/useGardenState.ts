@@ -55,6 +55,7 @@ import {
   type WearLookResult,
 } from '../lib/wardrobe'
 import type { ChangeSightings } from '../lib/sightings'
+import type { FileCopy } from '../lib/sightingPhotos'
 import { gardenRepository } from '../repository/gardenRepository'
 import { storedVersionOf } from '../repository/validateGarden'
 import type {
@@ -235,6 +236,13 @@ export function useGardenState() {
       }
       return settle(run, false)
     }
+    // A new photo is answered for as a personal image is (useMediaSaves):
+    // once it is on disk, or once it would not go in and has been taken back
+    // out, so that "saved" is said only of what was.
+    changeSightings.photoSaved = (photo) =>
+      media.waitFor(photo, (notCarried) => {
+        if (!stateRef.current?.sightings.some((sighting) => sighting.photo === photo)) notCarried()
+      })
     return {
       changeSightings,
       /**
@@ -555,29 +563,25 @@ export function useGardenState() {
        * of it would be an empty file that a later restore trusts. The set-aside
        * copy is what can be downloaded instead (see `quarantinedCopy`).
        */
-      exportGarden: async (): Promise<string | undefined> => {
+      exportGarden: async (): Promise<FileCopy | undefined> => {
         if (readOnlyRef.current) return undefined
-        const exportedAt = new Date().toISOString()
         // At the version an older app can tell apart (storedVersionOf).
         const garden = stateRef.current && {
           ...stateRef.current,
           version: storedVersionOf(),
         }
+        const file = {
+          format: 'the-butterfly-garden',
+          exportedAt: new Date().toISOString(),
+          appVersion: __APP_VERSION__,
+          garden,
+        }
         // A sighting's photo is a Blob, which goes into the file as text, as
-        // a personal image always has (lib/sightingPhotos).
-        const portable = garden?.sightings.some((sighting) => sighting.photo)
-          ? await (await import('../lib/sightingPhotos')).withPhotosAsText(garden)
-          : garden
-        return JSON.stringify(
-          {
-            format: 'the-butterfly-garden',
-            exportedAt,
-            appVersion: __APP_VERSION__,
-            garden: portable,
-          },
-          null,
-          2,
-        )
+        // a personal image always has (lib/sightingPhotos); one that cannot
+        // be read is left out, and said so, rather than fail the backup.
+        return garden?.sightings.some((sighting) => sighting.photo)
+          ? (await import('../lib/sightingPhotos')).fileCopy(file)
+          : { text: JSON.stringify(file, null, 2) }
       },
       /**
        * A copy from `exportGarden` reached the gardener: saved, downloaded or

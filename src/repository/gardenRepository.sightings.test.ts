@@ -3,6 +3,7 @@ import { openDB } from 'idb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInitialState } from '../lib/progression'
 import { withPhotosAsText } from '../lib/sightingPhotos'
+import { ArrayBufferFileReader } from '../test/fileReader'
 import type { AppState, Sighting } from '../types'
 import { gardenRepository, readImportedState, RAW_EXPORT_FORMAT } from './gardenRepository'
 
@@ -14,6 +15,7 @@ import { gardenRepository, readImportedState, RAW_EXPORT_FORMAT } from './garden
  */
 beforeEach(() => {
   vi.stubGlobal('Blob', NodeBlob)
+  vi.stubGlobal('FileReader', ArrayBufferFileReader)
 })
 afterEach(async () => {
   vi.unstubAllGlobals()
@@ -88,13 +90,55 @@ describe('sightings in storage', () => {
   })
 })
 
+describe('sightings and the device’s clock', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('loses nothing when the clock goes back between a save and a load, and on to the next save', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-27T12:00:00'))
+    const garden = withSightings()
+    const seen = [
+      { ...garden.sightings[0], date: '2026-10-19' },
+      { ...garden.sightings[1], date: '2026-03-02' },
+    ]
+    await gardenRepository.save({ ...garden, sightings: seen })
+
+    // A phone flat for a while wakes on the first of January, before it has
+    // the network's time.
+    vi.setSystemTime(new Date('2026-01-01T09:00:00'))
+    const early = await gardenRepository.load()
+    expect(early.status).toBe('loaded')
+    expect(early.state.sightings.map((item) => item.id)).toEqual(['sighting-1', 'sighting-2'])
+    // A sighting logged then is written beside them, not over them.
+    const logged: Sighting = {
+      id: 'sighting-3',
+      date: '2026-01-01',
+      kind: 'plant',
+      plantId: 'violet',
+      createdAt: '2026-01-01T09:00:00.000Z',
+    }
+    await gardenRepository.save({ ...early.state, sightings: [...early.state.sightings, logged] })
+
+    vi.setSystemTime(new Date('2026-10-27T12:30:00'))
+    const later = await gardenRepository.load()
+    expect(later.state.sightings.map((item) => [item.id, item.date])).toEqual([
+      ['sighting-1', '2026-10-19'],
+      ['sighting-2', '2026-03-02'],
+      ['sighting-3', '2026-01-01'],
+    ])
+    expect(await bytesOf(later.state.sightings[0].photo)).toEqual(BYTES)
+  })
+})
+
 describe('sightings in a backup', () => {
   it('round-trip a photo byte for byte, written as text in the file', async () => {
     const garden = withSightings()
     const file = JSON.stringify({
       format: 'the-butterfly-garden',
       exportedAt: '2026-10-27T09:00:00.000Z',
-      garden: await withPhotosAsText(garden),
+      garden: (await withPhotosAsText(garden)).value,
     })
     // In the file, a photo is its type and its base64, as a personal image is.
     const written = (JSON.parse(file) as { garden: { sightings: Array<Record<string, unknown>> } })
@@ -118,7 +162,7 @@ describe('sightings in a backup', () => {
   it('carries photos in safe mode’s copy of everything stored, which restores too', async () => {
     await gardenRepository.save(withSightings())
     const raw = await gardenRepository.readRaw()
-    const text = JSON.stringify(await withPhotosAsText(raw))
+    const text = JSON.stringify((await withPhotosAsText(raw)).value)
     const parsed = JSON.parse(text) as { format: string }
     expect(parsed.format).toBe(RAW_EXPORT_FORMAT)
     const restored = readImportedState(parsed)

@@ -3,20 +3,32 @@ import type { AppState, CustomBackdrop } from '../types'
 
 export type MediaResult = { ok: boolean; message?: string }
 
+/** What a save can wait for: one of the gardener's images, or a sighting's photo. */
+export type MediaRecord = CustomBackdrop | Blob
+
+/** Whether a garden carries `record`. */
+function carries(garden: AppState, record: MediaRecord): boolean {
+  return (
+    garden.customBackdrops.includes(record as CustomBackdrop) ||
+    garden.sightings.some((sighting) => sighting.photo === record)
+  )
+}
+
 /** How long an image save may wait for its write before giving up. */
 export const MEDIA_SAVE_TIMEOUT_MS = 30_000
 
 /**
  * Image saves waiting for the write that carries them.
  *
- * Saving one of the gardener's own images answers only once that exact
- * record reaches disk, so the editor can keep the draft through a quota
- * failure. Every wait settles exactly once: on its write, on a failure, when
+ * Saving one of the gardener's own images, or a sighting's new photo,
+ * answers only once that exact record reaches disk, so the editor can keep
+ * the draft through a quota failure, and the field book says "saved" only
+ * once it is. Every wait settles exactly once: on its write, on a failure, when
  * the garden changes underneath it, or after MEDIA_SAVE_TIMEOUT_MS. A wait
  * left hanging used to block every later image save until a reload.
  */
 export function useMediaSaves() {
-  const waiters = useRef(new Map<CustomBackdrop, (result: MediaResult) => void>())
+  const waiters = useRef(new Map<MediaRecord, (result: MediaResult) => void>())
 
   /** Answer every waiting save at once: the garden went away or was replaced. */
   const settleAll = useCallback((result: MediaResult) => {
@@ -27,7 +39,7 @@ export function useMediaSaves() {
   /** Answer the saves whose images are in a garden that just reached disk. */
   const settleWritten = useCallback((written: AppState) => {
     for (const [record, settle] of [...waiters.current]) {
-      if (written.customBackdrops.includes(record)) settle({ ok: true })
+      if (carries(written, record)) settle({ ok: true })
     }
   }, [])
 
@@ -36,10 +48,10 @@ export function useMediaSaves() {
    * failed, and hand back those images.
    */
   const failWritten = useCallback(
-    (attempted: AppState, message: string): CustomBackdrop[] => {
-      const failed: CustomBackdrop[] = []
+    (attempted: AppState, message: string): MediaRecord[] => {
+      const failed: MediaRecord[] = []
       for (const [record, settle] of [...waiters.current]) {
-        if (attempted.customBackdrops.includes(record)) {
+        if (carries(attempted, record)) {
           failed.push(record)
           settle({ ok: false, message })
         }
@@ -56,7 +68,7 @@ export function useMediaSaves() {
    * carry it, and is handed `notCarried` to call if it turns out not to.
    */
   const waitFor = useCallback(
-    (record: CustomBackdrop, start: (notCarried: () => void) => void) =>
+    (record: MediaRecord, start: (notCarried: () => void) => void) =>
       new Promise<MediaResult>((resolve) => {
         const settle = (result: MediaResult) => {
           if (waiters.current.get(record) !== settle) return

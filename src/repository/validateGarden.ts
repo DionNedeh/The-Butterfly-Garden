@@ -25,7 +25,6 @@ import {
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
 import {
-  addDaysToLocalDate,
   isLocalDate,
   RECAP_GRACE_CHOICES,
   RECAP_OPENS_CHOICES,
@@ -1095,41 +1094,46 @@ function sightingPhotoOf(value: unknown): Blob | undefined {
   ) {
     return undefined
   }
-  const bytes = Uint8Array.from(atob(value.imageData), (character) => character.charCodeAt(0))
+  // A plain loop: Uint8Array.from with a mapping function is many times
+  // slower, and a restore of a full field book reads megabytes this way.
+  const binary = atob(value.imageData)
+  const bytes = new Uint8Array(binary.length)
+  for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at)
   return new Blob([bytes], { type: value.mimeType })
 }
 
 /**
  * A sighting, kept only when what it names and the day it was seen are
- * real: a butterfly or plant the catalogue knows, on a local date no later
- * than tomorrow. A day ahead is allowed because one written down just after
- * midnight further east reads as tomorrow's once the gardener has flown
- * west; anything later cannot have been seen yet. Otherwise it is dropped
- * and counted, as a damaged plant is.
+ * real: a butterfly or plant the catalogue knows, on a real local date.
+ * Otherwise it is dropped and counted, as a damaged plant is.
+ *
+ * The day is not held against this device's clock, as a check-in's is not:
+ * a clock set back (a phone flat for a while, before it finds the network's
+ * time) would otherwise drop every sighting since, photos and all, and the
+ * next sighting written would make that for good. Only a sighting being
+ * written down has to be on a day already seen (lib/sightings).
  *
  * A photo that is not a photo refuses the whole garden instead, as a
  * damaged personal image does: a photograph cannot be taken again, and a
- * restore must never report success having dropped one.
+ * restore must never report success having dropped one. A photo a file
+ * marks as left out (lib/sightingPhotos: its bytes could not be read when
+ * the file was made) was lost before the file was; its sighting is kept
+ * without it, and counted.
  */
-function checkSighting(
-  raw: unknown,
-  ctx: Context,
-  latest: string,
-  ids: Set<string>,
-): Sighting | undefined {
+function checkSighting(raw: unknown, ctx: Context, ids: Set<string>): Sighting | undefined {
   if (
     !isRecord(raw) ||
     !(raw.kind === 'butterfly'
       ? SPECIES_IDS.has(raw.speciesId as string)
       : raw.kind === 'plant' && PLANT_IDS.has(raw.plantId as string)) ||
-    !isLocalDate(raw.date) ||
-    raw.date > latest
+    !isLocalDate(raw.date)
   ) {
     ctx.repaired += 1
     return undefined
   }
-  const photo = raw.photo === undefined ? undefined : sightingPhotoOf(raw.photo)
-  if (raw.photo !== undefined && !photo) {
+  const leftOut = isRecord(raw.photo) && raw.photo.unreadable === true
+  const photo = raw.photo === undefined || leftOut ? undefined : sightingPhotoOf(raw.photo)
+  if (raw.photo !== undefined && !photo && !leftOut) {
     ctx.refused ??= 'One of its photos is damaged.'
     return undefined
   }
@@ -1143,7 +1147,7 @@ function checkSighting(
   if (idOk && typeof raw.createdAt === 'string' && photo === raw.photo && noteOk) {
     return raw as unknown as Sighting
   }
-  if (!idOk || typeof raw.createdAt !== 'string') ctx.repaired += 1
+  if (!idOk || typeof raw.createdAt !== 'string' || leftOut) ctx.repaired += 1
   const sighting: UnknownRecord = { ...raw, id, photo, note, createdAt: stamp(raw.createdAt) }
   if (!photo) delete sighting.photo
   if (!note.trim()) delete sighting.note
@@ -1163,9 +1167,8 @@ function checkSightings(value: unknown, ctx: Context): Sighting[] {
     ctx.refused ??= 'Its field book is damaged.'
     return []
   }
-  const latest = addDaysToLocalDate(toLocalDate(), 1)
   const ids = new Set<string>()
-  const sightings = sanitise(value, ctx, (raw, c) => checkSighting(raw, c, latest, ids))
+  const sightings = sanitise(value, ctx, (raw, c) => checkSighting(raw, c, ids))
   if (
     sightings.length > MAX_SIGHTINGS ||
     sightings.filter((sighting) => sighting.photo).length > MAX_SIGHTING_PHOTOS

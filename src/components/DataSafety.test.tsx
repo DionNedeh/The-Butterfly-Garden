@@ -106,7 +106,7 @@ describe('restoring from Settings', () => {
       onUpdateProfile: vi.fn(),
       onSelectAmbientTrack: vi.fn(),
       onSelectBackdrop: vi.fn(),
-      onExportGarden: vi.fn(() => '{"format":"the-butterfly-garden"}'),
+      onExportGarden: vi.fn(() => ({ text: '{"format":"the-butterfly-garden"}' })),
       onImportGarden: vi.fn(() =>
         Promise.resolve({ ok: true, message: 'Your garden was restored.' }),
       ),
@@ -185,7 +185,7 @@ describe('restoring from Settings', () => {
         onSelectBackdrop={vi.fn()}
         onExportGarden={() => undefined}
         onImportGarden={vi.fn()}
-        onDownloadSetAside={vi.fn(() => Promise.resolve('{}'))}
+        onDownloadSetAside={vi.fn(() => Promise.resolve({ text: '{}' }))}
         onDeleteAll={vi.fn()}
       />,
     )

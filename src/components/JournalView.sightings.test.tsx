@@ -4,10 +4,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { formatDayInWords } from '../lib/fieldNotes'
 import { createInitialState } from '../lib/progression'
 import type { AppState, Sighting } from '../types'
+import { LAZY_PAGE_MS } from '../test/lazyPage'
 import { JournalView } from './JournalView'
 
 /** A lazily loaded form or page may take a while on a loaded machine. */
-const LAZY = { timeout: 8000 }
+const LAZY = { timeout: LAZY_PAGE_MS }
+/** Room for that wait and what comes around it, as the whole-app tests have. */
+const LAZY_TEST = { timeout: 20_000 }
 
 const sightings: Sighting[] = [
   { id: 'a', date: '2026-09-02', kind: 'butterfly', speciesId: 'monarch', createdAt: '2026-09-02T09:00:00.000Z' },
@@ -36,7 +39,7 @@ function card(name: string) {
   return screen.getByText(name, { selector: '.species-card strong' }).closest('article')!
 }
 
-describe('the field notes and the wild', () => {
+describe('the field notes and the wild', LAZY_TEST, () => {
   it('says when a species was last seen in the wild, and how often, with a pressed flower', async () => {
     const user = renderJournal({
       creatures: [

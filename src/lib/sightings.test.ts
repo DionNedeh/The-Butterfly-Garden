@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AppState, Sighting } from '../types'
 import { MAX_SIGHTING_PHOTOS, MAX_SIGHTINGS, photosIn } from './customBackdrops'
 import { createInitialState } from './progression'
@@ -229,6 +229,16 @@ describe('the field book’s actions on a garden', () => {
     const { actions } = gardenWith()
     expect(actions.log({ ...monarch, date: '2030-01-01' })).toBeUndefined()
     expect(actions.edit('none', monarch)).toBe(false)
+  })
+
+  it('asks the garden whether a new photo was stored, and takes it as kept where the garden cannot say', async () => {
+    const { actions } = gardenWith()
+    await expect(actions.photoSaved(photo())).resolves.toBe(true)
+    const change: ChangeSightings = () => true
+    change.photoSaved = vi.fn(() => Promise.resolve({ ok: false, message: 'Full.' }))
+    const kept = photo()
+    await expect(fieldBookActions(change).photoSaved(kept)).resolves.toBe(false)
+    expect(change.photoSaved).toHaveBeenCalledWith(kept)
   })
 })
 
