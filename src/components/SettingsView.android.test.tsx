@@ -11,7 +11,11 @@ vi.mock('../lib/native', () => ({ saveTextDocument: vi.fn() }))
  */
 async function renderAndroidSettings(
   state = createInitialState('Tester', 'Test Garden'),
-  extra: { onChooseTheme?: () => void; onSetTextSize?: () => void } = {},
+  extra: {
+    onChooseTheme?: () => void
+    onSetTextSize?: () => void
+    onSetSoundInBackground?: () => void
+  } = {},
 ) {
   vi.stubEnv('VITE_PLATFORM', 'android')
   vi.resetModules()
@@ -108,6 +112,16 @@ describe('SettingsView in the Android app', () => {
     expect(
       screen.getByText('Your phone’s own text size applies as well, so the two add up.'),
     ).toBeInTheDocument()
+  })
+
+  it('says the sound rests in the background, rather than offering to keep it playing', async () => {
+    await renderAndroidSettings(undefined, { onSetSoundInBackground: vi.fn() })
+    expect(
+      screen.getByText(/The sound rests while the app is in the background/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+    ).not.toBeInTheDocument()
   })
 
   it('lets the restore picker see backups however a storage app labels them', async () => {

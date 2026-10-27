@@ -1,184 +1,299 @@
-import { renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FADE_OUT_SECONDS, useAmbientSound } from './useAmbientSound'
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { gainForVolume } from '../lib/sound'
+import { contexts, installAudio, isSource, type FakeAudioContext } from '../test/fakeAudio'
+import {
+  FADE_OUT_SECONDS,
+  useAmbientSound,
+  type AmbientSoundOptions,
+} from './useAmbientSound'
 
-/**
- * A stand-in for the Web Audio API.
- *
- * The hook is the only place in the app that takes hold of an operating-system
- * resource, and a context it forgets to close stays open until the tab does.
- * Browsers cap how many a page may hold at once, so a leak here ends with the
- * garden silently losing its sound — which is exactly the kind of failure
- * nobody notices until a device has been open for a while.
- */
-function audioParam() {
-  return {
-    value: 0,
-    setValueAtTime: vi.fn(),
-    linearRampToValueAtTime: vi.fn(),
-    exponentialRampToValueAtTime: vi.fn(),
-    cancelScheduledValues: vi.fn(),
-  }
+const ON: AmbientSoundOptions = { enabled: true, trackId: 'garden-chimes', volume: 50 }
+
+function sound(options: Partial<AmbientSoundOptions> = {}) {
+  return renderHook((props: AmbientSoundOptions) => useAmbientSound(props), {
+    initialProps: { ...ON, ...options },
+  })
 }
 
-function audioNode() {
-  return {
-    gain: audioParam(),
-    frequency: audioParam(),
-    Q: audioParam(),
-    delayTime: audioParam(),
-    detune: audioParam(),
-    type: 'sine',
-    buffer: null as unknown,
-    loop: false,
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-  }
+/** Wait for the soundscapes' module to arrive and a soundscape to start. */
+async function playing(context: FakeAudioContext) {
+  await vi.waitFor(() => expect(context.nodes.length).toBeGreaterThan(1))
 }
 
-interface FakeContext {
-  close: ReturnType<typeof vi.fn>
-  resume: ReturnType<typeof vi.fn>
-  state: string
+/** The gains a soundscape plays through: those connected to the master. */
+function soundscapeBuses(context: FakeAudioContext) {
+  return context.nodes.filter((node) =>
+    node.connect.mock.calls.some(([target]) => target === context.master),
+  )
 }
 
-let contexts: FakeContext[] = []
-
-function installAudio(onConstruct?: () => void) {
-  class FakeAudioContext {
-    sampleRate = 44_100
-    currentTime = 0
-    state = 'running'
-    destination = {}
-    close = vi.fn(() => Promise.resolve())
-    resume = vi.fn(() => Promise.resolve())
-    createGain = vi.fn(audioNode)
-    createOscillator = vi.fn(audioNode)
-    createDelay = vi.fn(audioNode)
-    createBiquadFilter = vi.fn(audioNode)
-    createBufferSource = vi.fn(audioNode)
-    createBuffer = vi.fn(() => ({
-      getChannelData: () => new Float32Array(1024),
-    }))
-    constructor() {
-      onConstruct?.()
-      contexts.push(this)
-    }
-  }
-  vi.stubGlobal('AudioContext', FakeAudioContext)
+function setVisibility(state: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: state })
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
 }
 
-/** Run the delayed close that stopEngine schedules, without faking the clock. */
-function runScheduled(spy: ReturnType<typeof vi.spyOn>, delay: number) {
-  for (const call of spy.mock.calls) {
-    if (call[1] === delay) (call[0] as () => void)()
-  }
-}
+beforeAll(async () => {
+  // Loaded once here, as the app would have it after the first time.
+  await import('../lib/soundscapes')
+})
 
 beforeEach(() => {
-  contexts = []
+  vi.useFakeTimers()
+  installAudio()
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  Reflect.deleteProperty(document, 'visibilityState')
 })
 
 describe('useAmbientSound', () => {
   it('opens no audio context while sound is off', () => {
-    installAudio()
-    renderHook(() => useAmbientSound(false, 'garden-chimes'))
+    sound({ enabled: false })
     expect(contexts).toHaveLength(0)
   })
 
-  it('opens one context when sound is switched on', () => {
-    installAudio()
-    renderHook(() => useAmbientSound(true, 'garden-chimes'))
+  it('opens one context when sound is switched on, and plays the soundscape into it', async () => {
+    sound()
     expect(contexts).toHaveLength(1)
+    await playing(contexts[0])
+    expect(soundscapeBuses(contexts[0])).toHaveLength(1)
   })
 
-  it('closes the context and cancels its pending work when sound stops', () => {
-    installAudio()
-    const schedule = vi.spyOn(window, 'setTimeout')
-    const cancel = vi.spyOn(window, 'clearTimeout')
+  it('closes the context and lets every node go when sound stops', async () => {
+    const { rerender } = sound({ trackId: 'piano-music' })
+    const [context] = contexts
+    await playing(context)
+    vi.advanceTimersByTime(10_000)
+    rerender({ ...ON, trackId: 'piano-music', enabled: false })
 
-    const { unmount } = renderHook(() => useAmbientSound(true, 'piano-music'))
-    const scheduledDuringPlayback = schedule.mock.calls.length
-    unmount()
-
-    // Every timer the engine queued is cleared, so a closed engine cannot wake
-    // up later and schedule notes into a context that is going away.
-    expect(cancel).toHaveBeenCalled()
-    expect(scheduledDuringPlayback).toBeGreaterThan(0)
-
-    runScheduled(schedule, 900)
-    expect(contexts[0].close).toHaveBeenCalled()
+    vi.advanceTimersByTime(900)
+    expect(context.close).toHaveBeenCalled()
+    for (const node of context.nodes) {
+      expect(node.disconnect).toHaveBeenCalled()
+      if (isSource(node)) expect(node.stop).toHaveBeenCalled()
+    }
+    // Nothing wakes up later to queue notes into a context that has gone.
+    const made = context.nodes.length
+    vi.advanceTimersByTime(30_000)
+    expect(context.nodes).toHaveLength(made)
   })
 
-  it('closes the previous context when the soundscape changes', () => {
-    installAudio()
-    const schedule = vi.spyOn(window, 'setTimeout')
+  it('changes soundscape within the same context, letting the old one go', async () => {
+    const { rerender } = sound({ trackId: 'soft-rain' })
+    const [context] = contexts
+    await playing(context)
+    const rain = context.nodes.slice(1)
+    rerender({ ...ON, trackId: 'piano-music' })
+    await vi.waitFor(() => expect(context.createDelay).toHaveBeenCalled())
 
-    type Props = { track: 'garden-chimes' | 'piano-music' }
-    const { rerender } = renderHook(
-      ({ track }: Props) => useAmbientSound(true, track),
-      { initialProps: { track: 'garden-chimes' } },
-    )
-    rerender({ track: 'piano-music' })
+    // No second context: a change of soundscape can come at nightfall, with
+    // no tap to let a new one start.
+    expect(contexts).toHaveLength(1)
+    vi.advanceTimersByTime(1_600)
+    for (const node of rain) expect(node.disconnect).toHaveBeenCalled()
+    expect(context.master.disconnect).not.toHaveBeenCalled()
+    expect(context.close).not.toHaveBeenCalled()
+  })
 
-    expect(contexts).toHaveLength(2)
-    runScheduled(schedule, 900)
-    // The first is released rather than left open alongside the second.
-    expect(contexts[0].close).toHaveBeenCalled()
+  it('plays a soundscape asked for and taken back before it arrived only once', async () => {
+    const { rerender } = sound({ trackId: 'garden' })
+    rerender({ ...ON, trackId: 'dawn-birdsong' })
+    rerender({ ...ON, trackId: 'garden' })
+    const [context] = contexts
+    await playing(context)
+    vi.advanceTimersByTime(100)
+    expect(soundscapeBuses(context)).toHaveLength(1)
   })
 
   it('falls silent instead of throwing when no context can be opened', () => {
     // Browsers cap concurrent contexts, and closing one is deferred, so
     // toggling quickly can hit that ceiling. This runs inside an effect, where
     // an uncaught throw would take the whole app down with it.
-    installAudio(() => {
-      throw new Error('too many audio contexts')
+    installAudio({
+      onConstruct: () => {
+        throw new Error('too many audio contexts')
+      },
     })
-
-    expect(() =>
-      renderHook(() => useAmbientSound(true, 'garden-chimes')),
-    ).not.toThrow()
+    expect(() => sound()).not.toThrow()
   })
 
   it('falls silent when the platform has no Web Audio at all', () => {
     vi.stubGlobal('AudioContext', undefined)
-    expect(() =>
-      renderHook(() => useAmbientSound(true, 'garden-chimes')),
-    ).not.toThrow()
+    expect(() => sound()).not.toThrow()
+  })
+
+  it('waits for a first tap when the browser holds the sound back', () => {
+    installAudio({ state: 'suspended' })
+    const listen = vi.spyOn(window, 'addEventListener')
+    const forget = vi.spyOn(window, 'removeEventListener')
+    const { unmount } = sound()
+    expect(listen).toHaveBeenCalledWith('pointerdown', expect.any(Function), expect.anything())
+    unmount()
+    expect(forget).toHaveBeenCalledWith('pointerdown', expect.any(Function))
+  })
+})
+
+describe('the volume', () => {
+  it('brings the sound in to the usual level, as it always has', () => {
+    sound()
+    expect(contexts[0].master.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0.5, 3)
+  })
+
+  it('brings the sound in to the chosen volume', () => {
+    sound({ volume: 25 })
+    expect(contexts[0].master.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+      gainForVolume(25),
+      3,
+    )
+  })
+
+  it('glides to a new volume while playing, from where it is, with no jump', () => {
+    const { rerender } = sound()
+    const gain = contexts[0].master.gain
+    gain.value = 0.42
+    vi.clearAllMocks()
+    rerender({ ...ON, volume: 80 })
+    expect(gain.cancelScheduledValues).toHaveBeenCalled()
+    expect(gain.setValueAtTime).toHaveBeenCalledWith(0.42, 0)
+    expect(gain.linearRampToValueAtTime).toHaveBeenCalledWith(gainForVolume(80), 0.12)
+    // Held at its present value first, then ramped: a click needs a jump.
+    expect(gain.setValueAtTime.mock.invocationCallOrder[0]).toBeLessThan(
+      gain.linearRampToValueAtTime.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('hears a volume being chosen at once, and does not ramp again when it is stored', () => {
+    const { result, rerender } = sound()
+    const gain = contexts[0].master.gain
+    act(() => result.current.hearVolume(20))
+    expect(gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(gainForVolume(20), 0.12)
+    gain.linearRampToValueAtTime.mockClear()
+    rerender({ ...ON, volume: 20 })
+    expect(gain.linearRampToValueAtTime).not.toHaveBeenCalled()
+  })
+
+  it('hears nothing while the sound is off', () => {
+    const { result } = sound({ enabled: false })
+    expect(() => result.current.hearVolume(20)).not.toThrow()
+    expect(contexts).toHaveLength(0)
   })
 })
 
 describe('the fade-out timer', () => {
   it('lowers the sound over its last minute, and brings it back if the timer is taken away', () => {
-    vi.useFakeTimers()
-    try {
-      installAudio()
-      const endsAt = Date.now() + FADE_OUT_SECONDS * 1000 + 5_000
-      const initialProps: { fade?: number } = { fade: endsAt }
-      const { rerender } = renderHook(
-        ({ fade }: { fade?: number }) => useAmbientSound(true, 'garden', fade),
-        { initialProps },
-      )
-      const context = contexts[0] as unknown as { createGain: ReturnType<typeof vi.fn> }
-      const master = (context.createGain.mock.results[0].value as ReturnType<typeof audioNode>).gain
-      master.linearRampToValueAtTime.mockClear()
+    const endsAt = Date.now() + FADE_OUT_SECONDS * 1000 + 5_000
+    const { rerender } = sound({ trackId: 'garden', fadeEndsAt: endsAt })
+    const master = contexts[0].master.gain
+    master.linearRampToValueAtTime.mockClear()
 
-      vi.advanceTimersByTime(4_000)
-      expect(master.linearRampToValueAtTime).not.toHaveBeenCalledWith(0, expect.anything())
-      vi.advanceTimersByTime(1_000)
-      expect(master.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number))
+    vi.advanceTimersByTime(4_000)
+    expect(master.linearRampToValueAtTime).not.toHaveBeenCalledWith(0, expect.anything())
+    vi.advanceTimersByTime(1_000)
+    expect(master.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number))
 
-      rerender({ fade: undefined })
-      expect(master.linearRampToValueAtTime).toHaveBeenLastCalledWith(0.5, expect.any(Number))
-    } finally {
-      vi.useRealTimers()
-    }
+    rerender({ ...ON, trackId: 'garden', fadeEndsAt: undefined })
+    expect(master.linearRampToValueAtTime).toHaveBeenLastCalledWith(0.5, expect.any(Number))
+  })
+
+  it("brings it back to the gardener's own volume", () => {
+    const endsAt = Date.now() + 30_000
+    const { rerender } = sound({ volume: 30, fadeEndsAt: endsAt })
+    vi.advanceTimersByTime(1_000)
+    rerender({ ...ON, volume: 30 })
+    expect(contexts[0].master.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+      gainForVolume(30),
+      2,
+    )
+  })
+
+  it('keeps to its time across a pause, though the audio clock stood still', () => {
+    const endsAt = Date.now() + 90_000
+    sound({ fadeEndsAt: endsAt, pauseWhenHidden: true })
+    const [context] = contexts
+    setVisibility('hidden')
+    expect(context.suspend).toHaveBeenCalled()
+
+    // Fifty seconds hidden: the fade began twenty seconds ago by the clock,
+    // while the audio clock, suspended, stayed where it was.
+    vi.advanceTimersByTime(50_000)
+    const gain = context.master.gain
+    gain.linearRampToValueAtTime.mockClear()
+    setVisibility('visible')
+    expect(context.resume).toHaveBeenCalled()
+    // Where the fade has reached by now, then down to nothing in the forty
+    // seconds the timer has left.
+    const [toNow, toEnd] = gain.linearRampToValueAtTime.mock.calls
+    expect(toNow[0]).toBeCloseTo((0.5 * (40 - 0.12)) / 60)
+    expect(toEnd[0]).toBe(0)
+    expect(toEnd[1]).toBeCloseTo(40)
+  })
+})
+
+describe('playing in the background', () => {
+  it('keeps playing while hidden unless asked not to, as it always has', () => {
+    sound()
+    setVisibility('hidden')
+    expect(contexts[0].suspend).not.toHaveBeenCalled()
+  })
+
+  it('pauses while hidden, and carries on where it was when seen again', () => {
+    sound({ pauseWhenHidden: true, volume: 70 })
+    const [context] = contexts
+    const resumed = context.resume.mock.calls.length
+    setVisibility('hidden')
+    expect(context.suspend).toHaveBeenCalledOnce()
+    setVisibility('hidden')
+    expect(context.suspend).toHaveBeenCalledOnce()
+
+    setVisibility('visible')
+    expect(context.resume.mock.calls.length).toBe(resumed + 1)
+    expect(context.master.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+      gainForVolume(70),
+      expect.any(Number),
+    )
+    // Still the same context: nothing had to start again.
+    expect(contexts).toHaveLength(1)
+  })
+
+  it('leaves a sound the browser is holding back to the first tap', () => {
+    sound({ pauseWhenHidden: true })
+    const [context] = contexts
+    context.state = 'suspended'
+    const resumed = context.resume.mock.calls.length
+    setVisibility('hidden')
+    setVisibility('visible')
+    expect(context.suspend).not.toHaveBeenCalled()
+    expect(context.resume.mock.calls.length).toBe(resumed)
+  })
+
+  it('starts paused when the sound comes on while the page is hidden', () => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+    sound({ pauseWhenHidden: true })
+    expect(contexts[0].suspend).toHaveBeenCalled()
+  })
+
+  it('carries on at once when the switch is turned back on while paused', () => {
+    const { rerender } = sound({ pauseWhenHidden: true })
+    const [context] = contexts
+    setVisibility('hidden')
+    const resumed = context.resume.mock.calls.length
+    rerender({ ...ON, pauseWhenHidden: false })
+    expect(context.resume.mock.calls.length).toBe(resumed + 1)
+  })
+
+  it('does not wake a sound that was turned off while hidden', () => {
+    const { rerender } = sound({ pauseWhenHidden: true })
+    const [context] = contexts
+    setVisibility('hidden')
+    const resumed = context.resume.mock.calls.length
+    rerender({ ...ON, pauseWhenHidden: true, enabled: false })
+    setVisibility('visible')
+    expect(context.resume.mock.calls.length).toBe(resumed)
   })
 })

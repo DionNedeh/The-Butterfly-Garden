@@ -165,7 +165,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       eyebrow: 'Set the mood',
       title: 'Your garden soundscape',
       paragraphs: [
-        'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, or an original classical-style piano loop in Settings. Everything is generated on your device, works offline, and can be toggled off at any time.',
+        'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, soft rain, dawn birdsong, or an original classical-style piano loop in Settings, and how loud it plays. Night can bring the piano, if you like. Everything is generated on your device, works offline, and can be toggled off at any time.',
       ],
     },
     {

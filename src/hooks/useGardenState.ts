@@ -20,6 +20,7 @@ import { removePlant } from '../lib/plantManagement'
 import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
+import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
 import { requestPersistentStorage } from '../lib/storage'
 import { buyShopItem, equipOutfitItem, unequipOutfitSlot } from '../lib/wardrobe'
 import { gardenRepository } from '../repository/gardenRepository'
@@ -322,6 +323,15 @@ export function useGardenState() {
         update((current) => act.setRecapHours(current, hours)),
       selectAmbientTrack: (ambientTrack: AmbientTrackId) =>
         update((current) => act.selectAmbientTrack(current, ambientTrack)),
+      /** How loud, 0 to 100 (lib/sound). */
+      setSoundVolume: (volume: number) =>
+        update((current) => setSoundVolume(current, volume)),
+      /** Night brings the piano, or not. */
+      setSoundFollowsTheme: (on: boolean) =>
+        update((current) => setSoundFollowsTheme(current, on)),
+      /** Keep playing in the background, or pause while hidden. */
+      setSoundInBackground: (on: boolean) =>
+        update((current) => setSoundInBackground(current, on)),
       /** The header's switch, from the theme `showing` (it may be followed). */
       toggleTheme: (showing?: AppearanceTheme) =>
         update((current) => act.toggleTheme(current, showing)),

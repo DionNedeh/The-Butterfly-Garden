@@ -6,6 +6,7 @@ import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
 import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES } from '../lib/date'
+import { clampVolume } from '../lib/sound'
 import type { AmbientTrackId, AppState, OutfitSlot } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
@@ -652,6 +653,23 @@ function checkProfile(
   }
   if (value.textSize !== undefined && !TEXT_SIZES.has(value.textSize as string)) {
     delete profile.textSize
+  }
+  // The sound's choices. A volume out of range is brought into it, since what
+  // was meant is plain; anything that is not a number is dropped, and the
+  // usual volume plays. The two switches are stored only in their one
+  // non-default value, so any other is dropped and the default stands.
+  if (value.ambientVolume !== undefined) {
+    if (typeof value.ambientVolume === 'number' && Number.isFinite(value.ambientVolume)) {
+      profile.ambientVolume = clampVolume(value.ambientVolume)
+    } else {
+      delete profile.ambientVolume
+    }
+  }
+  if (value.soundFollowsTheme !== undefined && value.soundFollowsTheme !== true) {
+    delete profile.soundFollowsTheme
+  }
+  if (value.soundInBackground !== undefined && value.soundInBackground !== false) {
+    delete profile.soundInBackground
   }
   return profile
 }

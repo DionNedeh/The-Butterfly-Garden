@@ -53,7 +53,12 @@ export type AppearanceTheme = 'sunlight' | 'night'
 export type ThemeFollows = 'device' | 'evening'
 /** A text size larger than the usual one (lib/textSize). */
 export type TextSize = 'larger' | 'largest'
-export type AmbientTrackId = 'garden-chimes' | 'garden' | 'piano-music'
+export type AmbientTrackId =
+  | 'garden-chimes'
+  | 'garden'
+  | 'piano-music'
+  | 'soft-rain'
+  | 'dawn-birdsong'
 export type FlightPatternId =
   | 'gentle-drift'
   | 'petal-hop'
@@ -115,6 +120,23 @@ export interface Profile {
   ambientSound?: boolean
   /** Soundscape played while ambient sound is enabled. */
   ambientTrack?: AmbientTrackId
+  /**
+   * How loud the soundscape plays, a whole number from 0 to 100 (lib/sound).
+   * Optional: without it, 50, the level the garden has always played at.
+   */
+  ambientVolume?: number
+  /**
+   * Night brings the piano: while the theme on screen is night, Piano Music
+   * plays in place of `ambientTrack`, which returns with the sunlight.
+   * Optional, and only ever true.
+   */
+  soundFollowsTheme?: true
+  /**
+   * False pauses the sound while the page is hidden and picks it up again
+   * when it is seen. Optional, and only ever false: without it the sound keeps
+   * playing in the background, as it always has.
+   */
+  soundInBackground?: false
   /**
    * The theme chosen by hand. While `themeFollows` is set it waits underneath,
    * so an older build, which follows nothing, still opens on this.
