@@ -512,68 +512,62 @@ test('the journal finds words, opens a day from its calendar, and gives readable
   expect(csv).toContain('"Bright","Walked by the río"')
 })
 
-/** A local calendar date, as the app keys every entry: days ago by this machine's clock. */
-function localDateDaysAgo(days: number, from = new Date()): string {
-  const day = new Date(from.getFullYear(), from.getMonth(), from.getDate() - days, 12)
-  return [day.getFullYear(), day.getMonth() + 1, day.getDate()]
-    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0'))
-    .join('-')
-}
+/**
+ * Written later for an earlier day, and given back a month on. The zone and
+ * the instant are pinned, so the run can never cross a midnight between
+ * choosing the day and looking for it, and "a month ago" always exists: the
+ * 15th of September, twelve noon in UTC.
+ */
+test.describe('an earlier day', () => {
+  test.use({ timezoneId: 'UTC' })
 
-/** The same date a month ago, or undefined on a day the month before lacks (the 31st, say). */
-function sameDateLastMonth(now = new Date()): string | undefined {
-  const back = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 12)
-  if (back.getDate() !== now.getDate()) return undefined
-  return localDateDaysAgo(0, back)
-}
+  test('an entry for an earlier day is kept with its day, marked, and earns nothing', async ({
+    page,
+  }) => {
+    // Two accessibility sweeps and a reload.
+    test.slow()
+    const now = new Date('2026-09-15T12:00:00.000Z')
+    await page.clock.setFixedTime(now)
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await editGardenRecord(page, (state) => {
+      state.profile.createdAt = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000).toISOString()
+    })
+    await page.reload()
+    await goTo(page, 'Journal')
+    await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
 
-test('an entry for an earlier day is kept with its day, marked, and earns nothing', async ({
-  page,
-}) => {
-  // Two accessibility sweeps and a reload.
-  test.slow()
-  await enterGarden(page)
-  await editGardenRecord(page, (state) => {
-    state.profile.createdAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
-  })
-  await page.reload()
-  await goTo(page, 'Journal')
-  await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
+    const day = '2026-08-15'
+    const opener = page.getByRole('button', { name: 'Add an entry for an earlier day' })
+    const form = page.getByRole('form', { name: 'Add an entry for an earlier day' })
+    await opener.click()
+    await expect(form.getByLabel('Which day?')).toBeFocused()
+    expect(await seriousViolations(page, 'Journal, writing for an earlier day')).toEqual([])
+    await form.getByLabel('Which day?').fill(day)
+    await form.getByLabel('Inner weather that day').selectOption({ label: 'Rainy' })
+    await form.getByLabel('A note about that day, if you want').fill('Caught up on it later')
+    await form.getByRole('button', { name: 'Save entry' }).click()
 
-  const monthAgo = sameDateLastMonth()
-  const day = monthAgo ?? localDateDaysAgo(30)
-  const opener = page.getByRole('button', { name: 'Add an entry for an earlier day' })
-  const form = page.getByRole('form', { name: 'Add an entry for an earlier day' })
-  await opener.click()
-  await expect(form.getByLabel('Which day?')).toBeFocused()
-  expect(await seriousViolations(page, 'Journal, writing for an earlier day')).toEqual([])
-  await form.getByLabel('Which day?').fill(day)
-  await form.getByLabel('Inner weather that day').selectOption({ label: 'Rainy' })
-  await form.getByLabel('A note about that day, if you want').fill('Caught up on it later')
-  await form.getByRole('button', { name: 'Save entry' }).click()
+    // The day opens in the timeline, marked as written later.
+    const entry = page.locator(`#day-${day}`)
+    await expect(entry.locator('time')).toBeFocused()
+    await expect(entry.getByText('Written later')).toBeVisible()
+    await expect(entry.getByText('Caught up on it later')).toBeVisible()
+    // The care happened today, not then: the rhythm is as it was.
+    await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
 
-  // The day opens in the timeline, marked as written later.
-  const entry = page.locator(`#day-${day}`)
-  await expect(entry.locator('time')).toBeFocused()
-  await expect(entry.getByText('Written later')).toBeVisible()
-  await expect(entry.getByText('Caught up on it later')).toBeVisible()
-  // The care happened today, not then: the rhythm is as it was.
-  await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
+    // The journal keeps one check-in a day, so that day is offered instead.
+    await opener.click()
+    await form.getByLabel('Which day?').fill(day)
+    await expect(form.getByText(/already has a check-in/)).toBeVisible()
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await expect(opener).toBeFocused()
 
-  // The journal keeps one check-in a day, so that day is offered instead.
-  await opener.click()
-  await form.getByLabel('Which day?').fill(day)
-  await expect(form.getByText(/already has a check-in/)).toBeVisible()
-  await form.getByRole('button', { name: 'Cancel' }).click()
-  await expect(opener).toBeFocused()
+    // Kept through a reload, still marked.
+    await reloadAfterSave(page)
+    await expect(page.locator(`#day-${day}`).getByText('Written later')).toBeVisible()
 
-  // Kept through a reload, still marked.
-  await reloadAfterSave(page)
-  await expect(page.locator(`#day-${day}`).getByText('Written later')).toBeVisible()
-
-  // A month on, the day comes back at the top of the Journal, unless today
-  // is a date last month did not have.
-  if (monthAgo) {
+    // A month on, the day comes back at the top of the Journal.
     const card = page.getByRole('region', { name: 'A month ago today' })
     await expect(card).toBeVisible()
     await expect(card.getByText('Caught up on it later')).toBeVisible()
@@ -581,7 +575,7 @@ test('an entry for an earlier day is kept with its day, marked, and earns nothin
     await card.getByRole('button', { name: 'Put away for today' }).click()
     await expect(card).toHaveCount(0)
     await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeFocused()
-  }
+  })
 })
 
 test('supports plant selection and permanent local reset confirmation', async ({
@@ -717,6 +711,20 @@ test('sets a larger text size that the header and the dock make room for', async
   const icon = await page.locator('.brand img').boundingBox()
   const actions = await page.locator('.header-actions').boundingBox()
   expect(actions!.x).toBeGreaterThanOrEqual(icon!.x + icon!.width - 1)
+  // On a wide screen the tabs take a row of their own rather than covering
+  // the garden's icon; nothing is drawn over its middle.
+  const nav = page.locator('.app-header nav')
+  if (await nav.isVisible()) {
+    const tabs = (await nav.boundingBox())!
+    expect(
+      tabs.y >= icon!.y + icon!.height - 1 || tabs.x >= icon!.x + icon!.width - 1,
+    ).toBe(true)
+  }
+  const onTop = await page.evaluate(({ x, y }) => {
+    const element = document.elementFromPoint(x, y)
+    return Boolean(element?.closest('.brand'))
+  }, { x: icon!.x + icon!.width / 2, y: icon!.y + icon!.height / 2 })
+  expect(onTop).toBe(true)
   // Every label in the dock stays inside its own tab.
   const spilling = await page
     .locator('.bottom-nav button:visible')

@@ -1240,6 +1240,12 @@ describe('the next step after a check-in', () => {
       offer(),
     )
     expect(screen.getByRole('button', { name: 'Update check-in' })).toHaveFocus()
+
+    // An update is said again: the line is put back, so the region hears it.
+    const first = screen.getByText('Kept in your journal.')
+    await user.click(screen.getByRole('button', { name: 'Update check-in' }))
+    expect(first).not.toBeInTheDocument()
+    expect(screen.getByText('Kept in your journal.')).toBeInTheDocument()
   })
 
   it('keeps the support line after a stormy check-in, below the offer', () => {

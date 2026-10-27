@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { moodLevels } from '../../data/content'
-import { addDaysToLocalDate, formatJournalDate } from '../../lib/date'
+import { addDaysToLocalDate, formatJournalDate, toLocalDate } from '../../lib/date'
 import { clearDraft, useDraft } from '../../lib/drafts'
 import {
   earlierDayProblem,
@@ -72,15 +72,26 @@ export function EarlierEntry({
   const [opened, setOpened] = useState(false)
   // Said once an entry is kept while the form stays open for the other kind.
   const [kept, setKept] = useState('')
+  // What the device's own clock said at Save, when it disagreed with the day
+  // the page last noticed (a time zone crossed westward, a clock set back):
+  // the reducer goes by that clock, so the form says so and keeps the words.
+  const [refusal, setRefusal] = useState<{
+    date: string
+    kind: EarlierEntryKind
+    problem: EarlierDayProblem
+  }>()
   // A day or words left from before a reload keep the form open, so nothing
   // typed is ever hidden behind a button.
   const open = opened || date !== '' || note !== '' || body !== ''
 
   const openButton = useRef<HTMLButtonElement>(null)
   const dateField = useRef<HTMLInputElement>(null)
-  // Where focus goes once the form has opened or closed: the control that
-  // was pressed is gone by then, and focus must not fall to the page.
-  const focusNext = useRef<'date' | 'open' | undefined>(undefined)
+  const weatherField = useRef<HTMLSelectElement>(null)
+  const bodyField = useRef<HTMLTextAreaElement>(null)
+  // Where focus goes once the form has opened, closed or turned to the other
+  // kind: the control that was pressed is gone or disabled by then, and focus
+  // must not fall to the page.
+  const focusNext = useRef<'date' | 'open' | 'weather' | 'body' | undefined>(undefined)
   // An entry just saved, opened in the timeline once the garden holds it.
   const written = useRef<{ date: string; kind: EarlierEntryKind } | undefined>(undefined)
 
@@ -89,6 +100,8 @@ export function EarlierEntry({
     focusNext.current = undefined
     if (target === 'date') dateField.current?.focus()
     else if (target === 'open') openButton.current?.focus()
+    else if (target === 'weather') weatherField.current?.focus()
+    else if (target === 'body') bodyField.current?.focus()
   })
 
   useEffect(() => {
@@ -123,7 +136,11 @@ export function EarlierEntry({
     )
   }
 
-  const problem = date === '' ? undefined : earlierDayProblem(state, date, kind, today)
+  const problem =
+    date === ''
+      ? undefined
+      : (earlierDayProblem(state, date, kind, today) ??
+        (refusal?.date === date && refusal.kind === kind ? refusal.problem : undefined))
   const words = kind === 'check-in' ? weather !== undefined : body.trim() !== ''
   const ready = date !== '' && problem === undefined && words
   const hint =
@@ -137,12 +154,20 @@ export function EarlierEntry({
     clearDraft(DATE_KEY, NOTE_KEY, BODY_KEY)
     setWeather(undefined)
     setKept('')
+    setRefusal(undefined)
     setOpened(false)
   }
 
   const save = (event: FormEvent) => {
     event.preventDefault()
     if (!ready) return
+    // The reducer checks the day against the clock as it is now. Should that
+    // refuse what the page allowed, nothing is cleared and the form says why.
+    const now = earlierDayProblem(state, date, kind, toLocalDate())
+    if (now !== undefined) {
+      setRefusal({ date, kind, problem: now })
+      return
+    }
     if (kind === 'check-in' && weather !== undefined) {
       onAddMood(date, weather, note)
       clearDraft(NOTE_KEY)
@@ -156,6 +181,9 @@ export function EarlierEntry({
     // the form says what was kept rather than taking focus away mid-task.
     const otherWords = kind === 'check-in' ? body.trim() !== '' : note.trim() !== ''
     if (otherWords) {
+      // Focus moves to what the other kind needs next, since the field that
+      // had it is gone (or Save is disabled until a weather is chosen).
+      focusNext.current = kind === 'check-in' ? 'body' : 'weather'
       setKind(kind === 'check-in' ? 'reflection' : 'check-in')
       setKept(`Your ${kind} is kept with ${formatJournalDate(date)}.`)
       return
@@ -185,6 +213,7 @@ export function EarlierEntry({
           onChange={(event) => {
             setDate(event.target.value)
             setKept('')
+            setRefusal(undefined)
           }}
           aria-describedby={problem ? problemId : undefined}
         />
@@ -233,6 +262,7 @@ export function EarlierEntry({
           <label>
             Inner weather that day
             <select
+              ref={weatherField}
               value={weather ?? ''}
               onChange={(event) => {
                 const { value } = event.target
@@ -259,6 +289,7 @@ export function EarlierEntry({
         <label>
           What would you like to remember about that day?
           <textarea
+            ref={bodyField}
             value={body}
             onChange={(event) => setBody(event.target.value)}
             maxLength={4000}

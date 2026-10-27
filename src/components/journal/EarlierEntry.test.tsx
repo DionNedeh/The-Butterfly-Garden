@@ -7,6 +7,7 @@ import { addEarlierMood, addEarlierReflection } from '../../lib/gardenActions'
 import { createInitialState } from '../../lib/progression'
 import type { AppState, MoodEntry } from '../../types'
 import { JournalView } from '../JournalView'
+import { EarlierEntry } from './EarlierEntry'
 
 /** Only the clock is fixed: timers stay real, so typing and drafts behave as they do. */
 const NOW = new Date(2026, 9, 27, 10)
@@ -141,16 +142,59 @@ describe('adding an entry for an earlier day', () => {
     await user.click(save())
     expect(onAddEarlierMood).toHaveBeenCalledWith('2026-10-12', 4, '')
 
-    // Said, not shown by moving focus away from a form still in use.
+    // Said, and focus goes to the words still waiting rather than to the page.
     expect(within(form()).getByRole('status')).toHaveTextContent(
       `Your check-in is kept with ${formatJournalDate('2026-10-12')}.`,
     )
-    expect(save()).toHaveFocus()
+    expect(screen.getByLabelText('What would you like to remember about that day?')).toHaveFocus()
     expect(screen.getByRole('radio', { name: 'A reflection' })).toBeChecked()
     expect(dayField()).toHaveValue('2026-10-12')
     await user.click(save())
     expect(onAddEarlierReflection).toHaveBeenCalledWith('2026-10-12', 'Later words')
     expect(opener()).toBeInTheDocument()
+  })
+
+  it('turns to the weather question after a reflection, while a note is waiting', async () => {
+    const user = userEvent.setup()
+    const { onAddEarlierReflection } = renderJournal(garden())
+    await user.click(opener()!)
+    chooseDay('2026-10-12')
+    await user.type(screen.getByLabelText('A note about that day, if you want'), 'A quiet one')
+    await user.click(screen.getByRole('radio', { name: 'A reflection' }))
+    await user.type(screen.getByLabelText('What would you like to remember about that day?'), 'Words')
+    await user.click(save())
+    expect(onAddEarlierReflection).toHaveBeenCalledWith('2026-10-12', 'Words')
+    // Save is disabled until a weather is chosen, so it cannot keep focus.
+    expect(screen.getByLabelText('Inner weather that day')).toHaveFocus()
+    expect(screen.getByLabelText('A note about that day, if you want')).toHaveValue('A quiet one')
+  })
+
+  it('keeps the words when the device’s clock has gone back past the page’s day', async () => {
+    const user = userEvent.setup()
+    const onAddReflection = vi.fn()
+    // The page last noticed the 28th; the clock now reads the 27th (a time
+    // zone crossed westward), so the 27th is not yet past for the reducer.
+    render(
+      <EarlierEntry
+        state={garden()}
+        today="2026-10-28"
+        onAddMood={vi.fn()}
+        onAddReflection={onAddReflection}
+        onOpenDay={vi.fn()}
+      />,
+    )
+    await user.click(opener()!)
+    chooseDay('2026-10-27')
+    await user.click(screen.getByRole('radio', { name: 'A reflection' }))
+    await user.type(screen.getByLabelText('What would you like to remember about that day?'), 'Kept')
+    await user.click(save())
+    expect(onAddReflection).not.toHaveBeenCalled()
+    expect(screen.getByText('Today has a page of its own. Choose a day before today.')).toBeInTheDocument()
+    expect(screen.getByLabelText('What would you like to remember about that day?')).toHaveValue('Kept')
+    expect(save()).toBeDisabled()
+    // Another day is a fresh question.
+    chooseDay('2026-10-26')
+    expect(save()).toBeEnabled()
   })
 
   it('says so when the day already has a check-in, and offers to open it instead', async () => {

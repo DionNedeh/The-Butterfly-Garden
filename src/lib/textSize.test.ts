@@ -14,14 +14,18 @@ describe('the text size', () => {
     const root = document.documentElement
     const undo = applyTextSize('largest')
     expect(root.style.fontSize).toBe('125%')
+    // Named too, for the rules a media query cannot reach.
+    expect(root.dataset.textSize).toBe('largest')
     undo()
     expect(root.style.fontSize).toBe('')
+    expect(root).not.toHaveAttribute('data-text-size')
   })
 
   it('sets nothing at the usual size', () => {
     const root = document.createElement('div')
     const undo = applyTextSize(undefined, root)
     expect(root.getAttribute('style')).toBeNull()
+    expect(root).not.toHaveAttribute('data-text-size')
     undo()
     expect(root.getAttribute('style')).toBeNull()
   })

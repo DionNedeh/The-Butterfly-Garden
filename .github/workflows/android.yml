@@ -57,6 +57,10 @@ jobs:
         run: npm ci
       - name: Build the Android web bundle
         run: npm run build:android
+      - name: Bundle budgets
+        # The same caps as the web build's: the app's entry chunk and CSS are
+        # what every launch waits for, on the slowest phone it supports.
+        run: node scripts/check-budgets.mjs --dist dist-android
       - name: Copy it into the Android project
         run: npx cap sync android
       - name: Lint, unit-test and build

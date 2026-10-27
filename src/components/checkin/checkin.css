@@ -24,17 +24,20 @@
   gap: 0.55rem;
 }
 
-/* A chevron that points down while folded and up while open. */
-.check-in-extras-toggle::after {
+/* A chevron that points down while folded and up while open. It is an
+   element of its own: every .text-button already draws its hover underline
+   on ::after, and the two would merge. */
+.check-in-extras-chevron {
+  display: inline-block;
+  flex: none;
   width: 0.45rem;
   height: 0.45rem;
   border: solid currentColor;
   border-width: 0 2px 2px 0;
   transform: translateY(-2px) rotate(45deg);
-  content: '';
 }
 
-.check-in-extras-toggle[aria-expanded='true']::after {
+.check-in-extras-toggle[aria-expanded='true'] .check-in-extras-chevron {
   transform: translateY(2px) rotate(-135deg);
 }
 

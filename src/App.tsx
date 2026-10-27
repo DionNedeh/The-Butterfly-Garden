@@ -108,7 +108,8 @@ import { isBackupDue } from './lib/backupReminder'
 import type { AppView } from './types'
 import { motionClass, motionPreference } from './lib/motion'
 import { applyTextSize } from './lib/textSize'
-import { paintBrowserBars } from './lib/theme'
+import { nextMorning, paintBrowserBars } from './lib/theme'
+import { useDraft } from './lib/drafts'
 import { isArrival, movedTo } from './lib/hosting'
 import { routeFromHash, urlForRoute, type Route } from './lib/routes'
 import { MovedBanner } from './components/MovedBanner'
@@ -137,6 +138,9 @@ const SPLASH_MINIMUM_MS = 700
  * since the gardener has just said they are putting the phone down.
  */
 const FADE_TO_NIGHT_MINUTES: FadeOutMinutes = 15
+
+/** The draft that holds night until the morning after the recap's ending. */
+const NIGHT_UNTIL_DRAFT = 'night-until'
 
 /**
  * Every page in the navigation, in the header's order. On a phone the dock
@@ -331,8 +335,16 @@ function App() {
   // The theme on screen, chosen or followed (lib/theme). Everything that
   // matches the theme reads this, never profile.theme, which is only the
   // choice made by hand.
-  const theme = useEffectiveTheme(garden.state?.profile)
+  //
+  // The recap's "Fade the garden to night and close" holds night until the
+  // morning without touching that choice, so following the device, or a
+  // sunlight chosen by hand, is back after it. A draft, so a reload keeps it.
+  const [nightUntilDraft, setNightUntil] = useDraft(NIGHT_UNTIL_DRAFT, '')
+  const nightUntil = Number(nightUntilDraft) || undefined
+  const chosenTheme = useEffectiveTheme(garden.state?.profile)
+  const theme = useEffectiveTheme(garden.state?.profile, nightUntil)
   const night = theme === 'night'
+  const nightHeld = theme !== chosenTheme
   useEffect(() => {
     void setSystemBarsForTheme(night)
   }, [night])
@@ -454,9 +466,12 @@ function App() {
   const inRecap = view === 'recap' && openedRecapDate !== undefined
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
   // The header's switch says what pressing it does, following included: it
-  // chooses the other theme by hand, which ends following.
+  // chooses the other theme by hand, which ends following. A night held by
+  // the recap simply ends, and what was chosen or followed is back.
   const themeSwitchLabel = `${night ? 'Switch to sunlight mode' : 'Switch to night mode'}${
-    profile.themeFollows === 'device'
+    nightHeld
+      ? ''
+      : profile.themeFollows === 'device'
       ? ' and stop following your device'
       : profile.themeFollows === 'evening'
         ? ' and stop following your evening'
@@ -464,13 +479,13 @@ function App() {
   }`
   /**
    * The recap's other ending: put the phone down. The night is collected as
-   * ever (MoonlightRecap does that first); then the garden turns to night by
-   * hand, unless it is already night through what it follows, and a sound
-   * that is playing starts to fade, as Settings' timer would, unless a fade
-   * is already on its way.
+   * ever (MoonlightRecap does that first); then the garden turns to night
+   * until the morning, unless it is already night, without changing the
+   * theme chosen or followed; and a sound that is playing starts to fade, as
+   * Settings' timer would, unless a fade is already on its way.
    */
   const fadeToNight = () => {
-    if (!night) garden.chooseTheme('night')
+    if (!night) setNightUntil(String(nextMorning(profile, new Date()).getTime()))
     if (profile.ambientSound && fadeOut.endsAt === undefined)
       fadeOut.choose(fadeOut.minutes ?? FADE_TO_NIGHT_MINUTES, true)
     focusGardenTitle.current = true
@@ -551,7 +566,10 @@ function App() {
           </button>
           <button
             className="theme-toggle"
-            onClick={() => garden.toggleTheme(theme)}
+            onClick={() => {
+              setNightUntil('')
+              if (!nightHeld) garden.toggleTheme(theme)
+            }}
             aria-label={themeSwitchLabel}
             title={themeSwitchLabel}
           >
@@ -853,7 +871,10 @@ function App() {
               onOpenSupport={openSupport}
               onSetDayCountsHidden={garden.setDayCountsHidden}
               onSetRecapHours={garden.setRecapHours}
-              onChooseTheme={garden.chooseTheme}
+              onChooseTheme={(choice) => {
+                setNightUntil('')
+                garden.chooseTheme(choice)
+              }}
               onSetTextSize={garden.setTextSize}
               fadeOutMinutes={fadeOut.minutes}
               fadeOutEndsAt={fadeOut.endsAt}

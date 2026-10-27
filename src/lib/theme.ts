@@ -51,7 +51,10 @@ export function effectiveTheme(
   profile: ThemeProfile | undefined,
   now: Date,
   prefersDark: boolean,
+  /** A night held until this moment (ms since the epoch), whatever else says. */
+  nightUntil?: number,
 ): AppearanceTheme {
+  if (nightUntil !== undefined && now.getTime() < nightUntil) return 'night'
   switch (profile?.themeFollows) {
     case 'device':
       return prefersDark ? 'night' : 'sunlight'
@@ -87,6 +90,23 @@ export function nextThemeChange(
     )
     .filter((moment) => moment > now)
     .sort((a, b) => a.getTime() - b.getTime())[0]
+}
+
+/**
+ * When a night asked for tonight gives way: the next time a followed evening
+ * would end (6am, or a later late-night hour). The recap's "Fade the garden to
+ * night and close" holds night until then without changing any setting, so
+ * the theme chosen or followed is back in the morning.
+ */
+export function nextMorning(
+  profile: Pick<Profile, 'recapOpensHour' | 'recapGraceEndsHour'> | undefined,
+  now: Date,
+): Date {
+  const { until } = eveningNightHours(profile)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), until)
+  return today > now
+    ? today
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, until)
 }
 
 /**

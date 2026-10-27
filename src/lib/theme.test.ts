@@ -3,6 +3,7 @@ import {
   effectiveTheme,
   EVENING_THEME_ENDS_HOUR,
   eveningNightHours,
+  nextMorning,
   nextThemeChange,
   paintBrowserBars,
   themeChoiceOf,
@@ -104,6 +105,29 @@ describe('the next time a followed evening turns the theme', () => {
     expect(nextThemeChange(undefined, at(12))).toBeUndefined()
     expect(nextThemeChange({ theme: 'night' }, at(12))).toBeUndefined()
     expect(nextThemeChange({ themeFollows: 'device' }, at(12))).toBeUndefined()
+  })
+})
+
+describe('a night held until the morning', () => {
+  it('is night until the moment it ends, whatever is chosen or followed', () => {
+    const until = at(6, 0, 28).getTime()
+    for (const profile of [
+      { theme: 'sunlight' as const },
+      { theme: 'sunlight' as const, themeFollows: 'device' as const },
+    ]) {
+      expect(effectiveTheme(profile, at(21), false, until)).toBe('night')
+      expect(effectiveTheme(profile, at(5, 59, 28), false, until)).toBe('night')
+      expect(effectiveTheme(profile, at(6, 0, 28), false, until)).toBe('sunlight')
+    }
+  })
+
+  it('ends at six the next morning, or later when the late night runs later', () => {
+    expect(nextMorning(undefined, at(21))).toEqual(at(6, 0, 28))
+    // After midnight, the morning still to come is the same day's.
+    expect(nextMorning(undefined, at(1, 30, 28))).toEqual(at(6, 0, 28))
+    expect(nextMorning({ recapGraceEndsHour: 9 }, at(23))).toEqual(at(9, 0, 28))
+    // Past the morning already (a recap kept open late): the next one.
+    expect(nextMorning(undefined, at(6, 30, 28))).toEqual(at(6, 0, 29))
   })
 })
 

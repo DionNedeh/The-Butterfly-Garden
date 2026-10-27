@@ -20,6 +20,10 @@ export function rootFontSize(size: TextSize | undefined): string | undefined {
  * Set the text size on <html>, which is what rem reads, and return a function
  * that takes it off again. The usual size sets nothing at all, so the page is
  * exactly as it was before this setting existed.
+ *
+ * The size is also named on <html> (data-text-size), for the few rules that
+ * lay out differently at a larger size: a media query cannot see a font size
+ * set on the root, only the window's width.
  */
 export function applyTextSize(
   size: TextSize | undefined,
@@ -28,5 +32,9 @@ export function applyTextSize(
   const fontSize = rootFontSize(size)
   if (!fontSize) return () => undefined
   root.style.fontSize = fontSize
-  return () => root.style.removeProperty('font-size')
+  root.dataset.textSize = size
+  return () => {
+    root.style.removeProperty('font-size')
+    delete root.dataset.textSize
+  }
 }

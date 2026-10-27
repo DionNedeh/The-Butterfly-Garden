@@ -14,21 +14,34 @@ const PREFERS_DARK = '(prefers-color-scheme: dark)'
  * hold the timer back, so the clock is read again whenever the page is seen
  * again. The theme itself is worked out afresh on every render (lib/theme),
  * so a change of the gardener's hours shows at once.
+ *
+ * `nightUntil` holds night until that moment (ms since the epoch), as the
+ * recap's ending asks; the same timer lets it go.
  */
-export function useEffectiveTheme(profile: Profile | undefined): AppearanceTheme {
+export function useEffectiveTheme(
+  profile: Profile | undefined,
+  nightUntil?: number,
+): AppearanceTheme {
   const prefersDark = useMediaQuery(PREFERS_DARK)
   const follows = profile?.themeFollows
   const recapOpensHour = profile?.recapOpensHour
   const recapGraceEndsHour = profile?.recapGraceEndsHour
   const subscribe = useCallback(
     (onChange: () => void) => {
-      if (follows !== 'evening') return () => undefined
       const hours = { themeFollows: follows, recapOpensHour, recapGraceEndsHour }
+      // The first moment still to come at which the theme can turn.
+      const nextChange = (now: Date) => {
+        const held =
+          nightUntil !== undefined && nightUntil > now.getTime() ? new Date(nightUntil) : undefined
+        const followed = nextThemeChange(hours, now)
+        return held && followed ? (held < followed ? held : followed) : (held ?? followed)
+      }
+      if (nextChange(new Date()) === undefined) return () => undefined
       let timer: number | undefined
       const schedule = () => {
         window.clearTimeout(timer)
         const now = new Date()
-        const next = nextThemeChange(hours, now)
+        const next = nextChange(now)
         if (next)
           timer = window.setTimeout(() => {
             onChange()
@@ -47,9 +60,9 @@ export function useEffectiveTheme(profile: Profile | undefined): AppearanceTheme
         document.removeEventListener('visibilitychange', whenSeen)
       }
     },
-    [follows, recapOpensHour, recapGraceEndsHour],
+    [follows, recapOpensHour, recapGraceEndsHour, nightUntil],
   )
   return useSyncExternalStore(subscribe, () =>
-    effectiveTheme(profile, new Date(), prefersDark),
+    effectiveTheme(profile, new Date(), prefersDark, nightUntil),
   )
 }

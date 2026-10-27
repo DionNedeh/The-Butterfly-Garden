@@ -46,6 +46,7 @@ export function CheckInExtras({
         onClick={() => setOpen((value) => !value)}
       >
         Add feelings or energy
+        <span className="check-in-extras-chevron" aria-hidden="true" />
       </button>
       {!open && summary && <p className="check-in-extras-summary">{summary}</p>}
       <div id={`${id}-panel`} className="check-in-extras-panel" hidden={!open}>

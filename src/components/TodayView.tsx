@@ -170,7 +170,8 @@ export function TodayView({
   const [energyDraft, setEnergyDraft] = useDraft(energyKey, existingMood?.energy ?? '')
   const energy = isEnergyLevel(energyDraft) ? energyDraft : undefined
   // Said once a check-in has been saved on this visit, never on arrival.
-  const [savedNow, setSavedNow] = useState(false)
+  // Counted, so each save puts the line back and an update is heard too.
+  const [saves, setSaves] = useState(0)
   const [goalTitle, setGoalTitle] = useState('')
   const [goalTinyTitle, setGoalTinyTitle] = useState('')
   const goalTitleField = useRef<HTMLInputElement>(null)
@@ -483,7 +484,7 @@ export function TodayView({
             if (mood === undefined) return
             onSaveMood(mood, moodNote, checkInDetails({ feelings: chosenFeelings, energy }))
             clearDraft(moodNoteKey, feelingsKey, energyKey)
-            setSavedNow(true)
+            setSaves((count) => count + 1)
           }}
         >
           {existingMood ? 'Update check-in' : 'Save check-in'}
@@ -496,7 +497,11 @@ export function TodayView({
         {/* Polite, so the confirmation and the offer under it are heard as
             they appear, while focus stays on the button that saved. */}
         <div aria-live="polite">
-          {savedNow && existingMood && <p className="check-in-saved">Kept in your journal.</p>}
+          {saves > 0 && existingMood && (
+            <p key={saves} className="check-in-saved">
+              Kept in your journal.
+            </p>
+          )}
           {existingMood && nextSteps.length > 0 && (
             <NextStepOffer
               checkIn={existingMood}

@@ -405,7 +405,37 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
     expect(await screen.findByText(/The sound fades away at/, {}, { timeout: 3000 })).toBeInTheDocument()
     expect(screen.getByLabelText('Fade out after')).toHaveValue('15')
-    expect(within(screen.getByRole('group', { name: 'Theme' })).getByRole('radio', { name: /^Night/ })).toBeChecked()
+    // Night is held for tonight only: the theme chosen is still Sunlight,
+    // and it is back in the morning.
+    expect(within(screen.getByRole('group', { name: 'Theme' })).getByRole('radio', { name: /^Sunlight/ })).toBeChecked()
+    expect(shell()).toHaveClass('theme-night')
+    vi.setSystemTime(new Date(2026, 9, 28, 6, 1))
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(shell()).toHaveClass('theme-sunlight')
+  })
+
+  it('keeps following the device, and the switch simply ends the night it holds', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 9, 27, 21, 0))
+    stubDevice(false)
+    const user = await openGarden(storedWith({ themeFollows: 'device' }))
+    expect(shell()).toHaveClass('theme-sunlight')
+    await walkToTheEnd(user)
+    await user.click(screen.getByRole('button', { name: 'Fade the garden to night and close' }))
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
+    expect(shell()).toHaveClass('theme-night')
+
+    // Pressing the switch lets the held night go, and following goes on.
+    await user.click(screen.getByRole('button', { name: 'Switch to sunlight mode' }))
+    expect(shell()).toHaveClass('theme-sunlight')
+    expect(
+      screen.getByRole('button', { name: 'Switch to night mode and stop following your device' }),
+    ).toBeInTheDocument()
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: 3000 })
+    expect(within(themes).getByRole('radio', { name: /^Follow device/ })).toBeChecked()
   })
 
   it('leaves a followed night and a silent garden as they are', async () => {
