@@ -16,7 +16,16 @@ import {
 import * as act from '../lib/gardenActions'
 import { gardenEvents } from '../lib/gardenEvents'
 import { hasGardenPassFeature } from '../lib/gardenPass'
-import { buyJar, placeJar, removeJarPlacement } from '../lib/jars'
+import {
+  buyJar,
+  placeJar,
+  recycleJar,
+  removeJarPlacement,
+  restoreRecycledJar,
+  type JarRestoreOutcome,
+  type RecycledJar,
+  type RecycleOutcome,
+} from '../lib/jars'
 import { performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import type { ThemeChoice } from '../lib/theme'
@@ -145,23 +154,30 @@ export function useGardenState() {
    */
   const actions = useMemo(() => {
     /**
-     * Make a purchase and say how it went.
+     * Run a reducer that says what it did, and say so: a purchase, or a jar
+     * recycled and its undo.
      *
      * The outcome is worked out on the newest garden, and that same result
      * is what the update applies. The read-through moves on with it, so a
      * second purchase made before React has drawn the first is told about
      * the garden after the first, not the one before. Only if another tab's
-     * change lands in between does the purchase run again on the newer
+     * change lands in between does the reducer run again on the newer
      * garden, which still refuses anything it cannot pay for.
      */
-    const purchase = (buy: (current: AppState) => PurchaseResult): PurchaseOutcome => {
+    const settle = <Outcome>(
+      run: (current: AppState) => { state: AppState; outcome: Outcome },
+      none: Outcome,
+    ): Outcome => {
       const newest = stateRef.current
-      if (!newest) return { kind: 'unavailable', reason: 'unknown' }
-      const result = buy(newest)
+      if (!newest) return none
+      const result = run(newest)
       if (result.state !== newest) stateRef.current = result.state
-      update((current) => (current === newest ? result.state : buy(current).state))
+      update((current) => (current === newest ? result.state : run(current).state))
       return result.outcome
     }
+    /** Make a purchase and say how it went. */
+    const purchase = (buy: (current: AppState) => PurchaseResult): PurchaseOutcome =>
+      settle(buy, { kind: 'unavailable', reason: 'unknown' })
     return {
       /**
        * Make the garden, with any starter goals chosen on the way in. They
@@ -319,6 +335,12 @@ export function useGardenState() {
         update((current) => placeJar(current, jarId, plantId)),
       removeJarPlacement: (plantId: string) =>
         update((current) => removeJarPlacement(current, plantId)),
+      /** Recycle a jar on no plant for half its Nectar, and say how it went. */
+      recycleJar: (jarId: string): RecycleOutcome =>
+        settle((current) => recycleJar(current, jarId), { kind: 'missing' }),
+      /** Undo a recycle, while the Nectar it brought is still there (lib/jars). */
+      restoreJar: (recycled: RecycledJar): JarRestoreOutcome =>
+        settle((current) => restoreRecycledJar(current, recycled), { kind: 'back' }),
       selectCompanion: (creatureId: string) =>
         update((current) => act.selectCompanion(current, creatureId)),
       renameCreature: (creatureId: string, name: string) =>

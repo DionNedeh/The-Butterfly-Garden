@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { AppState } from '../types'
 import { createEmptyState } from './progression'
+import { JAR_CAPACITY, JAR_PRICE } from '../data/jars'
 import {
   availableJars,
+  buyJar,
+  JAR_RECYCLE_NECTAR,
+  normalizeJarCharacter,
   placeJar,
   purchaseJar,
+  recycleJar,
   removeJarPlacement,
+  restoreRecycledJar,
 } from './jars'
 
 function jarGarden(): AppState {
@@ -63,7 +69,7 @@ describe('jar shop and placement', () => {
     expect(purchaseJar(empty, 'A', 'blue')).toBe(empty)
 
     const funded = { ...empty, nectar: 12 }
-    expect(purchaseJar(funded, '*', 'blue')).toBe(funded)
+    expect(purchaseJar(funded, '~', 'blue')).toBe(funded)
     expect(purchaseJar(funded, 'A', 'made-up-color' as 'blue')).toBe(funded)
   })
 
@@ -93,5 +99,117 @@ describe('jar shop and placement', () => {
     expect(placeJar(state, 'missing-jar', 'plant-1')).toBe(state)
     expect(placeJar(state, 'jar-a', 'missing-plant')).toBe(state)
     expect(removeJarPlacement(state, 'missing-plant')).toBe(state)
+  })
+})
+
+describe('the characters a jar can carry', () => {
+  it('sells accented capitals and a few marks, from either case', () => {
+    expect(normalizeJarCharacter('é')).toBe('É')
+    expect(normalizeJarCharacter(' ñ ')).toBe('Ñ')
+    expect(normalizeJarCharacter('ø')).toBe('Ø')
+    expect(normalizeJarCharacter('œ')).toBe('Œ')
+    for (const mark of '!?&+.*') expect(normalizeJarCharacter(mark)).toBe(mark)
+    const bought = buyJar({ ...createEmptyState(), nectar: JAR_PRICE }, 'ç', 'green')
+    expect(bought.outcome.kind).toBe('bought')
+    expect(bought.state.jars[0].character).toBe('Ç')
+  })
+
+  it('still refuses anything else', () => {
+    for (const other of ['~', '#', '♥', '★', 'ß', 'Ł', 'AB', '', 'a\u0301'])
+      expect(normalizeJarCharacter(other)).toBeUndefined()
+  })
+})
+
+describe('recycling a jar', () => {
+  it('gives back half its price, rounded down', () => {
+    expect(JAR_RECYCLE_NECTAR).toBe(Math.floor(JAR_PRICE / 2))
+    expect(JAR_RECYCLE_NECTAR).toBe(3)
+  })
+
+  it('takes a jar on no plant off the shelf for its Nectar, without touching the old garden', () => {
+    const state = { ...jarGarden(), nectar: 4 }
+    const before = structuredClone(state)
+    const { state: after, outcome } = recycleJar(state, 'jar-a')
+
+    expect(outcome).toEqual({
+      kind: 'recycled',
+      recycled: { jar: state.jars[0], index: 0, nectar: JAR_RECYCLE_NECTAR },
+    })
+    expect(after.nectar).toBe(4 + JAR_RECYCLE_NECTAR)
+    expect(after.jars.map((jar) => jar.id)).toEqual(['jar-s'])
+    expect(state).toEqual(before)
+    // Only what changed is new, so the repository writes only that.
+    expect(after.plants).toBe(state.plants)
+    expect(after.jarPlacements).toBe(state.jarPlacements)
+  })
+
+  it('refuses a jar on a plant, and one no longer there, with the very same garden', () => {
+    const placed = placeJar(jarGarden(), 'jar-a', 'plant-1')
+    expect(recycleJar(placed, 'jar-a')).toEqual({ state: placed, outcome: { kind: 'placed' } })
+    const state = jarGarden()
+    expect(recycleJar(state, 'jar-gone')).toEqual({ state, outcome: { kind: 'missing' } })
+  })
+
+  it('never makes Nectar: buying and recycling leaves less than before', () => {
+    const start = { ...createEmptyState(), nectar: JAR_PRICE }
+    const bought = buyJar(start, 'A', 'blue').state
+    const recycled = recycleJar(bought, bought.jars[0].id).state
+    expect(recycled.nectar).toBeLessThan(start.nectar)
+    expect(recycled.jars).toEqual([])
+  })
+})
+
+describe('undoing a recycle', () => {
+  function recycled() {
+    const state = { ...jarGarden(), nectar: 0 }
+    const result = recycleJar(state, 'jar-s')
+    if (result.outcome.kind !== 'recycled') throw new Error('Expected a recycle')
+    return { before: state, after: result.state, recycled: result.outcome.recycled }
+  }
+
+  it('puts the jar back where it stood and takes its Nectar back', () => {
+    const { before, after, recycled: jar } = recycled()
+    const { state, outcome } = restoreRecycledJar(after, jar)
+    expect(outcome).toEqual({ kind: 'restored' })
+    expect(state.jars).toEqual(before.jars)
+    expect(state.nectar).toBe(before.nectar)
+  })
+
+  it('is refused once the Nectar it brought has been spent', () => {
+    const { after, recycled: jar } = recycled()
+    const spent = { ...after, nectar: 1 }
+    expect(restoreRecycledJar(spent, jar)).toEqual({
+      state: spent,
+      outcome: { kind: 'spent', needed: JAR_RECYCLE_NECTAR - 1 },
+    })
+  })
+
+  it('is refused when the shelf has filled again', () => {
+    const { after, recycled: jar } = recycled()
+    const full = {
+      ...after,
+      nectar: 50,
+      jars: Array.from({ length: JAR_CAPACITY }, (_, index) => ({
+        ...after.jars[0],
+        id: `full-${index}`,
+      })),
+    }
+    expect(restoreRecycledJar(full, jar)).toEqual({ state: full, outcome: { kind: 'full' } })
+  })
+
+  it('does nothing the second time, or once another tab put it back', () => {
+    const { after, recycled: jar } = recycled()
+    const back = restoreRecycledJar(after, jar).state
+    expect(restoreRecycledJar(back, jar)).toEqual({ state: back, outcome: { kind: 'back' } })
+  })
+
+  it('puts it at the end of a shelf that has shrunk since', () => {
+    const state = { ...jarGarden(), nectar: 0 }
+    const first = recycleJar(state, 'jar-s')
+    if (first.outcome.kind !== 'recycled') throw new Error('Expected a recycle')
+    const shrunk = recycleJar(first.state, 'jar-a').state
+    const { state: restored } = restoreRecycledJar(shrunk, first.outcome.recycled)
+    expect(restored.jars.map((jar) => jar.id)).toEqual(['jar-s'])
+    expect(restored.nectar).toBe(JAR_RECYCLE_NECTAR)
   })
 })

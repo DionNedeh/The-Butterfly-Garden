@@ -5,7 +5,7 @@ import { JAR_CAPACITY, JAR_PRICE } from '../data/jars'
 import { shopItems } from '../data/shopItems'
 import { requestDialogClose } from '../lib/backNavigation'
 import { buyFlightPattern } from '../lib/flightPatterns'
-import { buyJar } from '../lib/jars'
+import { buyJar, recycleJar, restoreRecycledJar, type RecycledJar } from '../lib/jars'
 import { createInitialState } from '../lib/progression'
 import { buyShopItem } from '../lib/wardrobe'
 import type { AppState, FlightPatternId, JarColorId } from '../types'
@@ -23,6 +23,8 @@ function renderShop(state: AppState = garden(), initialTab?: Parameters<typeof S
     onPurchaseJar: vi.fn(
       (character: string, color: JarColorId) => buyJar(state, character, color).outcome,
     ),
+    onRecycleJar: vi.fn((jarId: string) => recycleJar(state, jarId).outcome),
+    onRestoreJar: vi.fn((recycled: RecycledJar) => restoreRecycledJar(state, recycled).outcome),
     onPurchaseItem: vi.fn(
       (id: string, quantity?: number) => buyShopItem(state, id, quantity).outcome,
     ),
@@ -378,6 +380,36 @@ describe('flight patterns', () => {
     expect(
       screen.getByText('You already have Petal Hop, so nothing was spent.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('the Owned filter on the Garden Pass tab', () => {
+  const passPieces = shopItems.filter((item) => item.premium).length
+  const pieces = (n: number) => `${n} ${n === 1 ? 'piece' : 'pieces'} to explore`
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('counts the Pass pieces as owned while the Pass is open', async () => {
+    const { user } = renderShop(garden(), 'pass')
+    const collection = screen.getByRole('combobox', { name: /^Collection/ })
+    await user.selectOptions(collection, 'owned')
+    expect(count()).toBe(pieces(passPieces))
+    expect(screen.queryByRole('heading', { name: 'Nothing in this little corner yet' })).toBeNull()
+    await user.selectOptions(collection, 'new')
+    expect(count()).toBe(pieces(0))
+  })
+
+  it('and not once it has closed', async () => {
+    // A build without the preview: nothing opens the Pass.
+    vi.stubEnv('VITE_GARDEN_PASS_PREVIEW', 'off')
+    const { user } = renderShop(garden(), 'pass')
+    const collection = screen.getByRole('combobox', { name: /^Collection/ })
+    await user.selectOptions(collection, 'owned')
+    expect(count()).toBe(pieces(0))
+    await user.selectOptions(collection, 'new')
+    expect(count()).toBe(pieces(passPieces))
   })
 })
 

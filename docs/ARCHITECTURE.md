@@ -45,6 +45,7 @@ tells other tabs which parts it wrote.
 | The app shell, pages, hash routes, error boundaries | `App.tsx`, `lib/routes.ts` |
 | The navigation: header, dock, and on phones five tabs and More | `App.tsx` (the pages), `lib/navigation.ts` (dock order, badges) |
 | What a purchase did, or why it did not | `lib/purchase.ts`, beside the shop's rules in `lib/wardrobe.ts`, `lib/jars.ts`, `lib/flightPatterns.ts` |
+| Jars: the characters (each checked against the bundled fonts), recycling and its undo, alike jars stacked | `data/jars.ts`, `lib/jars.ts` (buy, place, recycle, undo), `lib/jarStacks.ts`, `components/shop/JarShelf.tsx`, `components/garden/JarManager.tsx` (loaded with a plant's panel) |
 | The header's tabs, the phone's five-tab dock and its More sheet | `components/Navigation.tsx`, `lib/navigation.ts` |
 | Last-resort screens | `main.tsx` → `SafeMode` (nothing could draw); `RecoveryScreen` (stored garden unreadable); `ViewProblem` (one page failed) |
 | Types of everything stored | `types.ts` |

@@ -763,6 +763,8 @@ function App() {
               state={state}
               onPurchasePattern={garden.purchaseFlightPattern}
               onPurchaseJar={garden.purchaseJar}
+              onRecycleJar={garden.recycleJar}
+              onRestoreJar={garden.restoreJar}
               onPurchaseItem={garden.purchaseItem}
               onOpenCare={() => setView('care')}
               onOpenFlight={() => setView('flight-patterns')}

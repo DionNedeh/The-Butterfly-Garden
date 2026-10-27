@@ -3,6 +3,7 @@ import { createInitialState } from '../lib/progression'
 import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, PRESET_NAME_LENGTH } from '../lib/companionDiary'
 import { formatJournalDate, isGoalDue, isLocalDate, toLocalDate } from '../lib/date'
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
+import { jarCharacters } from '../data/jars'
 import { validateGarden } from './validateGarden'
 
 function garden(overrides: Record<string, unknown> = {}) {
@@ -741,6 +742,37 @@ describe('validating a garden', () => {
     const result = validateGarden(garden({ version: 99 }))
     expect(result.state).toBeUndefined()
     expect(result.refused).toMatch(/newer version/)
+  })
+})
+
+describe('the characters on jars', () => {
+  const jar = (id: string, character: unknown) => ({
+    id,
+    character,
+    colorId: 'blue',
+    purchasedAt: '2026-10-27T12:00:00.000Z',
+  })
+
+  it('keeps a jar with any character the shop sells, accents and marks included', () => {
+    const jars = jarCharacters.map((character, index) => jar(`j${index}`, character))
+    const result = validateGarden(garden({ jars }))
+    expect(result.state?.jars.map((entry) => entry.character)).toEqual(jarCharacters)
+    expect(result.repaired).toBe(0)
+    for (const character of ['É', 'Ñ', 'Ü', 'Ø', 'Å', 'Ç', 'Œ', '!', '?', '&', '+', '.', '*'])
+      expect(jarCharacters).toContain(character)
+  })
+
+  it('still drops a jar with anything else, and its place on a plant', () => {
+    const plantId = garden().plants[0].id
+    const others = ['~', '#', '♥', '★', 'é', 'Ł', 'ß', 'AB', '', 'E\u0301', 7, null]
+    const result = validateGarden(
+      garden({
+        jars: [jar('kept', 'É'), ...others.map((character, index) => jar(`x${index}`, character))],
+        jarPlacements: [{ jarId: 'x2', plantId }],
+      }),
+    )
+    expect(result.state?.jars.map((entry) => entry.id)).toEqual(['kept'])
+    expect(result.state?.jarPlacements).toEqual([])
   })
 })
 
