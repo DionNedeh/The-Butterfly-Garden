@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -242,6 +242,125 @@ describe('SettingsView rhythm, sound and support', () => {
     renderSettings(undefined, { onOpenSupport })
     await userEvent.setup().click(screen.getByRole('button', { name: 'If you need support now' }))
     expect(onOpenSupport).toHaveBeenCalledOnce()
+  })
+})
+
+describe('SettingsView sound', () => {
+  /** Settings over a garden with these sound choices. */
+  function renderSound(fields: Partial<NonNullable<AppState['profile']>>, extra: Record<string, unknown> = {}) {
+    const seed = createInitialState('Tester', 'Test Garden')
+    const handlers = {
+      onSetSoundVolume: vi.fn(),
+      onHearSoundVolume: vi.fn(),
+      onSetSoundFollowsTheme: vi.fn(),
+      onSetSoundInBackground: vi.fn(),
+    }
+    const view = render(
+      <SettingsView
+        state={{ ...seed, profile: { ...seed.profile!, ...fields } }}
+        persistence={{ readOnly: false }}
+        onUpdateProfile={vi.fn()}
+        onSelectAmbientTrack={vi.fn()}
+        onSelectBackdrop={vi.fn()}
+        onExportGarden={vi.fn(() => '{}')}
+        onImportGarden={vi.fn(() => Promise.resolve({ ok: true, message: 'Restored.' }))}
+        onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
+        {...handlers}
+        {...extra}
+      />,
+    )
+    return { ...handlers, unmount: view.unmount }
+  }
+
+  it('offers the two new soundscapes beside the others', () => {
+    renderSound({})
+    expect(screen.getByRole('radio', { name: /^Soft Rain/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Dawn Birdsong/ })).toBeInTheDocument()
+    expect(screen.getByText(/no thunder\. Calming ambience, not a sleep aid\./)).toBeInTheDocument()
+  })
+
+  it('shows the volume, the usual level until another is chosen', () => {
+    renderSound({})
+    const slider = screen.getByRole('slider', { name: 'Volume' })
+    expect(slider).toHaveValue('50')
+    expect(slider).toHaveAttribute('aria-valuetext', '50, the usual level')
+    expect(screen.getByText('50 is the garden’s usual level.')).toBeInTheDocument()
+  })
+
+  it('hears a volume as it moves and stores it when it is let go', () => {
+    const { onHearSoundVolume, onSetSoundVolume } = renderSound({ ambientVolume: 20 })
+    const slider = screen.getByRole('slider', { name: 'Volume' })
+    expect(slider).toHaveValue('20')
+    fireEvent.input(slider, { target: { value: '35' } })
+    fireEvent.input(slider, { target: { value: '30' } })
+    expect(onHearSoundVolume).toHaveBeenLastCalledWith(30)
+    expect(onSetSoundVolume).not.toHaveBeenCalled()
+    // Its value, shown beside it for the eye; the slider says it aloud.
+    expect(slider.parentElement).toHaveTextContent('30')
+    expect(slider).toHaveAttribute('aria-valuetext', '30')
+
+    fireEvent.change(slider)
+    expect(onSetSoundVolume).toHaveBeenCalledOnce()
+    expect(onSetSoundVolume).toHaveBeenCalledWith(30)
+  })
+
+  it('keeps a volume being moved when Settings closes before it is let go', () => {
+    const { onSetSoundVolume, unmount } = renderSound({})
+    fireEvent.input(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '70' } })
+    unmount()
+    expect(onSetSoundVolume).toHaveBeenCalledWith(70)
+  })
+
+  it('lets night bring the piano, and keeps playing in the background unless asked not to', async () => {
+    const user = userEvent.setup()
+    const { onSetSoundFollowsTheme, onSetSoundInBackground } = renderSound({})
+    const piano = screen.getByRole('checkbox', { name: /^Night brings the piano/ })
+    const background = screen.getByRole('checkbox', {
+      name: /^Keep playing when the app is in the background/,
+    })
+    expect(piano).not.toBeChecked()
+    expect(background).toBeChecked()
+    await user.click(piano)
+    expect(onSetSoundFollowsTheme).toHaveBeenCalledWith(true)
+    await user.click(background)
+    expect(onSetSoundInBackground).toHaveBeenCalledWith(false)
+  })
+
+  it('shows the switches as stored', () => {
+    renderSound({ soundFollowsTheme: true, soundInBackground: false })
+    expect(screen.getByRole('checkbox', { name: /^Night brings the piano/ })).toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+    ).not.toBeChecked()
+  })
+
+  it('says the piano is playing while night has brought it, and that the choice comes back', () => {
+    renderSound(
+      { ambientTrack: 'soft-rain', soundFollowsTheme: true, ambientSound: true },
+      { heardTrackId: 'piano-music' },
+    )
+    const rain = screen.getByRole('radio', { name: /^Soft Rain/ })
+    expect(rain).toBeChecked()
+    expect(rain.closest('label')).toHaveTextContent('Back with the sunlight')
+    expect(screen.getByRole('radio', { name: /^Piano Music/ }).closest('label')).toHaveTextContent(
+      'Playing now',
+    )
+  })
+
+  it('says the piano plays at night while the sound is off', () => {
+    renderSound(
+      { ambientTrack: 'dawn-birdsong', soundFollowsTheme: true },
+      { heardTrackId: 'piano-music' },
+    )
+    expect(screen.getByRole('radio', { name: /^Piano Music/ }).closest('label')).toHaveTextContent(
+      'Plays at night',
+    )
+  })
+
+  it('offers none of it where the app does not ask', () => {
+    renderSettings()
+    expect(screen.queryByRole('slider', { name: 'Volume' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /^Night brings the piano/ })).not.toBeInTheDocument()
   })
 })
 

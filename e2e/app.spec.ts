@@ -701,6 +701,41 @@ test('follows the device, and the switch in the header stops following', async (
   )
 })
 
+test('shapes the sound: a volume kept across a reload, and night bringing the piano', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const volume = page.getByRole('slider', { name: 'Volume' })
+  await expect(volume).toHaveValue('50')
+  // Each key press is a step of its own, stored as it is taken.
+  await volume.focus()
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await expect(volume).toHaveValue('48')
+  await expect(page.locator('.sound-volume-value')).toHaveText('48')
+  // The whole height of the slider can be pressed.
+  expect((await volume.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+  expect(await seriousViolations(page, 'Settings, the sound card')).toEqual([])
+
+  await page.getByRole('radio', { name: /^Soft Rain/ }).check()
+  await page.getByRole('checkbox', { name: /^Night brings the piano/ }).check()
+  await expect(page.getByRole('button', { name: 'Turn on Soft Rain' })).toBeVisible()
+  await page.getByRole('button', { name: 'Switch to night mode' }).click()
+  await expect(page.getByRole('button', { name: 'Turn on Piano Music' })).toBeVisible()
+  await expect(
+    page.getByRole('radio', { name: /^Soft Rain/ }).locator('xpath=ancestor::label'),
+  ).toContainText('Back with the sunlight')
+  expect(await seriousViolations(page, 'Settings, the sound card at night')).toEqual([])
+
+  await reloadAfterSave(page)
+  await expect(page.getByRole('slider', { name: 'Volume' })).toHaveValue('48')
+  await expect(page.getByRole('checkbox', { name: /^Night brings the piano/ })).toBeChecked()
+  await expect(
+    page.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+  ).toBeChecked()
+})
+
 test('sets a larger text size that the header and the dock make room for', async ({
   page,
 }) => {

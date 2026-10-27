@@ -76,10 +76,7 @@ const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
   today: 'Back to Today',
   guide: 'Back to the Guide',
 }
-import {
-  ambientTrackName,
-  DEFAULT_AMBIENT_TRACK_ID,
-} from './data/ambientTracks'
+import { ambientTrackName } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
 import { useEffectiveTheme } from './hooks/useEffectiveTheme'
 import { useFadeOut, type FadeOutMinutes } from './hooks/useFadeOut'
@@ -109,6 +106,7 @@ import type { AppView } from './types'
 import { motionClass, motionPreference } from './lib/motion'
 import { applyTextSize } from './lib/textSize'
 import { paintBrowserBars } from './lib/theme'
+import { heardTrack, soundVolumeOf } from './lib/sound'
 import { isArrival, movedTo } from './lib/hosting'
 import { routeFromHash, urlForRoute, type Route } from './lib/routes'
 import { MovedBanner } from './components/MovedBanner'
@@ -260,11 +258,6 @@ function App() {
   const [appActive, setAppActive] = useState(true)
   const { setAmbientSound } = garden
   const fadeOut = useFadeOut(useCallback(() => setAmbientSound(false), [setAmbientSound]))
-  useAmbientSound(
-    Boolean(garden.state?.profile?.ambientSound) && appActive,
-    garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
-    fadeOut.endsAt,
-  )
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
   const [splashDone, setSplashDone] = useState(false)
@@ -333,6 +326,16 @@ function App() {
   // choice made by hand.
   const theme = useEffectiveTheme(garden.state?.profile)
   const night = theme === 'night'
+  // The soundscape follows the theme on screen when night brings the piano.
+  const soundProfile = garden.state?.profile
+  const heardTrackId = heardTrack(soundProfile, theme)
+  const ambient = useAmbientSound({
+    enabled: Boolean(soundProfile?.ambientSound) && appActive,
+    trackId: heardTrackId,
+    volume: soundVolumeOf(soundProfile),
+    fadeEndsAt: fadeOut.endsAt,
+    pauseWhenHidden: soundProfile?.soundInBackground === false,
+  })
   useEffect(() => {
     void setSystemBarsForTheme(night)
   }, [night])
@@ -421,7 +424,7 @@ function App() {
   // Unreachable after the check above; it narrows the type for what follows.
   if (!profile) return null
   const sunlight = sunlightForDate(state, today)
-  const activeTrackName = ambientTrackName(profile.ambientTrack)
+  const activeTrackName = ambientTrackName(heardTrackId)
   const recapCollected = recap.targetDate
     ? Boolean(moonlightForDate(state, recap.targetDate))
     : false
@@ -860,6 +863,11 @@ function App() {
               onChooseFadeOut={(minutes) =>
                 fadeOut.choose(minutes, Boolean(profile.ambientSound))
               }
+              heardTrackId={heardTrackId}
+              onSetSoundVolume={garden.setSoundVolume}
+              onHearSoundVolume={ambient.hearVolume}
+              onSetSoundFollowsTheme={garden.setSoundFollowsTheme}
+              onSetSoundInBackground={garden.setSoundInBackground}
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}

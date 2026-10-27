@@ -87,6 +87,14 @@ test('Settings speaks of the app on this phone, with an About section', async ({
     page.getByText(/your garden lives only in this app, on this phone/i),
   ).toBeVisible()
   await expect(page.getByText(/never copied to Google Drive/i)).toBeVisible()
+  // The sound always rests while the app is in the background, so there is
+  // no switch to keep it playing, only a line that says so.
+  await expect(
+    page.getByText(/The sound rests while the app is in the background/),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+  ).toHaveCount(0)
   await page.getByRole('button', { name: 'Restore from a backup' }).click()
   await expect(page.getByLabel('Backup file')).toHaveAttribute(
     'accept',

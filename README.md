@@ -44,8 +44,9 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - Seven illustrated backdrops and up to three personal images with crop and zoom
 - The Garden Pass: a Google Play subscription in the Android app, and a free
   preview in the PWA (no payment is taken on the web)
-- Three soundscapes synthesised on device — no audio files are downloaded —
-  with an optional fade-out after 15, 30 or 60 minutes
+- Five soundscapes synthesised on device — no audio files are downloaded —
+  with a volume, an optional piano at night, a choice to pause in the
+  background, and an optional fade-out after 15, 30 or 60 minutes
 - "If you need support now": a short, dated list of crisis lines that hands
   off to the phone, reachable from Settings, the Guide and a stormy check-in
 - Backup and restore to a JSON file including your personal backdrop images

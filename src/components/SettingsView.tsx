@@ -32,6 +32,8 @@ import { motionPreference, type MotionPreference } from '../lib/motion'
 import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
 import { releaseName } from '../data/releases'
+import { soundVolumeOf } from '../lib/sound'
+import { SoundSwitches, SoundVolume } from './SoundControls'
 import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
@@ -222,6 +224,11 @@ export function SettingsView({
   fadeOutMinutes,
   fadeOutEndsAt,
   onChooseFadeOut,
+  heardTrackId,
+  onSetSoundVolume,
+  onHearSoundVolume,
+  onSetSoundFollowsTheme,
+  onSetSoundInBackground,
   onOpenGardenPass,
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
@@ -267,6 +274,14 @@ export function SettingsView({
   /** When the fade-out timer runs out, while it is running. */
   fadeOutEndsAt?: number
   onChooseFadeOut?: (minutes: FadeOutMinutes | undefined) => void
+  /** The soundscape that plays now, if night has brought the piano. */
+  heardTrackId?: AmbientTrackId
+  /** Store a volume, 0 to 100. */
+  onSetSoundVolume?: (volume: number) => void
+  /** Hear a volume while it is being chosen, before it is stored. */
+  onHearSoundVolume?: (volume: number) => void
+  onSetSoundFollowsTheme?: (on: boolean) => void
+  onSetSoundInBackground?: (on: boolean) => void
   onOpenGardenPass?: () => void
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
@@ -609,8 +624,10 @@ export function SettingsView({
         <fieldset className="sound-options">
           <legend className="sr-only">Sound option</legend>
           {ambientTracks.map((track) => {
-            const selected =
-              (profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID) === track.id
+            const chosen = profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID
+            const selected = chosen === track.id
+            // Night may have brought the piano in place of the chosen one.
+            const heard = (heardTrackId ?? chosen) === track.id
             return (
               <label
                 className={`sound-option ${selected ? 'selected' : ''}`}
@@ -627,17 +644,28 @@ export function SettingsView({
                   <strong>{track.name}</strong>
                   <small>{track.description}</small>
                   <em>
-                    {selected
+                    {heard
                       ? profile?.ambientSound
                         ? 'Playing now'
-                        : 'Selected'
-                      : 'Select sound'}
+                        : selected
+                          ? 'Selected'
+                          : 'Plays at night'
+                      : selected
+                        ? 'Back with the sunlight'
+                        : 'Select sound'}
                   </em>
                 </span>
               </label>
             )
           })}
         </fieldset>
+        {onSetSoundVolume && (
+          <SoundVolume
+            volume={soundVolumeOf(profile)}
+            onHear={onHearSoundVolume}
+            onSet={onSetSoundVolume}
+          />
+        )}
         {onChooseFadeOut && (
           <div className="fade-out-setting">
             <label>
@@ -669,6 +697,12 @@ export function SettingsView({
             </p>
           </div>
         )}
+        <SoundSwitches
+          profile={profile}
+          android={android}
+          onSetFollowsTheme={onSetSoundFollowsTheme}
+          onSetInBackground={onSetSoundInBackground}
+        />
       </section>
 
       {(onSetDayCountsHidden || onSetRecapHours) && (

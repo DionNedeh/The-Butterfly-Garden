@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -423,5 +423,43 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
     expect(within(themes).getByRole('radio', { name: /^Follow evening/ })).toBeChecked()
     // No sound was playing, so no fade was started.
     expect(screen.getByLabelText('Fade out after')).toHaveValue('')
+  })
+})
+
+describe('the sound you can shape', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('lets night bring the piano as the theme turns, and the chosen soundscape return with the sunlight', async () => {
+    const setDark = stubDevice(false)
+    await openGarden(
+      storedWith({ ambientTrack: 'soft-rain', soundFollowsTheme: true, themeFollows: 'device' }),
+    )
+    expect(screen.getByRole('button', { name: 'Turn on Soft Rain' })).toBeInTheDocument()
+    setDark(true)
+    expect(screen.getByRole('button', { name: 'Turn on Piano Music' })).toBeInTheDocument()
+    setDark(false)
+    expect(screen.getByRole('button', { name: 'Turn on Soft Rain' })).toBeInTheDocument()
+  })
+
+  it('stores the volume and both switches from Settings', async () => {
+    const user = await openGarden()
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const lastProfile = () => save.mock.calls.at(-1)?.[0].profile
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    const slider = await screen.findByRole('slider', { name: 'Volume' }, { timeout: 3000 })
+
+    fireEvent.input(slider, { target: { value: '30' } })
+    fireEvent.change(slider)
+    await waitFor(() => expect(lastProfile()?.ambientVolume).toBe(30))
+    expect(slider).toHaveValue('30')
+
+    await user.click(screen.getByRole('checkbox', { name: /^Night brings the piano/ }))
+    await waitFor(() => expect(lastProfile()?.soundFollowsTheme).toBe(true))
+    await user.click(
+      screen.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+    )
+    await waitFor(() => expect(lastProfile()?.soundInBackground).toBe(false))
   })
 })

@@ -388,6 +388,55 @@ describe('validating a garden', () => {
     expect(validateGarden(garden()).state?.profile).not.toHaveProperty('textSize')
   })
 
+  it('accepts every soundscape, the two newest included, and falls back for any other', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const trackOf = (ambientTrack: unknown) =>
+      validateGarden(garden({ profile: { ...base, ambientTrack } })).state?.profile?.ambientTrack
+    for (const id of ['garden-chimes', 'garden', 'piano-music', 'soft-rain', 'dawn-birdsong']) {
+      expect(trackOf(id)).toBe(id)
+    }
+    for (const odd of ['thunder', 'Soft Rain', 3, null, {}]) {
+      expect(trackOf(odd)).toBe('garden-chimes')
+    }
+  })
+
+  it('brings a volume into range, and drops one that is not a number', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const volumeOf = (ambientVolume: unknown) =>
+      validateGarden(garden({ profile: { ...base, ambientVolume } })).state?.profile
+    expect(volumeOf(0)?.ambientVolume).toBe(0)
+    expect(volumeOf(35)?.ambientVolume).toBe(35)
+    expect(volumeOf(100)?.ambientVolume).toBe(100)
+    // What was meant is plain: a whole number within the slider.
+    expect(volumeOf(150)?.ambientVolume).toBe(100)
+    expect(volumeOf(-4)?.ambientVolume).toBe(0)
+    expect(volumeOf(42.6)?.ambientVolume).toBe(43)
+    for (const odd of ['50', NaN, Infinity, null, true, [], {}]) {
+      const profile = volumeOf(odd)
+      expect(profile).not.toHaveProperty('ambientVolume')
+      expect(profile?.gardenName).toBe('Test Garden')
+    }
+    // An older garden has none, and plays at the usual volume.
+    expect(validateGarden(garden()).state?.profile).not.toHaveProperty('ambientVolume')
+  })
+
+  it('keeps the sound switches only in the one value each is stored as', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const profileWith = (fields: Record<string, unknown>) =>
+      validateGarden(garden({ profile: { ...base, ...fields } })).state?.profile
+    expect(profileWith({ soundFollowsTheme: true })?.soundFollowsTheme).toBe(true)
+    expect(profileWith({ soundInBackground: false })?.soundInBackground).toBe(false)
+    for (const odd of [false, 'true', 1, null, {}]) {
+      expect(profileWith({ soundFollowsTheme: odd })).not.toHaveProperty('soundFollowsTheme')
+    }
+    for (const odd of [true, 'false', 0, null, []]) {
+      expect(profileWith({ soundInBackground: odd })).not.toHaveProperty('soundInBackground')
+    }
+    const older = validateGarden(garden()).state?.profile
+    expect(older).not.toHaveProperty('soundFollowsTheme')
+    expect(older).not.toHaveProperty('soundInBackground')
+  })
+
   it('keeps the time of the last backup only when it is a real moment', () => {
     const base = createInitialState('Tester', 'Test Garden').profile!
     const lastBackupOf = (lastBackupAt: unknown) =>
