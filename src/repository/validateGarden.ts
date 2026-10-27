@@ -12,6 +12,7 @@ import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } fr
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { clampVolume } from '../lib/sound'
 import { isRegionId } from '../lib/region'
+import { isSunday } from '../lib/letters'
 import type { AmbientTrackId, AppState, OutfitPreset, OutfitSlot, PlantInstance } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
@@ -335,6 +336,18 @@ function writtenLaterChecked<T extends { writtenLater?: true }>(entry: T | undef
   if (!entry || !('writtenLater' in entry) || entry.writtenLater === true) return entry
   const fixed = { ...entry }
   delete fixed.writtenLater
+  return fixed
+}
+
+/**
+ * A star, which lets a letter from Marigold quote the entry, is likewise only
+ * ever true. Anything else is no star: a hand-edited value must never make a
+ * line quotable that the gardener did not choose.
+ */
+function starredChecked<T extends { starred?: true }>(entry: T | undefined): T | undefined {
+  if (!entry || !('starred' in entry) || entry.starred === true) return entry
+  const fixed = { ...entry }
+  delete fixed.starred
   return fixed
 }
 
@@ -848,6 +861,18 @@ function checkProfile(
     const date = value[field]
     if (date !== undefined && !(isLocalDate(date) && date <= today)) delete profile[field]
   }
+  // The last letter read is a Sunday that has come: any other day, or one
+  // still to come, could hide a letter that is waiting, so it is dropped and
+  // the newest letter simply waits again.
+  const lastLetterRead = value.lastLetterRead
+  if (lastLetterRead !== undefined && !(isSunday(lastLetterRead) && lastLetterRead <= today)) {
+    delete profile.lastLetterRead
+  }
+  // Never quoting is the one choice stored; anything else is the default,
+  // which quotes only starred lines.
+  if (value.letterQuotes !== undefined && value.letterQuotes !== 'never') {
+    delete profile.letterQuotes
+  }
   // Saved looks live here, in the profile, because every older build carries
   // the profile through whole (see Profile.outfitPresets). A look dropped is
   // not damage: it is only an arrangement of pieces, and nothing is lost
@@ -1013,9 +1038,11 @@ export function validateGarden(value: unknown): GardenValidation {
 
   const goals = sanitise(candidate.goals, ctx, checkGoal)
   const completions = sanitise(candidate.completions, ctx, checkCompletion)
-  const moods = sanitise(candidate.moods, ctx, (raw, c) => writtenLaterChecked(checkMood(raw, c)))
+  const moods = sanitise(candidate.moods, ctx, (raw, c) =>
+    starredChecked(writtenLaterChecked(checkMood(raw, c))),
+  )
   const reflections = sanitise(candidate.reflections, ctx, (raw, c) =>
-    writtenLaterChecked(checkReflection(raw, c)),
+    starredChecked(writtenLaterChecked(checkReflection(raw, c))),
   )
   const sunlight = sanitise(candidate.sunlight, ctx, checkSunlight)
   const creatures = sanitise(candidate.creatures, ctx, checkCreature)

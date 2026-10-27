@@ -636,6 +636,7 @@ describe('the garden pace', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     const user = await openGarden(bloomed)
     await user.click(await screen.findByRole('button', { name: /^Milkweed 1/ }))
     // Classic: a plant blooms once, so there is no next bloom to speak of.
+    expect(await screen.findByText('Growth stage')).toBeInTheDocument()
     expect(screen.queryByText('Next bloom')).toBeNull()
 
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
@@ -645,7 +646,7 @@ describe('the garden pace', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
 
     await user.click(primaryNav().getByRole('button', { name: 'Garden' }))
     await user.click(await screen.findByRole('button', { name: /^Milkweed 1/ }))
-    expect(screen.getByText('Next bloom').nextElementSibling).toHaveTextContent(
+    expect((await screen.findByText('Next bloom')).nextElementSibling).toHaveTextContent(
       'Blooms again in 7 more days of care.',
     )
   })

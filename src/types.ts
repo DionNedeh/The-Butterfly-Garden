@@ -255,6 +255,19 @@ export interface Profile {
    * and planting tips. Optional: without it the Guide shows neither.
    */
   region?: RegionId
+  /**
+   * The Sunday (a local date) ending the week of the newest letter from
+   * Marigold the gardener has read or put away (lib/letters). Letters
+   * themselves are worked out when read and never stored. Optional: without
+   * it no letter has been read.
+   */
+  lastLetterRead?: string
+  /**
+   * Never quote the gardener's words in a letter. Optional, and only ever
+   * 'never': without it a letter may quote a line the gardener starred, and
+   * nothing else.
+   */
+  letterQuotes?: 'never'
 }
 
 /** Image formats a garden image may be stored as. */
@@ -360,6 +373,11 @@ export interface MoodEntry {
    * written on the day.
    */
   writtenLater?: true
+  /**
+   * The gardener starred the note, so a letter from Marigold may quote it
+   * (lib/letters). Only ever stored as true; without it, never quoted.
+   */
+  starred?: true
   createdAt: string
   updatedAt: string
 }
@@ -380,6 +398,8 @@ export interface ReflectionEntry {
   body: string
   /** Written afterwards for this earlier day; see MoodEntry.writtenLater. */
   writtenLater?: true
+  /** Starred, so a letter may quote it; see MoodEntry.starred. */
+  starred?: true
   createdAt: string
   updatedAt: string
 }

@@ -253,6 +253,19 @@ export function completeGoal(state: AppState, goalId: string, now: Date): AppSta
 }
 
 /**
+ * A star on today's entry stays through a rewrite while its words do: a star
+ * is the gardener's choice of those words for a letter to quote (lib/letters),
+ * and new words written on Today, where no star is shown, were not chosen.
+ */
+function keptStar(
+  existing: { starred?: true } | undefined,
+  before: string | undefined,
+  after: string,
+): { starred?: true } {
+  return existing?.starred === true && before === after ? { starred: true } : {}
+}
+
+/**
  * Today's check-in, written or rewritten, and its Sunlight.
  *
  * The Sunlight is the same whatever the answer, "not sure" included: it is
@@ -275,6 +288,7 @@ export function saveMood(
     ...moodFields(choice),
     note: note.trim(),
     ...checkInDetails(details),
+    ...keptStar(existing, existing?.note, note.trim()),
     createdAt: existing?.createdAt ?? now.toISOString(),
     updatedAt: now.toISOString(),
   }
@@ -311,6 +325,7 @@ export function saveReflection(
     localDate,
     promptId,
     body: body.trim(),
+    ...keptStar(existing, existing?.body, body.trim()),
     createdAt: existing?.createdAt ?? now.toISOString(),
     updatedAt: now.toISOString(),
   }

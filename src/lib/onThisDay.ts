@@ -79,6 +79,20 @@ function shortened(line: string): string {
   return `${(space > FIRST_LINE_LENGTH / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
 }
 
+/**
+ * The first line of a piece of writing that has words in it, shortened as the
+ * card shows it; undefined when there are none. A letter from Marigold quotes
+ * a starred line the same way (lib/summaries).
+ */
+export function firstLineOfText(text: string | undefined): string | undefined {
+  if (!text) return undefined
+  const line = text
+    .split(LINE_BREAKS)
+    .map((each) => each.trim())
+    .find((each) => each !== '')
+  return line ? shortened(line) : undefined
+}
+
 /** The first line with words in it, in the order the timeline shows a day. */
 function firstLineOf(days: JournalDays, localDate: string): string | undefined {
   const recap = days.recapByDate.get(localDate)
@@ -90,12 +104,8 @@ function firstLineOf(days: JournalDays, localDate: string): string | undefined {
     recap?.forTomorrow,
   ]
   for (const text of texts) {
-    if (!text) continue
-    const line = text
-      .split(LINE_BREAKS)
-      .map((each) => each.trim())
-      .find((each) => each !== '')
-    if (line) return shortened(line)
+    const line = firstLineOfText(text)
+    if (line) return line
   }
   return undefined
 }

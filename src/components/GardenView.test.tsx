@@ -284,8 +284,9 @@ describe('GardenView plant protection', () => {
 
     await user.click(screen.getByRole('button', { name: /^View .*growth 2 of 3/ }))
 
+    // The plant's panel is loaded once a plant is chosen, not with the garden.
     expect(
-      screen.getByText(/Sol is still growing on this host plant/),
+      await screen.findByText(/Sol is still growing on this host plant/),
     ).toBeInTheDocument()
     const remove = screen.getByRole('button', { name: /remove this plant/i })
     expect(remove).toBeDisabled()
@@ -300,7 +301,7 @@ describe('GardenView plant protection', () => {
     const spare = state.plants[1]
 
     await user.click(screen.getByRole('button', { name: /^View .*growth 1 of 3/ }))
-    await user.click(screen.getByRole('button', { name: /remove this plant/i }))
+    await user.click(await screen.findByRole('button', { name: /remove this plant/i }))
 
     // Removal is permanent and unrefunded, so it asks first.
     expect(
@@ -400,7 +401,7 @@ describe('saying why', () => {
       ],
     })
     await userEvent.setup().click(screen.getByRole('button', { name: /Milkweed 1/ }))
-    expect(screen.getByText("This bloom brought Pip's egg.")).toBeInTheDocument()
+    expect(await screen.findByText("This bloom brought Pip's egg.")).toBeInTheDocument()
   })
 })
 
@@ -420,13 +421,15 @@ describe('Keep giving, on the plant panel', () => {
       profile: { ...seed.profile!, gardenPace: 'keep-giving' },
     })
     await userEvent.setup().click(screen.getByRole('button', { name: /Milkweed 1/ }))
-    const row = screen.getByText('Next bloom').closest('div')!
+    const row = (await screen.findByText('Next bloom')).closest('div')!
     expect(within(row).getByText('Blooms again in 3 more days of care.')).toBeInTheDocument()
   })
 
   it('says nothing of blooming again under Classic', async () => {
     renderGarden({ plants: [mature] })
     await userEvent.setup().click(screen.getByRole('button', { name: /Milkweed 1/ }))
+    // Once the panel is there, it says nothing of a next bloom.
+    expect(await screen.findByText('Growth stage')).toBeInTheDocument()
     expect(screen.queryByText('Next bloom')).toBeNull()
     expect(screen.queryByText(/Blooms again/)).toBeNull()
   })

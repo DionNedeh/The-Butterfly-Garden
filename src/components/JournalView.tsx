@@ -38,7 +38,10 @@ import { JournalSearch } from './JournalSearch'
 import { FieldFacts } from './FieldFacts'
 import { WeatherCalendar } from './WeatherCalendar'
 import { EarlierEntry } from './journal/EarlierEntry'
+import { Letters } from './journal/Letters'
 import { OnThisDayCard } from './journal/OnThisDayCard'
+import { StarToggle } from './journal/StarToggle'
+import type { StarredKind } from '../lib/letters'
 import './journal/journal.css'
 
 /** The timeline grows for as long as the garden is kept, so it is paged. */
@@ -54,6 +57,9 @@ export function JournalView({
   onDeleteRecap,
   onAddEarlierMood,
   onAddEarlierReflection,
+  openLetter,
+  onReadLetter,
+  onSetStarred,
 }: {
   state: AppState
   onUpdateMood: (entry: MoodEntry) => void
@@ -66,6 +72,12 @@ export function JournalView({
   onAddEarlierMood?: (localDate: string, choice: MoodChoice, note: string) => void
   /** A reflection for a day that has passed, written later. */
   onAddEarlierReflection?: (localDate: string, body: string) => void
+  /** Arrived from the garden's card: open Marigold's newest letter. */
+  openLetter?: boolean
+  /** A letter was read (lib/letters). Without it, the letters are not shown. */
+  onReadLetter?: (sunday: string) => void
+  /** Star a line for letters to quote, or not. Without it, no star is offered. */
+  onSetStarred?: (kind: StarredKind, id: string, starred: boolean) => void
 }) {
   const [editingRecap, setEditingRecap] = useState<RecapEntry>()
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
@@ -198,6 +210,10 @@ export function JournalView({
           </p>
         </div>
       </header>
+
+      {onReadLetter && (
+        <Letters state={state} openOnArrival={openLetter} onRead={onReadLetter} />
+      )}
 
       {offered && putAway === '' && (
         <OnThisDayCard
@@ -463,6 +479,12 @@ export function JournalView({
                             </div>
                           </div>
                           <div className="inline-actions">
+                            {onSetStarred && mood.note && (
+                              <StarToggle
+                                starred={mood.starred === true}
+                                onChange={(starred) => onSetStarred('check-in', mood.id, starred)}
+                              />
+                            )}
                             <button
                               className="text-button"
                               onClick={() => setEditingMood(mood)}
@@ -553,6 +575,14 @@ export function JournalView({
                             </div>
                           </div>
                           <div className="inline-actions">
+                            {onSetStarred && reflection.body && (
+                              <StarToggle
+                                starred={reflection.starred === true}
+                                onChange={(starred) =>
+                                  onSetStarred('reflection', reflection.id, starred)
+                                }
+                              />
+                            )}
                             <button
                               className="text-button"
                               onClick={() => setEditingReflection(reflection)}

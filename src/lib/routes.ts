@@ -53,6 +53,12 @@ export interface Route {
    * back to and Android's back gesture returns to. Not part of the address.
    */
   from?: AppView
+  /**
+   * The Journal opened on Marigold's newest letter, from the garden's card.
+   * Not part of the address: a reload opens the Journal as usual, where the
+   * letter is kept.
+   */
+  letter?: boolean
 }
 
 /** A Guide section's name in the address: lower case words and hyphens. */

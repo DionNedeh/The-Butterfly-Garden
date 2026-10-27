@@ -40,6 +40,13 @@ import { requestPersistentStorage } from '../lib/storage'
 import { markQuietWrite } from '../lib/quietWrites'
 import { noteVisit, putAwayWelcomeBack } from '../lib/visits'
 import {
+  readLetter,
+  setLetterQuotes,
+  setStarred,
+  type LetterQuotes,
+  type StarredKind,
+} from '../lib/letters'
+import {
   buyShopItem,
   equipOutfitItem,
   unequipOutfitSlot,
@@ -454,6 +461,26 @@ export function useGardenState() {
         update((current) => act.setRegion(current, region)),
       /** Put the garden's welcome-back reveal away (lib/visits). */
       putAwayWelcomeBack: () => update(putAwayWelcomeBack),
+      /**
+       * The letter for the week ending `sunday` was read, or put away
+       * (lib/letters). Straight through setState, like a visit: nothing of
+       * the gardener's is in this write, and an older letter read again
+       * hands back the same garden, so nothing is written.
+       */
+      readLetter: (sunday: string) => {
+        if (readOnlyRef.current) return
+        setState((current) => {
+          if (!current) return current
+          const next = readLetter(current, sunday)
+          return next === current ? current : markQuietWrite(next)
+        })
+      },
+      /** Quote starred lines in letters, or never. */
+      setLetterQuotes: (quotes: LetterQuotes) =>
+        update((current) => setLetterQuotes(current, quotes)),
+      /** Star a check-in's note or a reflection for letters to quote, or not. */
+      setStarred: (kind: StarredKind, id: string, starred: boolean) =>
+        update((current) => setStarred(current, kind, id, starred)),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**
