@@ -62,6 +62,7 @@ tells other tabs which parts it wrote.
 | Moving the PWA to another address | `lib/hosting.ts`, `docs/moving-the-garden.md` |
 | The installed PWA: icons, shortcuts, screenshots | `pwaManifest.ts`; `scripts/pwa-assets.mjs` renders the shortcut icons and screenshots |
 | Moments worth saying aloud | `lib/gardenEvents.ts` → `lib/announcer.ts` → `Celebrations` |
+| A companion's story and the closet's saved looks | `lib/companionDiary.ts` (what is written down as it happens, and the limits storage checks), `lib/companionStory.ts` (the story told from it), `lib/outfitPresets.ts` and `lib/wardrobe.ts` (saving and wearing looks, who wears what), `data/closet.ts`, `components/care/` |
 | Motion preferences and animation | `lib/motion.ts`, `hooks/useFlightMotion.ts`, `components/sprites/` |
 | The theme, chosen or followed (device, evening), and text size | `lib/theme.ts` (the rule), `hooks/useEffectiveTheme.ts` (when it turns), `lib/textSize.ts`; the shell applies them in `App.tsx` |
 

@@ -724,6 +724,11 @@ function App() {
               onCare={garden.careForCreature}
               onEquip={garden.equipItem}
               onUnequip={garden.unequipSlot}
+              onSavePreset={garden.savePreset}
+              onWearPreset={garden.wearPreset}
+              onRenamePreset={garden.renamePreset}
+              onDeletePreset={garden.deletePreset}
+              onRestorePreset={garden.restorePreset}
               onRenameCreature={garden.renameCreature}
               onGoToShop={() => setView('shop')}
             />

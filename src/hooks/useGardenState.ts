@@ -16,12 +16,19 @@ import { buyJar, placeJar, removeJarPlacement } from '../lib/jars'
 import { performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import type { ThemeChoice } from '../lib/theme'
+import * as looks from '../lib/outfitPresets'
 import { removePlant } from '../lib/plantManagement'
 import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { requestPersistentStorage } from '../lib/storage'
-import { buyShopItem, equipOutfitItem, unequipOutfitSlot } from '../lib/wardrobe'
+import {
+  buyShopItem,
+  equipOutfitItem,
+  unequipOutfitSlot,
+  wearOutfitPreset,
+  type WearLookResult,
+} from '../lib/wardrobe'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
   AmbientTrackId,
@@ -36,6 +43,7 @@ import type {
   JarColorId,
   MoodChoice,
   MoodEntry,
+  OutfitPreset,
   OutfitSlot,
   RecapEntry,
   ReflectionEntry,
@@ -230,10 +238,40 @@ export function useGardenState() {
         update((current) => performCare(current, creatureId, actionId).state),
       purchaseItem: (itemId: string, quantity = 1) =>
         purchase((current) => buyShopItem(current, itemId, quantity)),
-      equipItem: (creatureId: string, itemId: string) =>
-        update((current) => equipOutfitItem(current, creatureId, itemId)),
+      equipItem: (creatureId: string, itemId: string) => {
+        const now = new Date()
+        update((current) => equipOutfitItem(current, creatureId, itemId, undefined, now))
+      },
       unequipSlot: (creatureId: string, slot: OutfitSlot) =>
         update((current) => unequipOutfitSlot(current, creatureId, slot)),
+      /** Save a companion's outfit as a look; an empty name takes the one suggested. */
+      savePreset: (creatureId: string, name: string) =>
+        update((current) => looks.saveOutfitPreset(current, creatureId, name)),
+      /**
+       * Put a saved look on a companion, and say which pieces were left off.
+       * Worked out on the newest garden, as a purchase is, so what Care says
+       * is what the update applies.
+       */
+      wearPreset: (creatureId: string, presetId: string): Omit<WearLookResult, 'state'> => {
+        const now = new Date()
+        const newest = stateRef.current
+        if (!newest) return { worn: [], skipped: [] }
+        const { state: next, ...outcome } = wearOutfitPreset(newest, creatureId, presetId, undefined, now)
+        if (next !== newest) stateRef.current = next
+        update((current) =>
+          current === newest
+            ? next
+            : wearOutfitPreset(current, creatureId, presetId, undefined, now).state,
+        )
+        return outcome
+      },
+      renamePreset: (presetId: string, name: string) =>
+        update((current) => looks.renameOutfitPreset(current, presetId, name)),
+      deletePreset: (presetId: string) =>
+        update((current) => looks.deleteOutfitPreset(current, presetId)),
+      /** Put back a look just deleted, where it was: Undo. */
+      restorePreset: (preset: OutfitPreset, index: number) =>
+        update((current) => looks.restoreOutfitPreset(current, preset, index)),
       removePlant: (plantId: string) => update((current) => removePlant(current, plantId)),
       purchaseFlightPattern: (patternId: FlightPatternId) =>
         purchase((current) => buyFlightPattern(current, patternId)),

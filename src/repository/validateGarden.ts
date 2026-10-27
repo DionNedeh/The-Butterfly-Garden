@@ -1,12 +1,15 @@
 import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
+import { getCareAction } from '../data/careActions'
+import { closetSlots } from '../data/closet'
+import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, presetName } from '../lib/companionDiary'
 import { jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
 import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES } from '../lib/date'
-import type { AmbientTrackId, AppState, OutfitSlot } from '../types'
+import type { AmbientTrackId, AppState, OutfitPreset, OutfitSlot } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
@@ -537,7 +540,103 @@ function checkCreature(raw: unknown, ctx: Context) {
   // An open offer to name an egg is only ever stored as true. Anything else
   // is no offer, so a hand-edited value can never reach the Care page.
   if (raw.awaitingName !== true) delete creature.awaitingName
+  // The companion's diary, kept only in the shapes it is written in, so a
+  // hand-edited value never reaches its story. A dropped note is not damage:
+  // the diary is a keepsake, and nothing is earned from it.
+  if (raw.hatchedAt !== undefined && !isTimestamp(raw.hatchedAt)) delete creature.hatchedAt
+  const careCounts = checkCareCounts(raw.careCounts)
+  if (careCounts) creature.careCounts = careCounts
+  else delete creature.careCounts
+  const outfitsWorn = checkOutfitsWorn(raw.outfitsWorn)
+  if (outfitsWorn) creature.outfitsWorn = outfitsWorn
+  else delete creature.outfitsWorn
   return creature
+}
+
+/** Counts of care actions this build knows, each a whole number above zero. */
+function checkCareCounts(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined
+  const counts: Record<string, number> = {}
+  for (const [actionId, count] of Object.entries(value)) {
+    if (getCareAction(actionId) && Number.isSafeInteger(count) && (count as number) > 0) {
+      counts[actionId] = count as number
+    }
+  }
+  return Object.keys(counts).length > 0 ? counts : undefined
+}
+
+/** Whether an id names a piece the closet could hold, in this slot if one is given. */
+function isCosmetic(itemId: unknown, slot?: string): itemId is string {
+  if (typeof itemId !== 'string' || !Object.hasOwn(closetSlots, itemId)) return false
+  return !slot || closetSlots[itemId] === slot
+}
+
+/** Known cosmetics, each once, in the order worn, no more than the diary keeps. */
+function checkOutfitsWorn(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const worn = value
+    .filter((itemId, index): itemId is string => isCosmetic(itemId) && value.indexOf(itemId) === index)
+    .slice(0, MAX_OUTFITS_WORN)
+  if (worn.length === 0) return undefined
+  return worn.length === value.length ? (value as string[]) : worn
+}
+
+/**
+ * A saved look's outfit: known slots, each holding a cosmetic made for that
+ * slot. Whether the gardener still owns it is asked when it is worn.
+ */
+function checkPresetOutfit(value: unknown): OutfitPreset['outfit'] {
+  const outfit: OutfitPreset['outfit'] = {}
+  if (!isRecord(value)) return outfit
+  for (const [slot, itemId] of Object.entries(value)) {
+    if (OUTFIT_SLOTS.has(slot as OutfitSlot) && isCosmetic(itemId, slot)) {
+      outfit[slot as OutfitSlot] = itemId
+    }
+  }
+  return outfit
+}
+
+/**
+ * Saved looks (lib/outfitPresets): each with an id of its own, a name as the
+ * wardrobe keeps names, and at least one piece the catalogue knows; no more
+ * than the closet keeps. Undefined when there were never any, so an older
+ * garden stays exactly as it was.
+ */
+function checkOutfitPresets(value: unknown): OutfitPreset[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<string>()
+  let changed = false
+  const presets: OutfitPreset[] = []
+  for (const raw of value) {
+    if (!isRecord(raw) || typeof raw.id !== 'string' || !raw.id || seen.has(raw.id)) {
+      changed = true
+      continue
+    }
+    const outfit = checkPresetOutfit(raw.outfit)
+    const pieces = Object.keys(outfit).length
+    if (pieces === 0) {
+      changed = true
+      continue
+    }
+    seen.add(raw.id)
+    const name = (typeof raw.name === 'string' && presetName(raw.name)) || 'Saved look'
+    if (
+      name === raw.name &&
+      isRecord(raw.outfit) &&
+      Object.keys(raw.outfit).length === pieces &&
+      Object.keys(raw).length === 3
+    ) {
+      presets.push(raw as unknown as OutfitPreset)
+    } else {
+      changed = true
+      presets.push({ id: raw.id, name, outfit })
+    }
+  }
+  if (presets.length > MAX_OUTFIT_PRESETS) {
+    changed = true
+    presets.length = MAX_OUTFIT_PRESETS
+  }
+  return changed ? presets : (value as OutfitPreset[])
 }
 
 /** Counts that can be earned again: whole, finite, never negative. */
@@ -644,6 +743,9 @@ function checkProfile(
   }
   if (value.lastBackupAt !== undefined && !isTimestamp(value.lastBackupAt)) {
     delete profile.lastBackupAt
+  }
+  if (value.diarySince !== undefined && !isTimestamp(value.diarySince)) {
+    delete profile.diarySince
   }
   // Dropped, not repaired, when unknown: the hand-chosen theme is still there
   // underneath, and the usual text size is always readable.
@@ -852,6 +954,9 @@ export function validateGarden(value: unknown): GardenValidation {
     jars,
     jarPlacements,
   }
+  const outfitPresets = checkOutfitPresets(candidate.outfitPresets)
+  if (outfitPresets) state.outfitPresets = outfitPresets
+  else delete state.outfitPresets
   return { state, repaired: ctx.repaired }
 }
 

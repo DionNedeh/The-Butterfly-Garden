@@ -85,6 +85,9 @@ export function createInitialState(
       selectedBackdropId: 'sunlit-meadow',
       unlockedBackdropIds: ['sunlit-meadow', 'cottage-bloom'],
       lastSeenReleaseId: currentRelease.id,
+      // A new garden keeps its companions' diaries from the start, so every
+      // story it tells is whole (lib/companionStory).
+      diarySince: nowIso,
     },
     plants: [
       {

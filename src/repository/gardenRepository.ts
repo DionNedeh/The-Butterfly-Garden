@@ -139,6 +139,7 @@ export const META_FIELDS = [
   'ownedItemIds',
   'ownedFlightPatternIds',
   'selectedFlightPatternId',
+  'outfitPresets',
 ] as const
 
 export type MetaField = (typeof META_FIELDS)[number]
@@ -402,6 +403,8 @@ function metaOf(state: AppState, revision: number): GardenMeta {
     ownedItemIds: state.ownedItemIds,
     ownedFlightPatternIds: state.ownedFlightPatternIds,
     selectedFlightPatternId: state.selectedFlightPatternId,
+    // Optional: a garden without saved looks stores the record it always did.
+    ...(state.outfitPresets ? { outfitPresets: state.outfitPresets } : {}),
     revision,
   }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState } from '../lib/progression'
+import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, PRESET_NAME_LENGTH } from '../lib/companionDiary'
 import { formatJournalDate, isGoalDue, isLocalDate } from '../lib/date'
 import { validateGarden } from './validateGarden'
 
@@ -460,6 +461,185 @@ describe('validating a garden', () => {
     expect(none.state?.recaps[0]).not.toHaveProperty('plannedGoalIds')
     const notAList = validateGarden(garden({ recaps: [{ ...recap, plannedGoalIds: 'g1' }] }))
     expect(notAList.state?.recaps[0]).not.toHaveProperty('plannedGoalIds')
+  })
+
+  describe('a companion’s diary', () => {
+    const base = createInitialState('Tester', 'Test Garden').creatures[0]
+    const diaryOf = (fields: Record<string, unknown>) => {
+      const result = validateGarden(garden({ creatures: [{ ...base, ...fields }] }))
+      return { creature: result.state!.creatures[0], repaired: result.repaired }
+    }
+
+    it('keeps a well-formed diary as it is', () => {
+      const fields = {
+        hatchedAt: '2026-06-03T09:00:00.000Z',
+        careCounts: { 'egg-warm': 3, 'cat-play': 1 },
+        outfitsWorn: ['sprout-cap', 'silk-bow'],
+      }
+      const { creature, repaired } = diaryOf(fields)
+      expect(creature).toMatchObject(fields)
+      expect(repaired).toBe(0)
+    })
+
+    it('keeps the day it hatched only when it is a real moment', () => {
+      for (const odd of ['yesterday', 1780000000000, '2026-06-03', null, '']) {
+        expect(diaryOf({ hatchedAt: odd }).creature).not.toHaveProperty('hatchedAt')
+      }
+    })
+
+    it('counts only care the garden knows, in whole numbers above nought', () => {
+      const { creature } = diaryOf({
+        careCounts: {
+          'egg-warm': 2,
+          'made-up': 4,
+          'cat-play': 0,
+          'cat-tuck': -1,
+          'cat-bath': 1.5,
+          'but-groom': '3',
+          'but-fly': Number.POSITIVE_INFINITY,
+          'chr-sun': 7,
+        },
+      })
+      expect(creature.careCounts).toEqual({ 'egg-warm': 2, 'chr-sun': 7 })
+      for (const odd of [{ 'made-up': 1 }, [], 'many', 5]) {
+        expect(diaryOf({ careCounts: odd }).creature).not.toHaveProperty('careCounts')
+      }
+    })
+
+    it('lists only known pieces, once each, and no more than the diary keeps', () => {
+      const { creature, repaired } = diaryOf({
+        outfitsWorn: ['silk-bow', 'leaf-bundle', 'retired-hat', 7, 'silk-bow', 'sprout-cap'],
+      })
+      // A supply is not a piece, and a piece the shop no longer has is not one.
+      expect(creature.outfitsWorn).toEqual(['silk-bow', 'sprout-cap'])
+      expect(repaired).toBe(0)
+      const many = Array.from({ length: MAX_OUTFITS_WORN + 5 }, () => 'silk-bow')
+      expect(diaryOf({ outfitsWorn: many }).creature.outfitsWorn).toEqual(['silk-bow'])
+      for (const odd of [['retired-hat'], [], 'silk-bow', { 0: 'silk-bow' }]) {
+        expect(diaryOf({ outfitsWorn: odd }).creature).not.toHaveProperty('outfitsWorn')
+      }
+    })
+
+    it('gives an older companion no diary of its own', () => {
+      const { creature } = diaryOf({})
+      for (const field of ['hatchedAt', 'careCounts', 'outfitsWorn']) {
+        expect(creature).not.toHaveProperty(field)
+      }
+    })
+
+    it('keeps the day the diary began only when it is a real moment', () => {
+      const profile = createInitialState('Tester', 'Test Garden').profile!
+      const since = (diarySince: unknown) =>
+        validateGarden(garden({ profile: { ...profile, diarySince } })).state?.profile
+      expect(since('2026-10-27T12:00:00.000Z')?.diarySince).toBe('2026-10-27T12:00:00.000Z')
+      for (const odd of ['today', 1780000000000, '2026-10-27', {}]) {
+        const kept = since(odd)
+        expect(kept).not.toHaveProperty('diarySince')
+        expect(kept?.gardenName).toBe('Test Garden')
+      }
+      const older = { ...profile }
+      delete older.diarySince
+      expect(validateGarden(garden({ profile: older })).state?.profile).not.toHaveProperty(
+        'diarySince',
+      )
+    })
+  })
+
+  describe('saved looks', () => {
+    const sunday = { id: 'sunday', name: 'Sunday best', outfit: { headwear: 'sprout-cap' } }
+
+    it('keeps well-formed looks as the very same list', () => {
+      const stored = garden({ outfitPresets: [sunday] })
+      const result = validateGarden(stored)
+      expect(result.state?.outfitPresets).toBe(stored.outfitPresets)
+      expect(result.repaired).toBe(0)
+      // And the same through a backup's JSON.
+      const restored = validateGarden(JSON.parse(JSON.stringify(stored)))
+      expect(restored.state?.outfitPresets).toEqual([sunday])
+    })
+
+    it('drops unknown slots and pieces, and pieces in the wrong slot', () => {
+      const result = validateGarden(
+        garden({
+          outfitPresets: [
+            {
+              id: 'mixed',
+              name: 'Mixed',
+              outfit: {
+                headwear: 'sprout-cap',
+                accessory: 'sparkle-aura',
+                aura: 'retired-glow',
+                cape: 'silk-bow',
+              },
+            },
+          ],
+        }),
+      )
+      expect(result.state?.outfitPresets).toEqual([
+        { id: 'mixed', name: 'Mixed', outfit: { headwear: 'sprout-cap' } },
+      ])
+    })
+
+    it('drops a look with nothing left in it, no id of its own, or a twin’s id', () => {
+      const result = validateGarden(
+        garden({
+          outfitPresets: [
+            sunday,
+            { ...sunday, name: 'Twin' },
+            { id: 'empty', name: 'Empty', outfit: { headwear: 'retired-hat' } },
+            { id: '', name: 'No id', outfit: sunday.outfit },
+            { name: 'No id', outfit: sunday.outfit },
+            { id: 'no-outfit', name: 'No outfit' },
+            'Sunday best',
+            null,
+          ],
+        }),
+      )
+      expect(result.state?.outfitPresets).toEqual([sunday])
+    })
+
+    it('names a look as the wardrobe names it, giving one with no name a plain one', () => {
+      const result = validateGarden(
+        garden({
+          outfitPresets: [
+            { ...sunday, id: 'padded', name: '  Padded  ' },
+            { ...sunday, id: 'long', name: 'L'.repeat(PRESET_NAME_LENGTH + 20) },
+            { ...sunday, id: 'blank', name: '   ' },
+            { ...sunday, id: 'number', name: 7 },
+            { ...sunday, id: 'extra', name: 'Extra', note: 'not kept' },
+          ],
+        }),
+      )
+      expect(result.state?.outfitPresets?.map((preset) => preset.name)).toEqual([
+        'Padded',
+        'L'.repeat(PRESET_NAME_LENGTH),
+        'Saved look',
+        'Saved look',
+        'Extra',
+      ])
+      expect(result.state?.outfitPresets?.[4]).not.toHaveProperty('note')
+    })
+
+    it('keeps no more looks than the closet holds', () => {
+      const many = Array.from({ length: MAX_OUTFIT_PRESETS + 3 }, (_, index) => ({
+        ...sunday,
+        id: `look-${index}`,
+      }))
+      const result = validateGarden(garden({ outfitPresets: many }))
+      expect(result.state?.outfitPresets).toHaveLength(MAX_OUTFIT_PRESETS)
+      expect(result.state?.outfitPresets?.[0].id).toBe('look-0')
+    })
+
+    it('gives an older garden no looks, and an odd value none either', () => {
+      expect(validateGarden(garden()).state).not.toHaveProperty('outfitPresets')
+      for (const odd of ['looks', 4, { sunday }, null]) {
+        expect(validateGarden(garden({ outfitPresets: odd })).state).not.toHaveProperty(
+          'outfitPresets',
+        )
+      }
+      // An emptied list is kept as the gardener left it.
+      expect(validateGarden(garden({ outfitPresets: [] })).state?.outfitPresets).toEqual([])
+    })
   })
 
   it('still refuses a garden from a newer version, saying so', () => {

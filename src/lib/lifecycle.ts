@@ -1,5 +1,6 @@
 import { getCareAction } from '../data/careActions'
 import type { AppState, CreatureInstance, CreatureStage } from '../types'
+import { countCare, diaryBegun } from './companionDiary'
 import { toLocalDate } from './date'
 
 export const STAGE_ORDER: CreatureStage[] = [
@@ -69,6 +70,28 @@ export function bondProgress(bond: number): number {
   return bond % BOND_PER_LEVEL
 }
 
+/** What the next bond level asks for, and what it brings. */
+export interface BondMilestone {
+  level: number
+  /** Bond still to earn: each act of care gives its own, one or two. */
+  bondToGo: number
+  stardust: number
+  nectar: number
+}
+
+/**
+ * The next bond level from here, read from the same constants performCare
+ * pays out by, so what Care promises is always what a level gives.
+ */
+export function nextBondMilestone(bond: number): BondMilestone {
+  return {
+    level: bondLevel(bond) + 1,
+    bondToGo: BOND_PER_LEVEL - bondProgress(bond),
+    stardust: BOND_LEVEL_STARDUST,
+    nectar: BOND_LEVEL_NECTAR,
+  }
+}
+
 /**
  * Whether the creature is ready to advance: three distinct care days logged
  * in the current stage. Butterflies are the final stage and never advance.
@@ -87,6 +110,9 @@ function advanceCreature(
   return {
     ...creature,
     stage,
+    // Recorded from now on. A companion that hatched before has none, and
+    // its story reads the day from its last egg care (lib/companionStory).
+    ...(stage === 'caterpillar' ? { hatchedAt: now.toISOString() } : {}),
     chrysalisStartedAt:
       stage === 'chrysalis' ? now.toISOString() : creature.chrysalisStartedAt,
     emergedAt: stage === 'butterfly' ? now.toISOString() : creature.emergedAt,
@@ -111,6 +137,8 @@ export interface CareResult {
  * - Any action marks today as a care day for the current stage; three
  *   distinct care days (they need not be consecutive) advance the stage.
  * - Bond accumulates forever; each bond level grants Stardust and Nectar.
+ * - The companion's diary counts the action (lib/companionDiary). Nothing
+ *   above reads that count, so it can never change what care earns.
  */
 export function performCare(
   inputState: AppState,
@@ -153,6 +181,7 @@ export function performCare(
     careDates,
     actionLog: { ...creature.actionLog, [actionId]: localDate },
     bond,
+    careCounts: countCare(creature.careCounts, actionId),
   }
 
   let advancedTo: CreatureStage | undefined
@@ -181,12 +210,13 @@ export function performCare(
     item.id === creatureId ? updated : item,
   )
 
-  const profile =
+  const chosen =
     advancedTo === 'butterfly' &&
     inputState.profile &&
     !inputState.profile.activeCompanionId
       ? { ...inputState.profile, activeCompanionId: updated.id }
       : inputState.profile
+  const profile = diaryBegun(chosen, now)
 
   return {
     state: {

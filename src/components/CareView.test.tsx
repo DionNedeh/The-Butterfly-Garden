@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { shopItems } from '../data/shopItems'
+import { BOND_LEVEL_NECTAR, BOND_LEVEL_STARDUST, BOND_PER_LEVEL } from '../lib/lifecycle'
 import { renameCreature } from '../lib/gardenActions'
 import { createInitialState } from '../lib/progression'
 import type { AppState, CreatureInstance } from '../types'
@@ -15,6 +16,17 @@ function gardenWithCaterpillar(overrides: Partial<AppState> = {}): AppState {
   return { ...base, ...overrides }
 }
 
+/** The saved looks' handlers, doing nothing: most tests are about something else. */
+function lookHandlers() {
+  return {
+    onSavePreset: vi.fn(),
+    onWearPreset: vi.fn(() => ({ worn: [], skipped: [] })),
+    onRenamePreset: vi.fn(),
+    onDeletePreset: vi.fn(),
+    onRestorePreset: vi.fn(),
+  }
+}
+
 function renderCare(state: AppState, overrides: Record<string, unknown> = {}) {
   const handlers = {
     onCare: vi.fn(),
@@ -22,6 +34,7 @@ function renderCare(state: AppState, overrides: Record<string, unknown> = {}) {
     onUnequip: vi.fn(),
     onRenameCreature: vi.fn(),
     onGoToShop: vi.fn(),
+    ...lookHandlers(),
     ...overrides,
   }
   render(<CareView state={state} today={TODAY} {...handlers} />)
@@ -171,6 +184,7 @@ describe('naming a new arrival', () => {
         onUnequip={vi.fn()}
         onRenameCreature={(id, name) => setState((current) => renameCreature(current, id, name))}
         onGoToShop={vi.fn()}
+        {...lookHandlers()}
       />
     )
   }
@@ -237,5 +251,69 @@ describe('naming a new arrival', () => {
       screen.getByRole('region', { name: /name your monarch egg/i }),
     ).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Fern')
+  })
+})
+
+describe('the bond and the companion’s story', () => {
+  function butterfly(bond: number): AppState {
+    const base = createInitialState('Tester', 'Test Garden')
+    return {
+      ...base,
+      creatures: [{ ...base.creatures[0], stage: 'butterfly', bond }],
+    }
+  }
+
+  it('says what the next bond level asks and brings, from the rules', () => {
+    renderCare(butterfly(BOND_PER_LEVEL + 7))
+    const next = document.querySelector('.bond-next')!
+    const seen = next.cloneNode(true) as HTMLElement
+    seen.querySelector('.sr-only')?.remove()
+    expect(seen).toHaveTextContent(
+      `Next bond level: ${BOND_PER_LEVEL - 7} more bond points → ${BOND_LEVEL_STARDUST} Stardust, ${BOND_LEVEL_NECTAR} Nectar`,
+    )
+    // The arrow is drawn for the eye; a screen reader hears a word instead.
+    const heard = next.cloneNode(true) as HTMLElement
+    heard.querySelector('[aria-hidden="true"]')?.remove()
+    expect(heard).toHaveTextContent(
+      `Next bond level: ${BOND_PER_LEVEL - 7} more bond points for ${BOND_LEVEL_STARDUST} Stardust, ${BOND_LEVEL_NECTAR} Nectar`,
+    )
+  })
+
+  it('agrees with one bond point to go', () => {
+    renderCare(butterfly(BOND_PER_LEVEL - 1))
+    expect(document.querySelector('.bond-next')).toHaveTextContent('Next bond level: 1 more bond point')
+  })
+
+  it('shows the bond’s numbers even when the journal keeps its day counts hidden', () => {
+    const state = butterfly(3)
+    renderCare({ ...state, profile: { ...state.profile!, hideDayCounts: true } })
+    expect(document.querySelector('.bond-next')).toHaveTextContent(
+      `${BOND_PER_LEVEL - 3} more bond points`,
+    )
+  })
+
+  it('folds the selected companion’s story under the wardrobe’s saved looks', async () => {
+    const user = userEvent.setup()
+    renderCare(gardenWithCaterpillar())
+    expect(screen.getByRole('heading', { name: 'Saved looks' })).toBeInTheDocument()
+    await user.click(screen.getByText('Sol’s story'))
+    expect(screen.getByText('Welcomed')).toBeInTheDocument()
+    expect(screen.getByText('Days cared for')).toBeInTheDocument()
+  })
+
+  it('hands a look to the garden’s own actions, for the companion chosen', async () => {
+    const user = userEvent.setup()
+    const state = gardenWithCaterpillar({ ownedItemIds: ['sprout-cap'] })
+    const sol = { ...state.creatures[0], outfit: { headwear: 'sprout-cap' } }
+    const handlers = renderCare({
+      ...state,
+      creatures: [sol],
+      outfitPresets: [{ id: 'bow', name: 'Bow', outfit: { accessory: 'silk-bow' } }],
+    })
+    await user.click(screen.getByRole('button', { name: 'Save this look' }))
+    await user.click(screen.getByRole('button', { name: 'Save look' }))
+    expect(handlers.onSavePreset).toHaveBeenCalledWith(sol.id, 'Sol’s look')
+    await user.click(screen.getByRole('button', { name: 'Wear Bow' }))
+    expect(handlers.onWearPreset).toHaveBeenCalledWith(sol.id, 'bow')
   })
 })
