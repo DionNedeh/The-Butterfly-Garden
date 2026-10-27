@@ -103,10 +103,15 @@ function wrappedKeyOf(value: unknown): WrappedKey | 'newer' | undefined {
   const { iterations } = value
   if (typeof iterations !== 'number' || !Number.isSafeInteger(iterations) || iterations < 1) return undefined
   if (iterations > MAX_ITERATIONS) return 'newer'
-  const salt = bytesOf(value.salt)
-  const iv = bytesOf(value.iv)
-  const wrapped = bytesOf(value.wrapped)
-  return salt && iv && wrapped ? { kdf: 'PBKDF2-SHA-256', iterations, salt, iv, wrapped } : undefined
+  // Every byte field of a way in (lib/gardenLock's Slot), as base64 in the copy.
+  const fields = ['salt', 'publicKey', 'privateIv', 'privateKey', 'ephemeral', 'iv', 'wrapped'] as const
+  const bytes: Partial<Record<(typeof fields)[number], Uint8Array>> = {}
+  for (const field of fields) {
+    const read = bytesOf(value[field])
+    if (!read) return undefined
+    bytes[field] = read
+  }
+  return { kdf: 'PBKDF2-SHA-256', iterations, ...(bytes as Record<(typeof fields)[number], Uint8Array>) }
 }
 
 /**

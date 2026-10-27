@@ -17,7 +17,6 @@ import {
 } from './sealedBackup'
 import { deriveKey, fromBase64, seal, toBase64 } from './sealing'
 import { withPhotosAsText } from './sightingPhotos'
-import { ArrayBufferFileReader } from '../test/fileReader'
 
 // Fast for every case but the one that checks the real count.
 const FAST = 1_000
