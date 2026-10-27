@@ -10,12 +10,18 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 ## What is included
 
 - Five-level inner weather check-ins with nothing preselected, plus "Not sure
-  today", and an editable private journal
+  today", optional feeling words and energy, one gentle next step after, and
+  an editable private journal
+- Entries written later for a day that was missed (marked so, and earning
+  nothing), and "On this day" bringing back a month or a year ago
 - A journal you can search (words, kinds of entry, weather, all on the
   device), a weather calendar by month or a year at a glance, and readable
   copies as Markdown, a printable page, or check-ins as a spreadsheet
 - A gentle reminder in Settings when the last backup is a month old, and
   *Share backup…* where the browser can share a file
+- Goal ideas in a balanced mix (the NHS five steps and rest), most with a
+  two-minute version, and up to three starter goals offered when a garden
+  begins
 - One-time, daily, and selected-weekday goals in compact rows, with skip,
   snooze, full editing and archive behind a ⋯ menu (and swipes on a touch
   screen), each of them undoable for a few seconds
@@ -52,7 +58,8 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - IndexedDB persistence with no account, analytics, or cloud transfer
 - Installable offline PWA and GitHub Pages deployment
 - An Android app for Google Play, built with Capacitor from the same code
-- Reduced-motion, night mode, and responsive mobile support
+- Reduced-motion, night mode (by hand, following the device, or following the
+  evening), three text sizes, and responsive mobile support
 
 ## Development
 
