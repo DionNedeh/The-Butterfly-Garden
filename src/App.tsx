@@ -779,6 +779,7 @@ function App() {
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
               onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
+              theme={theme}
             />
           )}
           {activeView === 'care' && (
@@ -813,6 +814,7 @@ function App() {
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
+              onChooseNightBackdrop={garden.chooseNightBackdrop}
             />
           )}
           {activeView === 'flight-patterns' && (
@@ -952,6 +954,7 @@ function App() {
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
               onSetRegion={garden.setRegion}
               onOpenGuide={openGuideAt}
+              onChooseNightBackdrop={garden.chooseNightBackdrop}
             />
           )}
         </Suspense>

@@ -1,11 +1,94 @@
 import {
-  checkSourceFile,
-  checkDecodedSize,
-  fitWithinMaxEdge,
   CUSTOM_BACKDROP_LIMITS,
+  isSupportedMimeType,
+  type CustomBackdropCheck,
+  type CustomBackdropRejection,
 } from './customBackdrops'
 import type { CustomBackdrop, CustomBackdropMimeType } from '../types'
 import { createId } from './id'
+
+// The checks made while an image is chosen live here, with the decoding they
+// guard, rather than in customBackdrops: the garden's first load needs that
+// module to show an image, and none of these until one is added.
+
+const OK: CustomBackdropCheck = { ok: true }
+
+function reject(
+  reason: CustomBackdropRejection,
+  message: string,
+): CustomBackdropCheck {
+  return { ok: false, reason, message }
+}
+
+/**
+ * Whether a chosen file is worth decoding.
+ *
+ * Type and byte size are checked first because both are known without reading
+ * the image, and decoding a very large file is the expensive, memory-hungry
+ * step this is here to avoid.
+ */
+export function checkSourceFile(file: {
+  type: string
+  size: number
+}): CustomBackdropCheck {
+  if (!isSupportedMimeType(file.type)) {
+    return reject(
+      'unsupported-type',
+      'Choose a JPEG, PNG or WebP image from your device.',
+    )
+  }
+  if (
+    !Number.isInteger(file.size) ||
+    file.size <= 0 ||
+    file.size > CUSTOM_BACKDROP_LIMITS.maxSourceBytes
+  ) {
+    return reject(
+      'too-large',
+      'That image is larger than 10 MB. Try a smaller copy.',
+    )
+  }
+  return OK
+}
+
+/** Whether decoded dimensions are within what can be resized safely. */
+export function checkDecodedSize(
+  width: number,
+  height: number,
+): CustomBackdropCheck {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return reject('invalid', 'That image could not be read.')
+  }
+  if (width * height > CUSTOM_BACKDROP_LIMITS.maxMegapixels * 1_000_000) {
+    return reject(
+      'too-many-pixels',
+      'That image has too many pixels to work with here.',
+    )
+  }
+  return OK
+}
+
+/**
+ * The size to resize an image to, preserving its aspect ratio.
+ *
+ * Images already inside the limit are left alone rather than upscaled.
+ */
+export function fitWithinMaxEdge(width: number, height: number) {
+  const longest = Math.max(width, height)
+  if (longest <= CUSTOM_BACKDROP_LIMITS.maxEdge) {
+    return { width: Math.round(width), height: Math.round(height) }
+  }
+  const factor = CUSTOM_BACKDROP_LIMITS.maxEdge / longest
+  return {
+    width: Math.max(1, Math.round(width * factor)),
+    height: Math.max(1, Math.round(height * factor)),
+  }
+}
+
 
 /** Read dimensions before allocating a decoded bitmap. Never trust a file extension. */
 export function imageHeader(bytes: Uint8Array): {
@@ -108,7 +191,38 @@ function base64(blob: Blob): Promise<string> {
   })
 }
 
-export async function prepareBackdrop(file: File): Promise<CustomBackdrop> {
+/** What processing makes: the stored picture, without its name or framing. */
+type BackdropPixels = Pick<
+  CustomBackdrop,
+  'mimeType' | 'width' | 'height' | 'byteLength' | 'imageData'
+>
+
+/**
+ * The canvas transform that turns a picture by quarter turns to the right
+ * (0 to 3), for a canvas already the turned shape: `width` by `height`.
+ *
+ * Whole numbers rather than `rotate()`, whose sine and cosine of a right
+ * angle come out a hair off zero and can soften every pixel of the copy.
+ */
+export function quarterTurnTransform(
+  turns: number,
+  width: number,
+  height: number,
+): [number, number, number, number, number, number] {
+  switch (turns) {
+    case 1:
+      return [0, 1, -1, 0, width, 0]
+    case 2:
+      return [-1, 0, 0, -1, width, height]
+    case 3:
+      return [0, -1, 1, 0, 0, height]
+    default:
+      return [1, 0, 0, 1, 0, 0]
+  }
+}
+
+/** Decode a chosen file, once the checks that keep a huge one from decoding at all have passed. */
+async function decodeFile(file: File): Promise<ImageBitmap> {
   const check = checkSourceFile(file)
   if (!check.ok) throw new Error(check.message)
   const bytes = new Uint8Array(await file.arrayBuffer())
@@ -119,20 +233,44 @@ export async function prepareBackdrop(file: File): Promise<CustomBackdrop> {
     )
   const dimensions = checkDecodedSize(header.width, header.height)
   if (!dimensions.ok) throw new Error(dimensions.message)
-  const bitmap = await createImageBitmap(file)
+  // The browser's default orientation applies the photo's own (EXIF)
+  // rotation as it decodes, so the bitmap is upright as the gardener sees it,
+  // and any quarter turns they ask for go on top. The copy made from it
+  // carries no EXIF, so nothing turns it a second time.
+  return createImageBitmap(file)
+}
+
+/**
+ * Resize, turn and encode a decoded picture, letting go of it afterwards.
+ *
+ * The turn is part of the one draw that resizes, into the one canvas the
+ * resize already needed (its longest edge capped), so turning costs no
+ * second copy in memory and no pass over the pixels in script: a 4096 px
+ * photo turned is the same work as one left as it is. Decoding and encoding
+ * are the browser's, off the main thread.
+ */
+async function processBitmap(
+  bitmap: ImageBitmap,
+  turns: number,
+): Promise<BackdropPixels> {
   try {
     const decoded = checkDecodedSize(bitmap.width, bitmap.height)
     if (!decoded.ok) throw new Error(decoded.message)
     const size = fitWithinMaxEdge(bitmap.width, bitmap.height)
+    const sideways = turns % 2 === 1
     const canvas = document.createElement('canvas')
-    canvas.width = size.width
-    canvas.height = size.height
+    canvas.width = sideways ? size.height : size.width
+    canvas.height = sideways ? size.width : size.height
     try {
       const context = canvas.getContext('2d')
       if (!context)
         throw new Error('Image editing is unavailable in this browser.')
       context.fillStyle = '#f5f0e4'
-      context.fillRect(0, 0, size.width, size.height)
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      if (turns)
+        context.setTransform(
+          ...quarterTurnTransform(turns, canvas.width, canvas.height),
+        )
       context.drawImage(bitmap, 0, 0, size.width, size.height)
       let blob = await encode(canvas, 'image/webp', 0.86)
       if (blob.type !== 'image/webp')
@@ -145,19 +283,12 @@ export async function prepareBackdrop(file: File): Promise<CustomBackdrop> {
         throw new Error(
           'This image is too detailed to fit. Try a smaller image.',
         )
-      const now = new Date().toISOString()
       return {
-        id: createId(),
-        name:
-          file.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'My garden image',
-        createdAt: now,
-        updatedAt: now,
         mimeType: blob.type as CustomBackdropMimeType,
-        width: size.width,
-        height: size.height,
+        width: canvas.width,
+        height: canvas.height,
         byteLength: blob.size,
         imageData: await base64(blob),
-        crop: { x: 0.5, y: 0.5, zoom: 1 },
       }
     } finally {
       canvas.width = 0
@@ -168,14 +299,57 @@ export async function prepareBackdrop(file: File): Promise<CustomBackdrop> {
   }
 }
 
+/** Bytes of a stored image, from its base64. */
+function storedBytes(record: Pick<CustomBackdrop, 'imageData'>): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(record.imageData), (character) =>
+    character.charCodeAt(0),
+  )
+}
+
+export async function prepareBackdrop(
+  file: File,
+  turns = 0,
+): Promise<CustomBackdrop> {
+  const pixels = await processBitmap(await decodeFile(file), turns)
+  const now = new Date().toISOString()
+  return {
+    id: createId(),
+    name: file.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'My garden image',
+    createdAt: now,
+    updatedAt: now,
+    ...pixels,
+    crop: { x: 0.5, y: 0.5, zoom: 1 },
+  }
+}
+
+/**
+ * The picture turned by quarter turns to the right (0 to 3).
+ *
+ * Made from the chosen file when there is one, so a turned photo is encoded
+ * once from the original; otherwise from the stored copy, the only source an
+ * image saved earlier has. Either way the editor keeps its source and asks
+ * for the total turn each time, so turning back and forth never re-encodes
+ * a copy of a copy.
+ */
+export async function turnBackdrop(
+  source: File | CustomBackdrop,
+  turns: number,
+): Promise<BackdropPixels> {
+  const bitmap =
+    'imageData' in source
+      ? await createImageBitmap(
+          new Blob([storedBytes(source)], { type: source.mimeType }),
+        )
+      : await decodeFile(source)
+  return processBitmap(bitmap, turns)
+}
+
 /** A structurally valid backup can still contain corrupt image bytes. Check before replacement. */
 export async function verifyBackdropImages(
   records: readonly CustomBackdrop[],
 ): Promise<void> {
   for (const record of records) {
-    const bytes = Uint8Array.from(atob(record.imageData), (character) =>
-      character.charCodeAt(0),
-    )
+    const bytes = storedBytes(record)
     const header = imageHeader(bytes)
     if (
       header.mime !== record.mimeType ||

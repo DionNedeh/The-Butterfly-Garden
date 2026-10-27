@@ -265,6 +265,7 @@ export function SettingsView({
   onSelectCustomBackdrop,
   onSetRegion,
   onOpenGuide,
+  onChooseNightBackdrop,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -324,6 +325,7 @@ export function SettingsView({
   onSetRegion?: (region: RegionId | undefined) => void
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
+  onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -865,6 +867,7 @@ export function SettingsView({
             onSaveCustomBackdrop={onSaveCustomBackdrop}
             onDeleteCustomBackdrop={onDeleteCustomBackdrop}
             onSelectCustomBackdrop={onSelectCustomBackdrop}
+            onChooseNightBackdrop={onChooseNightBackdrop}
           />
         )}
       <section className="card">

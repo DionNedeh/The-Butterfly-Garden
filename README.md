@@ -53,7 +53,8 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - New eggs arrive with a name of their own, and can be given another
 - On phones, five tabs and a More sheet
 - 25 real butterfly species with field notes, seed guidance, and selectable companions
-- Seven illustrated backdrops and up to three personal images with crop and zoom
+- Seven illustrated backdrops and up to three personal images with crop, zoom,
+  quarter turns and brightness, and a different image by night if you like
 - The Garden Pass: a Google Play subscription in the Android app, and a free
   preview in the PWA (no payment is taken on the web)
 - Five soundscapes synthesised on device — no audio files are downloaded —

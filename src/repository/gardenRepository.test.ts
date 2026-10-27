@@ -729,6 +729,59 @@ describe('garden repository', () => {
       expect(image?.height).toBe(stored.height)
     })
 
+    it("restores an older backup's images exactly, with nothing chosen for the night", () => {
+      // A file from before brightness and the night image: the same envelope,
+      // records without either field.
+      const older = JSON.parse(
+        JSON.stringify({
+          format: 'the-butterfly-garden',
+          exportedAt: '2026-09-09T00:00:00.000Z',
+          appVersion: '3.0.0',
+          garden: {
+            ...fullGarden(),
+            profile: { ...fullGarden().profile!, selectedCustomBackdropId: 'image-1' },
+          },
+        }),
+      ) as unknown
+      const restored = readImportedState(older)
+      expect(restored?.customBackdrops).toEqual([stored])
+      expect(restored?.customBackdrops[0]).not.toHaveProperty('brightness')
+      expect(restored?.profile?.selectedCustomBackdropId).toBe('image-1')
+      expect(restored?.profile).not.toHaveProperty('nightCustomBackdropId')
+    })
+
+    it('carries brightness and the night image through a backup and a save', async () => {
+      const second = { ...stored, id: 'image-2', name: 'By lamplight', brightness: -30 }
+      const garden = {
+        ...fullGarden(),
+        customBackdrops: [{ ...stored, brightness: 10 }, second],
+        profile: {
+          ...fullGarden().profile!,
+          selectedCustomBackdropId: 'image-1',
+          nightCustomBackdropId: 'image-2',
+        },
+      }
+      const file = JSON.parse(
+        JSON.stringify({ format: 'the-butterfly-garden', exportedAt: '2026-10-27T00:00:00.000Z', garden }),
+      ) as unknown
+      const restored = readImportedState(file)
+      expect(restored?.customBackdrops.map((image) => image.brightness)).toEqual([10, -30])
+      expect(restored?.profile?.nightCustomBackdropId).toBe('image-2')
+
+      await gardenRepository.replace(restored!)
+      const reopened = await gardenRepository.load()
+      expect(reopened.status).toBe('loaded')
+      expect(reopened.state.customBackdrops).toEqual(garden.customBackdrops)
+      expect(reopened.state.profile?.nightCustomBackdropId).toBe('image-2')
+    })
+
+    it('restores a backup with a hand-edited brightness, showing that image as taken', () => {
+      const restored = readImportedState({
+        garden: { ...fullGarden(), customBackdrops: [{ ...stored, brightness: 'very' }] },
+      })
+      expect(restored?.customBackdrops[0]).toEqual(stored)
+    })
+
     it('refuses a backup whose images are damaged rather than dropping them', () => {
       // Everything else in a garden can be re-earned or rewritten. A
       // gardener's own photographs cannot, so a restore that quietly discarded

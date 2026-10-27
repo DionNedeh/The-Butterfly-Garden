@@ -1,12 +1,13 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { prepareBackdrop } from '../lib/imageImport'
+import { prepareBackdrop, turnBackdrop } from '../lib/imageImport'
 import type { CustomBackdrop } from '../types'
 import CustomBackdropEditor from './CustomBackdropEditor'
 
-vi.mock('../lib/imageImport', () => ({ prepareBackdrop: vi.fn() }))
+vi.mock('../lib/imageImport', () => ({ prepareBackdrop: vi.fn(), turnBackdrop: vi.fn() }))
 const prepare = vi.mocked(prepareBackdrop)
+const turn = vi.mocked(turnBackdrop)
 
 function image(overrides: Partial<CustomBackdrop> = {}): CustomBackdrop {
   return {
@@ -35,12 +36,19 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function renderEditor(initial?: CustomBackdrop) {
+function renderEditor(initial?: CustomBackdrop, saveLabel?: string) {
   const onSave = vi.fn<(saved: CustomBackdrop) => Promise<{ ok: boolean; message?: string }>>(
     () => Promise.resolve({ ok: true }),
   )
   const onClose = vi.fn()
-  render(<CustomBackdropEditor initial={initial} onSave={onSave} onClose={onClose} />)
+  render(
+    <CustomBackdropEditor
+      initial={initial}
+      onSave={onSave}
+      onClose={onClose}
+      saveLabel={saveLabel}
+    />,
+  )
   return { onSave, onClose, user: userEvent.setup() }
 }
 
@@ -62,6 +70,7 @@ beforeEach(() => {
 
 afterEach(() => {
   prepare.mockReset()
+  turn.mockReset()
   vi.unstubAllGlobals()
 })
 
@@ -246,3 +255,151 @@ describe('closing', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('turning the picture', () => {
+  const turned = {
+    mimeType: 'image/webp' as const,
+    width: 300,
+    height: 400,
+    byteLength: 3,
+    imageData: 'BBBB',
+  }
+  const preview = () => document.querySelector<HTMLImageElement>('.crop-preview img')!
+  const button = (name: string) => screen.getByRole('button', { name, hidden: true })
+
+  it('turns a saved image from its stored copy, keeping focus on the button pressed', async () => {
+    const pending = deferred<typeof turned>()
+    turn.mockReturnValueOnce(pending.promise)
+    const kept = image({ crop: { x: 0.2, y: 0.1, zoom: 1.5 } })
+    const { onSave, user } = renderEditor(kept)
+    const right = button('Turn right')
+    await user.click(right)
+
+    expect(turn).toHaveBeenCalledWith(kept, 1)
+    expect(screen.getByRole('status', { hidden: true })).toHaveTextContent('Turning your image.')
+    // Unavailable while it works, but still where focus is.
+    expect(right).toHaveAttribute('aria-disabled', 'true')
+    expect(right).not.toBeDisabled()
+    expect(right).toHaveFocus()
+    await user.click(right)
+    expect(turn).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      pending.resolve(turned)
+      await pending.promise
+    })
+    expect(preview().src).toContain('BBBB')
+    // The framed part turns with it: near the top left, now the top right.
+    expect(slider('Horizontal position')).toHaveValue('0.9')
+    expect(slider('Vertical position')).toHaveValue('0.2')
+    expect(right).toHaveAttribute('aria-disabled', 'false')
+    expect(right).toHaveFocus()
+
+    // Back to as it was: the stored copy itself, not a new copy of it.
+    await user.click(button('Turn left'))
+    expect(turn).toHaveBeenCalledOnce()
+    expect(preview().src).toContain('AAAA')
+    await user.click(button('Save & use backdrop'))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageData: 'AAAA',
+        width: 400,
+        height: 300,
+        crop: { x: 0.2, y: 0.1, zoom: 1.5 },
+      }),
+    )
+  })
+
+  it('turns a newly chosen picture from the file, and saves it turned', async () => {
+    prepare.mockResolvedValue(image({ name: 'Fresh' }))
+    turn.mockResolvedValue(turned)
+    const { onSave, user } = renderEditor()
+    await user.upload(chooser(), picture)
+    await screen.findByDisplayValue('Fresh')
+
+    await user.click(button('Turn left'))
+    expect(turn).toHaveBeenCalledWith(picture, 3)
+    await waitFor(() => expect(preview().src).toContain('BBBB'))
+    // Every turn is asked of the file, as a total, never of the last copy.
+    await user.click(button('Turn left'))
+    expect(turn).toHaveBeenLastCalledWith(picture, 2)
+    await waitFor(() => expect(button('Turn left')).toHaveAttribute('aria-disabled', 'false'))
+
+    await user.click(button('Save & use backdrop'))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Fresh', imageData: 'BBBB', width: 300, height: 400 }),
+    )
+  })
+
+  it('says why a turn did not work, and keeps the picture as it was', async () => {
+    turn.mockRejectedValueOnce(new Error('This image is too detailed to fit. Try a smaller image.'))
+    const { user } = renderEditor(image())
+    await user.click(button('Turn right'))
+    expect(await screen.findByRole('alert', { hidden: true })).toHaveTextContent('too detailed')
+    expect(preview().src).toContain('AAAA')
+
+    turn.mockRejectedValueOnce('not an error')
+    await user.click(button('Turn right'))
+    expect(await screen.findByRole('alert', { hidden: true })).toHaveTextContent(
+      'That image could not be turned.',
+    )
+  })
+
+  it('lets a newer choice of picture win over a turn still being made', async () => {
+    const pending = deferred<typeof turned>()
+    turn.mockReturnValueOnce(pending.promise)
+    prepare.mockResolvedValue(image({ name: 'Newer', imageData: 'CCCC' }))
+    const { user } = renderEditor(image())
+    await user.click(button('Turn right'))
+    // The chooser is disabled while busy; a change still arriving is honoured.
+    fireEvent.change(chooser(), { target: { files: [picture] } })
+    await screen.findByDisplayValue('Newer')
+    await act(async () => {
+      pending.reject(new Error('stale'))
+      await pending.promise.catch(() => undefined)
+    })
+    expect(preview().src).toContain('CCCC')
+    expect(screen.queryByRole('alert', { hidden: true })).toBeNull()
+  })
+})
+
+describe('brightness', () => {
+  it('lightens or darkens the picture only, says by how much, and saves it', async () => {
+    const { onSave, user } = renderEditor(image())
+    const brightness = slider('Brightness')
+    expect(brightness).toHaveAttribute('aria-valuetext', 'As taken')
+    expect(brightness).toHaveAttribute('min', '-40')
+    expect(brightness).toHaveAttribute('max', '20')
+    const picture = document.querySelector<HTMLImageElement>('.crop-preview img')!
+    expect(picture.style.filter).toBe('')
+
+    fireEvent.change(brightness, { target: { value: '-20' } })
+    expect(brightness).toHaveAttribute('aria-valuetext', '20% darker')
+    expect(screen.getByText('20% darker')).toBeInTheDocument()
+    expect(picture.style.filter).toBe('brightness(0.8)')
+    // The caption standing in for the heading is never filtered.
+    expect(document.querySelector<HTMLElement>('.crop-caption')!.style.filter).toBe('')
+
+    fireEvent.change(brightness, { target: { value: '10' } })
+    expect(brightness).toHaveAttribute('aria-valuetext', '10% brighter')
+    await user.click(screen.getByRole('button', { name: 'Save & use backdrop', hidden: true }))
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ brightness: 10 }))
+  })
+
+  it('saves no brightness at all once it is back to as taken', async () => {
+    const { onSave, user } = renderEditor(image({ brightness: -30 }))
+    expect(slider('Brightness')).toHaveValue('-30')
+    fireEvent.change(slider('Brightness'), { target: { value: '0' } })
+    await user.click(screen.getByRole('button', { name: 'Save & use backdrop', hidden: true }))
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty('brightness')
+  })
+})
+
+describe('saving an image kept for the night', () => {
+  it('says what saving does when it is not choosing the image for the day', () => {
+    renderEditor(image(), 'Save night image')
+    expect(screen.getByRole('button', { name: 'Save night image', hidden: true })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save & use backdrop', hidden: true })).toBeNull()
+  })
+})
+

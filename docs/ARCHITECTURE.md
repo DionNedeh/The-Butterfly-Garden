@@ -56,7 +56,7 @@ tells other tabs which parts it wrote.
 | Ideas for goals, their two-minute versions, a balanced mix | `data/goalSuggestions.ts` (loaded with Today and onboarding only), `lib/goalSuggestions.ts` |
 | Restoring a chosen file | `lib/backupFile.ts` (size and read), `lib/backupPreview.ts` (what it holds) |
 | Suggesting a fresh backup | `lib/backupReminder.ts` (when, and in what words); `lib/shareFile.ts` (*Share backup…* in a browser that can) |
-| A gardener's own images | `lib/imageImport.ts` (header check before decode, resize), `lib/customBackdrops.ts` (limits, crop) |
+| A gardener's own images, by day and by night | `lib/imageImport.ts` (the checks before decoding; resizing and quarter turns in one draw), `lib/customBackdrops.ts` (limits, crop, which image shows by day and which by night), `lib/backdropEdits.ts` (the editor's turns and brightness) |
 | The Garden Pass: who may use what | `lib/gardenPass.ts`, the only access boundary; `lib/passEntitlement.ts`, `lib/playBilling.ts` behind it |
 | Android: back gesture, files, billing | `lib/backNavigation.ts`, `lib/native.ts`, `android/app/src/main/java/…` |
 | Moving the PWA to another address | `lib/hosting.ts`, `docs/moving-the-garden.md` |

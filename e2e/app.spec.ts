@@ -1568,6 +1568,60 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   )
 })
 
+test('a personal image turns, takes a brightness, and shows only by night', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  await enterGarden(page)
+  await goTo(page, 'Shop')
+  await page.getByRole('button', { name: 'Backdrops', exact: true }).click()
+  await page.getByRole('button', { name: /Add your own backdrop/ }).click()
+  const editor = page.getByRole('dialog')
+  await editor
+    .locator('input[type=file]')
+    .setInputFiles('src/assets/garden-cottage-bloom.webp')
+  await editor.getByLabel('Image name').fill('Evening light')
+  // Pressed from the keyboard, the button keeps focus while the turn is made
+  // and after; the turn is in the stored pixels, 1600 by 900 turned upright.
+  const right = editor.getByRole('button', { name: 'Turn right' })
+  await right.focus()
+  await page.keyboard.press('Enter')
+  await expect(editor.locator('.custom-scene-image')).toHaveJSProperty('naturalWidth', 900)
+  await expect(right).toHaveAttribute('aria-disabled', 'false')
+  await expect(right).toBeFocused()
+  const brightness = editor.getByLabel('Brightness')
+  await brightness.fill('-30')
+  await expect(brightness).toHaveAttribute('aria-valuetext', '30% darker')
+  await expect(editor.locator('.custom-scene-image')).toHaveCSS('filter', 'brightness(0.7)')
+  expect(await seriousViolations(page, 'Backdrop editor, turned and darkened')).toEqual([])
+  await editor.getByRole('button', { name: 'Save & use backdrop' }).click()
+  await expect(editor).not.toBeVisible()
+
+  // By day, a built-in scene; by night, the image.
+  await page
+    .locator('.scene-card')
+    .filter({ has: page.getByRole('heading', { name: 'Sunlit Meadow', exact: true }) })
+    .getByRole('button')
+    .click()
+  const byNight = page.getByRole('group', { name: 'By night' })
+  await expect(byNight.getByRole('radio', { name: /^The same as by day/ })).toBeChecked()
+  await byNight.getByRole('radio', { name: 'Evening light' }).check()
+  await expect(byNight.getByRole('radio', { name: 'Evening light' })).toBeChecked()
+  expect(await seriousViolations(page, 'Backdrops by night')).toEqual([])
+
+  await goTo(page, 'Garden')
+  const image = page.locator('.custom-scene-layer img')
+  await expect(image).toHaveCount(0)
+  await page.getByRole('button', { name: 'Switch to night mode' }).click()
+  await expect(image).toBeVisible()
+  await expect(image).toHaveJSProperty('naturalWidth', 900)
+  await expect(image).toHaveCSS('filter', 'brightness(0.7)')
+  // The heading over it is never filtered.
+  await expect(page.locator('.garden-heading h1')).toHaveCSS('filter', 'none')
+  await page.getByRole('button', { name: 'Switch to sunlight mode' }).click()
+  await expect(image).toHaveCount(0)
+})
+
 test('a look saved on one companion is worn by another, and their story kept', async ({
   page,
 }) => {
