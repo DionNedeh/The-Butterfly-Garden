@@ -1,9 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInitialState } from '../lib/progression'
 import type { AppState, Goal } from '../types'
 import { TodayView } from './TodayView'
+import { UNDO_MS } from './UndoToast'
 
 const TODAY = '2026-09-05'
 const YESTERDAY = '2026-09-04'
@@ -31,6 +32,8 @@ function renderToday(state: AppState, overrides: Record<string, unknown> = {}) {
     onWakeGoal: vi.fn(),
     onPlanGoal: vi.fn(),
     onSetGoalArchived: vi.fn(),
+    onUncompleteGoal: vi.fn(),
+    onRestoreGoal: vi.fn(),
     onOpenRecap: vi.fn(),
     moonlightCollected: false,
     ...overrides,
@@ -201,3 +204,119 @@ describe('the Moonlight card on Today', () => {
   })
 })
 
+
+describe('checking in', () => {
+  const mood = (level: 1 | 2 | 3 | 4 | 5, unsure?: true) => ({
+    id: 'm',
+    localDate: TODAY,
+    level,
+    ...(unsure ? { unsure } : {}),
+    note: '',
+    createdAt: '',
+    updatedAt: '',
+  })
+
+  it('chooses nothing for the gardener, and saves only once something is chosen', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    const save = screen.getByRole('button', { name: 'Save check-in' })
+    expect(save).toBeDisabled()
+    expect(screen.getByText(/Choose a weather, or Not sure today/)).toBeInTheDocument()
+    for (const button of screen.getAllByRole('button', { pressed: true })) {
+      expect(button).not.toHaveClass('mood-button')
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Not sure today' }))
+    expect(screen.getByRole('button', { name: 'Not sure today' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(save)
+    expect(onSaveMood).toHaveBeenCalledWith('unsure', '')
+  })
+
+  it('opens on the answer already given today, "not sure" included', () => {
+    renderToday({ ...createInitialState('Tester', 'Test Garden'), moods: [mood(3, true)] })
+    expect(screen.getByRole('button', { name: 'Not sure today' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Update check-in' })).toBeEnabled()
+  })
+
+  it('offers support quietly after a stormy check-in, and only then', async () => {
+    const onOpenSupport = vi.fn()
+    renderToday({ ...createInitialState('Tester', 'Test Garden'), moods: [mood(1)] }, { onOpenSupport })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'If you need support now' }))
+    expect(onOpenSupport).toHaveBeenCalledOnce()
+  })
+
+  it('does not offer support after a brighter day', () => {
+    renderToday({ ...createInitialState('Tester', 'Test Garden'), moods: [mood(4)] }, { onOpenSupport: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'If you need support now' })).toBeNull()
+  })
+})
+
+describe('undo on Today', () => {
+  afterEach(() => vi.useRealTimers())
+
+  const withGoal = (): AppState => ({
+    ...createInitialState('Tester', 'Test Garden'),
+    goals: [
+      goal({ id: 'first', title: 'Open a window', schedule: 'daily' }),
+      goal({ id: 'g', title: 'Water the fern', schedule: 'daily' }),
+    ],
+    completions: [{ id: 'g:2026-09-01', goalId: 'g', localDate: '2026-09-01', completedAt: '' }],
+  })
+
+  it('takes back a goal marked done', async () => {
+    const user = userEvent.setup()
+    const handlers = renderToday(withGoal())
+    await user.click(screen.getByRole('button', { name: 'Complete Water the fern' }))
+    expect(handlers.onCompleteGoal).toHaveBeenCalledWith('g')
+    expect(screen.getByRole('status')).toHaveTextContent('Water the fern marked done.')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onUncompleteGoal).toHaveBeenCalledWith('g', TODAY)
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+
+  it('takes back a skip by skipping again', async () => {
+    const user = userEvent.setup()
+    const handlers = renderToday(withGoal())
+    await user.click(screen.getAllByRole('button', { name: 'Skip' })[1])
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onSkipGoal).toHaveBeenCalledTimes(2)
+  })
+
+  it('puts back a deleted goal where it was, with its history', async () => {
+    const user = userEvent.setup()
+    const state = withGoal()
+    const handlers = renderToday(state)
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(handlers.onDeleteGoal).toHaveBeenCalledWith('g')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onRestoreGoal).toHaveBeenCalledWith(state.goals[1], 1, state.completions)
+  })
+
+  it('brings back an archived goal', async () => {
+    const user = userEvent.setup()
+    const handlers = renderToday(withGoal())
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Open a window archived.')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onSetGoalArchived).toHaveBeenLastCalledWith('first', false)
+  })
+
+  it('lets the offer go after a few seconds, but not while it is being reached for', () => {
+    vi.useFakeTimers()
+    renderToday(withGoal())
+    act(() => screen.getByRole('button', { name: 'Complete Water the fern' }).click())
+    const toast = screen.getByText('Water the fern marked done.').parentElement!
+    fireEvent.pointerEnter(toast)
+    act(() => {
+      vi.advanceTimersByTime(UNDO_MS * 2)
+    })
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument()
+    fireEvent.pointerLeave(toast)
+    act(() => {
+      vi.advanceTimersByTime(UNDO_MS)
+    })
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+})

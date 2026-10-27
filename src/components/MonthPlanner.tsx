@@ -27,6 +27,8 @@ const dayLabelFormat = new Intl.DateTimeFormat(undefined, {
   day: 'numeric',
 })
 const moodGlyphs = ['', '🌧', '🌦', '☁️', '🌤', '☀️']
+/** "Not sure today": a quiet mark that says a check-in happened, nothing more. */
+const UNSURE_GLYPH = '◌'
 
 /**
  * A month at a glance: see which goals land on each day, how past days
@@ -208,7 +210,9 @@ export const MonthPlanner = memo(function MonthPlanner({
               <span className="calendar-day-number">{dayNumber}</span>
               <span className="calendar-day-marks" aria-hidden="true">
                 {info.mood && (
-                  <span className="calendar-mood">{moodGlyphs[info.mood.level]}</span>
+                  <span className="calendar-mood">
+                    {info.mood.unsure ? UNSURE_GLYPH : moodGlyphs[info.mood.level]}
+                  </span>
                 )}
                 {info.sunlight > 0 && <span className="calendar-sun" />}
               </span>

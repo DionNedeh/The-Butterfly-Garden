@@ -8,9 +8,10 @@ export type BackAction =
 
 /**
  * Back walks out one layer at a time: the top open dialog, then a page that
- * was opened from another page back to it (the Moonlight recap to Today, the
- * privacy policy and notices to Settings), then any other page back to the
- * garden. Only from the garden itself does it leave the app.
+ * was opened from another page back to it (the Moonlight recap to Today; the
+ * privacy policy, the notices and the support page to Settings), then any
+ * other page back to the garden. Only from the garden itself does it leave
+ * the app.
  */
 export function backAction(
   view: AppView | undefined,
@@ -20,7 +21,7 @@ export function backAction(
   const top = open.item(open.length - 1) as HTMLDialogElement | null
   if (top) return { kind: 'close-dialog', dialog: top }
   if (view === 'recap') return { kind: 'view', view: 'today' }
-  if (view === 'privacy' || view === 'notices')
+  if (view === 'privacy' || view === 'notices' || view === 'support')
     return { kind: 'view', view: 'settings' }
   if (view && view !== 'garden') return { kind: 'view', view: 'garden' }
   return { kind: 'leave' }

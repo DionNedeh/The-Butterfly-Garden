@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { moodLevels, reflectionPrompts, suggestedGoals } from '../data/content'
 import {
   completionKey,
@@ -18,9 +18,11 @@ import {
 } from '../lib/progression'
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
-import type { AppState, Goal, GoalSchedule, MoodEntry } from '../types'
+import { moodChoiceOf } from '../lib/mood'
+import type { AppState, Goal, GoalSchedule, MoodChoice } from '../types'
 import { Icon } from './Icons'
 import { MonthPlanner } from './MonthPlanner'
+import { UndoToast, type UndoOffer } from './UndoToast'
 
 export function TodayView({
   state,
@@ -36,6 +38,9 @@ export function TodayView({
   onWakeGoal,
   onPlanGoal,
   onSetGoalArchived,
+  onUncompleteGoal,
+  onRestoreGoal,
+  onOpenSupport,
   recap,
   moonlightCollected,
   onOpenRecap,
@@ -43,7 +48,7 @@ export function TodayView({
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
   today: string
-  onSaveMood: (level: MoodEntry['level'], note: string) => void
+  onSaveMood: (choice: MoodChoice, note: string) => void
   onSaveReflection: (promptId: string, body: string) => void
   onAddGoal: (title: string, schedule: GoalSchedule, weekdays?: number[]) => void
   onUpdateGoal: (goal: Goal) => void
@@ -54,6 +59,11 @@ export function TodayView({
   onWakeGoal: (goalId: string) => void
   onPlanGoal: (title: string, scheduledDate: string) => void
   onSetGoalArchived: (goalId: string, archived: boolean) => void
+  /** Take back a completion made today; its Sunlight stays. */
+  onUncompleteGoal: (goalId: string, localDate: string) => void
+  /** Put back a goal just deleted, where it was, with its completions. */
+  onRestoreGoal: (goal: Goal, index: number, completions: AppState['completions']) => void
+  onOpenSupport?: () => void
   /** Undefined when the recap is not on offer at all, as in a read-only garden. */
   recap?: RecapWindow
   moonlightCollected: boolean
@@ -65,8 +75,10 @@ export function TodayView({
   )
   // Seeded from the stored entry, and kept in step with edits made in the
   // journal or another tab -- but never at the cost of something half-typed.
-  const [mood, setMood] = useSyncedDraft<MoodEntry['level']>(
-    existingMood?.level ?? 3,
+  // Nothing is chosen until the gardener chooses: a preselected weather,
+  // with Sunlight for saving, made "Overcast" days nobody actually had.
+  const [mood, setMood] = useSyncedDraft<MoodChoice | undefined>(
+    existingMood ? moodChoiceOf(existingMood) : undefined,
   )
   // Unsaved words are kept as drafts across page changes and reloads, keyed
   // by the day they belong to (lib/drafts.ts).
@@ -81,6 +93,8 @@ export function TodayView({
     existingReflection?.body ?? '',
   )
   const [editingGoal, setEditingGoal] = useState<Goal>()
+  const [undoOffer, setUndoOffer] = useState<UndoOffer>()
+  const dismissUndo = useCallback(() => setUndoOffer(undefined), [])
   const prompt = reflectionPrompts[getDailyPromptIndex(today, reflectionPrompts.length)]
   // One pass over completions instead of a scan per goal per render.
   const completed = useMemo(
@@ -195,6 +209,13 @@ export function TodayView({
             </button>
           ))}
         </div>
+        <button
+          className={`text-button unsure-choice ${mood === 'unsure' ? 'selected' : ''}`}
+          aria-pressed={mood === 'unsure'}
+          onClick={() => setMood('unsure')}
+        >
+          Not sure today
+        </button>
         <label>
           A note, if you want
           <input
@@ -206,13 +227,29 @@ export function TodayView({
         </label>
         <button
           className="primary-button"
+          disabled={mood === undefined}
+          aria-describedby={mood === undefined ? 'mood-choose-hint' : undefined}
           onClick={() => {
+            if (mood === undefined) return
             onSaveMood(mood, moodNote)
             clearDraft(moodNoteKey)
           }}
         >
           {existingMood ? 'Update check-in' : 'Save check-in'}
         </button>
+        {mood === undefined && (
+          <p className="subtle-copy" id="mood-choose-hint">
+            Choose a weather, or Not sure today. Every answer is welcome.
+          </p>
+        )}
+        {existingMood?.level === 1 && !existingMood.unsure && onOpenSupport && (
+          <p className="support-link-note">
+            A stormy day can be a lot to hold.{' '}
+            <button className="text-button" onClick={onOpenSupport}>
+              If you need support now
+            </button>
+          </p>
+        )}
       </section>
 
       <section className="card" aria-labelledby="goals-title">
@@ -239,7 +276,13 @@ export function TodayView({
               >
                 <button
                   className="goal-check"
-                  onClick={() => onCompleteGoal(goal.id)}
+                  onClick={() => {
+                    onCompleteGoal(goal.id)
+                    setUndoOffer({
+                      message: `${goal.title} marked done.`,
+                      undo: () => onUncompleteGoal(goal.id, today),
+                    })
+                  }}
                   disabled={complete || skipped}
                   aria-label={
                     complete ? `${goal.title} completed` : `Complete ${goal.title}`
@@ -265,7 +308,18 @@ export function TodayView({
                     <>
                       <button
                         className="text-button"
-                        onClick={() => onSkipGoal(goal.id)}
+                        onClick={() => {
+                          onSkipGoal(goal.id)
+                          // Skipping toggles, so skipping again is the undo.
+                          setUndoOffer(
+                            skipped
+                              ? undefined
+                              : {
+                                  message: `${goal.title} set aside for today.`,
+                                  undo: () => onSkipGoal(goal.id),
+                                },
+                          )
+                        }}
                         title={
                           skipped
                             ? 'Bring this goal back today'
@@ -361,8 +415,13 @@ export function TodayView({
                 className="text-button"
                 type="button"
                 onClick={() => {
-                  onSetGoalArchived(editingGoal.id, true)
+                  const archived = editingGoal
+                  onSetGoalArchived(archived.id, true)
                   setEditingGoal(undefined)
+                  setUndoOffer({
+                    message: `${archived.title} archived.`,
+                    undo: () => onSetGoalArchived(archived.id, false),
+                  })
                 }}
                 title="Stop showing this goal without losing the days you completed it"
               >
@@ -372,8 +431,20 @@ export function TodayView({
                 className="text-button danger-text"
                 type="button"
                 onClick={() => {
+                  // Kept here, so the undo can put back the goal and every
+                  // day it was completed, exactly where they were.
+                  const deleted = state.goals.find((goal) => goal.id === editingGoal.id)
+                  const index = state.goals.findIndex((goal) => goal.id === editingGoal.id)
+                  const completions = state.completions.filter(
+                    (completion) => completion.goalId === editingGoal.id,
+                  )
                   onDeleteGoal(editingGoal.id)
                   setEditingGoal(undefined)
+                  if (deleted)
+                    setUndoOffer({
+                      message: `${deleted.title} deleted.`,
+                      undo: () => onRestoreGoal(deleted, index, completions),
+                    })
                 }}
                 title="Remove the goal and every record of completing it"
               >
@@ -470,6 +541,7 @@ export function TodayView({
           {existingReflection ? 'Update reflection' : 'Keep this reflection'}
         </button>
       </section>
+      <UndoToast offer={undoOffer} onDone={dismissUndo} />
     </div>
   )
 }

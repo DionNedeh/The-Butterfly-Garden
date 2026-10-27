@@ -3,6 +3,7 @@ import type { Goal } from '../types'
 import {
   addDaysToLocalDate,
   completionKey,
+  daysBetweenLocalDates,
   isGoalDue,
   isGoalPlannedOn,
   isGoalSkipped,
@@ -192,5 +193,14 @@ describe('when the recap opens', () => {
     const { recapOpensAt } = await import('./date')
     expect(recapOpensAt('en-US')).toMatch(/^6\s?PM$/)
     expect(recapOpensAt('en-GB')).toBe('18')
+  })
+})
+
+describe('calendar days between dates', () => {
+  it('counts days, not hours, across months and daylight saving', () => {
+    expect(daysBetweenLocalDates('2026-10-26', '2026-10-27')).toBe(1)
+    expect(daysBetweenLocalDates('2026-02-28', '2026-03-01')).toBe(1)
+    expect(daysBetweenLocalDates('2026-03-07', '2026-03-09')).toBe(2)
+    expect(daysBetweenLocalDates('2026-10-27', '2026-10-26')).toBe(-1)
   })
 })

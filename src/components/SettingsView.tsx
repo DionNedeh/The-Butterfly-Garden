@@ -17,6 +17,7 @@ import {
 import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
+import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
 import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
 import { motionPreference, type MotionPreference } from '../lib/motion'
 import { counted } from '../lib/plural'
@@ -125,6 +126,12 @@ function noteForName(value: string): string | undefined {
     .join('')
 }
 
+/** "10:45 pm" or "22:45", as the gardener's clock shows it. */
+const fadeTimeFormat = new Intl.DateTimeFormat(undefined, {
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
 export function SettingsView({
   state,
   persistence,
@@ -141,6 +148,11 @@ export function SettingsView({
   onOpenWhatsNew,
   onOpenPrivacy,
   onOpenNotices,
+  onOpenSupport,
+  onSetDayCountsHidden,
+  fadeOutMinutes,
+  fadeOutEndsAt,
+  onChooseFadeOut,
   onOpenGardenPass,
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
@@ -170,6 +182,13 @@ export function SettingsView({
   onOpenWhatsNew?: () => void
   onOpenPrivacy?: () => void
   onOpenNotices?: () => void
+  onOpenSupport?: () => void
+  onSetDayCountsHidden?: (hidden: boolean) => void
+  /** The soundscape's fade-out length for this visit, if one is chosen. */
+  fadeOutMinutes?: FadeOutMinutes
+  /** When the fade-out timer runs out, while it is running. */
+  fadeOutEndsAt?: number
+  onChooseFadeOut?: (minutes: FadeOutMinutes | undefined) => void
   onOpenGardenPass?: () => void
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
@@ -433,7 +452,59 @@ export function SettingsView({
             )
           })}
         </fieldset>
+        {onChooseFadeOut && (
+          <div className="fade-out-setting">
+            <label>
+              Fade out after
+              <select
+                value={fadeOutMinutes ?? ''}
+                onChange={(event) =>
+                  onChooseFadeOut(
+                    event.target.value
+                      ? (Number(event.target.value) as FadeOutMinutes)
+                      : undefined,
+                  )
+                }
+              >
+                <option value="">Keep playing</option>
+                {FADE_OUT_CHOICES.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutes} minutes
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="subtle-copy">
+              {fadeOutEndsAt !== undefined
+                ? `The sound fades away at ${fadeTimeFormat.format(fadeOutEndsAt)}.`
+                : fadeOutMinutes
+                  ? 'The timer starts when the sound is turned on.'
+                  : 'Calming ambience that slowly fades, for this visit. It is not a sleep aid.'}
+            </p>
+          </div>
+        )}
       </section>
+
+      {onSetDayCountsHidden && (
+        <section className="card" aria-labelledby="rhythm-settings-title">
+          <p className="eyebrow">Your rhythm</p>
+          <h2 id="rhythm-settings-title">Days and numbers</h2>
+          <label className="toggle-row">
+            <span>
+              <strong>Show day counts</strong>
+              <small>
+                How many days you cared for yourself, in the journal. Turn this
+                off to keep the journal free of numbers.
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={!profile?.hideDayCounts}
+              onChange={(event) => onSetDayCountsHidden(!event.target.checked)}
+            />
+          </label>
+        </section>
+      )}
 
       {onSaveCustomBackdrop &&
         onDeleteCustomBackdrop &&
@@ -787,6 +858,11 @@ export function SettingsView({
           <button className="text-button" onClick={onOpenNotices}>
             Open-source notices
           </button>
+          {onOpenSupport && (
+            <button className="text-button" onClick={onOpenSupport}>
+              If you need support now
+            </button>
+          )}
         </div>
       </section>
 

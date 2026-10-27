@@ -7,6 +7,7 @@ import {
   backdropUnlockDays,
   daysUntilBackdrop,
   effectiveBackdropId,
+  elapsedGardenDays,
   progressAppearance,
   unlockedBackdropIds,
 } from './appearance'
@@ -168,5 +169,17 @@ describe('backdrops that depend on pass access', () => {
     // Waiting is not how it is obtained, so a countdown would be misleading.
     expect(backdropUnlockDays(passScene)).toBe(0)
     expect(daysUntilBackdrop(passProfile(), PASS_SCENE_ID, later)).toBe(0)
+  })
+})
+
+describe('the age of a garden', () => {
+  it('counts local calendar days, so an evening garden is a day old next morning', () => {
+    const evening = {
+      ...createInitialState('Robin', 'Age').profile!,
+      createdAt: new Date(2026, 9, 26, 22, 30).toISOString(),
+    }
+    expect(elapsedGardenDays(evening, new Date(2026, 9, 26, 23, 59))).toBe(0)
+    expect(elapsedGardenDays(evening, new Date(2026, 9, 27, 7, 0))).toBe(1)
+    expect(elapsedGardenDays({ ...evening, createdAt: 'not a date' }, new Date())).toBe(0)
   })
 })

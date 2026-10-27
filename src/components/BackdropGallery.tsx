@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useState, type CSSProperties } from 'react'
 import type { AppState, CustomBackdrop, GardenBackdropId } from '../types'
 import {
   availableBackdropIds,
+  backdropUnlockDays,
   daysUntilBackdrop,
   gardenBackdrops,
 } from '../lib/appearance'
@@ -55,6 +56,11 @@ export function BackdropGallery({
             state.profile?.selectedBackdropId === scene.id &&
             !state.profile.selectedCustomBackdropId
           const allowed = available.includes(scene.id)
+          // A scene that grows with the garden shows how far along it is.
+          const waitDays = backdropUnlockDays(scene)
+          const daysLeft =
+            state.profile && waitDays > 0 ? daysUntilBackdrop(state.profile, scene.id) : 0
+          const ripeness = waitDays > 0 ? Math.round((100 * (waitDays - daysLeft)) / waitDays) : 0
           return (
             <article
               className={`scene-card ${selected ? 'selected' : ''}`}
@@ -112,7 +118,16 @@ export function BackdropGallery({
                           ? isAndroidApp()
                             ? 'With the Garden Pass'
                             : 'Garden Pass unavailable'
-                          : `Opens in ${counted(state.profile ? daysUntilBackdrop(state.profile, scene.id) : 0, 'day', 'days')}`}
+                          : (
+                              <>
+                                <span
+                                  className="unlock-ring"
+                                  style={{ '--ripeness': `${ripeness}%` } as CSSProperties}
+                                  aria-hidden="true"
+                                />
+                                {`Opens in ${counted(daysLeft, 'day', 'days')}`}
+                              </>
+                            )}
                 </button>
               </div>
             </article>

@@ -7,7 +7,7 @@ import {
   MOONLIGHT_STARDUST_REWARD,
   sunlightForDate,
 } from '../lib/progression'
-import { calculateSunlightStreak } from '../lib/streak'
+import { describeDay } from '../lib/daySummary'
 import type { AppState, MoodEntry } from '../types'
 import { Icon } from './Icons'
 
@@ -92,17 +92,7 @@ export function MoonlightRecap({
 
   const closingAnotherDay = targetDate !== today
   const sunlight = sunlightForDate(state, targetDate)
-  const streak = useMemo(
-    () => calculateSunlightStreak(state.sunlight, targetDate),
-    [state.sunlight, targetDate],
-  )
-  const goalsCaredFor = useMemo(
-    () =>
-      state.completions.filter(
-        (completion) => completion.localDate === targetDate,
-      ).length,
-    [state.completions, targetDate],
-  )
+  const dayInWords = useMemo(() => describeDay(state, targetDate), [state, targetDate])
 
   const last = steps.length - 1
   const current = steps[step]
@@ -172,31 +162,20 @@ export function MoonlightRecap({
         {current.helper && <p className="recap-helper">{current.helper}</p>}
 
         {step === 0 && (
-          <ul className="recap-summary">
-            <li>
-              <Icon name="sun" size={20} />
-              <span>
-                <strong>
-                  {sunlight} / {DAILY_SUNLIGHT_CAP}
-                </strong>
-                Sunlight earned
-              </span>
-            </li>
-            <li>
-              <Icon name="leaf" size={20} />
-              <span>
-                <strong>{goalsCaredFor}</strong>
-                {goalsCaredFor === 1 ? 'act of care' : 'acts of care'}
-              </span>
-            </li>
-            <li>
-              <Icon name="sparkle" size={20} />
-              <span>
-                <strong>{streak.days}</strong>
-                {streak.days === 1 ? 'day streak' : 'days in a row'}
-              </span>
-            </li>
-          </ul>
+          <>
+            <p className="recap-day-words">{dayInWords}</p>
+            <ul className="recap-summary">
+              <li>
+                <Icon name="sun" size={20} />
+                <span>
+                  <strong>
+                    {sunlight} / {DAILY_SUNLIGHT_CAP}
+                  </strong>
+                  Sunlight earned
+                </span>
+              </li>
+            </ul>
+          </>
         )}
 
         {step === 1 && (

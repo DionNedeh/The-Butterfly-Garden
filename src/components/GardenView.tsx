@@ -22,6 +22,8 @@ import {
 import type { AppState, OutfitSlot } from '../types'
 import {
   PLANT_CAPACITY,
+  plantEggNote,
+  plantingBlocker,
   plantRemovalBlocker,
   remainingPlantGrowth,
 } from '../lib/plantManagement'
@@ -179,6 +181,9 @@ export function GardenView({
   const removalBlocker = selectedPlant
     ? plantRemovalBlocker(state, selectedPlant.id)
     : undefined
+  const eggNote = selectedPlant
+    ? plantEggNote(state, selectedPlant, MAX_PLANT_GROWTH)
+    : undefined
   const visiblePlants = state.plants.slice(0, PLANT_CAPACITY)
   const visiblePlantIds = new Set(visiblePlants.map((plant) => plant.id))
   const selectedPlantIsVisible = selectedPlant
@@ -268,6 +273,7 @@ export function GardenView({
   }, [sceneId])
 
   const gardenFull = state.plants.length >= PLANT_CAPACITY
+  const plantBlocker = plantingBlocker(state, PLANT_SEED_COST)
 
   return (
     <div className="view garden-view">
@@ -421,16 +427,16 @@ export function GardenView({
         <button
           className="secondary-button compact"
           onClick={() => setShowSeedTray((value) => !value)}
-          disabled={state.seeds < 1 || gardenFull}
+          disabled={Boolean(plantBlocker)}
+          aria-describedby={plantBlocker ? 'planting-blocker' : undefined}
           aria-expanded={showSeedTray}
         >
           Plant a seed
         </button>
       </section>
-      {gardenFull && (
-        <p className="capacity-note" role="status">
-          Your garden has all {PLANT_CAPACITY} plant spaces filled. Select an
-          eligible plant below and remove it before planting another seed.
+      {plantBlocker && (
+        <p className="capacity-note" id="planting-blocker">
+          {plantBlocker}
         </p>
       )}
       <p className="seed-economy-note">
@@ -523,6 +529,12 @@ export function GardenView({
                     : 'Adult butterflies visiting for nectar'}
                 </dd>
               </div>
+              {eggNote && (
+                <div>
+                  <dt>Eggs</dt>
+                  <dd>{eggNote}</dd>
+                </div>
+              )}
               <div>
                 <dt>Planted</dt>
                 <dd>

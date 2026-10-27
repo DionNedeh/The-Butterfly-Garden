@@ -40,6 +40,8 @@ export type AppView =
   /** Reached from Settings → About. */
   | 'privacy'
   | 'notices'
+  /** "If you need support now": from Settings, the Guide and Today. */
+  | 'support'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
@@ -117,6 +119,11 @@ export interface Profile {
   selectedCustomBackdropId?: string
   /** The newest release notes this gardener has already seen. */
   lastSeenReleaseId?: string
+  /**
+   * Keep the journal free of day counts: the rhythm card says nothing of how
+   * many days. Optional, so an older garden reads as counts shown.
+   */
+  hideDayCounts?: boolean
 }
 
 /** Image formats a garden image may be stored as. */
@@ -188,10 +195,18 @@ export interface MoodEntry {
   id: string
   localDate: string
   level: 1 | 2 | 3 | 4 | 5
+  /**
+   * The gardener chose "Not sure today". `level` is then the middle level,
+   * so a build that predates this field reads an ordinary, neutral day.
+   */
+  unsure?: true
   note: string
   createdAt: string
   updatedAt: string
 }
+
+/** A check-in answer: one of the five weathers, or not sure. */
+export type MoodChoice = MoodEntry['level'] | 'unsure'
 
 export interface ReflectionEntry {
   id: string

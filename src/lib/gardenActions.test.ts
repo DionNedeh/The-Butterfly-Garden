@@ -78,6 +78,33 @@ describe('goals', () => {
     expect(deleted.completions).toEqual([])
   })
 
+  it('takes back a completion without taking back its Sunlight, or paying twice', () => {
+    const before = garden({ goals: [goal()] })
+    const done = act.completeGoal(before, 'g1', NOW)
+    const undone = act.uncompleteGoal(done, 'g1', TODAY)
+    expect(undone.completions).toEqual([])
+    expect(undone.sunlight).toEqual(done.sunlight)
+    expect(act.uncompleteGoal(undone, 'g1', TODAY)).toBe(undone)
+    // Completing again counts the goal, and earns nothing more.
+    expect(act.completeGoal(undone, 'g1', NOW).sunlight).toHaveLength(1)
+  })
+
+  it('puts a deleted goal back where it was, with its completions', () => {
+    const completion = { id: 'g2:2026-10-25', goalId: 'g2', localDate: '2026-10-25', completedAt: '' }
+    const before = garden({
+      goals: [goal(), goal({ id: 'g2', title: 'Second' }), goal({ id: 'g3' })],
+      completions: [completion],
+    })
+    const deleted = act.deleteGoal(before, 'g2')
+    const restored = act.restoreGoal(deleted, before.goals[1], 1, [completion])
+    expect(restored.goals.map((item) => item.id)).toEqual(['g1', 'g2', 'g3'])
+    expect(restored.completions).toEqual([completion])
+    // A goal already back is not doubled.
+    expect(act.restoreGoal(restored, before.goals[1], 1, [completion])).toBe(restored)
+    // An index past the end lands at the end.
+    expect(act.restoreGoal(deleted, before.goals[1], 99, []).goals.at(-1)?.id).toBe('g2')
+  })
+
   it('completes a goal once a day and earns Sunlight for it', () => {
     const before = garden({ goals: [goal()] })
     const once = act.completeGoal(before, 'g1', NOW)
@@ -105,6 +132,16 @@ describe('the journal', () => {
     const again = act.saveReflection(first, 'notice', 'The rain', NOW)
     expect(again.reflections).toHaveLength(1)
     expect(again.reflections[0].body).toBe('The rain')
+  })
+
+  it('records "not sure" as an answer that earns the same Sunlight', () => {
+    const unsure = act.saveMood(garden(), 'unsure', '', NOW)
+    expect(unsure.moods[0]).toMatchObject({ level: 3, unsure: true })
+    expect(unsure.sunlight).toHaveLength(1)
+    // Choosing a weather later the same day clears the flag.
+    const sure = act.saveMood(unsure, 2, '', new Date(2026, 9, 26, 20))
+    expect(sure.moods[0].level).toBe(2)
+    expect(sure.moods[0].unsure).toBeUndefined()
   })
 
   it('stamps an edit and deletes an entry', () => {
@@ -181,6 +218,21 @@ describe('the gardener and their companions', () => {
       reducedMotion: true,
       calmMotion: false,
     })
+  })
+
+  it('hides and shows day counts, and switches sound to a given state', () => {
+    const hidden = act.setDayCountsHidden(garden(), true)
+    expect(hidden.profile?.hideDayCounts).toBe(true)
+    expect(act.setDayCountsHidden(hidden, true)).toBe(hidden)
+    expect(act.setDayCountsHidden(hidden, false).profile?.hideDayCounts).toBe(false)
+
+    const on = act.setAmbientSound(garden(), true)
+    expect(on.profile?.ambientSound).toBe(true)
+    expect(act.setAmbientSound(on, true)).toBe(on)
+    expect(act.setAmbientSound(on, false).profile?.ambientSound).toBe(false)
+    const empty = garden({ profile: undefined })
+    expect(act.setDayCountsHidden(empty, true)).toBe(empty)
+    expect(act.setAmbientSound(empty, true)).toBe(empty)
   })
 
   it('remembers release notes read, writing nothing the second time', () => {

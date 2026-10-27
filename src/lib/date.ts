@@ -44,6 +44,18 @@ export function addDaysToLocalDate(localDate: string, days: number): string {
   return toLocalDate(noon)
 }
 
+/**
+ * Calendar days from one local date to another: 1 from Monday to Tuesday,
+ * whatever the hours, and unbothered by a daylight-saving change between.
+ */
+export function daysBetweenLocalDates(from: string, to: string): number {
+  const utc = (localDate: string) => {
+    const [year, month, day] = localDate.split('-').map(Number)
+    return Date.UTC(year, month - 1, day)
+  }
+  return Math.round((utc(to) - utc(from)) / 86_400_000)
+}
+
 /** The hour the Moonlight recap becomes available, in local time. */
 export const RECAP_OPENS_HOUR = 18
 

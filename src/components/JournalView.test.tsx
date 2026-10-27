@@ -245,3 +245,49 @@ describe('recaps in the journal', () => {
   })
 })
 
+
+describe('the rhythm of care', () => {
+  const award = (localDate: string) => ({ id: localDate, localDate, source: `mood:${localDate}`, awardedAt: '' })
+
+  it('counts days cared for without ever showing a broken streak', () => {
+    const today = new Date()
+    const iso = (offset: number) => {
+      const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset)
+      return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    }
+    // Yesterday was missed; the old streak would read nothing at all today.
+    renderJournal({
+      ...createInitialState('Tester', 'Test Garden'),
+      sunlight: [award(iso(2)), award(iso(3)), award(iso(4))],
+    })
+    expect(screen.getByRole('heading', { name: 'Your rhythm' })).toBeInTheDocument()
+    expect(screen.getByLabelText('3 of the last 7 days cared for')).toBeInTheDocument()
+    expect(screen.getByText(/longest run so far is 3 days/)).toBeInTheDocument()
+    expect(screen.queryByText(/streak/i)).toBeNull()
+  })
+
+  it('keeps the journal free of numbers when the gardener asks', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    renderJournal({ ...seed, profile: { ...seed.profile!, hideDayCounts: true } })
+    expect(screen.getByText(/Day counts are hidden, as you chose/)).toBeInTheDocument()
+    expect(screen.queryByText(/of the last 7/)).toBeNull()
+  })
+})
+
+describe('a check-in that was not sure', () => {
+  it('reads "Not sure", and can be changed to a weather or back', async () => {
+    const user = userEvent.setup()
+    const unsure: MoodEntry = { ...mood('2026-03-01', 'Hard to say'), level: 3, unsure: true }
+    const { onUpdateMood } = renderJournal({ ...createInitialState('Tester', 'Test Garden'), moods: [unsure] })
+    expect(screen.getByText('Not sure')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const select = screen.getByLabelText('Inner weather')
+    expect(select).toHaveValue('unsure')
+    await user.selectOptions(select, '5')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    const saved = onUpdateMood.mock.calls[0][0] as MoodEntry
+    expect(saved.level).toBe(5)
+    expect(saved.unsure).toBeUndefined()
+  })
+})

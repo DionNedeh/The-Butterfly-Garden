@@ -7,8 +7,16 @@ import {
 } from '../data/content'
 import { formatJournalDate } from '../lib/date'
 import { useLocalDate } from '../hooks/useLocalDate'
-import { calculateSunlightStreak } from '../lib/streak'
-import type { AppState, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
+import { moodChoiceOf, moodName, UNSURE_MOOD_NAME, withMoodChoice } from '../lib/mood'
+import { counted } from '../lib/plural'
+import { careRhythm } from '../lib/rhythm'
+import type {
+  AppState,
+  MoodChoice,
+  MoodEntry,
+  RecapEntry,
+  ReflectionEntry,
+} from '../types'
 import { Butterfly } from './Butterfly'
 import { Icon } from './Icons'
 
@@ -87,10 +95,8 @@ export function JournalView({
     () => new Map(emerged.map((creature) => [creature.speciesId, creature])),
     [emerged],
   )
-  const streak = useMemo(
-    () => calculateSunlightStreak(state.sunlight, today),
-    [state.sunlight, today],
-  )
+  const rhythm = useMemo(() => careRhythm(state.sunlight, today), [state.sunlight, today])
+  const hideCounts = state.profile?.hideDayCounts === true
 
   return (
     <div className="view journal-view">
@@ -158,29 +164,39 @@ export function JournalView({
         </div>
       </details>
 
-      <section className="card streak-card" aria-labelledby="streak-title">
+      {/* A rhythm rather than a streak: nothing here falls back to zero after
+          a missed day (lib/rhythm.ts). */}
+      <section className="card streak-card" aria-labelledby="rhythm-title">
         <div className="streak-icon">
           <Icon name="sun" size={30} />
         </div>
         <div className="streak-copy">
           <p className="eyebrow">Daily care</p>
-          <h2 id="streak-title">Sunlight streak</h2>
-          <p>
-            One Sunlight keeps your streak growing. Miss a full local calendar
-            day and it begins again.
-          </p>
+          <h2 id="rhythm-title">Your rhythm</h2>
+          {hideCounts ? (
+            <p>
+              Day counts are hidden, as you chose. Every act of care still
+              grows your garden.
+            </p>
+          ) : (
+            <p>
+              Days you cared for yourself: {rhythm.lastSeven} of the last 7 ·{' '}
+              {rhythm.thisMonth} this month. A missed day never sets this back.
+              {rhythm.longestRun > 1 &&
+                ` Your longest run so far is ${counted(rhythm.longestRun, 'day', 'days')}.`}
+            </p>
+          )}
         </div>
-        <div className="streak-count" aria-label={`${streak.days} day streak`}>
-          <strong>{streak.days}</strong>
-          <span>{streak.days === 1 ? 'day' : 'days'}</span>
-          <small>
-            {streak.completedToday
-              ? 'Today is counted'
-              : streak.days > 0
-                ? 'Earn Sunlight today'
-                : 'Begin with one Sunlight'}
-          </small>
-        </div>
+        {!hideCounts && (
+          <div
+            className="streak-count"
+            aria-label={`${rhythm.lastSeven} of the last 7 days cared for`}
+          >
+            <strong>{rhythm.lastSeven}</strong>
+            <span>of the last 7</span>
+            <small>{counted(rhythm.thisMonth, 'day', 'days')} this month</small>
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="timeline-title">
@@ -223,14 +239,16 @@ export function JournalView({
                           <label>
                             Inner weather
                             <select
-                              value={editingMood.level}
+                              value={moodChoiceOf(editingMood)}
                               onChange={(event) =>
-                                setEditingMood({
-                                  ...editingMood,
-                                  level: Number(
-                                    event.target.value,
-                                  ) as MoodEntry['level'],
-                                })
+                                setEditingMood(
+                                  withMoodChoice(
+                                    editingMood,
+                                    event.target.value === 'unsure'
+                                      ? 'unsure'
+                                      : (Number(event.target.value) as MoodChoice),
+                                  ),
+                                )
                               }
                             >
                               {moodNames.map((name, index) => (
@@ -238,6 +256,7 @@ export function JournalView({
                                   {name}
                                 </option>
                               ))}
+                              <option value="unsure">{UNSURE_MOOD_NAME}</option>
                             </select>
                           </label>
                           <label>
@@ -270,11 +289,11 @@ export function JournalView({
                         <>
                           <div>
                             <span
-                              className={`weather small weather-${mood.level}`}
+                              className={`weather small weather-${moodChoiceOf(mood)}`}
                               aria-hidden="true"
                             />
                             <div>
-                              <strong>{moodNames[mood.level - 1]}</strong>
+                              <strong>{moodName(moodChoiceOf(mood))}</strong>
                               {mood.note && <p>{mood.note}</p>}
                             </div>
                           </div>
