@@ -79,6 +79,7 @@ export function TodayView({
   recap,
   moonlightCollected,
   onOpenRecap,
+  openAtCheckIn = false,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -108,6 +109,8 @@ export function TodayView({
   recap?: RecapWindow
   moonlightCollected: boolean
   onOpenRecap: () => void
+  /** Opened by the "Check in" shortcut: start at the weather question. */
+  openAtCheckIn?: boolean
 }) {
   const existingMood = state.moods.find((entry) => entry.localDate === today)
   const existingReflection = state.reflections.find(
@@ -152,6 +155,7 @@ export function TodayView({
   // The first goal "Show the other goals" revealed, to take focus.
   const revealFrom = useRef<number | undefined>(undefined)
   const goalsHeading = useRef<HTMLHeadingElement>(null)
+  const checkInHeading = useRef<HTMLHeadingElement>(null)
   const goalList = useRef<HTMLDivElement>(null)
   const gentleToggle = useRef<HTMLInputElement>(null)
   // One pass over completions instead of a scan per goal per render.
@@ -237,6 +241,12 @@ export function TodayView({
       undo: () => onSetGoalArchived(goal.id, false),
     })
   }
+
+  // The "Check in" shortcut skips past everything else on the page, the way
+  // a skip link would: the question is read out, and the weathers are next.
+  useEffect(() => {
+    if (openAtCheckIn) checkInHeading.current?.focus()
+  }, [openAtCheckIn])
 
   // Focus that had to wait for the page to redraw: a control that removed
   // itself or its row would otherwise leave focus on the page's body.
@@ -337,7 +347,9 @@ export function TodayView({
 
       <section className="card" aria-labelledby="mood-title">
         <p className="eyebrow">No right answer</p>
-        <h2 id="mood-title">What is your inner weather?</h2>
+        <h2 id="mood-title" ref={checkInHeading} tabIndex={-1}>
+          What is your inner weather?
+        </h2>
         <div className="mood-grid">
           {moodLevels.map((item) => (
             <button

@@ -76,6 +76,23 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     expect(window.location.hash).toBe('')
   })
 
+  it("reaches the pages behind the dock's More, and More stands for them", async () => {
+    const user = await openGarden()
+    const dock = within(screen.getByRole('navigation', { name: 'Mobile navigation' }))
+    const more = dock.getByRole('button', { name: 'More' })
+    await user.click(more)
+    await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Settings' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' }, { timeout: 3000 })).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/settings')
+    expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull()
+    expect(more).toHaveAttribute('aria-current', 'page')
+    expect(more).toHaveFocus()
+
+    await user.click(dock.getByRole('button', { name: 'Today' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Today' }, { timeout: 3000 })).toBeInTheDocument()
+    expect(more).not.toHaveAttribute('aria-current')
+  })
+
   it('follows Back to the page before', async () => {
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Journal' }))
@@ -202,4 +219,33 @@ describe('arriving at an address', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     await openGardenAt('Today')
     await waitFor(() => expect(window.location.hash).toBe('#/today'))
   })
+
+  it('opens the "Check in" shortcut on Today, at the weather question', async () => {
+    window.history.replaceState(null, '', '/#/today/check-in')
+    await openGardenAt('Today')
+    expect(screen.getByRole('heading', { name: 'What is your inner weather?' })).toHaveFocus()
+    expect(window.location.hash).toBe('#/today/check-in')
+  })
+})
+
+describe('the backup reminder in the navigation', () => {
+  it('marks Settings, quietly, once a fresh copy is due, and not before', async () => {
+    const seed = stored()
+    const longAgo = new Date(Date.now() - 40 * 86_400_000).toISOString()
+    await openGarden({ ...seed, profile: { ...seed.profile!, createdAt: longAgo } })
+    expect(
+      primaryNav().getByRole('button', { name: 'Settings, time for a fresh copy' }),
+    ).toBeInTheDocument()
+  }, WHOLE_APP_TIMEOUT_MS)
+
+  it('says nothing while the last copy is recent', async () => {
+    const seed = stored()
+    const longAgo = new Date(Date.now() - 40 * 86_400_000).toISOString()
+    const recently = new Date(Date.now() - 2 * 86_400_000).toISOString()
+    await openGarden({
+      ...seed,
+      profile: { ...seed.profile!, createdAt: longAgo, lastBackupAt: recently },
+    })
+    expect(primaryNav().getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+  }, WHOLE_APP_TIMEOUT_MS)
 })

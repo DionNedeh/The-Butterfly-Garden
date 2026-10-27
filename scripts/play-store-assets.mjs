@@ -82,6 +82,23 @@ function nav(page) {
   return page.locator('nav[aria-label$="navigation" i]:visible').first()
 }
 
+/**
+ * A page by its label, as a gardener reaches it: from its tab, or on a phone
+ * from the More sheet, where Shop, Flight, Guide and Settings live.
+ */
+async function open(page, label) {
+  const tab = nav(page).getByRole('button', { name: new RegExp(`^${label}(,|$)`) })
+  if (await tab.isVisible()) {
+    await tab.click()
+    return
+  }
+  await nav(page).getByRole('button', { name: /^More(,|$)/ }).click()
+  await page
+    .getByRole('dialog', { name: 'More' })
+    .getByRole('button', { name: new RegExp(`^${label}(,|$)`) })
+    .click()
+}
+
 async function settle(page, ms = 1800) {
   // Entrance animations finish and butterflies spread out across the scene.
   await page.waitForTimeout(ms)
@@ -188,7 +205,7 @@ async function screenshots() {
   await settle(page)
   await page.screenshot({ path: new URL('04-journal.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
 
-  await nav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await open(page, 'Shop')
   await page.getByRole('button', { name: 'Boutique', exact: true }).click()
   await scrollToSection(page, '.boutique-card')
   await settle(page)
@@ -199,7 +216,7 @@ async function screenshots() {
   await settle(page, 5000)
   await page.screenshot({ path: new URL('06-night-garden.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
 
-  await nav(page).getByRole('button', { name: 'Guide', exact: true }).click()
+  await open(page, 'Guide')
   await scrollToSection(page, '.species-grid', { exact: true })
   await settle(page)
   await page.screenshot({ path: new URL('07-guide.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })

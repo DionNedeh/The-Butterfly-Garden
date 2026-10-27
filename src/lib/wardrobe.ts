@@ -1,49 +1,53 @@
 import { getShopItem } from '../data/shopItems'
-import { balanceFor } from './currency'
 import {
   canWearItem,
   hasGardenPassFeature,
   type GardenPassProvider,
 } from './gardenPass'
+import { payFor, refuse, type PurchaseResult } from './purchase'
 import type { AppState, CreatureInstance, OutfitSlot } from '../types'
 
 /**
- * Buy a shop item. Supplies stack in the inventory; cosmetics are one-time
- * purchases added to the shared closet.
+ * Buy a shop item, and say how it went. Supplies stack in the inventory and
+ * can be bought several at a time, priced exactly; cosmetics are one-time
+ * purchases added to the shared closet, so they are bought one at a time.
  *
  * Pass items are still rejected here, and deliberately so: they are reached
  * through pass access, not bought for nothing. Routing a zero-cost pass item
  * through this function would add it to `ownedItemIds` and turn a grant that
  * should end with the pass into permanent ownership.
  */
-export function purchaseShopItem(state: AppState, itemId: string): AppState {
+export function buyShopItem(
+  state: AppState,
+  itemId: string,
+  quantity = 1,
+): PurchaseResult {
   const item = getShopItem(itemId)
-  if (!item || item.premium) return state
-  if (item.kind === 'cosmetic' && state.ownedItemIds.includes(itemId)) {
-    return state
-  }
+  if (!item) return refuse(state, { kind: 'unavailable', reason: 'unknown' })
+  if (item.premium) return refuse(state, { kind: 'unavailable', reason: 'pass' })
+  const supply = item.kind === 'supply'
+  if (!Number.isInteger(quantity) || quantity < 1 || (!supply && quantity !== 1))
+    return refuse(state, { kind: 'unavailable', reason: 'unknown' })
+  if (!supply && state.ownedItemIds.includes(itemId))
+    return refuse(state, { kind: 'owned' })
+  return payFor(
+    state,
+    { cost: item.cost * quantity, currency: item.currency, quantity },
+    () =>
+      supply
+        ? {
+            inventory: {
+              ...state.inventory,
+              [itemId]: (state.inventory[itemId] ?? 0) + quantity,
+            },
+          }
+        : { ownedItemIds: [...state.ownedItemIds, itemId] },
+  )
+}
 
-  if (balanceFor(state, item.currency) < item.cost) return state
-  const paid =
-    item.currency === 'stardust'
-      ? { stardust: state.stardust - item.cost }
-      : { nectar: state.nectar - item.cost }
-
-  if (item.kind === 'supply') {
-    return {
-      ...state,
-      ...paid,
-      inventory: {
-        ...state.inventory,
-        [itemId]: (state.inventory[itemId] ?? 0) + 1,
-      },
-    }
-  }
-  return {
-    ...state,
-    ...paid,
-    ownedItemIds: [...state.ownedItemIds, itemId],
-  }
+/** The garden after buying one item, for callers that need no outcome. */
+export function purchaseShopItem(state: AppState, itemId: string): AppState {
+  return buyShopItem(state, itemId).state
 }
 
 /**

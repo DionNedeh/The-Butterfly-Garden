@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import type { AppState } from '../src/types'
 import { expect, test } from '@playwright/test'
 import { seriousViolations } from './a11y'
+import { goTo, mainNav, moreSheet } from './navigation'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/The-Butterfly-Garden/')
@@ -69,6 +70,7 @@ interface GardenRecord {
     stage?: string
     sourcePlantId?: string
     emergeAt?: string
+    awaitingName?: boolean
   }>
 }
 
@@ -162,11 +164,30 @@ async function reloadAfterSave(page: import('@playwright/test').Page) {
 }
 
 /**
- * The app's own navigation, whichever of the header or bottom bar is showing.
- * Scoped by label so it never picks up the shop's own <nav> of tabs.
+ * The shop's search and filters. A wide screen shows them inline; a phone
+ * (600px or narrower, as in ShopView) keeps them in a sheet behind one
+ * Filter button, so there the sheet is opened first, and put away again
+ * before the collection beneath it is used.
  */
-function mainNav(page: import('@playwright/test').Page) {
-  return page.locator('nav[aria-label$="navigation" i]:visible').first()
+function onPhone(page: import('@playwright/test').Page) {
+  return (page.viewportSize()?.width ?? 1280) <= 600
+}
+
+async function openShopFilters(page: import('@playwright/test').Page) {
+  if (!onPhone(page)) return
+  await page.getByRole('button', { name: /^Filter\b/ }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Filter the collection' }),
+  ).toBeVisible()
+}
+
+async function closeShopFilters(page: import('@playwright/test').Page) {
+  if (!onPhone(page)) return
+  await page
+    .getByRole('dialog', { name: 'Filter the collection' })
+    .getByRole('button', { name: /^Show / })
+    .click()
+  await expect(page.getByRole('button', { name: /^Filter\b/ })).toBeFocused()
 }
 
 async function enterGarden(page: import('@playwright/test').Page) {
@@ -181,9 +202,9 @@ test('pages live in the address: Back, Forward and a reload all keep their place
   await enterGarden(page)
   await expect(page).toHaveURL(/\/The-Butterfly-Garden\/$/)
 
-  await mainNav(page).getByRole('button', { name: 'Journal', exact: true }).click()
+  await goTo(page, 'Journal')
   await expect(page).toHaveURL(/#\/journal$/)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await expect(page).toHaveURL(/#\/shop$/)
 
   await page.goBack()
@@ -244,9 +265,7 @@ test('onboards, completes care, and writes a private journal entry', async ({
       /marigold, your monarch garden guide enjoyed that gentle hello/i,
     ),
   ).toBeVisible()
-  await mainNav(page)
-    .getByRole('button', { name: 'Today', exact: true })
-    .click()
+  await goTo(page, 'Today')
   await page.getByRole('button', { name: /bright/i }).click()
   await page.getByLabel('A note, if you want').fill('A little more spacious.')
   await page.getByRole('button', { name: /save check-in/i }).click()
@@ -259,9 +278,7 @@ test('onboards, completes care, and writes a private journal entry', async ({
     .fill('I noticed sunlight on the kitchen table.')
   await page.getByRole('button', { name: /keep this reflection/i }).click()
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Journal', exact: true })
-    .click()
+  await goTo(page, 'Journal')
   await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Blue Morpho')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Your rhythm' })).toBeVisible()
@@ -277,7 +294,7 @@ test('a check-in can be unsure, a tap can be undone, and support is a link away'
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await goTo(page, 'Today')
 
   // Nothing is chosen for the gardener, and "not sure" is an answer.
   const save = page.getByRole('button', { name: /save check-in/i })
@@ -295,7 +312,7 @@ test('a check-in can be unsure, a tap can be undone, and support is a link away'
   await expect(page.getByRole('button', { name: /care for water the fern/i })).toBeEnabled()
 
   // Support is reachable from Settings, and hands off to the phone.
-  await mainNav(page).getByRole('button', { name: 'Settings', exact: true }).click()
+  await goTo(page, 'Settings')
   await page.getByRole('button', { name: 'If you need support now' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'If you need support now' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Call 116 123' })).toHaveAttribute('href', 'tel:116123')
@@ -311,7 +328,7 @@ test('a goal row keeps everything behind its menu, and a gentle day asks for lit
   // more than the default budget on a GPU-less runner's Safari.
   test.slow()
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await goTo(page, 'Today')
   for (const title of ['Water the fern', 'Stretch', 'Open a window', 'Step outside']) {
     await page.getByLabel('Add a goal').fill(title)
     await page.getByRole('button', { name: 'Add goal' }).click()
@@ -354,7 +371,7 @@ test('a goal row keeps everything behind its menu, and a gentle day asks for lit
   await expect(page.getByRole('button', { name: 'Show the other 1 goal' })).toBeVisible()
   expect(await seriousViolations(page, 'Today on a gentle day')).toEqual([])
   await reloadAfterSave(page)
-  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await goTo(page, 'Today')
   await expect(page.getByRole('checkbox', { name: /gentle day/i })).toBeChecked()
   await expect(page.getByRole('button', { name: /^More for / })).toHaveCount(3)
 
@@ -421,9 +438,7 @@ test('supports plant selection and permanent local reset confirmation', async ({
   await enterGarden(page)
   await page.getByRole('button', { name: /plant a seed/i }).click()
   await page.getByRole('button', { name: /parsley/i }).click()
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
   await expect(
     page.getByRole('heading', { name: 'Backup and restore' }),
@@ -480,9 +495,13 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     delete state.profile.unlockedBackdropIds
   })
   await page.reload()
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  // A garden this old with no copy on record is reminded, quietly, on the
+  // way to Settings: on Settings itself, or on More on a phone.
+  await expect(
+    mainNav(page).getByRole('button', { name: /^(Settings|More), time for a fresh copy/ }),
+  ).toBeVisible()
+  await goTo(page, 'Settings')
+  await expect(page.getByText('You have not saved a copy yet.', { exact: false })).toBeVisible()
 
   const conservatory = page
     .locator('.scene-card')
@@ -495,9 +514,7 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     .getByRole('button')
   await conservatory.click()
   await expect(conservatory).toHaveText('In your garden')
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.garden-hero')).toHaveClass(
     /backdrop-secret-conservatory/,
   )
@@ -507,9 +524,7 @@ test('guide explains how plants grow and when eggs appear', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Guide', exact: true })
-    .click()
+  await goTo(page, 'Guide')
 
   await expect(
     page.getByRole('heading', { name: 'How the garden works' }),
@@ -526,10 +541,11 @@ test('guide explains how plants grow and when eggs appear', async ({
 test('earns Nectar, purchases every tier, and persists a selected flight pattern', async ({
   page,
 }) => {
+  // Four pages, two accessibility sweeps, a reload and two settings: about
+  // thirty seconds in Safari on a GPU-less runner, the default budget's edge.
+  test.slow()
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Today', exact: true })
-    .click()
+  await goTo(page, 'Today')
   await page.getByRole('button', { name: /bright/i }).click()
   await page.getByRole('button', { name: /save check-in/i }).click()
   await page.getByLabel('Add a goal').fill('Stretch')
@@ -539,7 +555,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await page.getByRole('button', { name: /keep this reflection/i }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('9')
 
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page.waitForTimeout(450)
   expect(await seriousViolations(page, 'Shop')).toEqual([])
   // Flight patterns live behind their own tab; the shop opens on Supplies.
@@ -558,7 +574,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
     state.stardust = 20
   })
   await page.reload()
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page
     .locator('.shop-tabs')
     .getByRole('button', { name: 'Flight', exact: true })
@@ -575,31 +591,23 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await expect(page.getByTitle('Nectar balance')).toContainText('81')
   await expect(page.getByTitle('Stardust balance')).toContainText('3')
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Flight', exact: true })
-    .click()
+  await goTo(page, 'Flight')
   await page.waitForTimeout(450)
   expect(await seriousViolations(page, 'Flight patterns')).toEqual([])
   await page
     .getByRole('button', { name: /Garden Waltz.*Owned - select pattern/i })
     .click()
   await reloadAfterSave(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Flight', exact: true })
-    .click()
+  await goTo(page, 'Flight')
   await expect(
     page.getByRole('button', { name: /Garden Waltz.*Selected/i }),
   ).toHaveAttribute('aria-pressed', 'true')
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.flight-traveller').first()).toHaveAttribute(
     'data-pattern',
     'garden-waltz',
   )
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await page.getByLabel('Calm garden motion').check()
   await page.getByRole('button', { name: 'Save settings' }).click()
   await expect(page.locator('.app-shell')).toHaveClass(/calm-motion/)
@@ -617,7 +625,7 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
     state.nectar = 18
   })
   await page.reload()
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page
     .locator('.shop-tabs')
     .getByRole('button', { name: 'Jars', exact: true })
@@ -632,9 +640,7 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   await page.getByRole('button', { name: 'Buy Yellow S jar' }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('6')
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await page.getByRole('button', { name: /View Milkweed/i }).click()
   await page
     .getByRole('button', { name: /Place Blue A jar on Milkweed/i })
@@ -717,12 +723,33 @@ test('keeps butterfly field notes collapsed until requested', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Journal', exact: true })
-    .click()
+  await goTo(page, 'Journal')
   await expect(page.locator('.field-notes .species-grid')).toBeHidden()
   await page.getByText('Butterflies welcomed').click()
   await expect(page.locator('.field-notes .species-grid')).toBeVisible()
+})
+
+test('a new egg is offered a name of its own on the Care page', async ({ page }) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // An egg just found on a host plant, as one arrives from now on.
+    state.creatures[0].stage = 'egg'
+    state.creatures[0].awaitingName = true
+  })
+  await page.reload()
+  await goTo(page, 'Care')
+  const arrival = page.getByRole('region', { name: /Would you like to name your .* egg\?/ })
+  await expect(arrival).toBeVisible()
+  expect(await seriousViolations(page, 'Care with a new arrival')).toEqual([])
+  await arrival.getByLabel('Name', { exact: true }).fill('Pip')
+  await arrival.getByRole('button', { name: 'Save name' }).click()
+  await expect(arrival).toHaveCount(0)
+
+  // Answered once, it is not asked again.
+  await reloadAfterSave(page)
+  await goTo(page, 'Care')
+  await expect(page.getByText('Pip').first()).toBeVisible()
+  await expect(page.getByRole('region', { name: /Would you like to name/ })).toHaveCount(0)
 })
 
 test('persists emergence and selects the new butterfly as companion', async ({
@@ -741,9 +768,7 @@ test('persists emergence and selects the new butterfly as companion', async ({
   await expect(page.getByText('Luna')).toBeVisible()
   await reloadAfterSave(page)
   await expect(page.getByLabel('Name for Luna')).toHaveValue('Luna')
-  await mainNav(page)
-    .getByRole('button', { name: 'Journal', exact: true })
-    .click()
+  await goTo(page, 'Journal')
   await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Danaus plexippus')).toBeVisible()
   await expect(page.getByText('Welcomed as Luna')).toBeVisible()
@@ -809,7 +834,7 @@ test('has no serious accessibility violations on any view', async ({
   ]
   const offenders: string[] = []
   for (const view of views) {
-    await mainNav(page).getByRole('button', { name: view, exact: true }).click()
+    await goTo(page, view)
     // Let entrance animations settle so axe sees final contrast and sizing.
     await page.waitForTimeout(400)
     offenders.push(...(await seriousViolations(page, view)))
@@ -817,10 +842,83 @@ test('has no serious accessibility violations on any view', async ({
   expect(offenders).toEqual([])
 })
 
+test('a phone has five tabs in one solid row, and More holds the other four', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, 'The dock and its More sheet are for phones; a wider screen has a tab for every page.')
+  await enterGarden(page)
+  const dock = page.getByRole('navigation', { name: 'Mobile navigation' })
+  const tabs = dock.getByRole('button')
+  await expect(tabs).toHaveText(['Garden', 'Today', 'Care', 'Journal', 'More'])
+  const tops = await tabs.evaluateAll((buttons) =>
+    buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+  )
+  expect(new Set(tops).size).toBe(1)
+  for (const box of await tabs.evaluateAll((buttons) =>
+    buttons.map((button) => button.getBoundingClientRect()),
+  )) {
+    expect(box.width).toBeGreaterThanOrEqual(44)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+  }
+  // Solid, so no page text reads through the labels, and no blur to redraw.
+  const fill = await dock.evaluate((nav) => {
+    const style = getComputedStyle(nav)
+    return { background: style.backgroundColor, blur: style.backdropFilter }
+  })
+  expect(fill.background).toMatch(/^rgb\(/)
+  expect(fill.blur === 'none' || fill.blur === '').toBe(true)
+
+  const more = dock.getByRole('button', { name: 'More', exact: true })
+  await more.click()
+  const sheet = moreSheet(page)
+  await expect(sheet.getByRole('heading', { name: 'More' })).toBeVisible()
+  const pages = sheet.getByRole('list').getByRole('button')
+  await expect(pages).toHaveText(['Shop', 'Flight', 'Guide', 'Settings'])
+  // Let the sheet finish rising so axe sees it where it rests.
+  await page.waitForTimeout(400)
+  expect(await seriousViolations(page, 'More sheet')).toEqual([])
+
+  await sheet.getByRole('button', { name: 'Flight', exact: true }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: 'Flight Patterns' })).toBeVisible()
+  await expect(page).toHaveURL(/#\/flight$/)
+  await expect(more).toHaveAttribute('aria-current', 'page')
+  await expect(more).toBeFocused()
+
+  // Escape puts it away too, and so does a tap above it.
+  await more.click()
+  await page.keyboard.press('Escape')
+  await expect(sheet).toHaveCount(0)
+  await expect(more).toBeFocused()
+  await more.click()
+  await expect(sheet).toBeVisible()
+  await page.mouse.click(20, 20)
+  await expect(sheet).toHaveCount(0)
+  await expect(more).toBeFocused()
+
+  await goTo(page, 'Today')
+  await expect(more).not.toHaveAttribute('aria-current')
+
+  // On its side, a large phone still shares the width among the five.
+  await page.setViewportSize({ width: 915, height: 412 })
+  const sideways = await tabs.evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const box = button.getBoundingClientRect()
+      return { width: box.width, height: box.height, top: Math.round(box.top) }
+    }),
+  )
+  expect(new Set(sideways.map((box) => box.top)).size).toBe(1)
+  for (const box of sideways) {
+    expect(box.width).toBeGreaterThanOrEqual(150)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+  }
+})
+
 test('every shop tab is reachable and accessible', async ({ page }) => {
   test.slow()
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   const offenders: string[] = []
   for (const tab of [
     'Supplies',
@@ -908,9 +1006,7 @@ test('the guide card glow has no edge inside the card', async ({ page }) => {
   await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
-  await mainNav(page)
-    .getByRole('button', { name: 'Guide', exact: true })
-    .click()
+  await goTo(page, 'Guide')
   await expect(
     page.getByRole('heading', { name: /how the garden works/i }),
   ).toBeVisible()
@@ -953,9 +1049,7 @@ test.describe('rounding out the day', () => {
     const stardust = page.locator('.stardust-wallet strong')
     await expect(stardust).toHaveText('0')
 
-    await mainNav(page)
-      .getByRole('button', { name: 'Today', exact: true })
-      .click()
+    await goTo(page, 'Today')
     await expect(page.getByText('Round out your day')).toBeVisible()
     await page.getByRole('button', { name: 'Begin' }).click()
 
@@ -983,9 +1077,7 @@ test.describe('rounding out the day', () => {
     await expect(page.getByText('The day is rounded out.')).toBeVisible()
     await expect(stardust).toHaveText('1')
 
-    await mainNav(page)
-      .getByRole('button', { name: 'Journal', exact: true })
-      .click()
+    await goTo(page, 'Journal')
     await expect(page.getByText('Walked to the river.')).toBeVisible()
     await expect(page.getByText('The unanswered email.')).toBeVisible()
     await expect(
@@ -994,9 +1086,7 @@ test.describe('rounding out the day', () => {
 
     // And it survives a reload: the recap is stored, not just rendered.
     await reloadAfterSave(page)
-    await mainNav(page)
-      .getByRole('button', { name: 'Journal', exact: true })
-      .click()
+    await goTo(page, 'Journal')
     await expect(page.getByText('Walked to the river.')).toBeVisible()
   })
 })
@@ -1008,7 +1098,7 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
 }) => {
   test.setTimeout(60_000)
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page.getByRole('button', { name: 'Backdrops', exact: true }).click()
   await page.getByRole('button', { name: /Add your own backdrop/ }).click()
   const editor = page.getByRole('dialog')
@@ -1033,15 +1123,13 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   await page.reload()
   // A reload keeps its page now (#/shop); the image shows in the garden.
   await expect(page.getByRole('heading', { level: 1, name: /stock up/i })).toBeVisible()
-  await mainNav(page).getByRole('button', { name: 'Garden', exact: true }).click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.custom-scene-layer img')).toBeVisible()
   await expect(page.locator('.custom-scene-layer img')).toHaveJSProperty(
     'naturalWidth',
     1600,
   )
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download a backup' }).click()
   const download = await downloadPromise
@@ -1089,9 +1177,7 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   await expect(
     page.getByRole('button', { name: 'Undo the restore' }),
   ).toBeVisible()
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.custom-scene-layer img')).toHaveAttribute(
     'src',
     `data:${image.mimeType};base64,${image.imageData}`,
@@ -1111,18 +1197,24 @@ test('boutique filters and try-on leave balances and outfits unchanged', async (
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page.getByRole('button', { name: 'Boutique', exact: true }).click()
+  await openShopFilters(page)
   await page.getByRole('searchbox').fill('Daisy Bonnet')
+  await closeShopFilters(page)
   await expect(page.locator('.boutique-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('10')
+  await openShopFilters(page)
   await page.getByRole('button', { name: 'Clear filters' }).click()
   await page.getByRole('combobox', { name: /^Type/ }).selectOption('aura')
+  await closeShopFilters(page)
   await expect(page.locator('.boutique-card')).toHaveCount(7)
+  await openShopFilters(page)
   await page.getByRole('searchbox').fill('no such treasure')
+  await closeShopFilters(page)
   await expect(
     page.getByRole('heading', { name: 'Nothing in this little corner yet' }),
   ).toBeVisible()
@@ -1132,9 +1224,7 @@ test('species seed guidance opens the right seed without planting it', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Guide', exact: true })
-    .click()
+  await goTo(page, 'Guide')
   await page.getByRole('searchbox').fill('Queen')
   await expect(page.locator('.species-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Show Milkweed seed' }).click()

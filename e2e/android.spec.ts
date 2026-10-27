@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { seriousViolations } from './a11y'
+import { goTo, mainNav, moreSheet } from './navigation'
 
 /**
  * The Android app's own bundle (dist-android, served from the root as
@@ -14,10 +15,6 @@ import { seriousViolations } from './a11y'
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
-
-function mainNav(page: Page) {
-  return page.locator('nav[aria-label$="navigation" i]:visible').first()
-}
 
 async function enterGarden(page: Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
@@ -46,8 +43,9 @@ async function pressBack(page: Page) {
   })
 }
 
+/** The tab marking the page on screen. More stands for the pages behind it. */
 function currentPage(page: Page) {
-  return mainNav(page).locator('[aria-current="page"]')
+  return mainNav(page).locator('[aria-current="page"]:visible')
 }
 
 test('runs from the root with no service worker, install prompt or offline banner', async ({
@@ -79,9 +77,7 @@ test('Settings speaks of the app on this phone, with an About section', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await expect(page.getByRole('button', { name: 'Save a backup' })).toBeVisible()
   await expect(
     page.getByRole('button', { name: 'Download a backup' }),
@@ -109,23 +105,39 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await enterGarden(page)
 
   // A page returns to the garden.
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
-  await expect(currentPage(page)).toHaveText('Shop')
+  await goTo(page, 'Shop')
+  await expect(page).toHaveURL(/#\/shop$/)
+  await expect(currentPage(page)).toHaveText('More')
   await pressBack(page)
   await expect(currentPage(page)).toHaveText('Garden')
 
-  // An open dialog closes first, leaving its page where it was.
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  // An open dialog closes first, leaving its page where it was: on a phone
+  // the shop's filters are one, and focus goes back to the button that
+  // opened them.
+  await goTo(page, 'Shop')
   await page.getByRole('button', { name: 'Boutique', exact: true }).click()
-  await page.getByRole('searchbox').fill('Daisy Bonnet')
+  await page.getByRole('button', { name: /^Filter\b/ }).click()
+  await page
+    .getByRole('dialog', { name: 'Filter the collection' })
+    .getByRole('searchbox')
+    .fill('Daisy Bonnet')
+  await pressBack(page)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: 'Filter 1 active' }),
+  ).toBeFocused()
+  // Still the shop, whose tab on a phone is More.
+  await expect(page).toHaveURL(/#\/shop$/)
+  await expect(currentPage(page)).toHaveText('More')
+  await expect(page.locator('.boutique-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await pressBack(page)
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(currentPage(page)).toHaveText('Shop')
+  await expect(page).toHaveURL(/#\/shop$/)
 
   // A goal's menu, and then the goal editor, are put away before Today is left.
-  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await goTo(page, 'Today')
   await page.getByLabel('Add a goal').fill('Water the fern')
   await page.getByRole('button', { name: 'Add goal' }).click()
   const more = page.getByRole('button', { name: 'More for Water the fern' })
@@ -144,9 +156,7 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await expect(currentPage(page)).toHaveText('Garden')
 
   // A page opened from Settings returns to Settings.
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await page.getByRole('button', { name: 'Privacy policy' }).click()
   await expect(
     page.getByRole('heading', { name: 'Privacy policy', level: 1 }),
@@ -162,11 +172,55 @@ test('the back gesture closes, returns, and only then leaves', async ({
   expect(errors).toEqual([])
 })
 
+test('the dock is five tabs, and More opens the rest until the back gesture closes it', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  const dock = mainNav(page)
+  await expect(dock).toHaveAttribute('aria-label', 'Mobile navigation')
+  await expect(dock.getByRole('button')).toHaveText(['Garden', 'Today', 'Care', 'Journal', 'More'])
+
+  const more = dock.getByRole('button', { name: 'More', exact: true })
+  await more.click()
+  const sheet = moreSheet(page)
+  await expect(sheet.getByRole('heading', { name: 'More' })).toBeVisible()
+  await expect(sheet.getByRole('list').getByRole('button')).toHaveText([
+    'Shop',
+    'Flight',
+    'Guide',
+    'Settings',
+  ])
+  await page.waitForTimeout(300)
+  expect(await seriousViolations(page, 'More sheet')).toEqual([])
+
+  // Back closes the sheet and nothing else, and focus goes back to More.
+  await pressBack(page)
+  await expect(sheet).toHaveCount(0)
+  await expect(currentPage(page)).toHaveText('Garden')
+  await expect(more).toBeFocused()
+
+  // On a page behind More, back closes the sheet first, then leaves the page.
+  await goTo(page, 'Guide')
+  await expect(page).toHaveURL(/#\/guide$/)
+  await expect(currentPage(page)).toHaveText('More')
+  await more.click()
+  await expect(sheet.getByRole('button', { name: 'Guide', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await pressBack(page)
+  await expect(sheet).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/guide$/)
+  await pressBack(page)
+  await expect(currentPage(page)).toHaveText('Garden')
+  expect(errors).toEqual([])
+})
+
 test('the privacy policy and notices open inside the app', async ({ page }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await page.getByRole('button', { name: 'Privacy policy' }).click()
   const policy = page.frameLocator('iframe[title="Privacy policy"]')
   await expect(policy.getByText(/everything you write in The Butterfly Garden/i)).toBeVisible()
@@ -185,9 +239,7 @@ test('the Android-only pages have no serious accessibility violations', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await page.waitForTimeout(400)
   const offenders = await seriousViolations(page, 'Settings')
   await page.getByRole('button', { name: 'Privacy policy' }).click()
@@ -206,7 +258,7 @@ test('the Garden Pass speaks of Google Play, and says when Play cannot be reache
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page
     .locator('.shop-tabs')
     .getByRole('button', { name: 'Garden Pass', exact: true })
@@ -240,9 +292,7 @@ test('the Garden Pass speaks of Google Play, and says when Play cannot be reache
     page.getByRole('button', { name: 'With the Garden Pass' }).first(),
   ).toBeDisabled()
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   const passCard = page.locator('.pass-settings-card')
   await expect(passCard).toContainText('Google Play cannot be reached right now.')
   await passCard.getByRole('button', { name: 'See the Garden Pass' }).click()

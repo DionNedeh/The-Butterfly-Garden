@@ -37,3 +37,38 @@
       2rem
   );
 }
+
+/* The app is a phone at every width the dock shows at, so its dock is always
+   the five tabs, sharing the width (garden-3.css has the phone dock itself). */
+@media (max-width: 1180px) {
+  .android-app .bottom-nav {
+    display: grid;
+    position: fixed;
+    z-index: 30;
+    right: 0.7rem;
+    bottom: 0.7rem;
+    left: 0.7rem;
+  }
+}
+
+.android-app .bottom-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.android-app .bottom-nav .in-more {
+  display: none;
+}
+
+.android-app .bottom-nav .more-tab {
+  display: grid;
+}
+
+.android-app .bottom-nav button {
+  font-size: 0.7rem;
+}
+
+@media (max-width: 1080px) {
+  .android-app .undo-region {
+    bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+}

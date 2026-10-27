@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { shopItems } from '../data/shopItems'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarCharacters, jarColors, JAR_PRICE, JAR_CAPACITY } from '../data/jars'
 import { balanceFor, currencyLabel } from '../lib/currency'
 import { GARDEN_PASS_PREVIEW_NOTICE } from '../lib/gardenPass'
+import type { PurchaseOutcome } from '../lib/purchase'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import type {
   AppState,
   FlightPatternId,
@@ -17,7 +19,13 @@ import { ShopItemCard } from './shop/ShopItemCard'
 import { ItemPreview } from './shop/ItemPreview'
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { GardenPassPanel } from './shop/GardenPassPanel'
+import { FilterSheet } from './shop/FilterSheet'
+import { PurchaseToast, type PurchaseNote } from './shop/PurchaseToast'
+import { purchaseMessage, type PurchaseSubject } from './shop/purchaseMessage'
 import { motionPreference } from '../lib/motion'
+// Only the shop draws these, so they arrive with it rather than with the
+// stylesheet every page waits for.
+import './shop/shop.css'
 
 export type ShopTab =
   | 'supplies'
@@ -34,6 +42,8 @@ const tabs: { id: ShopTab; label: string }[] = [
   { id: 'backdrops', label: 'Backdrops' },
   { id: 'pass', label: 'Garden Pass' },
 ]
+/** Matches the phone layout in garden-3.css. */
+const PHONE_WIDTH = '(max-width: 600px)'
 export function ShopView({
   state,
   onPurchasePattern,
@@ -45,9 +55,9 @@ export function ShopView({
   ...backdrops
 }: {
   state: AppState
-  onPurchasePattern: (id: FlightPatternId) => void
-  onPurchaseJar: (character: string, color: JarColorId) => void
-  onPurchaseItem: (id: string) => void
+  onPurchasePattern: (id: FlightPatternId) => PurchaseOutcome
+  onPurchaseJar: (character: string, color: JarColorId) => PurchaseOutcome
+  onPurchaseItem: (id: string, quantity?: number) => PurchaseOutcome
   onOpenCare?: () => void
   onOpenFlight?: () => void
   /** Where the shop opens; the garden's Pass notice opens it on the Pass. */
@@ -63,7 +73,23 @@ export function ShopView({
   const [preview, setPreview] = useState<ShopItemDefinition>()
   const [character, setCharacter] = useState('A')
   const [color, setColor] = useState<JarColorId>('blue')
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState<PurchaseNote>()
+  // On a phone the filters wait in a sheet behind one button, so the
+  // collection itself starts on the first screen.
+  const phone = useMediaQuery(PHONE_WIDTH)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  // A phone turned on its side can be wide enough for the inline panel. The
+  // sheet is put away then, so it does not spring open again on turning back.
+  if (sheetOpen && !phone) setSheetOpen(false)
+  const filterButton = useRef<HTMLButtonElement>(null)
+  const searchField = useRef<HTMLInputElement>(null)
+  // Put away by a turn of the phone rather than by the gardener, the sheet
+  // takes focus with it; the same search, now inline, has it back.
+  const sheetWasOpen = useRef(false)
+  useEffect(() => {
+    if (sheetWasOpen.current && !sheetOpen && !phone) searchField.current?.focus()
+    sheetWasOpen.current = sheetOpen
+  }, [sheetOpen, phone])
   const items = shopItems
     .filter((item) =>
       tab === 'supplies'
@@ -84,6 +110,14 @@ export function ShopView({
           state.ownedItemIds.includes(item.id) === (ownership === 'owned')) &&
         (!affordableOnly || balanceFor(state, item.currency) >= item.cost),
     )
+  const activeFilters = [
+    query !== '',
+    slot !== 'all',
+    stage !== 'all',
+    currency !== 'all',
+    ownership !== 'all',
+    affordableOnly,
+  ].filter(Boolean).length
   const reset = () => {
     setQuery('')
     setSlot('all')
@@ -92,12 +126,124 @@ export function ShopView({
     setOwnership('all')
     setAffordableOnly(false)
   }
-  const buyItem = (id: string) => {
-    onPurchaseItem(id)
-    setNote(
-      `${shopItems.find((item) => item.id === id)?.name ?? 'Item'} added to your garden.`,
-    )
+  const closeSheet = () => {
+    setSheetOpen(false)
+    filterButton.current?.focus()
   }
+  /**
+   * Say what a purchase came to, in the words of the reducer's outcome.
+   *
+   * A purchase that cannot go through is aria-disabled rather than disabled:
+   * it still looks unavailable, but it keeps focus when a purchase empties
+   * the purse, and pressing it says why, and by how much, instead of nothing.
+   */
+  const tell = (outcome: PurchaseOutcome, subject: PurchaseSubject) =>
+    setNote((previous) => ({
+      text: purchaseMessage(outcome, subject),
+      key: (previous?.key ?? 0) + 1,
+    }))
+  const buyItem = (id: string, quantity: number) => {
+    const item = shopItems.find((entry) => entry.id === id)
+    tell(onPurchaseItem(id, quantity), {
+      name: item?.name ?? 'This piece',
+      kind: item?.kind === 'supply' ? 'supply' : 'piece',
+      quantity,
+    })
+  }
+  const jarName = `${jarColors.find((value) => value.id === color)?.label} ${character} jar`
+  // One set of filters, drawn inline on a wide screen or inside the sheet on
+  // a phone, so there is never a second search field to keep in step.
+  const filters = (
+    <div className="shop-filters">
+      <label className="shop-search">
+        Find something lovely
+        <input
+          ref={searchField}
+          type="search"
+          placeholder="Search the collection…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      {tab !== 'supplies' && (
+        <>
+          <label>
+            Type
+            <select
+              value={slot}
+              onChange={(event) => setSlot(event.target.value)}
+            >
+              <option value="all">Every type</option>
+              <option value="headwear">Headwear</option>
+              <option value="accessory">Accessories</option>
+              <option value="aura">Auras</option>
+            </select>
+          </label>
+          <label>
+            Life stage
+            <select
+              value={stage}
+              onChange={(event) => setStage(event.target.value)}
+            >
+              <option value="all">Every stage</option>
+              {['egg', 'caterpillar', 'chrysalis', 'butterfly'].map(
+                (value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          <label>
+            Collection
+            <select
+              value={ownership}
+              onChange={(event) => setOwnership(event.target.value)}
+            >
+              <option value="all">All pieces</option>
+              <option value="owned">Owned</option>
+              <option value="new">Not owned</option>
+            </select>
+          </label>
+        </>
+      )}
+      {tab !== 'pass' && (
+        <>
+          <label>
+            Currency
+            <select
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value)}
+            >
+              <option value="all">Both currencies</option>
+              <option value="nectar">Nectar</option>
+              <option value="stardust">Stardust</option>
+            </select>
+          </label>
+          <label className="check-filter">
+            <input
+              type="checkbox"
+              checked={affordableOnly}
+              onChange={(event) =>
+                setAffordableOnly(event.target.checked)
+              }
+            />
+            Within my budget
+          </label>
+        </>
+      )}
+      <button className="text-button" onClick={reset}>
+        Clear filters
+      </button>
+    </div>
+  )
+  const results = (
+    <p className="subtle-copy" role="status">
+      {items.length} {items.length === 1 ? 'piece' : 'pieces'} to explore
+      {tab === 'boutique' ? ' · Buy once, dress every companion.' : ''}
+    </p>
+  )
   return (
     <div className="view shop-view">
       <header className="page-header shop-heading">
@@ -128,18 +274,12 @@ export function ShopView({
             onClick={() => {
               setTab(item.id)
               reset()
-              setNote('')
             }}
           >
             {item.label}
           </button>
         ))}
       </nav>
-      {note && (
-        <p className="shop-feedback" role="status">
-          {note}
-        </p>
-      )}
       {(tab === 'supplies' || tab === 'boutique' || tab === 'pass') && (
         <>
           {/* Inline rather than isAndroidApp(): the bundler folds only an
@@ -194,92 +334,38 @@ export function ShopView({
               <span className="count-badge">{items.length} pieces</span>
             </div>
           )}
-          <div className="shop-filters">
-            <label className="shop-search">
-              Find something lovely
-              <input
-                type="search"
-                placeholder="Search the collection…"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-            {tab !== 'supplies' && (
-              <>
-                <label>
-                  Type
-                  <select
-                    value={slot}
-                    onChange={(event) => setSlot(event.target.value)}
-                  >
-                    <option value="all">Every type</option>
-                    <option value="headwear">Headwear</option>
-                    <option value="accessory">Accessories</option>
-                    <option value="aura">Auras</option>
-                  </select>
-                </label>
-                <label>
-                  Life stage
-                  <select
-                    value={stage}
-                    onChange={(event) => setStage(event.target.value)}
-                  >
-                    <option value="all">Every stage</option>
-                    {['egg', 'caterpillar', 'chrysalis', 'butterfly'].map(
-                      (value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </label>
-                <label>
-                  Collection
-                  <select
-                    value={ownership}
-                    onChange={(event) => setOwnership(event.target.value)}
-                  >
-                    <option value="all">All pieces</option>
-                    <option value="owned">Owned</option>
-                    <option value="new">Not owned</option>
-                  </select>
-                </label>
-              </>
-            )}
-            {tab !== 'pass' && (
-              <>
-                <label>
-                  Currency
-                  <select
-                    value={currency}
-                    onChange={(event) => setCurrency(event.target.value)}
-                  >
-                    <option value="all">Both currencies</option>
-                    <option value="nectar">Nectar</option>
-                    <option value="stardust">Stardust</option>
-                  </select>
-                </label>
-                <label className="check-filter">
-                  <input
-                    type="checkbox"
-                    checked={affordableOnly}
-                    onChange={(event) =>
-                      setAffordableOnly(event.target.checked)
-                    }
-                  />
-                  Within my budget
-                </label>
-              </>
-            )}
-            <button className="text-button" onClick={reset}>
-              Clear filters
-            </button>
-          </div>
-          <p className="subtle-copy" role="status">
-            {items.length} {items.length === 1 ? 'piece' : 'pieces'} to explore
-            {tab === 'boutique' ? ' · Buy once, dress every companion.' : ''}
-          </p>
+          {phone ? (
+            <div className="shop-filter-bar">
+              <button
+                ref={filterButton}
+                className="secondary-button"
+                aria-haspopup="dialog"
+                onClick={() => setSheetOpen(true)}
+              >
+                Filter
+                {activeFilters > 0 && (
+                  <>
+                    {' '}
+                    <span className="filter-count">
+                      {activeFilters}{' '}
+                      <span className="sr-only">active</span>
+                    </span>
+                  </>
+                )}
+              </button>
+              {results}
+            </div>
+          ) : (
+            <>
+              {filters}
+              {results}
+            </>
+          )}
+          {sheetOpen && (
+            <FilterSheet results={items.length} onClose={closeSheet}>
+              {filters}
+            </FilterSheet>
+          )}
           <div className="boutique-grid">
             {items.map((item) => (
               <ShopItemCard
@@ -369,21 +455,20 @@ export function ShopView({
               </small>
               <button
                 className="primary-button"
-                disabled={
+                aria-disabled={
                   state.nectar < JAR_PRICE || state.jars.length >= JAR_CAPACITY
+                    ? true
+                    : undefined
                 }
-                onClick={() => {
-                  onPurchaseJar(character, color)
-                  setNote(
-                    `${character} jar added. Place it from a plant's detail panel in Garden.`,
-                  )
-                }}
+                onClick={() =>
+                  tell(onPurchaseJar(character, color), { name: jarName, kind: 'jar' })
+                }
               >
                 {state.jars.length >= JAR_CAPACITY
                   ? 'Your jar shelf is full'
                   : state.nectar < JAR_PRICE
                     ? 'Not enough Nectar'
-                    : `Buy ${jarColors.find((value) => value.id === color)?.label} ${character} jar`}
+                    : `Buy ${jarName}`}
               </button>
             </div>
           </div>
@@ -426,8 +511,13 @@ export function ShopView({
                         </span>
                         <button
                           className="primary-button compact"
-                          disabled={owned || !affordable}
-                          onClick={() => onPurchasePattern(pattern.id)}
+                          aria-disabled={owned || !affordable ? true : undefined}
+                          onClick={() =>
+                            tell(onPurchasePattern(pattern.id), {
+                              name: pattern.name,
+                              kind: 'pattern',
+                            })
+                          }
                         >
                           {owned
                             ? 'Owned'
@@ -447,6 +537,7 @@ export function ShopView({
       {preview && (
         <ItemPreview item={preview} onClose={() => setPreview(undefined)} />
       )}
+      <PurchaseToast note={note} onDone={() => setNote(undefined)} />
     </div>
   )
 }

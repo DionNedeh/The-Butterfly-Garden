@@ -1,6 +1,7 @@
 import { JAR_CAPACITY, JAR_PRICE, jarCharacters, jarColors } from '../data/jars'
 import type { AppState, JarColorId, JarInstance } from '../types'
 import { createId } from './id'
+import { payFor, refuse, type PurchaseResult } from './purchase'
 
 export function normalizeJarCharacter(character: string): string | undefined {
   const normalized = character.trim().toUpperCase()
@@ -11,34 +12,40 @@ export function isJarColorId(colorId: string): colorId is JarColorId {
   return jarColors.some((color) => color.id === colorId)
 }
 
+/**
+ * Buy a jar, and say how it went: refused when the letter or colour is not
+ * one the shop makes, when the shelf is full, or when Nectar falls short.
+ */
+export function buyJar(
+  state: AppState,
+  character: string,
+  colorId: JarColorId,
+  now = new Date(),
+): PurchaseResult {
+  const normalizedCharacter = normalizeJarCharacter(character)
+  if (!normalizedCharacter || !isJarColorId(colorId))
+    return refuse(state, { kind: 'unavailable', reason: 'unknown' })
+  if (state.jars.length >= JAR_CAPACITY)
+    return refuse(state, { kind: 'unavailable', reason: 'full' })
+  return payFor(state, { cost: JAR_PRICE, currency: 'nectar' }, () => {
+    const jar: JarInstance = {
+      id: createId(),
+      character: normalizedCharacter,
+      colorId,
+      purchasedAt: now.toISOString(),
+    }
+    return { jars: [...state.jars, jar] }
+  })
+}
+
+/** The garden after buying a jar, for callers that need no outcome. */
 export function purchaseJar(
   state: AppState,
   character: string,
   colorId: JarColorId,
   now = new Date(),
 ): AppState {
-  const normalizedCharacter = normalizeJarCharacter(character)
-  if (
-    !normalizedCharacter ||
-    !isJarColorId(colorId) ||
-    state.nectar < JAR_PRICE ||
-    state.jars.length >= JAR_CAPACITY
-  ) {
-    return state
-  }
-
-  const jar: JarInstance = {
-    id: createId(),
-    character: normalizedCharacter,
-    colorId,
-    purchasedAt: now.toISOString(),
-  }
-
-  return {
-    ...state,
-    nectar: state.nectar - JAR_PRICE,
-    jars: [...state.jars, jar],
-  }
+  return buyJar(state, character, colorId, now).state
 }
 
 export function jarPlacementForPlant(state: AppState, plantId: string) {

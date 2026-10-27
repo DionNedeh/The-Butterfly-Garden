@@ -291,6 +291,16 @@ describe('checking in', () => {
     expect(onSaveMood).toHaveBeenCalledWith('unsure', '')
   })
 
+  it('starts at the weather question when opened by the "Check in" shortcut', () => {
+    renderToday(createInitialState('Tester', 'Test Garden'), { openAtCheckIn: true })
+    expect(screen.getByRole('heading', { name: 'What is your inner weather?' })).toHaveFocus()
+  })
+
+  it('leaves focus alone when Today is opened any other way', () => {
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    expect(screen.getByRole('heading', { name: 'What is your inner weather?' })).not.toHaveFocus()
+  })
+
   it('opens on the answer already given today, "not sure" included', () => {
     renderToday({ ...createInitialState('Tester', 'Test Garden'), moods: [mood(3, true)] })
     expect(screen.getByRole('button', { name: 'Not sure today' })).toHaveAttribute('aria-pressed', 'true')

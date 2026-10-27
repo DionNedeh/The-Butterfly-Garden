@@ -124,6 +124,11 @@ export function createInitialState(
   }
 }
 
+/** Names match ignoring case and the spaces around them: "  sol " is Sol. */
+function nameKey(name: string): string {
+  return name.trim().toLowerCase()
+}
+
 /**
  * A name no companion in the garden has yet. Names are offered in order,
  * starting where the garden's size points; the list used to be taken purely
@@ -133,17 +138,47 @@ export function createInitialState(
 export function nextCompanionName(
   creatures: ReadonlyArray<Pick<CreatureInstance, 'name'>>,
 ): string {
-  const taken = new Set(creatures.map((creature) => creature.name.trim().toLowerCase()))
+  const taken = new Set(creatures.map((creature) => nameKey(creature.name)))
   const start = creatures.length % butterflyNames.length
   for (let offset = 0; offset < butterflyNames.length; offset += 1) {
     const name = butterflyNames[(start + offset) % butterflyNames.length]
-    if (!taken.has(name.toLowerCase())) return name
+    if (!taken.has(nameKey(name))) return name
   }
   const base = butterflyNames[start]
   for (let number = 2; ; number += 1) {
     const name = `${base} ${number}`
-    if (!taken.has(name.toLowerCase())) return name
+    if (!taken.has(nameKey(name))) return name
   }
+}
+
+type NamedCreature = Pick<CreatureInstance, 'id' | 'name'>
+
+/** Whether a companion other than this one already goes by the name. */
+export function nameInUse(
+  creatures: readonly NamedCreature[],
+  name: string,
+  exceptId: string,
+): boolean {
+  const key = nameKey(name)
+  return creatures.some(
+    (creature) => creature.id !== exceptId && nameKey(creature.name) === key,
+  )
+}
+
+/**
+ * The name a new arrival is offered: its own while no other companion shares
+ * it, so the offer matches what the garden already calls it, and otherwise
+ * the first name nobody has. The second case is rare (another companion was
+ * renamed to match before the offer was answered), but an offer should never
+ * suggest a name that is already taken.
+ */
+export function nameToOffer(
+  creatures: readonly NamedCreature[],
+  creatureId: string,
+): string {
+  const own = creatures.find((creature) => creature.id === creatureId)
+  if (own && !nameInUse(creatures, own.name, creatureId)) return own.name
+  return nextCompanionName(creatures.filter((creature) => creature.id !== creatureId))
 }
 
 function discoverEgg(
@@ -174,6 +209,9 @@ function discoverEgg(
     carePoints: 0,
     discoveredAt: now.toISOString(),
     sourcePlantId: maturePlant.id,
+    // The name above is only a default. Care offers the gardener a chance to
+    // choose another, and doing nothing keeps this one.
+    awaitingName: true,
   }
 }
 

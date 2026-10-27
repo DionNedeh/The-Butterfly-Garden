@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
@@ -6,6 +6,7 @@ import './android.css'
 import { currentRelease, hasUnseenRelease, releaseName } from './data/releases'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
+import { BottomNav, PrimaryNav } from './components/Navigation'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { RecoveryScreen } from './components/RecoveryScreen'
 import { ViewProblem } from './components/ViewProblem'
@@ -94,13 +95,15 @@ import {
   onBackButton,
   setSystemBarsForTheme,
 } from './lib/native'
+import type { NavItem } from './lib/navigation'
 import { isAndroidApp } from './lib/platform'
 import {
   DAILY_SUNLIGHT_CAP,
   moonlightForDate,
   sunlightForDate,
 } from './lib/progression'
-import { addDaysToLocalDate, recapHoursOf } from './lib/date'
+import { addDaysToLocalDate, localDateToNoon, recapHoursOf } from './lib/date'
+import { isBackupDue } from './lib/backupReminder'
 import type { AppView } from './types'
 import { motionClass, motionPreference } from './lib/motion'
 import { isArrival, movedTo } from './lib/hosting'
@@ -125,33 +128,68 @@ interface InstallPromptEvent extends Event {
  */
 const SPLASH_MINIMUM_MS = 700
 
-const navigation: Array<{
-  id: AppView
-  label: string
-  icon:
-    | 'garden'
-    | 'care'
-    | 'today'
-    | 'journal'
-    | 'shop'
-    | 'flight'
-    | 'flower'
-    | 'settings'
-}> = [
+/**
+ * Every page in the navigation, in the header's order. On a phone the dock
+ * holds the first four and More, and More's sheet holds the pages marked
+ * `inMore`. A page's `badge` (lib/navigation) shows on its button and on More.
+ */
+const navigation: readonly NavItem[] = [
   { id: 'garden', label: 'Garden', icon: 'garden' },
   { id: 'care', label: 'Care', icon: 'care' },
   { id: 'today', label: 'Today', icon: 'today' },
   { id: 'journal', label: 'Journal', icon: 'journal' },
-  { id: 'shop', label: 'Shop', icon: 'shop' },
-  { id: 'flight-patterns', label: 'Flight', icon: 'flight' },
-  { id: 'guide', label: 'Guide', icon: 'flower' },
-  { id: 'settings', label: 'Settings', icon: 'settings' },
+  { id: 'shop', label: 'Shop', icon: 'shop', inMore: true },
+  { id: 'flight-patterns', label: 'Flight', icon: 'flight', inMore: true },
+  { id: 'guide', label: 'Guide', icon: 'flower', inMore: true },
+  { id: 'settings', label: 'Settings', icon: 'settings', inMore: true },
 ]
 
 function App() {
   const garden = useGardenState()
   const today = useLocalDate()
   const recap = useRecapWindow(recapHoursOf(garden.state?.profile))
+  // One quiet mark on Settings while a fresh copy of the garden is due, the
+  // same reminder Settings words in full (lib/backupReminder), asked at the
+  // same moment: noon of the day. By the day is close enough for a
+  // thirty-day rule, keeps the clock out of render, and lets a copy made any
+  // time today be believed.
+  const reminderAt = useMemo(() => localDateToNoon(today), [today])
+  // Only what the rule reads, so the count is not redone on every change.
+  const journalProfile = garden.state?.profile
+  const journalMoods = garden.state?.moods
+  const journalReflections = garden.state?.reflections
+  const journalRecaps = garden.state?.recaps
+  const backupDue = useMemo(
+    () =>
+      journalMoods && journalReflections && journalRecaps && !garden.persistence.readOnly
+        ? isBackupDue(
+            {
+              profile: journalProfile,
+              moods: journalMoods,
+              reflections: journalReflections,
+              recaps: journalRecaps,
+            },
+            reminderAt,
+          )
+        : false,
+    [
+      journalProfile,
+      journalMoods,
+      journalReflections,
+      journalRecaps,
+      garden.persistence.readOnly,
+      reminderAt,
+    ],
+  )
+  const navItems = useMemo(
+    () =>
+      backupDue
+        ? navigation.map((item) =>
+            item.id === 'settings' ? { ...item, badge: 'time for a fresh copy' } : item,
+          )
+        : navigation,
+    [backupDue],
+  )
   // The page lives in the address (lib/routes), so Back and Forward work, a
   // reload stays put, and a link or shortcut can open a page directly.
   const [route, setRoute] = useState<Route>(
@@ -403,19 +441,7 @@ function App() {
             <small>{profile.gardenName}</small>
           </span>
         </button>
-        <nav aria-label="Primary navigation">
-          {navigation.map((item) => (
-            <button
-              key={item.id}
-              className={activeView === item.id ? 'active' : ''}
-              onClick={() => setView(item.id)}
-              aria-current={activeView === item.id ? 'page' : undefined}
-            >
-              <Icon name={item.icon} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <PrimaryNav items={navItems} current={activeView} onNavigate={setView} />
         <div className="header-actions">
           <span className="header-sunlight" title="Sunlight earned today">
             <Icon name="sun" size={19} />
@@ -695,6 +721,7 @@ function App() {
               onOpenCare={() => setView('care')}
               recap={offeredRecap}
               moonlightCollected={recapCollected}
+              openAtCheckIn={route.checkIn}
               onOpenRecap={() => {
                 setRecapOpenedFor(recapTarget)
                 setView('recap')
@@ -754,6 +781,8 @@ function App() {
               onSelectAmbientTrack={garden.selectAmbientTrack}
               onSelectBackdrop={garden.selectBackdrop}
               onExportGarden={garden.exportGarden}
+              onBackupMade={garden.recordBackup}
+              reminderAt={reminderAt}
               onImportGarden={garden.importGarden}
               onUndoRestore={garden.undoRestore}
               onDownloadSetAside={garden.quarantinedCopy}
@@ -784,19 +813,7 @@ function App() {
         </ErrorBoundary>
       </main>
 
-      <nav className="bottom-nav" aria-label="Mobile navigation">
-        {navigation.map((item) => (
-          <button
-            key={item.id}
-            className={activeView === item.id ? 'active' : ''}
-            onClick={() => setView(item.id)}
-            aria-current={activeView === item.id ? 'page' : undefined}
-          >
-            <Icon name={item.icon} />
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
+      <BottomNav items={navItems} current={activeView} onNavigate={setView} />
       <UpdatePrompt />
     </div>
   )

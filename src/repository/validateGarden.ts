@@ -468,7 +468,7 @@ function checkCreature(raw: unknown, ctx: Context) {
       : 0
   const optionalStamp = (value: unknown) =>
     typeof value === 'string' ? value : undefined
-  return {
+  const creature = {
     ...(raw as unknown as AppState['creatures'][number]),
     stage,
     name: asText(raw.name, ctx, 'Little one'),
@@ -483,6 +483,10 @@ function checkCreature(raw: unknown, ctx: Context) {
     emergedAt: optionalStamp(raw.emergedAt),
     sourcePlantId: optionalStamp(raw.sourcePlantId),
   }
+  // An open offer to name an egg is only ever stored as true. Anything else
+  // is no offer, so a hand-edited value can never reach the Care page.
+  if (raw.awaitingName !== true) delete creature.awaitingName
+  return creature
 }
 
 /** Counts that can be earned again: whole, finite, never negative. */
@@ -585,7 +589,25 @@ function checkProfile(
     ctx.repaired += 1
     delete profile.theme
   }
+  if (value.lastBackupAt !== undefined && !isTimestamp(value.lastBackupAt)) {
+    delete profile.lastBackupAt
+  }
   return profile
+}
+
+/**
+ * An ISO 8601 date and time that names a real moment, as `toISOString()`
+ * writes it. Anything else could not be compared with the clock, so it is
+ * dropped and the garden simply has no copy on record.
+ */
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
+
+function isTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    ISO_TIMESTAMP.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  )
 }
 
 function checkInventory(value: unknown, ctx: Context): Record<string, number> {

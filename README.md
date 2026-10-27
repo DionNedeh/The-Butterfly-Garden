@@ -14,6 +14,8 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - A journal you can search (words, kinds of entry, weather, all on the
   device), a weather calendar by month or a year at a glance, and readable
   copies as Markdown, a printable page, or check-ins as a spreadsheet
+- A gentle reminder in Settings when the last backup is a month old, and
+  *Share backup…* where the browser can share a file
 - One-time, daily, and selected-weekday goals in compact rows, with skip,
   snooze, full editing and archive behind a ⋯ menu (and swipes on a touch
   screen), each of them undoable for a few seconds
@@ -34,7 +36,10 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - Host and nectar plants with visible growth across four stages
 - Egg, caterpillar, chrysalis and butterfly stages, advanced by days of care
 - Per-stage care activities, a bond meter, and a shared cosmetics wardrobe
-- A searchable shop with outfit previews, coloured glass jars, and twelve flight patterns
+- A searchable shop with outfit previews, coloured glass jars, and twelve flight
+  patterns, which says plainly what each purchase did or why it did not
+- New eggs arrive with a name of their own, and can be given another
+- On phones, five tabs and a More sheet
 - 25 real butterfly species with field notes, seed guidance, and selectable companions
 - Seven illustrated backdrops and up to three personal images with crop and zoom
 - The Garden Pass: a Google Play subscription in the Android app, and a free
