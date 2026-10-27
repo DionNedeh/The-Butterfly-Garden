@@ -19,6 +19,8 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   copies as Markdown, a printable page, or check-ins as a spreadsheet
 - A gentle reminder in Settings when the last backup is a month old, and
   *Share backup…* where the browser can share a file
+- A daily garden visit added to your own calendar as an event file; the
+  calendar does the reminding, and the garden sends no notifications
 - Goal ideas in a balanced mix (the NHS five steps and rest), most with a
   two-minute version, and up to three starter goals offered when a garden
   begins
@@ -29,6 +31,11 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - A month planner for scheduling one-time goals onto any upcoming day
 - Optional daily reflections from sixty prompts in families, with "Another
   prompt" and "Write freely"
+- Breathing with a butterfly: its wings open as you breathe in and close as
+  you breathe out, for one to five minutes, with the count and an optional
+  soft tone; finishing counts as care once a day
+- A weekly letter from Marigold on Sunday evening, saying what the week held
+  without scores, and quoting only lines you star in the journal, or none
 - Sunlight rewards capped at five per day, converting to Nectar, and a rhythm
   in the journal: days cared for in the last seven and this month, which a
   missed day never resets, and which Settings can hide
@@ -41,6 +48,8 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   flight patterns
 - Host and nectar plants with visible growth across four stages
 - Egg, caterpillar, chrysalis and butterfly stages, advanced by days of care
+- A young companion can grow alongside one of your goals: each day the goal
+  is done counts as a day of its care, and its story remembers the goal
 - Per-stage care activities, a bond meter that says what the next level
   brings, a shared cosmetics wardrobe with saved looks, and each companion's
   story

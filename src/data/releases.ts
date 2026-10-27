@@ -45,6 +45,15 @@ export const releases: ReleaseNote[] = [
     title: 'A kinder rhythm',
     sections: [
       {
+        title: 'New ways to care',
+        items: [
+          'Breathe with a butterfly: its wings open as you breathe in and close as you breathe out, for one, three or five minutes. Finishing counts as care, once a day.',
+          'A young companion can grow alongside one of your goals, and each day the goal is done counts as a day of its care.',
+          'Settings can add a daily garden visit to your own calendar. Your calendar does the reminding; the garden sends nothing.',
+          'On Sunday evening a letter from Marigold says what your week held. It quotes only lines you star in your journal, or none at all.',
+        ],
+      },
+      {
         title: 'Today',
         items: [
           'A check-in starts with nothing chosen, and “Not sure today” is an answer of its own. Once you choose, you can add up to five feeling words and your energy.',
