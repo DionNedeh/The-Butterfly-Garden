@@ -160,3 +160,25 @@ describe('sprite layers', () => {
     }
   })
 })
+
+describe('every plant at every stage', () => {
+  it('draws something for each plant in the catalogue, at each growth', async () => {
+    const { plants } = await import('../../data/content')
+    for (const plant of plants) {
+      for (const growth of [0, 1, 2, 3]) {
+        const { container, unmount } = render(<FlowerSprite plantId={plant.id} growth={growth} />)
+        const layer = container.querySelector('.plant-sway')
+        const shapes = layer?.querySelectorAll('path, circle, ellipse, rect').length ?? 0
+        expect(`${plant.id}@${growth}: ${shapes > 0}`).toBe(
+          `${plant.id}@${growth}: true`,
+        )
+        unmount()
+      }
+    }
+  })
+
+  it('draws an unknown plant rather than nothing', () => {
+    const { container } = render(<FlowerSprite plantId="not-a-plant" growth={3} />)
+    expect(container.querySelector('.plant-sway path, .plant-sway circle')).not.toBeNull()
+  })
+})

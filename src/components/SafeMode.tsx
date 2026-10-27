@@ -3,10 +3,9 @@ import {
   gardenRepository,
   inspectImportedState,
 } from '../repository/gardenRepository'
+import { readBackupFile } from '../lib/backupFile'
 import { datedFileName, saveTextFile } from '../lib/download'
-
-/** Largest backup file read into memory, in bytes. */
-export const MAX_BACKUP_BYTES = 64 * 1024 * 1024
+import { reloadApp } from '../lib/reload'
 
 /**
  * What the gardener sees when the app itself could not draw.
@@ -47,12 +46,21 @@ export function SafeMode({ error }: { error: Error }) {
 
   const restore = async (file: File) => {
     setNote(undefined)
-    if (file.size > MAX_BACKUP_BYTES) {
-      setNote('That file is too large to be a garden backup.')
+    const chosen = await readBackupFile(file)
+    if (!chosen.ok) {
+      setNote(chosen.message)
+      return
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(chosen.text)
+    } catch {
+      // The parser's own wording ("Unexpected token…") means nothing here.
+      setNote('That file is not a garden backup.')
       return
     }
     try {
-      const inspection = inspectImportedState(JSON.parse(await file.text()))
+      const inspection = inspectImportedState(parsed)
       if (!inspection.state) {
         setNote(
           `That backup could not be restored. ${inspection.refused ?? ''}`,
@@ -64,7 +72,7 @@ export function SafeMode({ error }: { error: Error }) {
         await verifyBackdropImages(inspection.state.customBackdrops)
       }
       await gardenRepository.replace(inspection.state, { snapshot: true })
-      window.location.reload()
+      reloadApp()
     } catch (problem) {
       setNote(
         problem instanceof Error && problem.message
@@ -77,7 +85,7 @@ export function SafeMode({ error }: { error: Error }) {
   const startFresh = async () => {
     try {
       await gardenRepository.clear()
-      window.location.reload()
+      reloadApp()
     } catch (problem) {
       setNote(
         problem instanceof Error ? problem.message : 'The garden could not be cleared.',
@@ -120,7 +128,7 @@ export function SafeMode({ error }: { error: Error }) {
           </label>
           <button
             className="text-button"
-            onClick={() => window.location.reload()}
+            onClick={reloadApp}
           >
             Try again
           </button>

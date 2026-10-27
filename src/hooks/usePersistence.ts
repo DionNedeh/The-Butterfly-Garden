@@ -406,7 +406,9 @@ export function usePersistence(
         } catch (error) {
           return { ok: false, message: errorMessage(error) }
         }
-        const [snapshot] = await repository.snapshots()
+        // The garden is already replaced; failing to find the copy only loses
+        // the offer to undo, not the restore itself.
+        const [snapshot] = await repository.snapshots().catch(() => [])
         setPersistence({
           readOnly: false,
           lastRestoreSnapshotId:
@@ -453,13 +455,13 @@ export function usePersistence(
        * for a new garden. Refused when storage itself could not be opened.
        */
       startFresh: async (): Promise<{ ok: boolean; message?: string }> => {
-        if ((await repository.quarantined()).length === 0)
-          return {
-            ok: false,
-            message:
-              'There is no set-aside copy of your garden yet, so starting again could lose it.',
-          }
         try {
+          if ((await repository.quarantined()).length === 0)
+            return {
+              ok: false,
+              message:
+                'There is no set-aside copy of your garden yet, so starting again could lose it.',
+            }
           await repository.prepareFreshStart()
         } catch (error) {
           return { ok: false, message: errorMessage(error) }

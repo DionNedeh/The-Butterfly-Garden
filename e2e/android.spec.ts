@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import AxeBuilder from '@axe-core/playwright'
+import { seriousViolations } from './a11y'
 
 /**
  * The Android app's own bundle (dist-android, served from the root as
@@ -48,16 +48,6 @@ async function pressBack(page: Page) {
 
 function currentPage(page: Page) {
   return mainNav(page).locator('[aria-current="page"]')
-}
-
-async function seriousViolations(page: Page, label: string) {
-  const results = await new AxeBuilder({ page }).analyze()
-  return results.violations
-    .filter(
-      (violation) =>
-        violation.impact === 'serious' || violation.impact === 'critical',
-    )
-    .map((violation) => `${label}: ${violation.id} (${violation.impact})`)
 }
 
 test('runs from the root with no service worker, install prompt or offline banner', async ({

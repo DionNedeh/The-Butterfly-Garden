@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import type { PersistenceStatus } from '../hooks/useGardenState'
+import { readBackupFile } from '../lib/backupFile'
 import { datedFileName, saveTextFile } from '../lib/download'
+import { reloadApp } from '../lib/reload'
 import { isAndroidApp } from '../lib/platform'
-import { MAX_BACKUP_BYTES } from './SafeMode'
 
 /**
  * Shown instead of onboarding when a garden is stored but could not be read.
@@ -60,11 +61,8 @@ export function RecoveryScreen({
 
   const restore = async (file: File) => {
     setNote(undefined)
-    if (file.size > MAX_BACKUP_BYTES) {
-      setNote('That file is too large to be a garden backup.')
-      return
-    }
-    const result = await onRestore(await file.text())
+    const chosen = await readBackupFile(file)
+    const result = chosen.ok ? await onRestore(chosen.text) : chosen
     setNote(result.message)
   }
 
@@ -79,7 +77,7 @@ export function RecoveryScreen({
           {unavailable ? (
             <button
               className="primary-button"
-              onClick={() => window.location.reload()}
+              onClick={reloadApp}
             >
               Try again
             </button>
@@ -128,9 +126,12 @@ export function RecoveryScreen({
                   <button
                     className="secondary-button"
                     onClick={() => {
-                      void onStartFresh().then((result) => {
-                        if (!result.ok) setNote(result.message)
-                      })
+                      void onStartFresh().then(
+                        (result) => {
+                          if (!result.ok) setNote(result.message)
+                        },
+                        () => setNote('A new garden could not be started just now.'),
+                      )
                     }}
                   >
                     Start a new garden

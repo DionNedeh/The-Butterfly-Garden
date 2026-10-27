@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ARRIVAL_HASH } from '../lib/hosting'
 import { Butterfly } from './Butterfly'
-import { MAX_BACKUP_BYTES } from './SafeMode'
+import { readBackupFile } from '../lib/backupFile'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
 
 export function Onboarding({
@@ -27,11 +27,12 @@ export function Onboarding({
   const restore = async (file: File) => {
     if (!onRestore) return
     setRestoreNote(undefined)
-    if (file.size > MAX_BACKUP_BYTES) {
-      setRestoreNote('That file is too large to be a garden backup.')
+    const chosen = await readBackupFile(file)
+    if (!chosen.ok) {
+      setRestoreNote(chosen.message)
       return
     }
-    const result = await onRestore(await file.text())
+    const result = await onRestore(chosen.text)
     if (result.ok && window.location.hash === ARRIVAL_HASH) {
       // Arrived and restored: the address no longer needs to say so.
       window.history.replaceState(

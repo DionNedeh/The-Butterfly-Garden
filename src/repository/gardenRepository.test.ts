@@ -19,6 +19,7 @@ import {
   META_FIELDS,
   changedParts,
   classifyRecord,
+  createGardenRepository,
   gardenRepository,
   readImportedState,
   sameCollection,
@@ -744,6 +745,30 @@ describe('garden repository', () => {
       expect(
         new Set(GARDEN_COLLECTIONS.map((c) => COLLECTION_STORES[c])).size,
       ).toBe(GARDEN_COLLECTIONS.length)
+    })
+
+    it('every part store exists in the database it opens', async () => {
+      // A database as the first builds left it: version 1, the whole garden
+      // in one store. Opening it here has to bring every store into being,
+      // or the first read of a split garden fails for everyone upgrading.
+      const name = 'butterfly-garden-upgrade-test'
+      const old = await openDB(name, 1, {
+        upgrade(db) {
+          db.createObjectStore('state')
+        },
+      })
+      old.close()
+      const repository = createGardenRepository(name)
+      expect((await repository.load()).status).toBe('empty')
+      const db = await openDB(name)
+      try {
+        expect(db.version).toBe(DATABASE_VERSION)
+        for (const store of ['state', ...PART_STORES, 'quarantine', 'snapshots', 'drafts'])
+          expect(db.objectStoreNames.contains(store), store).toBe(true)
+      } finally {
+        db.close()
+      }
+      await repository.clear()
     })
   })
 
