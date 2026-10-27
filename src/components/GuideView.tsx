@@ -124,7 +124,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       eyebrow: 'Life in the scene',
       title: 'Companions in the garden',
       paragraphs: [
-        'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly for a little burst of hearts; on the Care page, every stage answers the same way, egg to butterfly.',
+        'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly in the garden to meet it: its card says who it is, has a Pet button for a little burst of hearts, and opens Care for a companion. On the Care page, a tap on any stage, egg to butterfly, gives the hearts straight away.',
         'Choose one butterfly as your active companion from its card in the Garden, and rename any companion whenever you like from its card or the Care page.',
       ],
     },

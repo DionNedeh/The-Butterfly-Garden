@@ -1,7 +1,6 @@
 import { plants as plantCatalog, species as speciesCatalog } from '../data/content'
 import type { AppState, PlantInstance } from '../types'
 import { canBloomAgain, careDaysCounted, keepsGiving, REBLOOM_CARE_DAYS } from './gardenPace'
-import { counted } from './plural'
 import { nextSpeciesForPlant } from './speciesAcquisition'
 
 export const PLANT_CAPACITY = 8
@@ -75,7 +74,9 @@ export function plantBloomNote(
 ): string | undefined {
   if (!keepsGiving(state.profile) || !canBloomAgain(plant, maxGrowth)) return undefined
   const left = REBLOOM_CARE_DAYS - careDaysCounted(plant)
-  if (left > 0) return `Blooms again in ${counted(left, 'more day', 'more days')} of care.`
+  // Spelt out here rather than through lib/plural, which this file would
+  // otherwise bring into the first load for one sentence.
+  if (left > 0) return `Blooms again in ${left} more ${left === 1 ? 'day' : 'days'} of care.`
   // Ready, and waiting only for an egg it can bring.
   return nextSpeciesForPlant(state, plant.plantId)
     ? 'Ready to bloom again with your next Sunlight.'

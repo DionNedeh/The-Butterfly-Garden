@@ -139,3 +139,9 @@
   font-weight: 700;
   line-height: 1.45;
 }
+
+/* The life-stage filter capitalises its lowercase values; a companion's name
+   is shown exactly as the gardener wrote it. */
+.shop-filters select.companion-filter {
+  text-transform: none;
+}

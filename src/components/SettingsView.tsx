@@ -1,5 +1,6 @@
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { useEffect, useRef, useState } from 'react'
+import { ambientTrackDescriptions } from '../data/ambientTrackDescriptions'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import { previewBackup, type BackupPreview } from '../lib/backupPreview'
@@ -32,7 +33,7 @@ import { motionPreference, type MotionPreference } from '../lib/motion'
 import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
 import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
-import { releaseName } from '../data/releases'
+import { releaseName } from '../data/currentRelease'
 import { soundVolumeOf } from '../lib/sound'
 import { SoundSwitches, SoundVolume } from './SoundControls'
 import './settings.css'
@@ -665,7 +666,7 @@ export function SettingsView({
                 />
                 <span>
                   <strong>{track.name}</strong>
-                  <small>{track.description}</small>
+                  <small>{ambientTrackDescriptions[track.id]}</small>
                   <em>
                     {heard
                       ? profile?.ambientSound

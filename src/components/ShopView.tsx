@@ -239,6 +239,7 @@ export function ShopView({
             <label>
               Companion
               <select
+                className="companion-filter"
                 value={fitsCompanion ? fitsId : 'all'}
                 onChange={(event) => setFitsId(event.target.value)}
               >

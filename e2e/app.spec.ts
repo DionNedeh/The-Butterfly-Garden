@@ -627,9 +627,31 @@ test('a garden that keeps giving, and a small welcome back after a few days away
   await expect(welcome).toHaveCount(0)
   await expect(page.locator('#garden-title')).toBeFocused()
 
-  // Put away for good: a reload the same day does not bring it back.
+  // Put away for good: what is stored says so...
+  const storedProfile = () =>
+    page.evaluate(
+      () =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const request = indexedDB.open('butterfly-garden')
+          request.onerror = () => reject(request.error)
+          request.onsuccess = () => {
+            const db = request.result
+            const get = db.transaction('meta', 'readonly').objectStore('meta').get('current')
+            get.onsuccess = () => {
+              db.close()
+              resolve((get.result as { profile: Record<string, unknown> }).profile)
+            }
+            get.onerror = () => reject(get.error)
+          }
+        }),
+    )
+  await expect.poll(async () => (await storedProfile()).welcomeBackOn).toBeUndefined()
+  expect((await storedProfile()).lastVisitOn).toBe(localDateDaysAgo(0))
+  // ...and a reload the same day does not bring it back, once the card's own
+  // code would have had time to load (it is fetched only on such a day).
   await reloadAfterSave(page)
   await expect(page.locator('#garden-title')).toBeVisible()
+  await page.waitForLoadState('networkidle')
   await expect(page.getByRole('group', { name: 'Welcome back' })).toHaveCount(0)
 })
 

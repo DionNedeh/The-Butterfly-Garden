@@ -3,7 +3,7 @@ import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
 import './android.css'
-import { currentRelease, hasUnseenRelease, releaseName } from './data/releases'
+import { currentRelease, hasUnseenRelease, releaseName } from './data/currentRelease'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { BottomNav, PrimaryNav } from './components/Navigation'
@@ -69,6 +69,10 @@ const NoticesView = lazy(() =>
 const SupportView = lazy(() =>
   import('./components/SupportView').then((m) => ({ default: m.SupportView })),
 )
+// Only ever shown on the address the garden moved from, never in the app.
+const MovedBanner = lazy(() =>
+  import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
+)
 
 /** What the support page's own back button says, for the page that opened it. */
 const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
@@ -110,7 +114,6 @@ import { useDraft } from './lib/drafts'
 import { heardTrack, soundVolumeOf } from './lib/sound'
 import { isArrival, movedTo } from './lib/hosting'
 import { routeFromHash, urlForRoute, type Route } from './lib/routes'
-import { MovedBanner } from './components/MovedBanner'
 import { Celebrations } from './components/Celebrations'
 
 function currentUrl(): string {
@@ -641,7 +644,9 @@ function App() {
       )}
 
       {newAddress && (
-        <MovedBanner target={newAddress} onExportGarden={garden.exportGarden} />
+        <Suspense fallback={null}>
+          <MovedBanner target={newAddress} onExportGarden={garden.exportGarden} />
+        </Suspense>
       )}
 
       <Celebrations />

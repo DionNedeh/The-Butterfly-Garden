@@ -27,6 +27,7 @@ import { createInitialState, plantSeed, type RecapDraft } from '../lib/progressi
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
 import { requestPersistentStorage } from '../lib/storage'
+import { markQuietWrite } from '../lib/quietWrites'
 import { noteVisit, putAwayWelcomeBack } from '../lib/visits'
 import {
   buyShopItem,
@@ -128,7 +129,12 @@ export function useGardenState() {
       const today = toLocalDate()
       // Most of the time today is already noted; then not even a render.
       if (stateRef.current?.profile?.lastVisitOn === today) return
-      setState((current) => (current ? noteVisit(current, today) : current))
+      setState((current) => {
+        if (!current) return current
+        const next = noteVisit(current, today)
+        // Nothing of the gardener's is in this write (lib/quietWrites).
+        return next === current ? current : markQuietWrite(next)
+      })
     }
     visit()
     window.addEventListener('focus', visit)

@@ -25,7 +25,7 @@ import { EMERGENCE_SEED_REWARD } from './lifecycle'
 import { PLANT_CAPACITY } from './plantManagement'
 import { selectDiscoveryCandidate } from './speciesAcquisition'
 import { createId } from './id'
-import { currentRelease } from '../data/releases'
+import { currentRelease } from '../data/currentRelease'
 
 export { EMERGENCE_SEED_REWARD }
 

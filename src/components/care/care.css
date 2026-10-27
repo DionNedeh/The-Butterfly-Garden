@@ -98,8 +98,10 @@
   font-weight: 700;
 }
 
+/* While empty it keeps its place in the page, so a screen reader is already
+   listening when it first speaks; it only gives back the grid's gap. */
 .look-status:empty {
-  display: none;
+  margin-top: -0.75rem;
 }
 
 /* A companion's story: folded like the Journal's field notes. */

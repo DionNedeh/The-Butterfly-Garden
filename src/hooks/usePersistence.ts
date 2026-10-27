@@ -12,6 +12,7 @@ import {
   type GardenRepository,
   type LoadResult,
 } from '../repository/gardenRepository'
+import { isQuietWrite } from '../lib/quietWrites'
 import type { AppState } from '../types'
 import type { useMediaSaves } from './useMediaSaves'
 
@@ -247,12 +248,15 @@ export function usePersistence(
         }
         if (error instanceof GardenConflictError) {
           // Another tab wrote first. Its garden is the true one: read it back
-          // and say plainly that this change was not kept.
-          settleAll({ ok: false, message: error.message })
+          // and say plainly that this change was not kept -- unless the write
+          // held nothing of the gardener's (lib/quietWrites), when there is
+          // nothing to say.
+          const quiet = isQuietWrite(next)
+          if (!quiet) settleAll({ ok: false, message: error.message })
           const result = await repository.load()
           if (result.status === 'loaded') applyLoadResult(result)
           else pauseSaving(result.reason)
-          setPersistence((current) => ({ ...current, notice: error.message }))
+          if (!quiet) setPersistence((current) => ({ ...current, notice: error.message }))
           return
         }
         const failed = failWritten(next, errorMessage(error))

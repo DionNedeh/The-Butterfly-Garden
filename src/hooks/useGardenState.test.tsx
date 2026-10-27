@@ -1318,6 +1318,20 @@ describe('the day the garden was opened', () => {
     expect(result.current.state?.profile?.lastVisitOn).toBe(toLocalDate())
   })
 
+  it('says nothing when another tab noted the day first, and reads its garden back', async () => {
+    const other = lastVisited(0)
+    const load = vi
+      .spyOn(gardenRepository, 'load')
+      .mockResolvedValueOnce({ status: 'loaded', state: lastVisited(1) })
+      .mockResolvedValue({ status: 'loaded', state: other })
+    vi.spyOn(gardenRepository, 'save').mockRejectedValue(new GardenConflictError())
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(result.current.state).toEqual(other))
+    // The write held nothing of the gardener's, so nothing was lost.
+    expect(result.current.persistence.notice).toBeUndefined()
+  })
+
   it('writes nothing for a garden already visited today', async () => {
     vi.spyOn(gardenRepository, 'load').mockResolvedValue({
       status: 'loaded',
