@@ -174,6 +174,9 @@ export default function SightingForm({
       ref={dialog}
       className="garden-dialog sighting-form"
       aria-labelledby={`${ids}-title`}
+      // Nothing here is a draft: the auto-lock waits while it is open
+      // (components/lock/LockWatch).
+      data-auto-lock-waits=""
       onCancel={(event) => {
         event.preventDefault()
         close()

@@ -124,6 +124,39 @@ describe('SettingsView in the Android app', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('saves a protected backup through the app’s own save screen, and says plainly what happened', async () => {
+    const user = userEvent.setup()
+    const { save, onExportGarden, onBackupMade } = await renderAndroidSettings()
+    expect(screen.queryByRole('button', { name: /^Download a protected/ })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Save a protected backup…' }))
+    await screen.findByRole('dialog', { name: 'Save a protected backup' })
+    await user.type(screen.getByLabelText('Passphrase'), 'quiet meadow lantern')
+    await user.type(screen.getByLabelText('Passphrase again'), 'quiet meadow lantern')
+    await user.click(screen.getByRole('button', { name: 'Lock the backup' }))
+    const button = await screen.findByRole('button', { name: 'Save protected backup' }, { timeout: 10_000 })
+
+    // Backing out of the save screen saves nothing, and says so.
+    save.mockResolvedValueOnce(false)
+    await user.click(button)
+    expect(await screen.findByText('Nothing was saved. Choose Save again to pick a place.')).toBeInTheDocument()
+    expect(onBackupMade).not.toHaveBeenCalled()
+
+    save.mockResolvedValueOnce(true)
+    await user.click(button)
+    expect(
+      await screen.findByText('Protected backup saved. Keep its passphrase somewhere safe, apart from the file.'),
+    ).toBeInTheDocument()
+    expect(onExportGarden).toHaveBeenCalledOnce()
+    const [fileName, mimeType, text] = save.mock.lastCall!
+    expect(fileName).toMatch(/^butterfly-garden-protected-\d{4}-\d{2}-\d{2}\.json$/)
+    expect(mimeType).toBe('application/json')
+    const { sealedKind } = await import('../lib/backupFile')
+    expect(sealedKind(text)).toBe('backup')
+    // Written at the full count: nothing in the app asks for fewer.
+    expect((JSON.parse(text) as { kdf: { iterations: number } }).kdf.iterations).toBe(600_000)
+    expect(onBackupMade).toHaveBeenCalledOnce()
+  })
+
   it('lets the restore picker see backups however a storage app labels them', async () => {
     const user = userEvent.setup()
     await renderAndroidSettings()

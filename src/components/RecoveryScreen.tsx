@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { PersistenceStatus } from '../hooks/useGardenState'
-import { readBackupFile } from '../lib/backupFile'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
 import type { FileCopy } from '../lib/sightingPhotos'
+import { ProtectedRestore } from './backup/ProtectedRestore'
 
 /**
  * Shown instead of onboarding when a garden is stored but could not be read.
@@ -25,6 +26,9 @@ export function RecoveryScreen({
 }) {
   const [note, setNote] = useState<string>()
   const [confirmFresh, setConfirmFresh] = useState(false)
+  /** A protected backup chosen to restore, waiting for its passphrase. */
+  const [sealedChoice, setSealedChoice] = useState<string>()
+  const fileInput = useRef<HTMLInputElement>(null)
   const unavailable = reason === 'unavailable'
 
   // The platform is checked inline, so each build carries only its own words.
@@ -60,11 +64,21 @@ export function RecoveryScreen({
     }
   }
 
+  const restoreText = async (text: string) => {
+    setNote((await onRestore(text)).message)
+  }
+
   const restore = async (file: File) => {
     setNote(undefined)
     const chosen = await readBackupFile(file)
-    const result = chosen.ok ? await onRestore(chosen.text) : chosen
-    setNote(result.message)
+    if (!chosen.ok) {
+      setNote(chosen.message)
+      return
+    }
+    // A protected backup asks for its passphrase, and a locked garden's copy
+    // for its passcode or recovery code; then each restores as any other.
+    if (sealedKind(chosen.text)) setSealedChoice(chosen.text)
+    else await restoreText(chosen.text)
   }
 
   return (
@@ -93,6 +107,7 @@ export function RecoveryScreen({
           <label className="secondary-button file-button">
             Restore a backup
             <input
+              ref={fileInput}
               type="file"
               accept="application/json,.json,text/plain,application/octet-stream"
               onChange={(event) => {
@@ -103,6 +118,21 @@ export function RecoveryScreen({
             />
           </label>
         </div>
+        {sealedChoice !== undefined && (
+          <ProtectedRestore
+            text={sealedChoice}
+            next="replace"
+            returnFocus={() => fileInput.current}
+            onOpened={(plain) => {
+              setSealedChoice(undefined)
+              void restoreText(plain)
+            }}
+            onClose={(message) => {
+              setSealedChoice(undefined)
+              setNote(message)
+            }}
+          />
+        )}
         {note && (
           <p className="settings-note" role="status">
             {note}

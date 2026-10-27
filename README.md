@@ -88,6 +88,10 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - "If you need support now": a short, dated list of crisis lines that hands
   off to the phone, reachable from Settings, the Guide and a stormy check-in
 - Backup and restore to a JSON file including your personal backdrop images
+- A protected backup locked with a passphrase, and an optional garden lock:
+  the journal sealed on the device under a passcode and a 24-word recovery
+  code (or a passkey where the device offers one), with a lock screen and an
+  optional auto-lock
 - IndexedDB persistence with no account, analytics, or cloud transfer
 - Installable offline PWA and GitHub Pages deployment, with a one-time guide
   to the Home Screen on iPhone and iPad, an hourly look for updates while it

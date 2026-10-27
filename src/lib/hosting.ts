@@ -1,5 +1,3 @@
-import { isAndroidApp } from './platform'
-
 /**
  * Where the app is served from, and what happens when that changes.
  *
@@ -17,10 +15,10 @@ export const ARRIVAL_HASH = '#/arrive'
 /**
  * The garden's new address, when this is the old address's final build.
  * Only an https URL counts. The Android app has no address to move, so it
- * never shows the move.
+ * never shows the move; the check is inline so its build leaves it out.
  */
 export function movedTo(): URL | undefined {
-  if (isAndroidApp()) return undefined
+  if (import.meta.env.VITE_PLATFORM === 'android') return undefined
   const raw = import.meta.env.VITE_MOVED_TO
   if (typeof raw !== 'string' || raw.trim() === '') return undefined
   try {

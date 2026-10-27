@@ -40,8 +40,23 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-4',
+    version: '3.4.0',
+    title: 'Private by design',
+    sections: [
+      {
+        title: 'Your privacy',
+        items: [
+          'Lock my garden, in Settings: your journal is sealed on this device with a passcode, and a 24-word recovery code you keep. It opens with either, or a passkey where your device offers one, and can lock by itself when you step away.',
+          'A protected backup: the usual backup file, locked with a passphrase, so it can sit in your downloads or a cloud folder and only you can open it.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'release-3-3',
     version: '3.3.0',
+    releasedOn: '2026-10-27',
     title: 'Out of doors, and for harder days',
     sections: [
       {

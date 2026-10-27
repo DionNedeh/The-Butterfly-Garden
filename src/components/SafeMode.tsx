@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   gardenRepository,
   inspectImportedState,
 } from '../repository/gardenRepository'
-import { readBackupFile } from '../lib/backupFile'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { hasPictures } from '../lib/customBackdrops'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
 import { storedCopy } from '../lib/storedCopy'
+import { ProtectedRestore } from './backup/ProtectedRestore'
 
 /**
  * What the gardener sees when the app itself could not draw.
@@ -21,6 +22,9 @@ export function SafeMode({ error }: { error: Error }) {
   const [note, setNote] = useState<string>()
   const [downloaded, setDownloaded] = useState(false)
   const [confirmFresh, setConfirmFresh] = useState(false)
+  /** A protected backup chosen to restore, waiting for its passphrase. */
+  const [sealedChoice, setSealedChoice] = useState<string>()
+  const fileInput = useRef<HTMLInputElement>(null)
 
   const downloadStored = async () => {
     setNote(undefined)
@@ -36,11 +40,14 @@ export function SafeMode({ error }: { error: Error }) {
         return
       }
       setDownloaded(true)
+      // Under the lock the copy is sealed as the garden is stored, and is
+      // known by the lock's record in it: it can be restored, but only with
+      // the lock's own secrets (lib/lockedCopy).
       setNote(
-        `${
-          outcome === 'saved'
-            ? 'Saved. Keep this file: it holds everything this app had stored, and can be restored later.'
-            : 'Download started. Keep this file: it holds everything this app had stored, and can be restored later.'
+        `${outcome === 'saved' ? 'Saved.' : 'Download started.'} ${
+          sealedKind(copy.text)
+            ? 'This copy is sealed with your lock: it keeps everything, but it can only be opened by this app, with your passcode or recovery code.'
+            : 'Keep this file: it holds everything this app had stored, and can be restored later.'
         }${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
@@ -48,16 +55,10 @@ export function SafeMode({ error }: { error: Error }) {
     }
   }
 
-  const restore = async (file: File) => {
-    setNote(undefined)
-    const chosen = await readBackupFile(file)
-    if (!chosen.ok) {
-      setNote(chosen.message)
-      return
-    }
+  const restoreText = async (text: string) => {
     let parsed: unknown
     try {
-      parsed = JSON.parse(chosen.text)
+      parsed = JSON.parse(text)
     } catch {
       // The parser's own wording ("Unexpected token…") means nothing here.
       setNote('That file is not a garden backup.')
@@ -84,6 +85,19 @@ export function SafeMode({ error }: { error: Error }) {
           : 'That file is not a garden backup.',
       )
     }
+  }
+
+  const restore = async (file: File) => {
+    setNote(undefined)
+    const chosen = await readBackupFile(file)
+    if (!chosen.ok) {
+      setNote(chosen.message)
+      return
+    }
+    // A protected backup asks for its passphrase, and a locked garden's copy
+    // for its passcode or recovery code; then each restores as any other.
+    if (sealedKind(chosen.text)) setSealedChoice(chosen.text)
+    else await restoreText(chosen.text)
   }
 
   const startFresh = async () => {
@@ -121,6 +135,7 @@ export function SafeMode({ error }: { error: Error }) {
           <label className="secondary-button file-button">
             Restore a backup
             <input
+              ref={fileInput}
               type="file"
               accept="application/json,.json,text/plain,application/octet-stream"
               onChange={(event) => {
@@ -137,6 +152,21 @@ export function SafeMode({ error }: { error: Error }) {
             Try again
           </button>
         </div>
+        {sealedChoice !== undefined && (
+          <ProtectedRestore
+            text={sealedChoice}
+            next="replace"
+            returnFocus={() => fileInput.current}
+            onOpened={(plain) => {
+              setSealedChoice(undefined)
+              void restoreText(plain)
+            }}
+            onClose={(message) => {
+              setSealedChoice(undefined)
+              setNote(message)
+            }}
+          />
+        )}
         {note && (
           <p className="settings-note" role="status">
             {note}

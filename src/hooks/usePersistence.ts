@@ -19,10 +19,10 @@ import type { AppState, CustomBackdrop, Sighting } from '../types'
 import type { useMediaSaves } from './useMediaSaves'
 
 /** Tabs tell each other when the shared garden changed underneath them. */
-const SYNC_CHANNEL = 'butterfly-garden-sync'
+export const SYNC_CHANNEL = 'butterfly-garden-sync'
 
 /** What tabs say to each other on the sync channel. */
-type SyncMessage =
+export type SyncMessage =
   | { type: 'garden-saved'; parts?: unknown }
   /** A tab is about to delete the garden: stop writing now. */
   | { type: 'garden-clearing' }
@@ -30,6 +30,18 @@ type SyncMessage =
   | { type: 'garden-cleared' }
   /** The deletion did not happen after all: read the garden again. */
   | { type: 'garden-clear-failed' }
+  /**
+   * The garden lock was turned on or off, or (`now`) locked. A tab with the
+   * garden open follows it here, reading the garden again; one showing the
+   * lock screen, there.
+   */
+  | { type: 'garden-lock'; now?: boolean }
+  /**
+   * The time the garden may be out of sight before it locks itself was
+   * chosen anew. Nothing of the garden changed: only a tab with it open
+   * under the lock takes the new time (components/lock/LockWatch).
+   */
+  | { type: 'garden-auto-lock' }
 
 /** Retry delays after storage could not be read, in milliseconds. */
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
@@ -191,6 +203,12 @@ export function usePersistence(
     channelRef.current = channel
     channel.onmessage = (event: MessageEvent<SyncMessage | undefined>) => {
       const message = event.data
+      if (message?.type === 'garden-lock' && message.now) {
+        // Locked everywhere now: this tab too, and components/LockGate
+        // shows the lock screen.
+        void import('../lib/gardenLockActions').then(({ lockGarden }) => lockGarden(false))
+        return
+      }
       if (message?.type === 'garden-clearing') {
         pauseSaving('deleting')
         return
@@ -203,10 +221,22 @@ export function usePersistence(
         void repository.load().then(applyLoadResult)
         return
       }
-      if (message?.type !== 'garden-saved' || readOnlyRef.current) return
+      if (message?.type !== 'garden-saved' && message?.type !== 'garden-lock') return
+      if (readOnlyRef.current) {
+        // Nothing is written from here, so nothing is read back; but a lock
+        // turned on still takes the garden off this screen (LockGate).
+        if (message.type === 'garden-lock') void repository.checkLock().catch(() => undefined)
+        return
+      }
       // The sender names what it wrote, so only those parts are read back.
-      // A message without them -- an older tab -- falls back to a full load.
-      void repository.adopt(message.parts).then((result) => {
+      // A message without them falls back to a full load: an older tab's, or
+      // the lock turned on or off, which stores every part again under a new
+      // revision (in a database of its own, perhaps, which the read opens).
+      // Kept at the old one, this tab's next change would be refused as a
+      // conflict and lost. The load follows the lock as it now stands, so a
+      // garden this tab may no longer read goes to the lock screen.
+      const parts = message.type === 'garden-saved' ? message.parts : undefined
+      void repository.adopt(parts).then((result) => {
         if (result.status === 'loaded') {
           applyLoadResult(result)
           return

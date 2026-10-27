@@ -3,10 +3,11 @@ import type { GoalSuggestion } from '../data/goalSuggestions'
 import type { StarterGoal } from '../hooks/useGardenState'
 import { ARRIVAL_HASH } from '../lib/hosting'
 import { Butterfly } from './Butterfly'
-import { readBackupFile } from '../lib/backupFile'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { balancedSuggestions } from '../lib/goalSuggestions'
 import { isAndroidApp } from '../lib/platform'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
+import { ProtectedRestore } from './backup/ProtectedRestore'
 import './goals/goals.css'
 
 /** The most starter goals a new garden begins with: a few, never a list. */
@@ -45,6 +46,9 @@ export function Onboarding({
   const [gardenName, setGardenName] = useState('Sunlit Sanctuary')
   const [restoreOpen, setRestoreOpen] = useState(arriving)
   const [restoreNote, setRestoreNote] = useState<string>()
+  /** A protected backup chosen to restore, waiting for its passphrase. */
+  const [sealedChoice, setSealedChoice] = useState<string>()
+  const restoreInput = useRef<HTMLInputElement>(null)
   const [starters, setStarters] = useState<GoalSuggestion[]>([])
   const startersFull = starters.length >= MAX_STARTER_GOALS
   // Each step replaces the one before, button and all, so focus is taken to
@@ -62,15 +66,9 @@ export function Onboarding({
           : chosen,
     )
 
-  const restore = async (file: File) => {
+  const restoreText = async (text: string) => {
     if (!onRestore) return
-    setRestoreNote(undefined)
-    const chosen = await readBackupFile(file)
-    if (!chosen.ok) {
-      setRestoreNote(chosen.message)
-      return
-    }
-    const result = await onRestore(chosen.text)
+    const result = await onRestore(text)
     if (result.ok && window.location.hash === ARRIVAL_HASH) {
       // Arrived and restored: the address no longer needs to say so.
       window.history.replaceState(
@@ -81,6 +79,20 @@ export function Onboarding({
     }
     // On success the garden opens, so only a refusal stays to be read.
     if (!result.ok) setRestoreNote(result.message)
+  }
+
+  const restore = async (file: File) => {
+    if (!onRestore) return
+    setRestoreNote(undefined)
+    const chosen = await readBackupFile(file)
+    if (!chosen.ok) {
+      setRestoreNote(chosen.message)
+      return
+    }
+    // A protected backup asks for its passphrase, and a locked garden's copy
+    // for its passcode or recovery code; then each restores as any other.
+    if (sealedKind(chosen.text)) setSealedChoice(chosen.text)
+    else await restoreText(chosen.text)
   }
 
   return (
@@ -125,6 +137,7 @@ export function Onboarding({
                   <label className="secondary-button file-button">
                     Choose a backup
                     <input
+                      ref={restoreInput}
                       type="file"
                       accept="application/json,.json,text/plain,application/octet-stream"
                       onChange={(event) => {
@@ -138,6 +151,21 @@ export function Onboarding({
                     <p className="settings-note error" role="status">
                       {restoreNote}
                     </p>
+                  )}
+                  {sealedChoice !== undefined && (
+                    <ProtectedRestore
+                      text={sealedChoice}
+                      next="arrive"
+                      returnFocus={() => restoreInput.current}
+                      onOpened={(plain) => {
+                        setSealedChoice(undefined)
+                        void restoreText(plain)
+                      }}
+                      onClose={(message) => {
+                        setSealedChoice(undefined)
+                        setRestoreNote(message)
+                      }}
+                    />
                   )}
                 </div>
               ) : (

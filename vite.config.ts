@@ -74,12 +74,16 @@ export default defineConfig(({ mode }) => {
           // both builds: it still loads with the app, but the entry stays
           // under its cap (check-budgets.mjs) however the rest of the graph
           // is split, and the web build no longer repeats what the chunks
-          // around it already hold.
+          // around it already hold. The garden lock's sealing
+          // (repository/sealedStores), its changes of database
+          // (repository/gardenSwitch) and setting an unreadable garden aside
+          // (repository/setAside) are left out of it, so that only a garden
+          // that needs them downloads them.
           codeSplitting: {
             groups: [
               {
                 name: 'repository',
-                test: /[\\/]src[\\/]repository[\\/]|[\\/]node_modules[\\/]idb[\\/]/,
+                test: /[\\/]src[\\/]repository[\\/](?!sealedStores|gardenSwitch|setAside)|[\\/]node_modules[\\/]idb[\\/]/,
               },
             ],
           },

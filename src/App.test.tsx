@@ -92,7 +92,7 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     expect(window.location.hash).toBe('#/settings')
     expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull()
     expect(more).toHaveAttribute('aria-current', 'page')
-    expect(more).toHaveFocus()
+    await waitFor(() => expect(more).toHaveFocus())
 
     await user.click(dock.getByRole('button', { name: 'Today' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Today' }, { timeout: LAZY_PAGE_MS })).toBeInTheDocument()
@@ -263,7 +263,9 @@ describe('arriving at an address', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
   it('opens the "Check in" shortcut on Today, at the weather question', async () => {
     window.history.replaceState(null, '', '/#/today/check-in')
     await openGardenAt('Today')
-    expect(screen.getByRole('heading', { name: 'What is your inner weather?' })).toHaveFocus()
+    // Focus moves in an effect, which can run a moment after the page is drawn.
+    const question = screen.getByRole('heading', { name: 'What is your inner weather?' })
+    await waitFor(() => expect(question).toHaveFocus())
     expect(window.location.hash).toBe('#/today/check-in')
   })
 })
@@ -435,7 +437,7 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
     await user.click(screen.getByRole('button', { name: 'Fade the garden to night and close' }))
 
     const title = await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
-    expect(title).toHaveFocus()
+    await waitFor(() => expect(title).toHaveFocus())
     expect(window.location.hash).toBe('')
     expect(shell()).toHaveClass('theme-night')
     expect(screen.getByTitle('Stardust balance')).toHaveTextContent('1 Stardust')
@@ -563,7 +565,7 @@ describe('meeting a butterfly, and a flight of its own', { timeout: WHOLE_APP_TI
     expect(window.location.hash).toBe('#/care')
     const tab = screen.getByRole('tab', { name: /Sol/ })
     expect(tab).toHaveAttribute('aria-selected', 'true')
-    expect(tab).toHaveFocus()
+    await waitFor(() => expect(tab).toHaveFocus())
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Flight' }), 'Petal Hop')
     await user.click(primaryNav().getByRole('button', { name: 'Garden' }))

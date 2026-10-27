@@ -899,9 +899,10 @@ describe('garden repository', () => {
       // installed databases gain the store, then update the numbers here.
       // Version 6 added the snapshots and drafts stores, which are not
       // collections of the garden, so the collection count stayed at 12.
-      // Version 7 added the sightings, the thirteenth.
+      // Version 7 added the sightings, the thirteenth. Version 8 added the
+      // garden lock's store, which is not a collection either.
       expect(GARDEN_COLLECTIONS).toHaveLength(13)
-      expect(DATABASE_VERSION).toBe(7)
+      expect(DATABASE_VERSION).toBe(8)
     })
 
     it('creates every part store when an older database is upgraded', () => {
@@ -931,7 +932,7 @@ describe('garden repository', () => {
       const db = await openDB(name)
       try {
         expect(db.version).toBe(DATABASE_VERSION)
-        for (const store of ['state', ...PART_STORES, 'quarantine', 'snapshots', 'drafts'])
+        for (const store of ['state', ...PART_STORES, 'quarantine', 'snapshots', 'drafts', 'lock'])
           expect(db.objectStoreNames.contains(store), store).toBe(true)
       } finally {
         db.close()
