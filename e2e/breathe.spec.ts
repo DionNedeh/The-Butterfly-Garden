@@ -227,6 +227,7 @@ test('at the largest text on a short screen, Stop never covers the count', async
     { width: 1024, height: 600 },
     { width: 844, height: 390 },
     { width: 667, height: 375 },
+    { width: 568, height: 320 },
   ]) {
     await page.setViewportSize(viewport)
     // By keyboard from the top of the page, where Start begins behind the dock.
