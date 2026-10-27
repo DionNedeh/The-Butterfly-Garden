@@ -94,6 +94,9 @@ export function createInitialState(
       lastSeenReleaseId: currentRelease.id,
       // Making the garden is its first visit (lib/visits).
       lastVisitOn: toLocalDate(now),
+      // A new garden keeps its companions' diaries from the start, so every
+      // story it tells is whole (lib/companionStory).
+      diarySince: nowIso,
     },
     plants: [
       {

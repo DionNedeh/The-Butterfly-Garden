@@ -717,6 +717,45 @@ describe('every action, through the hook', () => {
     expect(garden().profile?.activeCompanionId).toBe(sol.id)
   })
 
+  it('saves, wears, renames, deletes and puts back a look', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    const sol = garden().creatures[0]
+    act(() => {
+      result.current.purchaseItem('flower-crown')
+      result.current.purchaseItem('silk-bow')
+    })
+    act(() => result.current.equipItem(sol.id, 'flower-crown'))
+    expect(garden().creatures[0].outfitsWorn).toEqual(['flower-crown'])
+    act(() => result.current.savePreset(sol.id, 'Crowned'))
+    const [look] = garden().outfitPresets!
+    expect(look).toMatchObject({ name: 'Crowned', outfit: { headwear: 'flower-crown' } })
+
+    act(() => result.current.unequipSlot(sol.id, 'headwear'))
+    act(() => result.current.equipItem(sol.id, 'silk-bow'))
+    let worn: ReturnType<typeof result.current.wearPreset> | undefined
+    act(() => {
+      worn = result.current.wearPreset(sol.id, look.id)
+    })
+    expect(worn).toEqual({ worn: ['flower-crown'], skipped: [] })
+    // The look is the whole outfit: the bow it does not hold comes off.
+    expect(garden().creatures[0].outfit).toEqual({ headwear: 'flower-crown' })
+
+    act(() => result.current.renamePreset(look.id, 'Sunday crown'))
+    expect(garden().outfitPresets?.[0].name).toBe('Sunday crown')
+    const renamed = garden().outfitPresets![0]
+    act(() => result.current.deletePreset(look.id))
+    expect(garden().outfitPresets).toEqual([])
+    act(() => result.current.restorePreset(renamed, 0))
+    expect(garden().outfitPresets).toEqual([renamed])
+  })
+
+  it('wears nothing before the garden has loaded', () => {
+    vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useGardenState())
+    expect(result.current.wearPreset('sol', 'look')).toEqual({ worn: [], skipped: [] })
+  })
+
   it('refuses a purchase, and says so, when the balance cannot cover it', async () => {
     const { result } = await renderReady()
     const before = result.current.state

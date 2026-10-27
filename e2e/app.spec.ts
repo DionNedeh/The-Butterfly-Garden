@@ -68,12 +68,16 @@ interface GardenRecord {
     plantedAt: string
   }>
   creatures: Array<{
+    id?: string
+    name?: string
     stage?: string
     sourcePlantId?: string
     emergeAt?: string
     awaitingName?: boolean
+    outfit?: Record<string, string>
   }>
   ownedFlightPatternIds?: string[]
+  ownedItemIds?: string[]
 }
 
 /**
@@ -1538,6 +1542,55 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
     'complete',
     true,
   )
+})
+
+test('a look saved on one companion is worn by another, and their story kept', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // Sol, the starter caterpillar, in a cap the garden owns, and Fern, a
+    // butterfly with nothing on yet.
+    state.ownedItemIds = ['sprout-cap']
+    const sol = state.creatures[0]
+    sol.outfit = { headwear: 'sprout-cap' }
+    state.creatures.push({ ...sol, id: 'fern', name: 'Fern', stage: 'butterfly', outfit: {} })
+  })
+  await page.reload()
+  await goTo(page, 'Care')
+
+  // What the next bond level asks and brings, under the meter.
+  await expect(page.locator('.bond-next')).toContainText(
+    'Next bond level: 10 more bond points',
+  )
+
+  await page.getByRole('button', { name: 'Save this look' }).click()
+  await page.getByRole('textbox', { name: 'Name this look' }).fill('Little cap')
+  await page.getByRole('button', { name: 'Save look' }).click()
+  await expect(page.getByRole('heading', { name: 'Saved looks' })).toBeFocused()
+
+  await page.getByRole('tab', { name: /^Fern/ }).click()
+  await page.getByRole('button', { name: 'Wear Little cap' }).click()
+  await expect(page.locator('.look-status')).toHaveText('Fern is wearing Little cap.')
+
+  await page.getByText('Fern’s story').click()
+  await expect(page.getByText('Outfits worn')).toBeVisible()
+  expect(await seriousViolations(page, 'Care with saved looks and a story')).toEqual([])
+
+  // Kept: the look is still there after a reload, and the shop knows who
+  // wears the cap and what fits whom.
+  await reloadAfterSave(page)
+  await goTo(page, 'Care')
+  await expect(page.getByRole('button', { name: 'Wear Little cap' })).toBeVisible()
+  await goTo(page, 'Shop')
+  await page.getByRole('button', { name: 'Boutique', exact: true }).click()
+  await openShopFilters(page)
+  await page.getByRole('combobox', { name: /^Companion/ }).selectOption({ label: 'Fits Sol now' })
+  await closeShopFilters(page)
+  await expect(page.getByRole('heading', { name: 'Star Diadem' })).toHaveCount(0)
+  await expect(
+    page.locator('.boutique-card', { has: page.getByRole('heading', { name: 'Sprout Cap' }) }),
+  ).toContainText('Owned · worn by Sol and Fern')
 })
 
 test('boutique filters and try-on leave balances and outfits unchanged', async ({

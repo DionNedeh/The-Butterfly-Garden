@@ -73,5 +73,13 @@ export function formatWelcomedOn(
 ): string | undefined {
   const time = arrivalTime(creature)
   if (time === undefined) return undefined
-  return welcomedFormat.format(localDateToNoon(toLocalDate(new Date(time))))
+  return formatDayInWords(toLocalDate(new Date(time)))
+}
+
+/**
+ * A local calendar day in the same words as a welcome: "3 March 2026". A
+ * companion's story (lib/companionStory) dates the rest of its life this way.
+ */
+export function formatDayInWords(localDate: string): string {
+  return welcomedFormat.format(localDateToNoon(localDate))
 }

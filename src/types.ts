@@ -220,6 +220,14 @@ export interface Profile {
    * any other day it means nothing. It grants nothing and changes nothing.
    */
   welcomeBackOn?: string
+  /**
+   * When the garden began keeping its companions' diaries (an ISO timestamp):
+   * the care each received and the outfits each wore. Set when a garden is
+   * made, or by the first thing written down in an older one. A companion
+   * welcomed before it has a story with gaps, and Care says so rather than
+   * guessing. Optional: an older garden has kept nothing yet.
+   */
+  diarySince?: string
 }
 
 /** Image formats a garden image may be stored as. */
@@ -431,6 +439,32 @@ export interface CreatureInstance {
    * the pattern is owned again.
    */
   flightPatternId?: FlightPatternId
+  /**
+   * When the egg became a caterpillar, beside `chrysalisStartedAt` and
+   * `emergedAt`. Recorded from the diary on; an older companion's hatching
+   * is read from its last egg care day instead (lib/companionStory).
+   */
+  hatchedAt?: string
+  /**
+   * How many times each care action was given (action id -> count), from
+   * the diary on. Only the companion's story reads it: no reward ever
+   * depends on it.
+   */
+  careCounts?: Record<string, number>
+  /**
+   * Cosmetics this companion has worn (item ids), each once, in the order
+   * first put on, from the diary on. At most MAX_OUTFITS_WORN.
+   */
+  outfitsWorn?: string[]
+}
+
+/** A look saved from a companion's outfit, to put on any companion later. */
+export interface OutfitPreset {
+  id: string
+  /** The gardener's name for it: trimmed, at most PRESET_NAME_LENGTH. */
+  name: string
+  /** Cosmetic item ids by slot, as a companion's `outfit` holds them. */
+  outfit: Partial<Record<OutfitSlot, string>>
 }
 
 export interface SunlightAward {
@@ -477,6 +511,11 @@ export interface AppState {
   selectedFlightPatternId: FlightPatternId
   jars: JarInstance[]
   jarPlacements: JarPlacement[]
+  /**
+   * Looks saved from the wardrobe, at most MAX_OUTFIT_PRESETS (lib/outfitPresets).
+   * Optional, so an older garden or backup simply has none.
+   */
+  outfitPresets?: OutfitPreset[]
 }
 
 export interface SpeciesDefinition {

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { shopItems } from '../data/shopItems'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarCharacters, jarColors, JAR_PRICE, JAR_CAPACITY } from '../data/jars'
 import { balanceFor, currencyLabel } from '../lib/currency'
-import { GARDEN_PASS_PREVIEW_NOTICE } from '../lib/gardenPass'
+import { GARDEN_PASS_PREVIEW_NOTICE, hasGardenPassFeature } from '../lib/gardenPass'
+import { stageLabels, STAGE_ORDER } from '../lib/lifecycle'
+import { fitsCreature, wearersByItem } from '../lib/wardrobe'
 import type { PurchaseOutcome } from '../lib/purchase'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import type {
@@ -69,6 +71,7 @@ export function ShopView({
   const [stage, setStage] = useState('all')
   const [currency, setCurrency] = useState('all')
   const [ownership, setOwnership] = useState('all')
+  const [fitsId, setFitsId] = useState('all')
   const [affordableOnly, setAffordableOnly] = useState(false)
   const [preview, setPreview] = useState<ShopItemDefinition>()
   const [character, setCharacter] = useState('A')
@@ -90,6 +93,29 @@ export function ShopView({
     if (sheetWasOpen.current && !sheetOpen && !phone) searchField.current?.focus()
     sheetWasOpen.current = sheetOpen
   }, [sheetOpen, phone])
+  // The companions in the order Care lists them, for "Fits {name} now". A
+  // name two companions share says which one by its stage.
+  const companions = useMemo(() => {
+    const ordered = [...state.creatures].sort(
+      (a, b) =>
+        STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage) ||
+        a.name.localeCompare(b.name),
+    )
+    return ordered.map((creature) => ({
+      creature,
+      label: ordered.some((other) => other !== creature && other.name === creature.name)
+        ? `Fits ${creature.name}, the ${stageLabels[creature.stage].toLowerCase()}, now`
+        : `Fits ${creature.name} now`,
+    }))
+  }, [state.creatures])
+  // A companion gone from the garden (a sync from another tab) filters nothing.
+  const fitsCompanion = state.creatures.find((creature) => creature.id === fitsId)
+  // Who wears each piece, worked out once rather than per card.
+  const passCosmetics = hasGardenPassFeature('pass-cosmetics')
+  const wearers = useMemo(
+    () => wearersByItem(state.creatures, passCosmetics),
+    [state.creatures, passCosmetics],
+  )
   const items = shopItems
     .filter((item) =>
       tab === 'supplies'
@@ -108,6 +134,7 @@ export function ShopView({
         (currency === 'all' || item.currency === currency) &&
         (ownership === 'all' ||
           state.ownedItemIds.includes(item.id) === (ownership === 'owned')) &&
+        (!fitsCompanion || fitsCreature(item, fitsCompanion)) &&
         (!affordableOnly || balanceFor(state, item.currency) >= item.cost),
     )
   const activeFilters = [
@@ -116,6 +143,7 @@ export function ShopView({
     stage !== 'all',
     currency !== 'all',
     ownership !== 'all',
+    fitsCompanion !== undefined,
     affordableOnly,
   ].filter(Boolean).length
   const reset = () => {
@@ -124,6 +152,7 @@ export function ShopView({
     setStage('all')
     setCurrency('all')
     setOwnership('all')
+    setFitsId('all')
     setAffordableOnly(false)
   }
   const closeSheet = () => {
@@ -206,6 +235,22 @@ export function ShopView({
               <option value="new">Not owned</option>
             </select>
           </label>
+          {companions.length > 0 && (
+            <label>
+              Companion
+              <select
+                value={fitsCompanion ? fitsId : 'all'}
+                onChange={(event) => setFitsId(event.target.value)}
+              >
+                <option value="all">Any companion</option>
+                {companions.map(({ creature, label }) => (
+                  <option key={creature.id} value={creature.id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </>
       )}
       {tab !== 'pass' && (
@@ -375,6 +420,7 @@ export function ShopView({
                 onPurchase={buyItem}
                 onPreview={() => setPreview(item)}
                 onWardrobe={onOpenCare}
+                wornBy={wearers.get(item.id)}
               />
             ))}
           </div>

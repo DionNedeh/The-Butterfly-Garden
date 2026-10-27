@@ -155,6 +155,18 @@ function fullGarden(): AppState {
       },
     ],
     stardust: 3,
+    // A companion's diary and a saved look, so a backup is shown to carry
+    // both (they live in the creatures collection and the meta record).
+    creatures: [
+      {
+        ...seed.creatures[0],
+        hatchedAt: '2026-09-03T09:00:00.000Z',
+        careCounts: { 'cat-play': 2 },
+        outfitsWorn: ['sprout-cap'],
+      },
+    ],
+    ownedItemIds: ['sprout-cap'],
+    outfitPresets: [{ id: 'look-1', name: 'Sunday best', outfit: { headwear: 'sprout-cap' } }],
   }
 }
 
@@ -207,6 +219,36 @@ describe('garden repository', () => {
       status: 'loaded',
       state: { version: 6, seeds: 4 },
     })
+  })
+
+  it('keeps saved looks and a companion’s diary through a save and a load', async () => {
+    const seed = createInitialState('Dresser', 'Closet Garden')
+    const state: AppState = {
+      ...seed,
+      creatures: [{ ...seed.creatures[0], careCounts: { 'cat-play': 3 }, outfitsWorn: ['silk-bow'] }],
+      outfitPresets: [{ id: 'look-1', name: 'Sunday best', outfit: { accessory: 'silk-bow' } }],
+    }
+    await gardenRepository.save(state)
+    const loaded = await gardenRepository.load()
+    expect(loaded.state.outfitPresets).toEqual(state.outfitPresets)
+    expect(loaded.state.creatures[0]).toMatchObject({
+      careCounts: { 'cat-play': 3 },
+      outfitsWorn: ['silk-bow'],
+    })
+    expect(loaded.state.profile?.diarySince).toBe(seed.profile?.diarySince)
+  })
+
+  it('stores no saved looks at all for a garden that has none', async () => {
+    await gardenRepository.save(createInitialState('Plain', 'Plain Garden'))
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      expect('outfitPresets' in meta).toBe(false)
+    } finally {
+      db.close()
+    }
+    const loaded = await gardenRepository.load()
+    expect('outfitPresets' in loaded.state).toBe(false)
   })
 
   it('reports an untouched database as empty rather than loaded', async () => {
@@ -849,6 +891,12 @@ describe('garden repository', () => {
       expect(
         changedParts(before, { ...before, nectar: before.nectar + 1 }),
       ).toEqual(['meta'])
+    })
+
+    it('writes the meta record when a look is saved, and nothing else', () => {
+      const before = maturedGarden()
+      const look = { id: 'look-1', name: 'Sunday best', outfit: { aura: 'sparkle-aura' } }
+      expect(changedParts(before, { ...before, outfitPresets: [look] })).toEqual(['meta'])
     })
   })
 })

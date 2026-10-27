@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { JAR_CAPACITY, JAR_PRICE } from '../data/jars'
@@ -389,5 +389,92 @@ describe('the Garden Pass in the PWA', () => {
     expect(handlers.onOpenCare).toHaveBeenCalledOnce()
     await user.click(screen.getByRole('button', { name: 'Explore backdrops' }))
     expect(screen.queryByRole('heading', { name: 'Your Garden Pass preview' })).toBeNull()
+  })
+})
+
+describe('dressing a particular companion', () => {
+  /** Sol, the starter caterpillar, and Fern, a butterfly, sharing one closet. */
+  function companions(overrides: Partial<AppState> = {}): AppState {
+    const base = garden()
+    const sol = base.creatures[0]
+    const fern = { ...sol, id: 'fern', name: 'Fern', stage: 'butterfly' as const }
+    return garden({ creatures: [sol, fern], ...overrides })
+  }
+  const boutiqueFor = (stage: string) =>
+    shopItems.filter(
+      (item) => item.kind === 'cosmetic' && !item.premium && item.stages?.includes(stage as never),
+    ).length
+
+  it('keeps to the pieces a companion can wear now, and clears with the rest', async () => {
+    const { user } = renderShop(companions(), 'boutique')
+    const all = Number(count().match(/\d+/)?.[0])
+    const companion = screen.getByRole('combobox', { name: /^Companion/ })
+    expect(within(companion).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Any companion',
+      'Fits Sol now',
+      'Fits Fern now',
+    ])
+
+    await user.selectOptions(companion, 'Fits Sol now')
+    expect(count()).toContain(`${boutiqueFor('caterpillar')} pieces`)
+    // A diadem is for butterflies only.
+    expect(screen.queryByRole('heading', { name: 'Star Diadem' })).toBeNull()
+    await user.selectOptions(companion, 'Fits Fern now')
+    expect(count()).toContain(`${boutiqueFor('butterfly')} pieces`)
+    expect(screen.getByRole('heading', { name: 'Star Diadem' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(Number(count().match(/\d+/)?.[0])).toBe(all)
+    expect(companion).toHaveValue('all')
+  })
+
+  it('counts as a filter on a phone, chosen inside the sheet', async () => {
+    phoneScreen()
+    const { user } = renderShop(companions(), 'boutique')
+    await user.click(screen.getByRole('button', { name: 'Filter' }))
+    const sheet = within(screen.getByRole('dialog', { name: 'Filter the collection' }))
+    await user.selectOptions(sheet.getByRole('combobox', { name: /^Companion/ }), 'Fits Sol now')
+    await user.click(sheet.getByRole('button', { name: /^Show / }))
+    expect(screen.getByRole('button', { name: 'Filter 1 active' })).toHaveFocus()
+  })
+
+  it('says which companion it means when two share a name', () => {
+    const state = companions()
+    const twin = { ...state.creatures[1], id: 'sol-2', name: 'Sol' }
+    renderShop({ ...state, creatures: [...state.creatures, twin] }, 'boutique')
+    const options = within(screen.getByRole('combobox', { name: /^Companion/ }))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(options).toEqual([
+      'Any companion',
+      'Fits Sol, the caterpillar, now',
+      'Fits Fern now',
+      'Fits Sol, the butterfly, now',
+    ])
+  })
+
+  it('offers no companion to fit when there is none', () => {
+    renderShop(garden({ creatures: [] }), 'boutique')
+    expect(screen.queryByRole('combobox', { name: /^Companion/ })).toBeNull()
+  })
+
+  it('says who is wearing a piece', () => {
+    const passHat = shopItems.find((item) => item.premium && item.slot === 'headwear')!
+    const state = companions({ ownedItemIds: ['sprout-cap', 'silk-bow'] })
+    const [sol, fern] = state.creatures
+    const dressed = {
+      ...state,
+      creatures: [
+        { ...sol, outfit: { headwear: 'sprout-cap' } },
+        { ...fern, outfit: { headwear: passHat.id, accessory: 'silk-bow' } },
+      ],
+    }
+    renderShop(dressed, 'boutique')
+    expect(within(card('Sprout Cap')).getByText('Owned · worn by Sol')).toBeInTheDocument()
+    expect(within(card('Silk Bow')).getByText('Owned · worn by Fern')).toBeInTheDocument()
+    // The Pass's pieces have a tab of their own.
+    cleanup()
+    renderShop(dressed, 'pass')
+    expect(within(card(passHat.name)).getByText('Worn by Fern')).toBeInTheDocument()
   })
 })
