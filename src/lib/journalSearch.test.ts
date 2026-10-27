@@ -227,6 +227,36 @@ describe('filterJournalDates', () => {
     expect(find(garden, filter({ query: 'rain', kinds: ['reflection'], weather: 4 }))).toEqual([])
   })
 
+  it('finds a check-in by its feelings and energy, in the words the journal shows', () => {
+    const tagged = journal({
+      moods: [
+        mood('2026-04-01', 'Long day', { level: 2, feelings: ['hopeful', 'tired'], energy: 'low' }),
+        mood('2026-04-02', '', { feelings: ['calm'] }),
+        mood('2026-04-03', 'Hopeful about the weekend'),
+      ],
+      reflections: [reflection('2026-04-04', 'Felt hopeful')],
+    })
+    expect(find(tagged, filter({ query: 'hopeful' }))).toEqual([
+      '2026-04-04',
+      '2026-04-03',
+      '2026-04-01',
+    ])
+    expect(find(tagged, filter({ query: 'energy low' }))).toEqual(['2026-04-01'])
+    expect(find(tagged, filter({ query: 'calm' }))).toEqual(['2026-04-02'])
+    // The filters work as they did: feelings belong to the check-in.
+    expect(find(tagged, filter({ query: 'hopeful', kinds: ['check-in'] }))).toEqual([
+      '2026-04-03',
+      '2026-04-01',
+    ])
+    expect(find(tagged, filter({ query: 'hopeful', weather: 2 }))).toEqual(['2026-04-01'])
+    expect(find(tagged, filter({ query: 'tired', kinds: ['reflection'] }))).toEqual([])
+  })
+
+  it('does not let a word run from a note into its feelings', () => {
+    const tagged = journal({ moods: [mood('2026-04-01', 'Felt', { feelings: ['tired'] })] })
+    expect(find(tagged, filter({ query: 'feltfeeling' }))).toEqual([])
+  })
+
   it('searches an empty note without trouble', () => {
     const quiet = journal({ moods: [mood('2026-04-01', '')] })
     expect(find(quiet, filter({ query: 'anything' }))).toEqual([])

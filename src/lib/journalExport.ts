@@ -1,5 +1,6 @@
 import type { AppState } from '../types'
 import { formatJournalDate, toLocalDate } from './date'
+import { describeCheckInDetails, energyNameOf, feelingNamesOf } from './feelings'
 import { moodChoiceOf, moodName } from './mood'
 import { promptById } from './prompts'
 
@@ -26,7 +27,8 @@ interface ExportDay {
   localDate: string
   /** "Tuesday, October 27, 2026", as the timeline heads the day. */
   heading: string
-  checkIn?: { weather: string; note: string }
+  /** `details` is "Feeling tired, hopeful · Energy low", or empty when neither was given. */
+  checkIn?: { weather: string; details: string; note: string }
   /** `prompt` is absent for a prompt this build no longer knows. */
   reflection?: { prompt?: string; body: string }
   recap?: {
@@ -64,7 +66,13 @@ function journalDays(state: AppState): ExportDay[] {
   return dates.map((localDate) => {
     const day: ExportDay = { localDate, heading: formatJournalDate(localDate) }
     const mood = moodByDate.get(localDate)
-    if (mood) day.checkIn = { weather: moodName(moodChoiceOf(mood)), note: mood.note }
+    if (mood) {
+      day.checkIn = {
+        weather: moodName(moodChoiceOf(mood)),
+        details: describeCheckInDetails(mood),
+        note: mood.note,
+      }
+    }
     const reflection = reflectionByDate.get(localDate)
     if (reflection) {
       const prompt = promptById(reflection.promptId)
@@ -152,6 +160,7 @@ function dayMarkdown(day: ExportDay): string[] {
   const blocks = [`## ${markdownLine(day.heading)}`]
   if (day.checkIn) {
     blocks.push(`### ${markdownLine(`Check-in: ${day.checkIn.weather}`)}`)
+    if (written(day.checkIn.details)) blocks.push(`*${markdownLine(day.checkIn.details)}*`)
     if (written(day.checkIn.note)) blocks.push(markdownText(day.checkIn.note))
   }
   if (day.reflection) {
@@ -229,7 +238,7 @@ const EXPORT_CSS = [
   'p, ul, dl, dd { margin: 0 0 0.5rem; }',
   'ul { padding-left: 1.25rem; }',
   'dt { font-weight: 700; }',
-  '.exported, .prompt { color: #46584f; }',
+  '.exported, .prompt, .details { color: #46584f; }',
   '.prompt { font-style: italic; }',
   'article { margin-top: 2rem; border-top: 1px solid #d9d8c8; padding-top: 1.25rem; }',
   'section { break-inside: avoid; }',
@@ -251,6 +260,9 @@ function dayHtml(day: ExportDay): string {
   ]
   if (day.checkIn) {
     parts.push('<section>', `<h3>${escapeHtml(`Check-in: ${day.checkIn.weather}`)}</h3>`)
+    if (written(day.checkIn.details)) {
+      parts.push(`<p class="details">${escapeHtml(day.checkIn.details)}</p>`)
+    }
     if (written(day.checkIn.note)) parts.push(wordsHtml(day.checkIn.note))
     parts.push('</section>')
   }
@@ -357,14 +369,26 @@ function csvRecord(fields: readonly string[]): string {
   return fields.map(csvField).join(',')
 }
 
-/** Every check-in as a spreadsheet: date, weather and note, newest first. */
+/**
+ * Every check-in as a spreadsheet, newest first: date, weather and note, then
+ * feelings and energy. The later two come last, so a sheet built on the
+ * first three columns still finds them where they were.
+ */
 export function checkInsCsv(state: AppState): string {
   const moods = [...byDate(state.moods).values()].sort((a, b) =>
     newerFirst(a.localDate, b.localDate),
   )
   const records = [
-    csvRecord(['date', 'weather', 'note']),
-    ...moods.map((mood) => csvRecord([mood.localDate, moodName(moodChoiceOf(mood)), mood.note])),
+    csvRecord(['date', 'weather', 'note', 'feelings', 'energy']),
+    ...moods.map((mood) =>
+      csvRecord([
+        mood.localDate,
+        moodName(moodChoiceOf(mood)),
+        mood.note,
+        feelingNamesOf(mood.feelings).join(', '),
+        energyNameOf(mood.energy) ?? '',
+      ]),
+    ),
   ]
   return `${BOM}${records.join(CRLF)}${CRLF}`
 }

@@ -419,6 +419,33 @@ describe('the rhythm of care', () => {
   })
 })
 
+describe('feelings and energy in the journal', () => {
+  it('says them in plain words under the weather, and nothing when not answered', () => {
+    const tagged = { ...mood('2026-01-02', 'A long day'), feelings: ['hopeful', 'tired'], energy: 'low' as const }
+    renderJournal({
+      ...createInitialState('Tester', 'Test Garden'),
+      moods: [mood('2026-01-01', 'Quiet'), tagged],
+    })
+    const block = screen.getByText('A long day').closest('.journal-block') as HTMLElement
+    expect(within(block).getByText('Feeling hopeful, tired · Energy low')).toBeInTheDocument()
+    const quiet = screen.getByText('Quiet').closest('.journal-block') as HTMLElement
+    expect(within(quiet).queryByText(/^Feeling|^Energy/)).toBeNull()
+  })
+
+  it('keeps them through an edit of the weather or note', async () => {
+    const user = userEvent.setup()
+    const tagged = { ...mood('2026-01-02', 'A long day'), feelings: ['calm'], energy: 'steady' as const }
+    const { onUpdateMood } = renderJournal({ ...createInitialState('Tester', 'Test Garden'), moods: [tagged] })
+    const block = screen.getByText('A long day').closest('.journal-block') as HTMLElement
+    await user.click(within(block).getByRole('button', { name: 'Edit' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Inner weather' }), '2')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onUpdateMood).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 2, feelings: ['calm'], energy: 'steady' }),
+    )
+  })
+})
+
 describe('a check-in that was not sure', () => {
   it('reads "Not sure", and can be changed to a weather or back', async () => {
     const user = userEvent.setup()

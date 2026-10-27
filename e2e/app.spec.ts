@@ -321,6 +321,44 @@ test('a check-in can be unsure, a tap can be undone, and support is a link away'
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
 })
 
+test('a check-in can name feelings and energy, and offers one gentle next step', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Today')
+
+  // Both extras wait for a weather, and are folded away until asked for.
+  await page.getByRole('button', { name: /^Rainy/ }).click()
+  await expect(page.getByText('All weather is welcome.')).toBeVisible()
+  await page.getByRole('button', { name: 'Add feelings or energy' }).click()
+  const feelings = page.getByRole('group', { name: 'Feelings' })
+  await feelings.getByRole('button', { name: 'tired', exact: true }).click()
+  await feelings.getByRole('button', { name: 'hopeful', exact: true }).click()
+  await expect(feelings.getByRole('button', { name: 'tired', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await page.getByRole('group', { name: 'Energy' }).getByRole('radio', { name: 'low' }).check()
+  expect(await seriousViolations(page, 'Today with feelings and energy')).toEqual([])
+
+  // Saving offers one next step in the page, and leaves focus where it was.
+  await page.getByRole('button', { name: /save check-in/i }).click()
+  await expect(page.getByText('Kept in your journal.')).toBeVisible()
+  const offer = page.getByRole('group', { name: /One small thing/ })
+  await expect(offer.getByRole('button', { name: 'Make today a gentle day' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /update check-in/i })).toBeFocused()
+  expect(await seriousViolations(page, 'Today with a next step offered')).toEqual([])
+  await offer.getByRole('button', { name: 'Write one line' }).click()
+  await expect(page.locator('#daily-reflection')).toBeFocused()
+  await expect(offer).toHaveCount(0)
+
+  // The journal says them in words, and finds them.
+  await goTo(page, 'Journal')
+  await expect(page.getByText('Feeling hopeful, tired · Energy low')).toBeVisible()
+  await page.getByRole('searchbox', { name: 'Search your journal' }).fill('hopeful')
+  await expect(page.getByText('1 day matches')).toBeVisible()
+})
+
 test('a goal row keeps everything behind its menu, and a gentle day asks for little', async ({
   page,
 }) => {
@@ -428,7 +466,7 @@ test('the journal finds words, opens a day from its calendar, and gives readable
   const csvDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Check-ins as CSV' }).click()
   const csv = await readFile(await (await csvDownload).path(), 'utf8')
-  expect(csv.startsWith('﻿"date","weather","note"\r\n')).toBe(true)
+  expect(csv.startsWith('﻿"date","weather","note","feelings","energy"\r\n')).toBe(true)
   expect(csv).toContain('"Bright","Walked by the río"')
 })
 

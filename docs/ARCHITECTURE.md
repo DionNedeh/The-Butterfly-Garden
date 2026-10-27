@@ -52,6 +52,7 @@ tells other tabs which parts it wrote.
 | What counts as a valid garden, and migrations | `repository/validateGarden.ts` |
 | Asking the browser not to evict the garden | `lib/storage.ts` |
 | Unsaved text that survives a reload | `lib/drafts.ts`, `hooks/useSyncedDraft.ts` |
+| A check-in's feelings and energy, and the one next step offered after it | `data/feelings.ts`, `lib/feelings.ts` (what is stored, and in what words), `lib/nextStep.ts`, `components/checkin/` |
 | Restoring a chosen file | `lib/backupFile.ts` (size and read), `lib/backupPreview.ts` (what it holds) |
 | Suggesting a fresh backup | `lib/backupReminder.ts` (when, and in what words); `lib/shareFile.ts` (*Share backup…* in a browser that can) |
 | A gardener's own images | `lib/imageImport.ts` (header check before decode, resize), `lib/customBackdrops.ts` (limits, crop) |
