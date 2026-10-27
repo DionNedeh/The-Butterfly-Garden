@@ -11,6 +11,9 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 
 - Five-level inner weather check-ins with nothing preselected, plus "Not sure
   today", and an editable private journal
+- A journal you can search (words, kinds of entry, weather, all on the
+  device), a weather calendar by month or a year at a glance, and readable
+  copies as Markdown, a printable page, or check-ins as a spreadsheet
 - One-time, daily, and selected-weekday goals in compact rows, with skip,
   snooze, full editing and archive behind a ⋯ menu (and swipes on a touch
   screen), each of them undoable for a few seconds

@@ -3983,3 +3983,664 @@
 .recap-hours .subtle-copy {
   margin: 0;
 }
+
+/* Journal: find things (J2), the weather calendar (J3), readable copies (J6) */
+/* Journal → Find things: words, kinds and weather (components/JournalSearch). */
+.journal-search {
+  display: grid;
+  gap: 1rem;
+}
+
+.journal-search-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.journal-search-field input {
+  min-height: 44px;
+}
+
+.journal-search-hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.journal-search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 1.5rem;
+}
+
+/* The fieldset is there for the group's name, not for the browser's frame. */
+.journal-search-kinds {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.journal-search-kinds legend {
+  margin-bottom: 0.45rem;
+  padding: 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+.journal-search-kind-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.journal-search-kind {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  padding: 0.55rem 1rem 0.55rem 0.75rem;
+  color: var(--ink);
+  font-weight: 750;
+  transition:
+    background 200ms ease,
+    border-color 200ms ease;
+}
+
+.journal-search-kind:hover {
+  border-color: var(--forest);
+}
+
+.journal-search-kind[aria-pressed='true'] {
+  border-color: var(--forest);
+  background: #e6eddd;
+  color: var(--forest-dark);
+}
+
+/* An empty ring that fills with a tick when pressed, so the state can be
+   read from the shape alone, without telling the two greens apart. */
+.journal-search-check {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+}
+
+.journal-search-kind[aria-pressed='true'] .journal-search-check {
+  border-color: var(--forest);
+  background: var(--forest);
+}
+
+.journal-search-kind[aria-pressed='true'] .journal-search-check::after {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 6px;
+  height: 10px;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  content: '';
+}
+
+.journal-search-weather {
+  flex: 1 1 12rem;
+  max-width: 20rem;
+}
+
+.journal-search-weather select {
+  min-height: 44px;
+}
+
+.journal-search-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+/* With no filter the count is empty and Clear is gone; the row then takes
+   no room. An engine without :has() just keeps a little space below. */
+.journal-search-summary:has(.journal-search-status:empty) {
+  margin-top: -1rem;
+}
+
+.journal-search-status {
+  margin: 0;
+  color: var(--forest-dark);
+  font-weight: 800;
+}
+
+.journal-search-clear {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+}
+
+.theme-night .journal-search-kind {
+  border-color: #385463;
+  background: #152f3e;
+  color: var(--ink);
+}
+
+.theme-night .journal-search-kind:hover {
+  border-color: var(--forest);
+}
+
+.theme-night .journal-search-kind[aria-pressed='true'] {
+  border-color: var(--forest);
+  background: #254b4b;
+  color: var(--forest-dark);
+}
+
+.reduce-motion .journal-search-kind {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journal-search-kind {
+    transition: none;
+  }
+}
+/* Weather calendar (components/WeatherCalendar).
+
+   A day's colour is the inner weather it was given, on a light-to-dark ramp:
+   Stormy darkest, Radiant lightest. The five steps are spaced by lightness
+   (CIE L* roughly 25, 45, 64, 78, 93 by day; 39, 56, 67, 82, 95 by night), so
+   they still read apart in greyscale and to colour-blind eyes. "Not sure" is a
+   dashed outline and a day with words but no check-in a solid one, so neither
+   depends on colour either; the key under the grid names all seven, and every
+   day button carries its weather in its name.
+
+   Day numbers on a tile keep at least 4.5:1 against its fill: white on the two
+   darkest, dark ink on the rest. The ink is fixed rather than var(--ink),
+   which turns light at night. */
+.weather-calendar {
+  --cal-1: #2f3d52;
+  --cal-1-ink: #ffffff;
+  --cal-2: #4f6f8a;
+  --cal-2-ink: #ffffff;
+  --cal-3: #8f9f98;
+  --cal-3-ink: #17241f;
+  --cal-4: #e2bd4e;
+  --cal-4-ink: #243a32;
+  --cal-5: #fcebb4;
+  --cal-5-ink: #243a32;
+  /* A hairline round every filled tile: the lightest weathers sit close to
+     the card itself. */
+  --cal-edge: rgba(36, 58, 50, 0.24);
+  --cal-unsure: #6b7a72;
+  --cal-empty: #e6e9dd;
+}
+
+.theme-night .weather-calendar {
+  --cal-1: #4a5c78;
+  --cal-1-ink: #ffffff;
+  --cal-2: #6c8aa3;
+  --cal-2-ink: #0b1a24;
+  --cal-3: #97a7a0;
+  --cal-3-ink: #0b1a24;
+  --cal-4: #ecc85c;
+  --cal-4-ink: #0b1a24;
+  --cal-5: #fdf0c4;
+  --cal-5-ink: #0b1a24;
+  --cal-edge: rgba(232, 242, 237, 0.3);
+  --cal-unsure: #b7c9c1;
+  --cal-empty: #193740;
+}
+
+/* Month / Year, and the steps either side of what is shown. */
+.cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.cal-views {
+  display: inline-flex;
+  gap: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft, #f1f2e8);
+  padding: 0.25rem;
+}
+
+.cal-views button {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 11px;
+  background: transparent;
+  padding: 0.5rem 1rem;
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.cal-views button[aria-pressed='true'] {
+  background: var(--forest);
+  color: #fffdf5;
+}
+
+.theme-night .cal-views {
+  border-color: #385463;
+  background: #0c2231;
+}
+
+/* Night's --forest is a pale green: dark ink on it, not white. */
+.theme-night .cal-views button[aria-pressed='true'] {
+  color: #0b1a24;
+}
+
+.cal-steps {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cal-step {
+  min-width: 44px;
+  padding-inline: 0.9rem;
+  font-size: 1.1rem;
+}
+
+/* aria-disabled, not disabled, so a button at its limit keeps focus. Drawn
+   the way the app draws button:disabled. */
+.cal-step[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cal-period {
+  margin: 0 0 0.55rem;
+  color: var(--forest-dark);
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+/* Month view. */
+.cal-month {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.cal-month caption {
+  caption-side: top;
+}
+
+/* Focused only when a month is opened from the year view. */
+.cal-month:focus {
+  outline: none;
+}
+
+.cal-month:focus-visible {
+  border-radius: 12px;
+  outline: 3px solid var(--forest);
+  outline-offset: 4px;
+}
+
+.cal-month th {
+  padding: 0 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cal-month td {
+  padding: 0;
+  text-align: center;
+}
+
+/* The whole cell is the target; the tile inside it is drawn 2px smaller, so
+   neighbouring days still look apart without shrinking what can be tapped. */
+.cal-day {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  background: transparent;
+  padding: 2px;
+  color: inherit;
+}
+
+button.cal-day:focus-visible {
+  outline: 3px solid var(--forest);
+  outline-offset: 0;
+}
+
+.cal-tile {
+  position: relative;
+  display: flex;
+  min-height: clamp(40px, 8vw, 60px);
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  transition:
+    transform 160ms var(--ease-spring, ease),
+    box-shadow 200ms ease;
+}
+
+button.cal-day:hover .cal-tile {
+  box-shadow: inset 0 0 0 2px var(--forest);
+}
+
+button.cal-day:active .cal-tile {
+  transform: scale(0.94);
+}
+
+.cal-tile.cal-plain {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Today: a bar under the number, in the tile's own ink, so it shows on any
+   weather and needs no colour of its own. */
+.cal-tile.cal-today {
+  font-weight: 900;
+}
+
+.cal-tile.cal-today::after {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  content: '';
+  transform: translateX(-50%);
+}
+
+/* The weathers, shared by month tiles, year pixels and the key. */
+.cal-weather-1 {
+  background: var(--cal-1);
+  box-shadow: inset 0 0 0 1px var(--cal-edge);
+  color: var(--cal-1-ink);
+}
+
+.cal-weather-2 {
+  background: var(--cal-2);
+  box-shadow: inset 0 0 0 1px var(--cal-edge);
+  color: var(--cal-2-ink);
+}
+
+.cal-weather-3 {
+  background: var(--cal-3);
+  box-shadow: inset 0 0 0 1px var(--cal-edge);
+  color: var(--cal-3-ink);
+}
+
+.cal-weather-4 {
+  background: var(--cal-4);
+  box-shadow: inset 0 0 0 1px var(--cal-edge);
+  color: var(--cal-4-ink);
+}
+
+.cal-weather-5 {
+  background: var(--cal-5);
+  box-shadow: inset 0 0 0 1px var(--cal-edge);
+  color: var(--cal-5-ink);
+}
+
+.cal-weather-unsure {
+  border: 2px dashed var(--cal-unsure);
+  background: transparent;
+  color: var(--ink);
+}
+
+.cal-no-check-in {
+  border: 2px solid var(--forest);
+  background: transparent;
+  color: var(--ink);
+}
+
+/* Year view: twelve rows of up to 31 pixels. */
+.cal-year {
+  display: grid;
+  gap: 2px;
+}
+
+.cal-year-row {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The pixels are an overview; the month name is the full-size target that
+   opens the month where every day is a comfortable tap. */
+.cal-year-month {
+  display: flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  border-radius: 10px;
+  background: transparent;
+  padding: 0 0.4rem;
+  color: var(--forest-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+span.cal-year-month {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+button.cal-year-month:hover {
+  background: var(--surface-soft, #f1f2e8);
+}
+
+button.cal-year-month:focus-visible {
+  outline: 3px solid var(--forest);
+  outline-offset: 0;
+}
+
+.cal-year-days {
+  display: grid;
+  max-width: calc(31 * 22px + 30 * 2px);
+  grid-template-columns: repeat(31, minmax(0, 1fr));
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cal-year-days li {
+  display: flex;
+  min-width: 0;
+}
+
+/* No background or border here: those come from the weather classes, which
+   this rule would otherwise override by coming later. */
+.cal-pixel {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  padding: 0;
+}
+
+.cal-pixel.cal-plain {
+  background: var(--cal-empty);
+}
+
+/* Small pixels take thinner outlines, or the dash swallows the square. */
+.cal-pixel.cal-weather-unsure,
+.cal-pixel.cal-no-check-in {
+  border-width: 1.5px;
+}
+
+.cal-pixel.cal-future {
+  opacity: 0.45;
+}
+
+.cal-pixel.cal-today {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+button.cal-pixel:hover {
+  outline: 2px solid var(--forest);
+  outline-offset: 1px;
+}
+
+button.cal-pixel:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid var(--forest);
+  outline-offset: 1px;
+}
+
+/* On a touch screen the pixels grow into taller strips, easier to see and to
+   hit, within the 44px row the month name already needs. */
+@media (any-pointer: coarse) {
+  .cal-pixel {
+    height: 32px;
+    aspect-ratio: auto;
+  }
+}
+
+/* The key. */
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.cal-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cal-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 5px;
+}
+
+/* At 360px wide the card's own padding is what leaves a day under 44px, so it
+   gives some back. Below 360px seven columns cannot all reach 44px; they
+   shrink to fit, and stay well above the 24px minimum. */
+@media (max-width: 420px) {
+  .card.weather-calendar {
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .weather-calendar > .section-heading,
+  .weather-calendar > .section-explainer,
+  .weather-calendar > .cal-legend {
+    padding-right: 0.6rem;
+    padding-left: 0.6rem;
+  }
+
+  .cal-year-row {
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-tile {
+    transition: none;
+  }
+
+  button.cal-day:active .cal-tile {
+    transform: none;
+  }
+}
+
+.reduce-motion .cal-tile {
+  transition: none;
+}
+
+.reduce-motion button.cal-day:active .cal-tile {
+  transform: none;
+}
+/* Journal → Take your words with you: readable downloads (components/JournalExport).
+   Colours come only from the theme variables and the shared .settings-note and
+   .empty-copy rules, which the night theme already redefines, so this needs no
+   .theme-night overrides. It adds no motion of its own. */
+.journal-export h2 {
+  margin-bottom: 0.5rem;
+}
+
+.journal-export .empty-copy {
+  margin-bottom: 0;
+}
+
+.journal-export-intro {
+  max-width: 62ch;
+  margin-bottom: 1rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.journal-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+/* Side by side where there is room, one to a row on a phone. The shared
+   button rule already keeps each at least 44px tall. */
+.journal-export-actions .secondary-button {
+  flex: 1 1 13rem;
+}
+
+/* While a file is being saved the buttons are aria-disabled rather than
+   disabled, so the one just pressed keeps keyboard focus. They look like any
+   unavailable button, and lose the hover lift and the press. */
+.journal-export-actions .secondary-button[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.journal-export-actions .secondary-button[aria-disabled='true']:hover,
+.journal-export-actions .secondary-button[aria-disabled='true']:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.journal-export .settings-note {
+  margin-top: 0.65rem;
+}
+
+/* The status line stays in the page while it is empty, so a screen reader is
+   already listening when it fills; it just takes no room until then. */
+.journal-export .settings-note:empty {
+  margin: 0;
+}
+
+/* A button announced as unavailable does not move as if it were not. */
+.secondary-button[aria-disabled='true']:hover,
+.secondary-button[aria-disabled='true']:active {
+  transform: none;
+  box-shadow: none;
+}

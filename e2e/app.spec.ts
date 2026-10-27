@@ -366,6 +366,55 @@ test('a goal row keeps everything behind its menu, and a gentle day asks for lit
   await expect(page.getByRole('button', { name: 'More for Water the fern' })).toBeVisible()
 })
 
+test('the journal finds words, opens a day from its calendar, and gives readable copies', async ({
+  page,
+}) => {
+  // Two pages, an accessibility sweep and two downloads: more than the
+  // default budget on a GPU-less runner's Safari.
+  test.slow()
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await page.getByRole('button', { name: /bright/i }).click()
+  await page.getByLabel('A note, if you want').fill('Walked by the río')
+  await page.getByRole('button', { name: /save check-in/i }).click()
+  // Words that would be markup anywhere careless.
+  await page.locator('#daily-reflection').fill('A <script>alert(1)</script> moment, =1+1')
+  await page.getByRole('button', { name: /keep this reflection/i }).click()
+
+  await mainNav(page).getByRole('button', { name: 'Journal', exact: true }).click()
+  expect(await seriousViolations(page, 'Journal with its calendar and search')).toEqual([])
+
+  // Searching forgives accents and case, and never leaves the device.
+  const search = page.getByRole('searchbox', { name: 'Search your journal' })
+  await search.fill('RIO')
+  await expect(page.getByText('1 day matches')).toBeVisible()
+  await search.fill('nowhere at all')
+  await expect(page.getByText('Nothing in the journal matches that yet.')).toBeVisible()
+  await search.press('Escape')
+  await expect(search).toHaveValue('')
+
+  // A day in the calendar opens its entry.
+  const calendar = page.getByRole('region', { name: 'Weather calendar' })
+  await calendar.getByRole('button', { name: /: Bright$/ }).click()
+  await expect(page.locator('.timeline-entry time').first()).toBeFocused()
+
+  // The printable page shows the words as words, and can run nothing.
+  const htmlDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Printable journal (HTML)' }).click()
+  const html = await readFile(await (await htmlDownload).path(), 'utf8')
+  expect(html).toContain("default-src 'none'")
+  expect(html).toContain('A &lt;script&gt;alert(1)&lt;/script&gt; moment')
+  expect(html).not.toContain('<script>')
+  await expect(page.getByText('Your download has started.')).toBeVisible()
+
+  // The spreadsheet opens with its accents, and a note cannot become a formula.
+  const csvDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Check-ins as CSV' }).click()
+  const csv = await readFile(await (await csvDownload).path(), 'utf8')
+  expect(csv.startsWith('﻿"date","weather","note"\r\n')).toBe(true)
+  expect(csv).toContain('"Bright","Walked by the río"')
+})
+
 test('supports plant selection and permanent local reset confirmation', async ({
   page,
 }) => {

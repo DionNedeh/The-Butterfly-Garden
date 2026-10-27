@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   moodLevels,
   moodNames,
@@ -9,6 +9,13 @@ import { useLocalDate } from '../hooks/useLocalDate'
 import { moodChoiceOf, moodName, UNSURE_MOOD_NAME, withMoodChoice } from '../lib/mood'
 import { counted, listed } from '../lib/plural'
 import { TOMORROW_TEXT_LENGTH } from '../lib/gardenActions'
+import {
+  EMPTY_FILTER,
+  filterJournalDates,
+  indexJournalText,
+  isFilterActive,
+  type JournalFilter,
+} from '../lib/journalSearch'
 import { promptById } from '../lib/prompts'
 import { careRhythm } from '../lib/rhythm'
 import type {
@@ -20,6 +27,9 @@ import type {
 } from '../types'
 import { Butterfly } from './Butterfly'
 import { Icon } from './Icons'
+import { JournalExport } from './JournalExport'
+import { JournalSearch } from './JournalSearch'
+import { WeatherCalendar } from './WeatherCalendar'
 
 /** The timeline grows for as long as the garden is kept, so it is paged. */
 const TIMELINE_PAGE_SIZE = 30
@@ -80,10 +90,63 @@ export function JournalView({
       ).sort((a, b) => b.localeCompare(a)),
     [moodByDate, reflectionByDate, recapByDate],
   )
-  const visibleDates = useMemo(
-    () => dates.slice(0, visibleCount),
-    [dates, visibleCount],
+  // Searching happens over the garden in memory, never anywhere else. The
+  // text is normalised once per change to the entries, and the filter is
+  // deferred, so typing stays quick in a journal years long.
+  const [filter, setFilter] = useState<JournalFilter>(EMPTY_FILTER)
+  const deferredFilter = useDeferredValue(filter)
+  const textIndex = useMemo(
+    () => indexJournalText({ moodByDate, reflectionByDate, recapByDate }),
+    [moodByDate, reflectionByDate, recapByDate],
   )
+  const filtering = isFilterActive(deferredFilter)
+  const shownDates = useMemo(
+    () =>
+      filtering
+        ? filterJournalDates(
+            dates,
+            { moodByDate, reflectionByDate, recapByDate },
+            deferredFilter,
+            textIndex,
+          )
+        : dates,
+    [filtering, dates, moodByDate, reflectionByDate, recapByDate, deferredFilter, textIndex],
+  )
+  const visibleDates = useMemo(
+    () => shownDates.slice(0, visibleCount),
+    [shownDates, visibleCount],
+  )
+  const hasEntry = useCallback(
+    (localDate: string) =>
+      moodByDate.has(localDate) || reflectionByDate.has(localDate) || recapByDate.has(localDate),
+    [moodByDate, reflectionByDate, recapByDate],
+  )
+  // A day chosen in the calendar: shown in the timeline, then given focus.
+  // Each choice is a new request, so choosing a day already in view still
+  // redraws and is answered at once, never on some later, unrelated redraw.
+  const [openRequest, setOpenRequest] = useState<{ day: string; serial: number }>()
+  const answeredRequest = useRef(0)
+  const openDay = useCallback(
+    (localDate: string) => {
+      const index = dates.indexOf(localDate)
+      if (index === -1) return
+      // The whole journal, so the day cannot be hidden by a search.
+      setFilter(EMPTY_FILTER)
+      setVisibleCount((count) =>
+        Math.max(count, Math.ceil((index + 1) / TIMELINE_PAGE_SIZE) * TIMELINE_PAGE_SIZE),
+      )
+      setOpenRequest((previous) => ({ day: localDate, serial: (previous?.serial ?? 0) + 1 }))
+    },
+    [dates],
+  )
+  useEffect(() => {
+    if (!openRequest || answeredRequest.current === openRequest.serial) return
+    // A search being cleared shows the day a moment later; this runs again then.
+    const entry = document.getElementById(`day-${openRequest.day}`)
+    if (!entry) return
+    answeredRequest.current = openRequest.serial
+    entry.querySelector<HTMLElement>('time')?.focus()
+  }, [openRequest, visibleDates])
   const emerged = useMemo(
     () => state.creatures.filter((creature) => creature.stage === 'butterfly'),
     [state.creatures],
@@ -196,6 +259,14 @@ export function JournalView({
         )}
       </section>
 
+      <WeatherCalendar
+        moodByDate={moodByDate}
+        hasEntry={hasEntry}
+        today={today}
+        firstDate={dates.at(-1)}
+        onOpenDay={openDay}
+      />
+
       <section aria-labelledby="timeline-title">
         <div className="section-heading timeline-heading">
           <div>
@@ -203,9 +274,24 @@ export function JournalView({
             <h2 id="timeline-title">Journal timeline</h2>
           </div>
         </div>
+        <JournalSearch
+          filter={filter}
+          onChange={(next) => {
+            setFilter(next)
+            setVisibleCount(TIMELINE_PAGE_SIZE)
+          }}
+          // Unknown until the deferred search has caught up, so a count for
+          // the whole journal is never announced in passing.
+          matches={filter === deferredFilter ? shownDates.length : undefined}
+          total={dates.length}
+        />
         {dates.length === 0 ? (
           <div className="card empty-state">
             <p>Your first check-in or reflection will appear here.</p>
+          </div>
+        ) : shownDates.length === 0 ? (
+          <div className="card empty-state">
+            <p>Nothing in the journal matches that yet.</p>
           </div>
         ) : (
           <div className="timeline">
@@ -224,9 +310,12 @@ export function JournalView({
                 : []
               const prompt = reflection ? promptById(reflection.promptId) : undefined
               return (
-                <article className="card timeline-entry" key={date}>
+                <article className="card timeline-entry" key={date} id={`day-${date}`}>
                   <span className="timeline-dot" aria-hidden="true" />
-                  <time dateTime={date}>{formatJournalDate(date)}</time>
+                  {/* Focusable from code alone, for a day opened from the calendar. */}
+                  <time dateTime={date} tabIndex={-1}>
+                    {formatJournalDate(date)}
+                  </time>
                   {mood && (
                     <div className="journal-block">
                       {editingMood?.id === mood.id ? (
@@ -606,19 +695,21 @@ export function JournalView({
                 </article>
               )
             })}
-            {visibleCount < dates.length && (
+            {visibleCount < shownDates.length && (
               <button
                 className="secondary-button"
                 onClick={() =>
                   setVisibleCount((count) => count + TIMELINE_PAGE_SIZE)
                 }
               >
-                Show earlier days ({dates.length - visibleCount} more)
+                Show earlier days ({shownDates.length - visibleCount} more)
               </button>
             )}
           </div>
         )}
       </section>
+
+      <JournalExport state={state} />
     </div>
   )
 }
