@@ -455,12 +455,15 @@ test.describe('safe mode with the lock on', () => {
     await expect(passcode).toBeFocused()
     await passcode.fill(PASSCODE)
     await prompt.getByRole('button', { name: 'Open the copy' }).click()
-    await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible(DERIVING)
+    // The garden comes back on the page the address still names (Settings,
+    // where it was locked), under its own name.
+    const restored = page.getByRole('button', { name: 'The Butterfly Garden — Sunlit Sanctuary. Go to the garden.' })
+    await expect(restored).toBeVisible(DERIVING)
     await expect(prompt).toHaveCount(0)
     // Everything came back, in the clear as the prompt said, with no lock to open.
     expect(await everythingStored(page)).toContain(WORDS_OF_MINE)
     await page.reload()
-    await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+    await expect(restored).toBeVisible()
     await expect(lockScreen(page)).toHaveCount(0)
   })
 })
