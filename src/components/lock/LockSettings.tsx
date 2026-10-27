@@ -97,9 +97,11 @@ export function LockSettings() {
   }
 
   const removePasskey = async () => {
-    setNote(undefined)
+    // The garden is sealed again under a key the passkey does not open.
+    setNote('Removing the passkey… this can take a few seconds.')
     try {
-      await (await actions()).removePasskey()
+      const lock = await actions()
+      await lock.removePasskey(() => setNote(lock.WAITING_FOR_WINDOWS))
       setPasskey((current) => ({ ...current, stored: undefined }))
       setNote('The passkey no longer opens the garden.')
       // Its button is gone; focus stays in the lock's section.
@@ -117,8 +119,8 @@ export function LockSettings() {
       {on ? (
         <>
           <p>
-            The lock is on: everything the garden keeps here is sealed, and it opens with
-            your passcode. It is open in this tab now.
+            The lock is on: your garden is stored sealed here, and it opens with your
+            passcode. It is open in this tab now.
           </p>
           <div className="form-actions">
             <button className="secondary-button" type="button" onClick={() => void lockNow()}>
@@ -165,8 +167,8 @@ export function LockSettings() {
       ) : (
         <>
           <p>
-            Lock your journal on this device. With the lock on, everything the garden keeps
-            here is sealed, and it opens only with your passcode.
+            Lock your journal on this device. With the lock on, your garden is stored sealed
+            here, and it opens only with your passcode.
           </p>
           <div className="form-actions">
             <button className="secondary-button" type="button" onClick={() => setOpen('setup')}>
@@ -182,8 +184,8 @@ export function LockSettings() {
       )}
       <p className="lock-small-print">
         {android
-          ? 'The lock keeps what the garden stores on this phone sealed, so on a lost or shared phone your journal can’t be read without your passcode or recovery code. It can’t protect the garden while it is open, from someone using the phone then, or from software that already controls this phone. Backups you save are not locked.'
-          : 'The lock keeps what the garden stores in this browser sealed, so on a shared, lost or borrowed device your journal can’t be read without your passcode or recovery code. It can’t protect the garden while it is open, from someone using the device then, or from other code running at the same web address as the garden. Backups you download are not locked.'}
+          ? 'The lock keeps what the garden stores on this phone sealed, so on a lost or shared phone your journal can’t be read without your passcode or recovery code. It can’t protect the garden while it is open, from someone using the phone then, or from software that already controls this phone. Backups you save are not locked. Each time the lock is turned on or changed, the garden is stored afresh and its old copy deleted; like any deleted file, traces of it can stay on the phone’s storage until that space is used again.'
+          : 'The lock keeps what the garden stores in this browser sealed, so on a shared, lost or borrowed device your journal can’t be read without your passcode or recovery code. It can’t protect the garden while it is open, from someone using the device then, or from other code running at the same web address as the garden. Backups you download are not locked. Each time the lock is turned on or changed, the garden is stored afresh and its old copy deleted; like any deleted file, traces of it can stay on the device’s disk until that space is used again.'}
       </p>
       {open && (
         <Suspense fallback={null}>

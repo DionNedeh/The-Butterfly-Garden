@@ -7,12 +7,15 @@ import { goTo } from './navigation'
  * derivation (PBKDF2, 600,000 iterations): lock a garden from Settings,
  * reload into the lock screen, open it with the passcode and with the
  * recovery code, find none of the gardener's words in storage while it is
- * locked, and turn it off. Swept with axe by day and by night.
+ * locked, and turn it off. Each change is written into a new database and
+ * the old one deleted, with no copy left behind; a second tab follows a new
+ * passcode to the lock screen. Swept with axe by day and by night.
  */
 
 /** Each unlock derives a key the slow way on purpose; give it room. */
 const DERIVING = { timeout: 30_000 }
 const PASSCODE = 'kingfisher at the old mill'
+const NEW_PASSCODE = 'swifts over the station roof'
 const WORDS_OF_MINE = 'Lavender tea at the window'
 
 test.beforeEach(async ({ page }) => {
@@ -68,6 +71,14 @@ function everythingStored(page: Page) {
   )
 }
 
+/**
+ * The names of the origin's databases. A change of the lock writes the
+ * garden into a staging copy first; none may be left once it is done.
+ */
+function databaseNames(page: Page) {
+  return page.evaluate(async () => (await indexedDB.databases()).map((database) => database.name))
+}
+
 /** The two words a confirmation asks for, typed from the words shown. */
 async function confirmTwoWords(dialog: Locator, words: string[]) {
   const fields = dialog.getByRole('textbox', { name: /^Word \d+$/ })
@@ -112,6 +123,9 @@ async function lockFromSettings(page: Page): Promise<string[]> {
   await check.getByRole('button', { name: 'Lock my garden' }).click()
   const done = page.getByRole('dialog', { name: 'Your garden is locked' })
   await expect(done).toBeVisible(DERIVING)
+  // Said as it is: written again sealed, the unsealed copy deleted.
+  await expect(done.getByText(/stored again, sealed, and the unsealed copy\s+deleted/)).toBeVisible()
+  await expect(lockSection.getByText(/traces of it can stay on the device’s disk/)).toBeVisible()
   await done.getByRole('button', { name: 'Done' }).click()
   await expect(lockSection.getByRole('heading', { name: 'The garden lock' })).toBeFocused()
   return words
@@ -130,9 +144,12 @@ test('a garden is locked, opened by passcode and by recovery code, and unlocked 
   expect(await everythingStored(page)).toContain(WORDS_OF_MINE)
 
   const words = await lockFromSettings(page)
-  // Locked at rest: none of the gardener's words in any store.
+  // Locked at rest: none of the gardener's words in any store, and no
+  // staging copy left behind.
   await expect.poll(() => everythingStored(page)).not.toContain(WORDS_OF_MINE)
   expect(await everythingStored(page)).not.toContain('Sunlit Sanctuary')
+  expect(await databaseNames(page)).toContain('butterfly-garden')
+  expect(await databaseNames(page)).not.toContain('butterfly-garden-switch')
   // A backup is still the garden in the clear, and says so.
   await expect(
     page.getByText('This copy is not locked; keep it somewhere private, or use a protected backup.'),
@@ -196,6 +213,7 @@ test('a garden is locked, opened by passcode and by recovery code, and unlocked 
   await offDone.getByRole('button', { name: 'Done' }).click()
   await expect(lockSection.getByRole('button', { name: 'Lock my garden…' })).toBeVisible()
   expect(await everythingStored(page)).toContain(WORDS_OF_MINE)
+  expect(await databaseNames(page)).not.toContain('butterfly-garden-switch')
   await page.reload()
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
   await expect(lockScreen(page)).toHaveCount(0)
@@ -221,4 +239,64 @@ test('a second tab follows the lock: locked there too, and opened on its own', a
   await page.getByRole('region', { name: 'The garden lock' }).getByRole('button', { name: 'Lock now' }).click()
   await expect(lockScreen(page)).toBeVisible()
   await expect(lockScreen(other)).toBeVisible()
+})
+
+test('a new passcode seals the garden again: another tab follows it to the lock screen, and only the new passcode opens it', async ({
+  page,
+  context,
+}) => {
+  test.slow()
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await writeSomething(page)
+  await lockFromSettings(page)
+  const other = await context.newPage()
+  other.on('pageerror', (error) => errors.push(error.message))
+  await other.goto('/The-Butterfly-Garden/')
+  await other.getByLabel('Passcode', { exact: true }).fill(PASSCODE)
+  await other.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(other.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible(DERIVING)
+
+  // A new passcode in the first tab, with the garden open in the other: the
+  // other tab lets go of the old database, which is deleted.
+  const lockSection = page.getByRole('region', { name: 'The garden lock' })
+  await lockSection.getByRole('button', { name: 'Change my passcode…' }).click()
+  const change = page.getByRole('dialog', { name: 'Change my passcode' })
+  await change.getByLabel('Current passcode').fill(PASSCODE)
+  await change.getByLabel('New passcode', { exact: true }).fill(NEW_PASSCODE)
+  await change.getByLabel('The new passcode again').fill(NEW_PASSCODE)
+  await change.getByRole('button', { name: 'Change my passcode' }).click()
+  const changed = page.getByRole('dialog', { name: 'Your passcode is changed' })
+  await expect(changed).toBeVisible(DERIVING)
+  await expect(changed.getByText(/the old passcode opens\s+nothing stored here now/)).toBeVisible()
+  await changed.getByRole('button', { name: 'Done' }).click()
+  expect(await everythingStored(page)).not.toContain(WORDS_OF_MINE)
+  expect(await databaseNames(page)).not.toContain('butterfly-garden-switch')
+
+  // The other tab held the old key: it is locked now, never offered a new
+  // garden, and the old passcode no longer opens it.
+  await expect(lockScreen(other)).toBeVisible()
+  await expect(other.getByRole('button', { name: /enter the garden/i })).toHaveCount(0)
+  await other.getByLabel('Passcode', { exact: true }).fill(PASSCODE)
+  await other.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(other.getByRole('alert')).toHaveText(
+    'That passcode didn’t open your garden. Please try again.',
+    DERIVING,
+  )
+  await other.getByLabel('Passcode', { exact: true }).fill(NEW_PASSCODE)
+  await other.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(other.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible(DERIVING)
+
+  // The first tab stayed open throughout, and still reads and writes it.
+  await goTo(page, 'Settings')
+  await page.getByRole('link', { name: 'Your comfort plan' }).click()
+  const helps = page.getByRole('region', { name: 'Things that help me feel a little better' })
+  await expect(helps.getByRole('listitem')).toHaveText([new RegExp(`^${WORDS_OF_MINE}`)])
+  const field = helps.getByRole('textbox', { name: 'Something that helps' })
+  await field.fill('A walk before breakfast')
+  await field.press('Enter')
+  await expect(helps.getByRole('listitem')).toHaveCount(2)
+  await expect.poll(() => everythingStored(page)).not.toContain('A walk before breakfast')
+  expect(errors).toEqual([])
 })

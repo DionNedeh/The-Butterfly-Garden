@@ -1,11 +1,14 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { openDB } from 'idb'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { openLock, type LockRecord } from '../../lib/gardenLock'
 import { addPasskey, lockGarden, turnLockOn, unlockGarden } from '../../lib/gardenLockActions'
 import { createInitialState } from '../../lib/progression'
 import { newRecoveryCode } from '../../lib/recoveryCode'
 import { randomBytes } from '../../lib/sealing'
 import { gardenRepository } from '../../repository/gardenRepository'
+import { openValue } from '../../repository/sealedStores'
 import { LockScreen } from './LockScreen'
 
 /** Quick key derivations: the count is the app's business, not these tests'. */
@@ -100,8 +103,9 @@ describe('the lock screen', { timeout: 30_000 }, () => {
     expect(screen.getByRole('button', { name: 'Open my garden' })).toBeEnabled()
   })
 
-  it('opens with the recovery code, then lets a new passcode be chosen', async () => {
+  it('opens with the recovery code, then lets a new passcode be chosen, sealing the garden under a new key', async () => {
     const words = await lockedGarden()
+    const before = (await gardenRepository.readLock()) as LockRecord
     const user = userEvent.setup()
     render(<LockScreen />)
     await user.click(screen.getByRole('button', { name: 'Use my recovery code' }))
@@ -137,6 +141,17 @@ describe('the lock screen', { timeout: 30_000 }, () => {
     await user.type(screen.getByLabelText('The same passcode again'), 'remembered at last')
     await user.click(screen.getByRole('button', { name: 'Save it and open my garden' }))
     await waitFor(() => expect(gardenRepository.lockState()).toBe('unlocked'))
+    // Opened under the new lock, which an old copy of the lock, with the
+    // forgotten passcode, does not reach.
+    expect((await gardenRepository.readLock())?.id).not.toBe(before.id)
+    expect((await gardenRepository.load()).status).toBe('loaded')
+    const oldKey = await openLock(before, { slot: 'passcode', passcode: PASSCODE })
+    const db = await openDB('butterfly-garden')
+    try {
+      await expect(openValue(oldKey, 'moods', await db.get('moods', 'current'))).rejects.toThrow()
+    } finally {
+      db.close()
+    }
 
     // The new passcode opens it from now on, and the old one does not.
     await lockGarden(false)

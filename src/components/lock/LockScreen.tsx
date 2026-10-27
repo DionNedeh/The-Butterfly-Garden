@@ -158,8 +158,8 @@ export function LockScreen() {
     setBusy(true)
     setProblem(undefined)
     try {
-      await replaceForgottenPasscode(recovered.record, recovered.words, newPasscode)
-      openWithKey(recovered.record, recovered.key)
+      // Sealed under a new key first, then opened with it.
+      await replaceForgottenPasscode(recovered.record, recovered.key, recovered.words, newPasscode)
     } catch {
       setProblem('The new passcode couldn’t be saved, so your old one still stands. You can open your garden without changing it.')
       setBusy(false)

@@ -36,15 +36,21 @@ async function opens(key: CryptoKey, sealed: { iv: Uint8Array; ciphertext: Uint8
 }
 
 describe('a new lock', () => {
-  it('wraps one fresh data key by the passcode and by the recovery code, each with its own salt', async () => {
+  it('opens one fresh data key by the passcode and by the recovery code, each its own way in', async () => {
     const { record, key } = await newLock()
     expect(record).toMatchObject({ format: LOCK_FORMAT, version: 1 })
     expect(record.passcode).toMatchObject({ kdf: 'PBKDF2-SHA-256', iterations: FAST })
     expect(record.recovery).toMatchObject({ kdf: 'PBKDF2-SHA-256', iterations: FAST })
     expect(toBase64(record.passcode.salt)).not.toBe(toBase64(record.recovery.salt))
     expect(record.passcode.salt).toHaveLength(16)
+    // Each way in has a P-256 key pair of its own: the public half raw, the
+    // private half sealed under the key its secret makes.
+    expect(record.passcode.publicKey).toHaveLength(65)
+    expect(toBase64(record.passcode.publicKey)).not.toBe(toBase64(record.recovery.publicKey))
+    expect(record.passcode.privateIv).toHaveLength(12)
+    // The data key sealed to it: 32 bytes of key and AES-GCM's 16-byte tag.
+    expect(record.passcode.ephemeral).toHaveLength(65)
     expect(record.passcode.iv).toHaveLength(12)
-    // 32 bytes of key and AES-GCM's 16-byte tag.
     expect(record.passcode.wrapped).toHaveLength(48)
     expect(key.extractable).toBe(false)
     expect(key.usages.sort()).toEqual(['decrypt', 'encrypt'])
@@ -107,52 +113,100 @@ describe('opening the lock', () => {
   })
 })
 
+/**
+ * After a secret is replaced, the old secret -- with the lock record as it
+ * was then, which an old copy of the device's storage may still hold --
+ * opens only the old data key: never the new one, so nothing sealed since.
+ */
+async function oldWrapOpensNothingNew(
+  old: LockRecord,
+  secret: Parameters<typeof openLock>[1],
+  next: { key: CryptoKey },
+) {
+  const after = await seal(next.key, text('written after the change'), text('reflections'))
+  const oldKey = await openLock(old, secret)
+  await expect(open(oldKey, after, text('reflections'))).rejects.toThrow()
+}
+
 describe('changing the passcode', () => {
-  it('wraps the same data key again, so nothing stored is sealed again', async () => {
+  it('opens with the new passcode only, and makes a new data key the old one cannot reach', async () => {
     const { record, words, sealed } = await newLock()
-    const changed = await withNewPasscode(
+    const next = await withNewPasscode(
       record,
       { slot: 'passcode', passcode: PASSCODE },
       'a new and longer passphrase',
       FAST,
     )
-    expect(changed.id).toBe(record.id)
+    const changed = next.record
+    expect(changed.id).not.toBe(record.id)
     expect(changed.stamp).not.toBe(record.stamp)
-    expect(changed.recovery).toBe(record.recovery)
+    expect(changed.createdAt).toBe(record.createdAt)
+    // The recovery code's own key pair is kept; only the data key sealed to it is new.
+    expect(changed.recovery.publicKey).toEqual(record.recovery.publicKey)
+    expect(changed.recovery.salt).toEqual(record.recovery.salt)
+    expect(changed.recovery.wrapped).not.toEqual(record.recovery.wrapped)
     await expect(openLock(changed, { slot: 'passcode', passcode: PASSCODE })).rejects.toBeInstanceOf(
       WrongSecretError,
     )
     const key = await openLock(changed, { slot: 'passcode', passcode: 'a new and longer passphrase' })
-    expect(await opens(key, sealed)).toBe('a reflection')
-    // The recovery code still opens it.
-    expect(await opens(await openLock(changed, { slot: 'recovery', words }), sealed)).toBe(
-      'a reflection',
+    const after = await seal(next.key, text('a new reflection'), text('reflections'))
+    expect(await opens(key, after)).toBe('a new reflection')
+    // The garden sealed before is under the old key, which the new one is not.
+    await expect(opens(key, sealed)).rejects.toThrow()
+    // The recovery code, never typed here, still opens the new key.
+    expect(await opens(await openLock(changed, { slot: 'recovery', words }), after)).toBe(
+      'a new reflection',
     )
+    await oldWrapOpensNothingNew(record, { slot: 'passcode', passcode: PASSCODE }, next)
   })
 
   it('asks for the current passcode, or the recovery code when it is forgotten', async () => {
-    const { record, words, sealed } = await newLock()
+    const { record, words } = await newLock()
     await expect(
       withNewPasscode(record, { slot: 'passcode', passcode: 'not it' }, 'another one', FAST),
     ).rejects.toBeInstanceOf(WrongSecretError)
     const reset = await withNewPasscode(record, { slot: 'recovery', words }, 'remembered now', FAST)
-    const key = await openLock(reset, { slot: 'passcode', passcode: 'remembered now' })
-    expect(await opens(key, sealed)).toBe('a reflection')
+    const key = await openLock(reset.record, { slot: 'passcode', passcode: 'remembered now' })
+    const after = await seal(reset.key, text('a reflection'), text('reflections'))
+    expect(await opens(key, after)).toBe('a reflection')
+    await oldWrapOpensNothingNew(record, { slot: 'passcode', passcode: PASSCODE }, reset)
+  })
+
+  it('keeps the passkey and the auto-lock', async () => {
+    const { record } = await newLock()
+    const prfOutput = randomBytes(32)
+    const withKey = withAutoLock(
+      await withPasskey(record, PASSCODE, { credentialId: randomBytes(16), prfSalt: randomBytes(32), prfOutput }),
+      15,
+    )
+    const next = await withNewPasscode(withKey, { slot: 'passcode', passcode: PASSCODE }, 'yet another', FAST)
+    expect(next.record.autoLockMinutes).toBe(15)
+    expect(next.record.passkey?.credentialId).toEqual(withKey.passkey?.credentialId)
+    const after = await seal(next.key, text('a reflection'), text('reflections'))
+    expect(await opens(await openLockWithPasskey(next.record, prfOutput), after)).toBe('a reflection')
   })
 })
 
 describe('a new recovery code', () => {
-  it('stops the old code working and opens with the new one', async () => {
-    const { record, words, sealed } = await newLock()
+  it('stops the old code working, opens with the new one, and makes a new data key', async () => {
+    const { record, words } = await newLock()
     const fresh = newRecoveryCode()
-    const changed = await withNewRecoveryCode(record, PASSCODE, fresh, FAST)
+    const next = await withNewRecoveryCode(record, PASSCODE, fresh, FAST)
+    const changed = next.record
+    expect(changed.id).not.toBe(record.id)
     await expect(openLock(changed, { slot: 'recovery', words })).rejects.toBeInstanceOf(
       WrongSecretError,
     )
-    expect(await opens(await openLock(changed, { slot: 'recovery', words: fresh }), sealed)).toBe(
+    const after = await seal(next.key, text('a reflection'), text('reflections'))
+    expect(await opens(await openLock(changed, { slot: 'recovery', words: fresh }), after)).toBe(
       'a reflection',
     )
-    expect(changed.passcode).toBe(record.passcode)
+    expect(await opens(await openLock(changed, { slot: 'passcode', passcode: PASSCODE }), after)).toBe(
+      'a reflection',
+    )
+    expect(changed.passcode.publicKey).toEqual(record.passcode.publicKey)
+    // Not even the old record, kept somewhere, lets the old code reach the new key.
+    await oldWrapOpensNothingNew(record, { slot: 'recovery', words }, next)
   })
 
   it('needs the passcode', async () => {
@@ -170,10 +224,11 @@ describe('a passkey', () => {
     const passkey = { credentialId: randomBytes(16), prfSalt: randomBytes(32), prfOutput }
     const withKey = await withPasskey(record, PASSCODE, passkey)
     expect(withKey.passkey).toMatchObject({ credentialId: passkey.credentialId, prfSalt: passkey.prfSalt })
+    // Adding a way in takes nothing away: the data key stays.
+    expect(withKey.id).toBe(record.id)
     // The answer itself is never stored.
-    expect(JSON.stringify(Array.from(withKey.passkey!.wrapped))).not.toContain(
-      JSON.stringify(Array.from(prfOutput)).slice(1, -1),
-    )
+    const stored = JSON.stringify(Object.values(withKey.passkey!).map((bytes) => Array.from(bytes)))
+    expect(stored).not.toContain(JSON.stringify(Array.from(prfOutput)).slice(1, -1))
     expect(await opens(await openLockWithPasskey(withKey, prfOutput), sealed)).toBe('a reflection')
     await expect(openLockWithPasskey(withKey, randomBytes(32))).rejects.toBeInstanceOf(
       WrongSecretError,
@@ -181,17 +236,26 @@ describe('a passkey', () => {
     await expect(withPasskey(record, 'wrong', passkey)).rejects.toBeInstanceOf(WrongSecretError)
   })
 
-  it('is removed, and then opens nothing', async () => {
-    const { record } = await newLock()
+  it('is removed with a new data key, so it opens nothing sealed from then on', async () => {
+    const { record, words } = await newLock()
     const prfOutput = randomBytes(32)
     const withKey = await withPasskey(record, PASSCODE, {
       credentialId: randomBytes(16),
       prfSalt: randomBytes(32),
       prfOutput,
     })
-    const without = withoutPasskey(withKey)
-    expect(without.passkey).toBeUndefined()
-    await expect(openLockWithPasskey(without, prfOutput)).rejects.toBeInstanceOf(WrongSecretError)
+    const next = await withoutPasskey(withKey)
+    expect(next.record.passkey).toBeUndefined()
+    expect(next.record.id).not.toBe(withKey.id)
+    await expect(openLockWithPasskey(next.record, prfOutput)).rejects.toBeInstanceOf(WrongSecretError)
+    // The record from before still opens with the passkey, but only the old key.
+    const after = await seal(next.key, text('a reflection'), text('reflections'))
+    await expect(opens(await openLockWithPasskey(withKey, prfOutput), after)).rejects.toThrow()
+    // The passcode and the recovery code open the new key.
+    expect(await opens(await openLock(next.record, { slot: 'passcode', passcode: PASSCODE }), after)).toBe(
+      'a reflection',
+    )
+    expect(await opens(await openLock(next.record, { slot: 'recovery', words }), after)).toBe('a reflection')
   })
 })
 

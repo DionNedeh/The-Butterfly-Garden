@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type FormEvent } from 'react'
-import { turnLockOn } from '../../lib/gardenLockActions'
+import { changeProblem, turnLockOn, WAITING_FOR_WINDOWS } from '../../lib/gardenLockActions'
 import { MIN_PASSCODE_LENGTH, NO_WAY_BACK, passcodeProblem } from '../../lib/gardenLock'
 import { newRecoveryCode } from '../../lib/recoveryCode'
 import { LockDialog } from './LockDialog'
@@ -27,6 +27,7 @@ export function LockSetup({ onClose }: { onClose: () => void }) {
   const [again, setAgain] = useState('')
   const [problem, setProblem] = useState<string>()
   const [busy, setBusy] = useState(false)
+  const [waiting, setWaiting] = useState(false)
   const [words] = useState(newRecoveryCode)
   const [madeOn] = useState(() => new Date())
   const passcodeField = useRef<HTMLInputElement>(null)
@@ -47,18 +48,15 @@ export function LockSetup({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setProblem(undefined)
     try {
-      await turnLockOn(passcode, words)
+      await turnLockOn(passcode, words, () => setWaiting(true))
       setPasscode('')
       setAgain('')
       setStep('done')
     } catch (error) {
-      setProblem(
-        `Your garden could not be locked, so nothing has changed. ${
-          error instanceof Error && error.message ? error.message : ''
-        }`.trim(),
-      )
+      setProblem(changeProblem(error, 'Your garden could not be locked, so nothing has changed.'))
     } finally {
       setBusy(false)
+      setWaiting(false)
     }
   }
 
@@ -67,8 +65,8 @@ export function LockSetup({ onClose }: { onClose: () => void }) {
       {step === 'passcode' && (
         <form onSubmit={choosePasscode} noValidate>
           <p>
-            With the lock on, everything the garden keeps on this device is sealed, and it
-            opens only with your passcode, or with a recovery code you save next.
+            With the lock on, your garden is stored sealed on this device, and it opens
+            only with your passcode, or with a recovery code you save next.
           </p>
           <p className="lock-warning">{NO_WAY_BACK}</p>
           <label>
@@ -141,7 +139,7 @@ export function LockSetup({ onClose }: { onClose: () => void }) {
             onBack={() => setStep('sheet')}
           />
           <p className="lock-progress" role="status">
-            {busy ? 'Locking your garden… this can take a few seconds.' : ''}
+            {busy ? (waiting ? WAITING_FOR_WINDOWS : 'Locking your garden… this can take a few seconds.') : ''}
           </p>
           {problem && (
             <p className="settings-note error" role="alert">
@@ -154,9 +152,10 @@ export function LockSetup({ onClose }: { onClose: () => void }) {
       {step === 'done' && (
         <>
           <p>
-            Everything the garden keeps on this device is sealed now, and from now on it
-            opens with your passcode. It stays open in this tab until you lock it, or until
-            it locks itself after a while out of sight, if you choose that in Settings.
+            Your garden is sealed now: it was stored again, sealed, and the unsealed copy
+            deleted. From now on it opens with your passcode. It stays open in this tab
+            until you lock it, or until it locks itself after a while out of sight, if you
+            choose that in Settings.
           </p>
           <div className="form-actions">
             <button className="primary-button" type="button" onClick={onClose}>
