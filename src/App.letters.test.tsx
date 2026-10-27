@@ -6,6 +6,7 @@ import { toLocalDate } from './lib/date'
 import { resetDrafts } from './lib/drafts'
 import { createInitialState } from './lib/progression'
 import { gardenRepository } from './repository/gardenRepository'
+import { LAZY_PAGE_MS } from './test/lazyPage'
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({
@@ -51,12 +52,20 @@ describe('a letter from Marigold', { timeout: 20_000 }, () => {
     const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
     render(<App />)
-    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: 3000 })
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: LAZY_PAGE_MS })
 
-    const card = await screen.findByRole('region', { name: 'A letter from Marigold is waiting' })
+    const card = await screen.findByRole(
+      'region',
+      { name: 'A letter from Marigold is waiting' },
+      { timeout: LAZY_PAGE_MS },
+    )
     await user.click(within(card).getByRole('button', { name: 'Read the letter' }))
 
-    const heading = await screen.findByRole('heading', { name: /^The week of October 19/ })
+    const heading = await screen.findByRole(
+      'heading',
+      { name: /^The week of October 19/ },
+      { timeout: LAZY_PAGE_MS },
+    )
     await waitFor(() => expect(heading).toHaveFocus())
     expect(window.location.hash).toBe('#/journal')
     const letter = screen.getByRole('article', { name: /^The week of October 19/ })
@@ -72,7 +81,7 @@ describe('a letter from Marigold', { timeout: 20_000 }, () => {
 
     const nav = within(screen.getByRole('navigation', { name: 'Primary navigation' }))
     await user.click(nav.getByRole('button', { name: 'Garden' }))
-    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: LAZY_PAGE_MS })
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.queryByRole('region', { name: 'A letter from Marigold is waiting' })).toBeNull()
   })

@@ -7,6 +7,7 @@ import { resetDrafts } from './lib/drafts'
 import { createInitialState } from './lib/progression'
 import { gardenRepository } from './repository/gardenRepository'
 import type { AppState } from './types'
+import { LAZY_PAGE_MS } from './test/lazyPage'
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({
@@ -48,12 +49,6 @@ afterEach(() => {
 // page. That outgrows Vitest's five seconds on a busy CI runner with coverage
 // on, without anything being wrong.
 const WHOLE_APP_TIMEOUT_MS = 20_000
-/**
- * How long a page loaded for the first time may take to appear. Pages arrive
- * as lazy chunks, which a busy machine (a loaded CI runner) can take seconds
- * to transform; finding one sooner is what every wait expects.
- */
-const LAZY_PAGE_MS = 8000
 
 describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
   // Seven pages, each loaded for the first time: on a busy machine that is
@@ -668,12 +663,12 @@ describe('breathing with a butterfly', { timeout: WHOLE_APP_TIMEOUT_MS }, () => 
   it('opens from the support page, and goes back there by its button or Escape', async () => {
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Guide' }))
-    await user.click(await screen.findByRole('button', { name: 'If you need support now' }, { timeout: 3000 }))
-    await user.click(await screen.findByRole('link', { name: 'breathe with Marigold' }, { timeout: 3000 }))
+    await user.click(await screen.findByRole('button', { name: 'If you need support now' }, { timeout: LAZY_PAGE_MS }))
+    await user.click(await screen.findByRole('link', { name: 'breathe with Marigold' }, { timeout: LAZY_PAGE_MS }))
     const heading = await screen.findByRole(
       'heading',
       { level: 1, name: 'Breathe with Marigold' },
-      { timeout: 3000 },
+      { timeout: LAZY_PAGE_MS },
     )
     expect(window.location.hash).toBe('#/breathe')
     await waitFor(() => expect(heading).toHaveFocus())
@@ -716,8 +711,8 @@ describe('breathing with a butterfly', { timeout: WHOLE_APP_TIMEOUT_MS }, () => 
     }
     const user = await openGarden(stormy)
     await user.click(primaryNav().getByRole('button', { name: 'Today' }))
-    await user.click(await screen.findByRole('button', { name: 'Breathe with Marigold' }, { timeout: 3000 }))
-    await screen.findByRole('heading', { level: 1, name: 'Breathe with Marigold' }, { timeout: 3000 })
+    await user.click(await screen.findByRole('button', { name: 'Breathe with Marigold' }, { timeout: LAZY_PAGE_MS }))
+    await screen.findByRole('heading', { level: 1, name: 'Breathe with Marigold' }, { timeout: LAZY_PAGE_MS })
     await user.click(screen.getByRole('button', { name: 'Back to Today' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
   })

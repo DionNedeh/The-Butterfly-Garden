@@ -5,6 +5,7 @@ import App from './App'
 import { createInitialState } from './lib/progression'
 import { gardenRepository } from './repository/gardenRepository'
 import type { AppState, CreatureStage } from './types'
+import { LAZY_PAGE_MS } from './test/lazyPage'
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({
@@ -50,7 +51,7 @@ async function openGarden(garden: AppState) {
   vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
   const user = userEvent.setup()
   render(<App />)
-  await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: 3000 })
+  await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: LAZY_PAGE_MS })
   return user
 }
 
@@ -62,12 +63,12 @@ function primaryNav() {
 async function openGuideFromZed() {
   const user = await openGarden(gardenOfThree())
   await user.click(primaryNav().getByRole('button', { name: 'Care' }))
-  await user.click(await screen.findByRole('tab', { name: /Zed/ }, { timeout: 3000 }))
+  await user.click(await screen.findByRole('tab', { name: /Zed/ }, { timeout: LAZY_PAGE_MS }))
   await user.click(screen.getByRole('link', { name: /^What does this do\? Bond levels/ }))
   const heading = await screen.findByRole(
     'heading',
     { level: 2, name: 'Bond levels' },
-    { timeout: 3000 },
+    { timeout: LAZY_PAGE_MS },
   )
   await waitFor(() => expect(heading).toHaveFocus())
   expect(window.location.hash).toBe('#/guide/bond')
@@ -76,7 +77,7 @@ async function openGuideFromZed() {
 
 /** Care as it should be on the way back: Zed shown, focus on the link pressed. */
 async function expectBackWithZed() {
-  await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: 3000 })
+  await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: LAZY_PAGE_MS })
   expect(window.location.hash).toBe('#/care')
   expect(screen.getByRole('tab', { name: /Zed/ })).toHaveAttribute('aria-selected', 'true')
   await waitFor(() =>
@@ -116,17 +117,17 @@ describe('back from the Guide a "What does this do?" link opened', { timeout: 20
     const link = await screen.findByRole(
       'link',
       { name: /^What does this do\? Seeds/ },
-      { timeout: 3000 },
+      { timeout: LAZY_PAGE_MS },
     )
     // Far down the page, where Garden pace is.
     const scrolled = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(1500)
     await user.click(link)
-    await screen.findByRole('heading', { level: 1, name: 'How the garden works' }, { timeout: 3000 })
+    await screen.findByRole('heading', { level: 1, name: 'How the garden works' }, { timeout: LAZY_PAGE_MS })
     // The Guide opens at its top.
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: 'instant' })
     scrolled.mockReturnValue(0)
     await user.click(screen.getByRole('button', { name: 'Back to Settings' }))
-    await screen.findByRole('heading', { level: 1, name: 'Settings' }, { timeout: 3000 })
+    await screen.findByRole('heading', { level: 1, name: 'Settings' }, { timeout: LAZY_PAGE_MS })
     expect(window.location.hash).toBe('#/settings')
     await waitFor(() =>
       expect(screen.getByRole('link', { name: /^What does this do\? Seeds/ })).toHaveFocus(),
@@ -139,7 +140,7 @@ describe('back from the Guide a "What does this do?" link opened', { timeout: 20
     scrollTo.mockClear()
     // Leaving the Guide by the navigation is not going back.
     await user.click(primaryNav().getByRole('button', { name: 'Care' }))
-    await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: 3000 })
+    await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: LAZY_PAGE_MS })
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'instant' })
     expect(screen.getByRole('tab', { name: /Elm/ })).toHaveAttribute('aria-selected', 'true')
   })
