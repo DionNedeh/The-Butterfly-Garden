@@ -13,6 +13,8 @@ export function FlyingButterfly({
   calm = false,
   settled = false,
   preview = false,
+  aloft = 1,
+  onMeet,
 }: {
   id: string
   pattern: FlightPatternId
@@ -26,6 +28,10 @@ export function FlyingButterfly({
   /** Resting in calm motion: at its static pose, wings still. */
   settled?: boolean
   preview?: boolean
+  /** How many fly together; each keeps to a lane of its own (lib/flightMotion). */
+  aloft?: number
+  /** A tap introduces the butterfly (ButterflyCard), where it can be petted. */
+  onMeet?: () => void
 }) {
   const size = preview ? 48 : 96
   const { travel, heading } = useFlightMotion(
@@ -36,12 +42,14 @@ export function FlyingButterfly({
     reduced || settled,
     preview,
     calm,
+    aloft,
   )
   return (
     <div
       ref={travel}
       className="flight-traveller"
       data-pattern={pattern}
+      data-flyer={preview ? undefined : id}
       aria-hidden={preview || undefined}
     >
       <div ref={heading} className="flight-heading">
@@ -50,7 +58,7 @@ export function FlyingButterfly({
           label={label}
           outfit={outfit}
           size={size}
-          pettable={!preview}
+          onMeet={preview ? undefined : onMeet}
           flapping={!settled}
         />
       </div>

@@ -15,11 +15,12 @@ import {
   STAGE_ORDER,
 } from '../lib/lifecycle'
 import { visibleOutfits } from '../lib/wardrobe'
-import type { AppState, CreatureStage, OutfitSlot } from '../types'
+import type { AppState, CreatureStage, FlightPatternId, OutfitSlot } from '../types'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { PettableCreature } from './PettableCreature'
 import { Icon } from './Icons'
 import { NameArrival } from './NameArrival'
+import { CompanionFlight } from './CompanionFlight'
 
 const stageDescriptions: Record<CreatureStage, string> = {
   egg: 'A tiny egg rests on its host leaf. Keep it warm and watched for three days of care and it will hatch.',
@@ -39,6 +40,8 @@ export function CareView({
   onUnequip,
   onRenameCreature,
   onGoToShop,
+  openOn,
+  onChooseFlight,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -48,6 +51,10 @@ export function CareView({
   onUnequip: (creatureId: string, slot: OutfitSlot) => void
   onRenameCreature: (creatureId: string, name: string) => void
   onGoToShop: () => void
+  /** The companion to open on, as "Care for {name}" in the garden asks. */
+  openOn?: string
+  /** A companion's own flight pattern, or none for the garden's. */
+  onChooseFlight?: (creatureId: string, patternId: FlightPatternId | undefined) => void
 }) {
   const ordered = useMemo(
     () =>
@@ -72,17 +79,19 @@ export function CareView({
   const arrival = state.creatures.find(
     (creature) => creature.stage === 'egg' && creature.awaitingName,
   )
-  // The page opens on the egg being offered a name, so the portrait shows
-  // the companion the offer is about.
-  const [selectedId, setSelectedId] = useState<string | undefined>(arrival?.id)
+  // The page opens on the companion asked for, or else on the egg being
+  // offered a name, so the portrait shows the companion the offer is about.
+  const [selectedId, setSelectedId] = useState<string | undefined>(openOn ?? arrival?.id)
   const [nameDraft, setNameDraft] = useState<string>()
   const selected =
     ordered.find((creature) => creature.id === selectedId) ?? ordered[0]
 
   // Answering the offer removes it. Focus goes to the named companion's chip,
   // which shows the name it now has, rather than falling to the page body.
+  // Opened for one companion, focus starts on its chip, where the garden's
+  // card handed over.
   const picker = useRef<HTMLDivElement>(null)
-  const focusChip = useRef<string>(undefined)
+  const focusChip = useRef<string | undefined>(openOn)
   useEffect(() => {
     const id = focusChip.current
     if (id === undefined) return
@@ -289,6 +298,10 @@ export function CareView({
                 <span style={{ width: `${(progress / BOND_PER_LEVEL) * 100}%` }} />
               </div>
             </div>
+
+            {isButterfly && onChooseFlight && (
+              <CompanionFlight state={state} creature={selected} onChoose={onChooseFlight} />
+            )}
           </div>
         </div>
       </section>

@@ -38,6 +38,11 @@ export interface Route {
    * installed app's "Check in" shortcut leads.
    */
   checkIn?: boolean
+  /**
+   * Care opened for one companion, from its card in the garden. Not part of
+   * the address: a reload or a link opens Care as usual.
+   */
+  companionId?: string
 }
 
 /**

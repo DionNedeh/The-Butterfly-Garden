@@ -493,3 +493,53 @@ describe('the sound you can shape', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     await waitFor(() => expect(lastProfile()?.soundInBackground).toBe(false))
   })
 })
+
+describe('meeting a butterfly, and a flight of its own', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  function twoCompanions(): AppState {
+    const seed = stored()
+    const flyer = (id: string, name: string) => ({
+      ...seed.creatures[0],
+      id,
+      name,
+      speciesId: 'monarch',
+      stage: 'butterfly' as const,
+    })
+    return {
+      ...seed,
+      ownedFlightPatternIds: ['gentle-drift', 'petal-hop'],
+      // Ash comes first on the Care page; the card asks for Sol.
+      creatures: [flyer('ash', 'Ash'), flyer('sol', 'Sol')],
+    }
+  }
+
+  it('opens Care on the companion from its card, and flies the pattern chosen there', async () => {
+    const user = await openGarden(twoCompanions())
+    await user.click(screen.getByRole('button', { name: 'Meet Sol, Monarch' }))
+    const card = await screen.findByRole('dialog', { name: 'Sol' }, { timeout: 3000 })
+    await user.click(within(card).getByRole('button', { name: 'Care for Sol' }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/care')
+    const tab = screen.getByRole('tab', { name: /Sol/ })
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(tab).toHaveFocus()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Flight' }), 'Petal Hop')
+    await user.click(primaryNav().getByRole('button', { name: 'Garden' }))
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
+    const pattern = (id: string) =>
+      document.querySelector<HTMLElement>(`[data-flyer="${id}"]`)?.dataset.pattern
+    expect(pattern('sol')).toBe('petal-hop')
+    expect(pattern('ash')).toBe('gentle-drift')
+    expect(pattern('marigold-guide')).toBe('gentle-drift')
+
+    // Care from the navigation opens as usual, on the first companion.
+    await user.click(primaryNav().getByRole('button', { name: 'Care' }))
+    expect(await screen.findByRole('tab', { name: /Ash/ }, { timeout: 3000 })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+})

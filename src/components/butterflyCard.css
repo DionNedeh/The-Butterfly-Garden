@@ -1,0 +1,38 @@
+/* The card a garden butterfly opens. ButterflyCard imports this file, so it
+   arrives with the card rather than in the stylesheet every page waits for.
+   The dialog's surface, ink and backdrop are the shared .garden-dialog's, and
+   its colours come from the theme's tokens, which the night theme already
+   redefines; nothing here sets a colour of its own. */
+
+/* A small card, not a page: the body fills it, so a tap on the backdrop is
+   the only one that lands on the dialog itself and closes it. */
+.butterfly-card {
+  width: min(22rem, calc(100% - 2rem));
+  padding: 0;
+  text-align: center;
+}
+
+.butterfly-card-body {
+  padding: 1.5rem 1.25rem 1.25rem;
+}
+
+.butterfly-card-portrait {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.butterfly-card h2 {
+  margin: 0.15rem 0 0.35rem;
+}
+
+.butterfly-card-actions {
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+/* A long name wraps inside its button rather than running out of the card. */
+.butterfly-card-actions button {
+  max-width: 100%;
+  white-space: normal;
+}

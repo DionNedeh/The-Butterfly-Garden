@@ -466,6 +466,7 @@ function checkSunlight(raw: unknown, ctx: Context) {
 
 const CREATURE_STAGES = new Set(['egg', 'caterpillar', 'chrysalis', 'butterfly'])
 const OUTFIT_SLOTS = new Set<OutfitSlot>(['headwear', 'accessory', 'aura'])
+const FLIGHT_PATTERN_IDS = new Set<string>(flightPatterns.map((pattern) => pattern.id))
 
 function checkCreature(raw: unknown, ctx: Context) {
   if (
@@ -538,6 +539,15 @@ function checkCreature(raw: unknown, ctx: Context) {
   // An open offer to name an egg is only ever stored as true. Anything else
   // is no offer, so a hand-edited value can never reach the Care page.
   if (raw.awaitingName !== true) delete creature.awaitingName
+  // A companion's own flight pattern is kept only when the catalogue knows
+  // it; without one it flies the garden's, which is no damage to report.
+  // Whether the garden still owns it is asked when the garden is drawn
+  // (flightPatternFor), so a choice is not lost while a pattern is unowned.
+  if (
+    typeof raw.flightPatternId !== 'string' ||
+    !FLIGHT_PATTERN_IDS.has(raw.flightPatternId)
+  )
+    delete creature.flightPatternId
   return creature
 }
 

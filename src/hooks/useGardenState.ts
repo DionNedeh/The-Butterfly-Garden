@@ -8,7 +8,11 @@ import {
   selectCustomBackdrop as selectCustomBackdropIn,
 } from '../lib/customBackdrops'
 import { toLocalDate, type RecapHours } from '../lib/date'
-import { buyFlightPattern, selectFlightPattern } from '../lib/flightPatterns'
+import {
+  buyFlightPattern,
+  chooseCompanionFlight,
+  selectFlightPattern,
+} from '../lib/flightPatterns'
 import * as act from '../lib/gardenActions'
 import { gardenEvents } from '../lib/gardenEvents'
 import { hasGardenPassFeature } from '../lib/gardenPass'
@@ -240,6 +244,9 @@ export function useGardenState() {
         purchase((current) => buyFlightPattern(current, patternId)),
       selectFlightPattern: (patternId: FlightPatternId) =>
         update((current) => selectFlightPattern(current, patternId)),
+      /** One companion's own pattern; none lets it fly the garden's again. */
+      chooseCompanionFlight: (creatureId: string, patternId: FlightPatternId | undefined) =>
+        update((current) => chooseCompanionFlight(current, creatureId, patternId)),
       purchaseJar: (character: string, colorId: JarColorId) => {
         const now = new Date()
         return purchase((current) => buyJar(current, character, colorId, now))

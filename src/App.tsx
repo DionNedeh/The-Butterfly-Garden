@@ -734,6 +734,7 @@ function App() {
               onSelectCompanion={garden.selectCompanion}
               onRenameCreature={garden.renameCreature}
               onOpenCare={() => setView('care')}
+              onCareFor={(companionId) => navigate({ view: 'care', companionId })}
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
             />
@@ -747,6 +748,8 @@ function App() {
               onUnequip={garden.unequipSlot}
               onRenameCreature={garden.renameCreature}
               onGoToShop={() => setView('shop')}
+              openOn={route.companionId}
+              onChooseFlight={garden.chooseCompanionFlight}
             />
           )}
           {activeView === 'shop' && (

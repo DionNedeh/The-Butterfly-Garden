@@ -1,5 +1,13 @@
 import { effectiveBackdropId } from '../lib/appearance'
-import { useEffect, useRef, useMemo, useState, type CSSProperties } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarColors } from '../data/jars'
@@ -10,6 +18,7 @@ import { JarSprite } from './sprites/JarSprite'
 import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
 import { activeCustomBackdrop } from '../lib/customBackdrops'
 import { hasGardenPassFeature } from '../lib/gardenPass'
+import { flightPatternFor } from '../lib/flightPatterns'
 import { CustomBackdropImage } from './CustomBackdropImage'
 import { isAndroidApp } from '../lib/platform'
 import { availableJars, jarForPlant } from '../lib/jars'
@@ -47,6 +56,12 @@ const speciesById = new Map(species.map((item) => [item.id, item]))
 const jarColorsById = new Map<string, (typeof jarColors)[number]>(
   jarColors.map((color) => [color.id, color]),
 )
+/** Marigold flies with the companions but is the garden's guide, not one. */
+const GUIDE_ID = 'marigold-guide'
+/** Only asked for once a butterfly is tapped, so it is not in the first load. */
+const ButterflyCard = lazy(() =>
+  import('./ButterflyCard').then((m) => ({ default: m.ButterflyCard })),
+)
 /** Built once; constructing an Intl formatter per render is not free. */
 const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -82,6 +97,7 @@ export function GardenView({
   onSelectCompanion,
   onRenameCreature,
   onOpenCare,
+  onCareFor,
   seedFocus,
   onOpenGuide,
 }: {
@@ -93,6 +109,8 @@ export function GardenView({
   onSelectCompanion: (creatureId: string) => void
   onRenameCreature: (creatureId: string, name: string) => void
   onOpenCare: () => void
+  /** Opens Care with one companion chosen, from its card in the scene. */
+  onCareFor?: (creatureId: string) => void
   seedFocus?: string
   onOpenGuide?: () => void
 }) {
@@ -126,19 +144,26 @@ export function GardenView({
   const active = emerged.find(
     (creature) => creature.id === state.profile?.activeCompanionId,
   )
+  const selectedPattern =
+    flightPatterns.find(
+      (pattern) => pattern.id === state.selectedFlightPatternId,
+    ) ?? flightPatterns[0]
   const allGardenButterflies = [
     {
-      id: 'marigold-guide',
+      id: GUIDE_ID,
       speciesId: 'monarch',
       label: 'Marigold, your monarch garden guide',
       // Marigold is the garden's guide, not a companion, so she wears nothing.
       outfit: undefined as Partial<Record<OutfitSlot, string>> | undefined,
+      pattern: selectedPattern.id,
     },
     ...emerged.map((creature) => ({
       id: creature.id,
       speciesId: creature.speciesId,
       label: `${creature.name}, ${speciesById.get(creature.speciesId)?.commonName ?? 'butterfly'}`,
       outfit: outfitByCreature.get(creature.id),
+      // Its own pattern while the garden owns it, otherwise the garden's.
+      pattern: flightPatternFor(state, creature),
     })),
   ]
   // Keep the scene smooth on modest devices: at most 12 butterflies fly at
@@ -150,7 +175,7 @@ export function GardenView({
   if (allGardenButterflies.length > MAX_VISIBLE_FLYERS) {
     const always = allGardenButterflies.filter(
       (butterfly) =>
-        butterfly.id === 'marigold-guide' ||
+        butterfly.id === GUIDE_ID ||
         butterfly.id === state.profile?.activeCompanionId,
     )
     const rest = allGardenButterflies.filter(
@@ -164,6 +189,26 @@ export function GardenView({
         (_, index) => rest[(offset + index) % rest.length],
       ),
     ]
+  }
+  // How many share the sky. In calm motion only the first few fly and the
+  // others settle, so the flyers spread out as if they were alone.
+  const aloft =
+    motion === 'calm'
+      ? Math.min(CALM_AIRBORNE, gardenButterflies.length)
+      : gardenButterflies.length
+  /** The butterfly whose card is open, by id. */
+  const [meeting, setMeeting] = useState<string>()
+  const meetingCreature = emerged.find((creature) => creature.id === meeting)
+  const flightSpace = useRef<HTMLDivElement>(null)
+  // The card has closed, however it was closed: focus goes back to the
+  // butterfly it was about, rather than falling to the page.
+  const closeCard = () => {
+    const id = meeting
+    setMeeting(undefined)
+    const flyer = Array.from(
+      flightSpace.current?.querySelectorAll<HTMLElement>('[data-flyer]') ?? [],
+    ).find((element) => element.dataset.flyer === id)
+    flyer?.querySelector<HTMLElement>('[role="button"]')?.focus()
   }
   const observationChoices = observations.filter(
     (item) => item.speciesId === 'all' || item.speciesId === active?.speciesId,
@@ -234,10 +279,6 @@ export function GardenView({
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
   }, [state.jarPlacements, state.jars, state.plants])
-  const selectedPattern =
-    flightPatterns.find(
-      (pattern) => pattern.id === state.selectedFlightPatternId,
-    ) ?? flightPatterns[0]
   const customBackdrop = activeCustomBackdrop(
     state,
     hasGardenPassFeature('custom-backdrops'),
@@ -309,13 +350,16 @@ export function GardenView({
         <div
           className="garden-flight-space"
           aria-label="Butterflies flying in the garden"
+          ref={flightSpace}
         >
           {gardenButterflies.map((butterfly, index) => (
             <FlyingButterfly
               key={butterfly.id}
               id={butterfly.id}
-              pattern={selectedPattern.id}
+              pattern={butterfly.pattern}
               index={index}
+              aloft={aloft}
+              onMeet={() => setMeeting(butterfly.id)}
               speciesId={butterfly.speciesId}
               label={butterfly.label}
               outfit={butterfly.outfit}
@@ -387,6 +431,21 @@ export function GardenView({
           })}
         </div>
       </section>
+      {/* Outside the scene, so nothing styled for the scene reaches the card. */}
+      {(meeting === GUIDE_ID || meetingCreature) && (
+        <Suspense fallback={null}>
+          <ButterflyCard
+            creature={meetingCreature}
+            outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
+            onCareFor={
+              meetingCreature && onCareFor
+                ? () => onCareFor(meetingCreature.id)
+                : undefined
+            }
+            onClose={closeCard}
+          />
+        </Suspense>
+      )}
 
       {sceneUnavailable && (
         <p role="status">

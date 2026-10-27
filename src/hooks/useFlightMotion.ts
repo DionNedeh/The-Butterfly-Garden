@@ -11,6 +11,8 @@ export function useFlightMotion(
   reduced: boolean,
   preview: boolean,
   calm = false,
+  /** How many fly together, so each keeps to its own lane (lib/flightMotion). */
+  aloft = 1,
 ) {
   const travel = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLDivElement>(null)
@@ -53,6 +55,7 @@ export function useFlightMotion(
         bounds: { width: frame.clientWidth, height: frame.clientHeight },
         sprite: { width: size, height: (size * 110) / 120 },
         densityIndex: index,
+        aloft,
         auraMargin: preview ? 3 : 12,
         safeTop: preview ? 0 : Math.min(130, frame.clientHeight * 0.28),
         reducedMotion: reduced || preference.matches,
@@ -110,6 +113,6 @@ export function useFlightMotion(
       document.removeEventListener('visibilitychange', sync)
       preference.removeEventListener('change', create)
     }
-  }, [id, pattern, index, size, reduced, preview, calm])
+  }, [id, pattern, index, size, reduced, preview, calm, aloft])
   return { travel, heading }
 }

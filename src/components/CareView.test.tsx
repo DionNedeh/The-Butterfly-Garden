@@ -239,3 +239,83 @@ describe('naming a new arrival', () => {
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Fern')
   })
 })
+
+describe('opened for one companion, and a flight of its own', () => {
+  function gardenOfButterflies(overrides: Partial<AppState> = {}): AppState {
+    const base = createInitialState('Tester', 'Test Garden')
+    const flyer = (id: string, name: string, more: Partial<CreatureInstance> = {}) => ({
+      ...base.creatures[0],
+      id,
+      name,
+      stage: 'butterfly' as const,
+      ...more,
+    })
+    return {
+      ...base,
+      ownedFlightPatternIds: ['gentle-drift', 'petal-hop', 'ribbon-loop'],
+      selectedFlightPatternId: 'gentle-drift',
+      creatures: [flyer('a', 'Aster'), flyer('b', 'Briar'), flyer('c', 'Clove')],
+      ...overrides,
+    }
+  }
+
+  it('opens on the companion it was asked for, with focus on its tab', () => {
+    renderCare(gardenOfButterflies(), { openOn: 'b' })
+    const tab = screen.getByRole('tab', { name: /Briar/ })
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(tab).toHaveFocus()
+    expect(screen.getByLabelText('Name for Briar')).toBeInTheDocument()
+  })
+
+  it('opens as usual, and leaves focus alone, when asked for nobody in particular', () => {
+    renderCare(gardenOfButterflies())
+    expect(screen.getByRole('tab', { name: /Aster/ })).toHaveAttribute('aria-selected', 'true')
+    expect(document.body).toHaveFocus()
+  })
+
+  it('offers the garden default and every owned pattern, and says which is flown', async () => {
+    const user = userEvent.setup()
+    const onChooseFlight = vi.fn()
+    renderCare(gardenOfButterflies(), { onChooseFlight })
+    const flight = screen.getByRole('combobox', { name: 'Flight' })
+    expect(Array.from((flight as HTMLSelectElement).options).map((option) => option.text)).toEqual([
+      'Garden default (Gentle Drift)',
+      'Gentle Drift',
+      'Petal Hop',
+      'Ribbon Loop',
+    ])
+    expect(flight).toHaveValue('')
+
+    await user.selectOptions(flight, 'Petal Hop')
+    expect(onChooseFlight).toHaveBeenCalledWith('a', 'petal-hop')
+  })
+
+  it('shows a companion its own pattern, and hands back none for the garden default', async () => {
+    const user = userEvent.setup()
+    const onChooseFlight = vi.fn()
+    const state = gardenOfButterflies()
+    renderCare(
+      { ...state, creatures: [{ ...state.creatures[0], flightPatternId: 'ribbon-loop' }] },
+      { onChooseFlight },
+    )
+    const flight = screen.getByRole('combobox', { name: 'Flight' })
+    expect(flight).toHaveValue('ribbon-loop')
+
+    await user.selectOptions(flight, 'Garden default (Gentle Drift)')
+    expect(onChooseFlight).toHaveBeenCalledWith('a', undefined)
+  })
+
+  it('shows the garden default while its own pattern is not owned', () => {
+    const state = gardenOfButterflies()
+    renderCare(
+      { ...state, creatures: [{ ...state.creatures[0], flightPatternId: 'canopy-dance' }] },
+      { onChooseFlight: vi.fn() },
+    )
+    expect(screen.getByRole('combobox', { name: 'Flight' })).toHaveValue('')
+  })
+
+  it('asks nothing about flight before a companion has wings', () => {
+    renderCare(gardenWithCaterpillar(), { onChooseFlight: vi.fn() })
+    expect(screen.queryByRole('combobox', { name: 'Flight' })).toBeNull()
+  })
+})
