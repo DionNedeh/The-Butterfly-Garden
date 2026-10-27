@@ -13,9 +13,27 @@ import { sameOutfit } from './wardrobe'
  * The looks' limits live with the companions' diary (lib/companionDiary),
  * which storage loads to check a stored look (validateGarden), so storage
  * loads neither these rules nor the shop.
+ *
+ * The looks are kept in the profile (Profile.outfitPresets), which every
+ * older build carries through whole, and the list is left out altogether
+ * when it is empty. A garden with no profile yet has nowhere to keep one.
  */
 
 type Outfit = Partial<Record<OutfitSlot, string>>
+
+/** The garden's saved looks, in the order they were saved. */
+function looksOf(state: AppState): readonly OutfitPreset[] {
+  return state.profile?.outfitPresets ?? []
+}
+
+/** The garden with these looks in its profile, and no list at all for none. */
+function withLooks(state: AppState, looks: OutfitPreset[]): AppState {
+  if (!state.profile) return state
+  const profile = { ...state.profile }
+  if (looks.length > 0) profile.outfitPresets = looks
+  else delete profile.outfitPresets
+  return { ...state, profile }
+}
 
 /** The pieces of an outfit, leaving out empty slots. */
 function piecesOf(outfit: Outfit): Outfit {
@@ -64,34 +82,35 @@ export function presetSaveProblem(
 /**
  * Save a companion's outfit as a look. A name left empty takes the one
  * suggested. The very same garden comes back when there is nothing to save
- * (see presetSaveProblem).
+ * (see presetSaveProblem), or no profile yet to keep it in.
  */
 export function saveOutfitPreset(state: AppState, creatureId: string, name: string): AppState {
   const creature = state.creatures.find((entry) => entry.id === creatureId)
-  const presets = state.outfitPresets ?? []
+  const presets = looksOf(state)
   if (!creature || presetSaveProblem(presets, creature.outfit)) return state
   const preset: OutfitPreset = {
     id: createId(),
     name: presetName(name) || suggestPresetName(presets, creature.name),
     outfit: piecesOf(creature.outfit),
   }
-  return { ...state, outfitPresets: [...presets, preset] }
+  return withLooks(state, [...presets, preset])
 }
 
 export function renameOutfitPreset(state: AppState, presetId: string, name: string): AppState {
-  const presets = state.outfitPresets ?? []
+  const presets = looksOf(state)
   const index = presets.findIndex((preset) => preset.id === presetId)
   const named = presetName(name)
   if (index === -1 || !named || presets[index].name === named) return state
-  const outfitPresets = [...presets]
-  outfitPresets[index] = { ...presets[index], name: named }
-  return { ...state, outfitPresets }
+  const renamed = [...presets]
+  renamed[index] = { ...presets[index], name: named }
+  return withLooks(state, renamed)
 }
 
+/** Delete a look. The last one gone leaves no list behind, as before any was saved. */
 export function deleteOutfitPreset(state: AppState, presetId: string): AppState {
-  const presets = state.outfitPresets ?? []
+  const presets = looksOf(state)
   if (!presets.some((preset) => preset.id === presetId)) return state
-  return { ...state, outfitPresets: presets.filter((preset) => preset.id !== presetId) }
+  return withLooks(state, presets.filter((preset) => preset.id !== presetId))
 }
 
 /**
@@ -100,11 +119,11 @@ export function deleteOutfitPreset(state: AppState, presetId: string): AppState 
  * the meantime is not overfilled.
  */
 export function restoreOutfitPreset(state: AppState, preset: OutfitPreset, index: number): AppState {
-  const presets = state.outfitPresets ?? []
+  const presets = looksOf(state)
   if (presets.some((entry) => entry.id === preset.id) || presets.length >= MAX_OUTFIT_PRESETS) {
     return state
   }
-  const outfitPresets = [...presets]
-  outfitPresets.splice(Math.max(0, Math.min(index, presets.length)), 0, preset)
-  return { ...state, outfitPresets }
+  const restored = [...presets]
+  restored.splice(Math.max(0, Math.min(index, presets.length)), 0, preset)
+  return withLooks(state, restored)
 }

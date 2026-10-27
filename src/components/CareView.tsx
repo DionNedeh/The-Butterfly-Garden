@@ -473,7 +473,7 @@ export function CareView({
         </div>
         <OutfitLooks
           creature={selected}
-          presets={state.outfitPresets ?? []}
+          presets={state.profile?.outfitPresets ?? []}
           onSave={onSavePreset}
           onWear={onWearPreset}
           onRename={onRenamePreset}

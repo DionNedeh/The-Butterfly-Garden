@@ -247,7 +247,7 @@ export function wearOutfitPreset(
 ): WearLookResult {
   const index = state.creatures.findIndex((entry) => entry.id === creatureId)
   const creature = index === -1 ? undefined : state.creatures[index]
-  const preset = state.outfitPresets?.find((entry) => entry.id === presetId)
+  const preset = state.profile?.outfitPresets?.find((entry) => entry.id === presetId)
   if (!creature || !preset) return { state, worn: [], skipped: [] }
 
   const worn: string[] = []

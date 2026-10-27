@@ -463,6 +463,39 @@ describe('backups the garden cannot trust', () => {
   })
 })
 
+describe('saved looks in a backup', () => {
+  it('keeps them through an export and a restore, in the profile', async () => {
+    const seed = createInitialState('Tester', 'Dressed')
+    const looks = [{ id: 'look-1', name: 'Sunday best', outfit: { headwear: 'sprout-cap' } }]
+    await gardenRepository.save({ ...seed, profile: { ...seed.profile!, outfitPresets: looks } })
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.state?.profile?.outfitPresets).toEqual(looks)
+
+    const file = result.current.exportGarden()!
+    const { garden } = JSON.parse(file) as { garden: Record<string, unknown> & { profile: object } }
+    // Inside the profile, which an older build restoring this file carries
+    // through whole, and not beside it, where that build would drop it.
+    expect(garden.profile).toMatchObject({ outfitPresets: looks })
+    expect(garden).not.toHaveProperty('outfitPresets')
+
+    // Gone from the garden, then brought back by the file.
+    act(() => result.current.deletePreset('look-1'))
+    expect(result.current.state?.profile).not.toHaveProperty('outfitPresets')
+    // Let the deletion's write land before replacing it.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    let outcome: { ok: boolean; message: string } | undefined
+    await act(async () => {
+      outcome = await result.current.importGarden(file)
+    })
+    expect(outcome).toEqual({ ok: true, message: 'Your garden was restored from the backup.' })
+    expect(result.current.state?.profile?.outfitPresets).toEqual(looks)
+    // And stored so, for the next time the garden opens.
+    const stored = await gardenRepository.load()
+    expect(stored.state.profile?.outfitPresets).toEqual(looks)
+  })
+})
+
 describe('an image save that never hears back', () => {
   it('gives up after a while instead of blocking every later image', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -728,7 +761,7 @@ describe('every action, through the hook', () => {
     act(() => result.current.equipItem(sol.id, 'flower-crown'))
     expect(garden().creatures[0].outfitsWorn).toEqual(['flower-crown'])
     act(() => result.current.savePreset(sol.id, 'Crowned'))
-    const [look] = garden().outfitPresets!
+    const [look] = garden().profile!.outfitPresets!
     expect(look).toMatchObject({ name: 'Crowned', outfit: { headwear: 'flower-crown' } })
 
     act(() => result.current.unequipSlot(sol.id, 'headwear'))
@@ -742,12 +775,13 @@ describe('every action, through the hook', () => {
     expect(garden().creatures[0].outfit).toEqual({ headwear: 'flower-crown' })
 
     act(() => result.current.renamePreset(look.id, 'Sunday crown'))
-    expect(garden().outfitPresets?.[0].name).toBe('Sunday crown')
-    const renamed = garden().outfitPresets![0]
+    expect(garden().profile?.outfitPresets?.[0].name).toBe('Sunday crown')
+    const renamed = garden().profile!.outfitPresets![0]
     act(() => result.current.deletePreset(look.id))
-    expect(garden().outfitPresets).toEqual([])
+    // The last look gone leaves no list, as before any was saved.
+    expect(garden().profile).not.toHaveProperty('outfitPresets')
     act(() => result.current.restorePreset(renamed, 0))
-    expect(garden().outfitPresets).toEqual([renamed])
+    expect(garden().profile?.outfitPresets).toEqual([renamed])
   })
 
   it('wears nothing before the garden has loaded', () => {

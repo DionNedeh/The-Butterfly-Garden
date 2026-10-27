@@ -228,6 +228,15 @@ export interface Profile {
    * guessing. Optional: an older garden has kept nothing yet.
    */
   diarySince?: string
+  /**
+   * Looks saved from the wardrobe, at most MAX_OUTFIT_PRESETS
+   * (lib/outfitPresets). Kept in the profile rather than beside it in the
+   * stored meta record: an older build writes that record field by field,
+   * and would drop a field it did not know, but it carries the profile
+   * through whole. Optional, and absent rather than empty when there are
+   * none, so an older garden or backup simply has none.
+   */
+  outfitPresets?: OutfitPreset[]
 }
 
 /** Image formats a garden image may be stored as. */
@@ -511,11 +520,6 @@ export interface AppState {
   selectedFlightPatternId: FlightPatternId
   jars: JarInstance[]
   jarPlacements: JarPlacement[]
-  /**
-   * Looks saved from the wardrobe, at most MAX_OUTFIT_PRESETS (lib/outfitPresets).
-   * Optional, so an older garden or backup simply has none.
-   */
-  outfitPresets?: OutfitPreset[]
 }
 
 export interface SpeciesDefinition {

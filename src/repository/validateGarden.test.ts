@@ -643,76 +643,83 @@ describe('validating a garden', () => {
   describe('saved looks', () => {
     const sunday = { id: 'sunday', name: 'Sunday best', outfit: { headwear: 'sprout-cap' } }
 
-    it('keeps well-formed looks as the very same list', () => {
-      const stored = garden({ outfitPresets: [sunday] })
+    /** A garden whose profile holds these looks, where the wardrobe keeps them. */
+    function withLooks(outfitPresets: unknown) {
+      const stored = garden()
+      return { ...stored, profile: { ...stored.profile!, outfitPresets } }
+    }
+
+    it('keeps well-formed looks in the profile as the very same list', () => {
+      const stored = withLooks([sunday])
       const result = validateGarden(stored)
-      expect(result.state?.outfitPresets).toBe(stored.outfitPresets)
+      expect(result.state?.profile?.outfitPresets).toBe(stored.profile.outfitPresets)
+      expect(result.state?.profile?.gardenName).toBe('Test Garden')
       expect(result.repaired).toBe(0)
       // And the same through a backup's JSON.
       const restored = validateGarden(JSON.parse(JSON.stringify(stored)))
-      expect(restored.state?.outfitPresets).toEqual([sunday])
+      expect(restored.state?.profile?.outfitPresets).toEqual([sunday])
     })
 
     it('drops unknown slots and pieces, and pieces in the wrong slot', () => {
       const result = validateGarden(
-        garden({
-          outfitPresets: [
-            {
-              id: 'mixed',
-              name: 'Mixed',
-              outfit: {
-                headwear: 'sprout-cap',
-                accessory: 'sparkle-aura',
-                aura: 'retired-glow',
-                cape: 'silk-bow',
-              },
+        withLooks([
+          {
+            id: 'mixed',
+            name: 'Mixed',
+            outfit: {
+              headwear: 'sprout-cap',
+              accessory: 'sparkle-aura',
+              aura: 'retired-glow',
+              cape: 'silk-bow',
             },
-          ],
-        }),
+          },
+        ]),
       )
-      expect(result.state?.outfitPresets).toEqual([
+      expect(result.state?.profile?.outfitPresets).toEqual([
         { id: 'mixed', name: 'Mixed', outfit: { headwear: 'sprout-cap' } },
       ])
     })
 
     it('drops a look with nothing left in it, no id of its own, or a twin’s id', () => {
-      const result = validateGarden(
-        garden({
-          outfitPresets: [
-            sunday,
-            { ...sunday, name: 'Twin' },
-            { id: 'empty', name: 'Empty', outfit: { headwear: 'retired-hat' } },
-            { id: '', name: 'No id', outfit: sunday.outfit },
-            { name: 'No id', outfit: sunday.outfit },
-            { id: 'no-outfit', name: 'No outfit' },
-            'Sunday best',
-            null,
-          ],
-        }),
-      )
-      expect(result.state?.outfitPresets).toEqual([sunday])
+      const stored = withLooks([
+        sunday,
+        { ...sunday, name: 'Twin' },
+        { id: 'empty', name: 'Empty', outfit: { headwear: 'retired-hat' } },
+        { id: '', name: 'No id', outfit: sunday.outfit },
+        { name: 'No id', outfit: sunday.outfit },
+        { id: 'no-outfit', name: 'No outfit' },
+        'Sunday best',
+        null,
+      ])
+      const result = validateGarden(stored)
+      expect(result.state?.profile?.outfitPresets).toEqual([sunday])
+      // A cleaned list is a new one, and the stored one is left as it was.
+      expect(result.state?.profile?.outfitPresets).not.toBe(stored.profile.outfitPresets)
+      expect(stored.profile.outfitPresets).toHaveLength(8)
+      // A look is an arrangement of pieces, not something made: dropping one
+      // is not reported as damage.
+      expect(result.repaired).toBe(0)
     })
 
     it('names a look as the wardrobe names it, giving one with no name a plain one', () => {
       const result = validateGarden(
-        garden({
-          outfitPresets: [
-            { ...sunday, id: 'padded', name: '  Padded  ' },
-            { ...sunday, id: 'long', name: 'L'.repeat(PRESET_NAME_LENGTH + 20) },
-            { ...sunday, id: 'blank', name: '   ' },
-            { ...sunday, id: 'number', name: 7 },
-            { ...sunday, id: 'extra', name: 'Extra', note: 'not kept' },
-          ],
-        }),
+        withLooks([
+          { ...sunday, id: 'padded', name: '  Padded  ' },
+          { ...sunday, id: 'long', name: 'L'.repeat(PRESET_NAME_LENGTH + 20) },
+          { ...sunday, id: 'blank', name: '   ' },
+          { ...sunday, id: 'number', name: 7 },
+          { ...sunday, id: 'extra', name: 'Extra', note: 'not kept' },
+        ]),
       )
-      expect(result.state?.outfitPresets?.map((preset) => preset.name)).toEqual([
+      const looks = result.state?.profile?.outfitPresets
+      expect(looks?.map((preset) => preset.name)).toEqual([
         'Padded',
         'L'.repeat(PRESET_NAME_LENGTH),
         'Saved look',
         'Saved look',
         'Extra',
       ])
-      expect(result.state?.outfitPresets?.[4]).not.toHaveProperty('note')
+      expect(looks?.[4]).not.toHaveProperty('note')
     })
 
     it('keeps no more looks than the closet holds', () => {
@@ -720,20 +727,20 @@ describe('validating a garden', () => {
         ...sunday,
         id: `look-${index}`,
       }))
-      const result = validateGarden(garden({ outfitPresets: many }))
-      expect(result.state?.outfitPresets).toHaveLength(MAX_OUTFIT_PRESETS)
-      expect(result.state?.outfitPresets?.[0].id).toBe('look-0')
+      const looks = validateGarden(withLooks(many)).state?.profile?.outfitPresets
+      expect(looks).toHaveLength(MAX_OUTFIT_PRESETS)
+      expect(looks?.[0].id).toBe('look-0')
     })
 
-    it('gives an older garden no looks, and an odd value none either', () => {
-      expect(validateGarden(garden()).state).not.toHaveProperty('outfitPresets')
-      for (const odd of ['looks', 4, { sunday }, null]) {
-        expect(validateGarden(garden({ outfitPresets: odd })).state).not.toHaveProperty(
-          'outfitPresets',
-        )
+    it('gives an older garden no looks, and an odd or empty value none either', () => {
+      expect(validateGarden(garden()).state?.profile).not.toHaveProperty('outfitPresets')
+      // An emptied list is kept as no list at all, the way a garden that never
+      // saved a look stores it.
+      for (const odd of ['looks', 4, { sunday }, null, [], [null]]) {
+        const profile = validateGarden(withLooks(odd)).state?.profile
+        expect(profile).not.toHaveProperty('outfitPresets')
+        expect(profile?.gardenName).toBe('Test Garden')
       }
-      // An emptied list is kept as the gardener left it.
-      expect(validateGarden(garden({ outfitPresets: [] })).state?.outfitPresets).toEqual([])
     })
   })
 
