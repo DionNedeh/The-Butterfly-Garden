@@ -1,5 +1,14 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import type { AppState, AppView } from '../types'
+import {
+  lazy,
+  Suspense,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from 'react'
+import type { AppState, AppView, SightingSubject } from '../types'
 import { SpeciesDirectory } from './SpeciesDirectory'
 import { RegionGuide } from './guide/RegionGuide'
 import { STAGE_CARE_DAYS } from '../lib/lifecycle'
@@ -20,8 +29,18 @@ import { hashForRoute } from '../lib/routes'
 import { counted } from '../lib/plural'
 import { regionGuideWords } from '../lib/regionGuide'
 import { hasEveryWord, normaliseForSearch, searchWords } from '../lib/searchText'
+import {
+  fieldBookActions,
+  PHOTO_NOT_KEPT,
+  seenInTheWild,
+  type ChangeSightings,
+} from '../lib/sightings'
+import { useLocalDate } from '../hooks/useLocalDate'
 // Only the Guide draws these, so they arrive with it.
 import './guide/guide.css'
+
+// The sighting form arrives when a card's "Log a sighting" is pressed.
+const SightingForm = lazy(() => import('./sightings/SightingForm'))
 
 interface GuideSection {
   /** Its name in the address, `#/guide/{id}`, and in the table of contents' links. */
@@ -265,6 +284,7 @@ export function GuideView({
   returnTo,
   onReturn,
   onOpenSection,
+  onChangeSightings,
 }: {
   state: AppState
   onShowSeed: (id: string) => void
@@ -276,9 +296,20 @@ export function GuideView({
   onReturn?: () => void
   /** Put a section in the address, as following its link does. */
   onOpenSection?: (section: string) => void
+  /** Log a sighting from a species' or plant's card. Without it, none is offered. */
+  onChangeSightings?: ChangeSightings
 }) {
   const { opensHour, graceEndsHour } = recapHoursOf(state.profile)
   const region = state.profile?.region
+  const today = useLocalDate()
+  const seen = useMemo(() => seenInTheWild(state.sightings), [state.sightings])
+  // The butterfly or plant whose card opened the sighting form, and the
+  // button that did, which takes focus back when the form closes.
+  const [logging, setLogging] = useState<SightingSubject>()
+  const loggedFrom = useRef<HTMLElement | null>(null)
+  /** Whether the photo of the sighting just logged was stored, while that is not yet known. */
+  const photoSaved = useRef<Promise<boolean>>(undefined)
+  const [logged, setLogged] = useState('')
   // Rebuilt only when the gardener's evening moves, not on every garden change.
   const sections = useMemo(
     () => guideSections({ opensHour, graceEndsHour }),
@@ -401,7 +432,52 @@ export function GuideView({
             : ''}
         </p>
       </nav>
-      <SpeciesDirectory state={state} onShowSeed={onShowSeed} words={words} region={region} />
+      <p className="subtle-copy guide-sighting-status" role="status">
+        {logged}
+      </p>
+      <SpeciesDirectory
+        state={state}
+        onShowSeed={onShowSeed}
+        words={words}
+        region={region}
+        seen={seen}
+        onLogSighting={
+          onChangeSightings
+            ? (subject, opener) => {
+                loggedFrom.current = opener
+                setLogged('')
+                setLogging(subject)
+              }
+            : undefined
+        }
+      />
+      {logging && onChangeSightings && (
+        <Suspense fallback={null}>
+          <SightingForm
+            sightings={state.sightings}
+            region={region}
+            today={today}
+            subject={logging}
+            onSave={(input) => {
+              const actions = fieldBookActions(onChangeSightings)
+              if (actions.log(input) === undefined) return false
+              // With a photo, "saved" waits for the photo to be stored.
+              photoSaved.current = input.photo && actions.photoSaved(input.photo)
+              return true
+            }}
+            onClose={(saved) => {
+              setLogging(undefined)
+              loggedFrom.current?.focus()
+              if (!saved) return
+              const words = 'Saved to your field book, in the Journal’s field notes.'
+              const waiting = photoSaved.current
+              photoSaved.current = undefined
+              if (!waiting) setLogged(words)
+              else void waiting.then((kept) => setLogged(kept ? words : PHOTO_NOT_KEPT))
+            }}
+          />
+        </Suspense>
+      )}
       {region && regionShown && <RegionGuide region={region} />}
       <div className="guide-grid">
         {shown.map((item) => (

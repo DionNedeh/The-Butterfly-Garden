@@ -42,7 +42,7 @@ export const MOONLIGHT_STARDUST_REWARD = 1
 
 export function createEmptyState(): AppState {
   return {
-    version: 6,
+    version: 8,
     goals: [],
     completions: [],
     moods: [],
@@ -62,6 +62,7 @@ export function createEmptyState(): AppState {
     selectedFlightPatternId: DEFAULT_FLIGHT_PATTERN_ID,
     jars: [],
     jarPlacements: [],
+    sightings: [],
   }
 }
 

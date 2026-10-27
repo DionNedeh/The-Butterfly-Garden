@@ -24,6 +24,8 @@ const PATHS: Record<AppView, string> = {
   notices: 'notices',
   support: 'support',
   breathe: 'breathe',
+  year: 'year',
+  comfort: 'comfort',
 }
 
 const VIEWS = new Map<string, AppView>(
@@ -39,15 +41,20 @@ export type BreatheWay = 'goal' | 'next-step' | 'support' | 'recap'
 
 /**
  * Where on a page a link to a page opened for a moment was pressed (a "What
- * does this do?" link to the Guide, or a way into breathing), so that leaving
- * that page puts the gardener back there, rather than at the top of a fresh
- * copy of the page with focus nowhere.
+ * does this do?" link to the Guide, a way into breathing or into the comfort
+ * plan, or the plan's own way to the support page), so that leaving that page
+ * puts the gardener back there, rather than at the top of a fresh copy of the
+ * page with focus nowhere.
  */
 export interface LinkPlace {
   /** A Guide link: the section it opened, which names the link on its page. */
   section?: string
   /** A way into breathing: which one, which names it on its page. */
   breathe?: BreatheWay
+  /** A way into the comfort plan: each page that offers one has one. */
+  comfort?: boolean
+  /** On the comfort plan, its way to the support page. */
+  support?: boolean
   /** How far down the page had been scrolled. */
   scrollY: number
   /** On Care, the companion whose link it was. */
@@ -78,18 +85,27 @@ export interface Route {
   section?: string
   /**
    * The page a "What does this do?" link left, which the Guide offers a way
-   * back to and Android's back gesture returns to; for breathing, the page
-   * that offered it. Not part of the address.
+   * back to and Android's back gesture returns to; for breathing and the
+   * comfort plan, the page that opened them. Not part of the address.
    */
   from?: AppView
-  /** On the Guide or breathing, where on the page `from` its link was pressed. */
+  /**
+   * On the Guide, breathing or the comfort plan, where on the page `from` its
+   * link was pressed.
+   */
   fromPlace?: LinkPlace
   /**
-   * Back from the Guide or breathing: the place on this page to put the
+   * Back from the Guide, breathing or the comfort plan, or from the support
+   * page to the plan that opened it: the place on this page to put the
    * gardener at, as it was when they pressed the link. Not part of the
    * address.
    */
   restore?: LinkPlace
+  /**
+   * The year "Your garden's year" looks back on: `#/year/2025`. Without it,
+   * this year (`#/year`). The page offers only years it has something for.
+   */
+  year?: number
   /**
    * The Journal opened on Marigold's newest letter, from the garden's card.
    * Not part of the address: a reload opens the Journal as usual, where the
@@ -100,6 +116,9 @@ export interface Route {
 
 /** A Guide section's name in the address: lower case words and hyphens. */
 const GUIDE_SECTION = /^guide\/([a-z][a-z-]{0,39})$/
+
+/** A year looked back on, in the address: four digits. */
+const YEAR = /^year\/(\d{4})$/
 
 /**
  * The page a hash names, or undefined for one that names no page (an old
@@ -114,19 +133,21 @@ export function routeFromHash(hash: string): Route | undefined {
   if (path === 'recap') return { view: 'today' }
   const section = GUIDE_SECTION.exec(path)?.[1]
   if (section) return { view: 'guide', section }
+  const year = YEAR.exec(path)?.[1]
+  if (year) return { view: 'year', year: Number(year) }
   const view = VIEWS.get(path)
   return view ? { view } : undefined
 }
 
 /**
  * The way back from a page another page opened for a moment: the Guide, from
- * a "What does this do?" link, or breathing, from wherever it was offered.
- * It is the page left, for the same companion on Care, with the place to put
- * the gardener back at. Nothing for either opened any other way (a link, the
- * navigation), or for any other page.
+ * a "What does this do?" link, or breathing or the comfort plan, from
+ * wherever they were offered. It is the page left, for the same companion on
+ * Care, with the place to put the gardener back at. Nothing for any of them
+ * opened any other way (a link, the navigation), or for any other page.
  */
 export function returnFrom(route: Route): Route | undefined {
-  if (route.view !== 'guide' && route.view !== 'breathe') return undefined
+  if (route.view !== 'guide' && route.view !== 'breathe' && route.view !== 'comfort') return undefined
   if (!route.from || route.from === route.view) return undefined
   return { view: route.from, companionId: route.fromPlace?.companionId, restore: route.fromPlace }
 }
@@ -136,6 +157,7 @@ export function hashForRoute(route: Route): string {
   if (route.view === 'shop' && route.onPass) return '#/shop/pass'
   if (route.view === 'today' && route.checkIn) return '#/today/check-in'
   if (route.view === 'guide' && route.section) return `#/guide/${route.section}`
+  if (route.view === 'year' && route.year) return `#/year/${route.year}`
   const path = PATHS[route.view]
   return path ? `#/${path}` : ''
 }

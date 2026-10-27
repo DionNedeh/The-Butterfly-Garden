@@ -75,6 +75,22 @@ describe('backAction', () => {
     expect(backAction('breathe', document, 'breathe')).toEqual({ kind: 'view', view: 'garden' })
   })
 
+  it('returns a year looked back on to the page that opened it, or else the Journal', () => {
+    expect(backAction('year', document, 'journal')).toEqual({ kind: 'view', view: 'journal' })
+    // Opened from a link or a reload, it goes back to the Journal, where it lives.
+    expect(backAction('year')).toEqual({ kind: 'view', view: 'journal' })
+    expect(backAction('year', document, 'year')).toEqual({ kind: 'view', view: 'journal' })
+  })
+
+  it('returns the comfort plan to the page that opened it, or else the garden', () => {
+    expect(backAction('comfort', document, 'today')).toEqual({ kind: 'view', view: 'today' })
+    expect(backAction('comfort', document, 'settings')).toEqual({ kind: 'view', view: 'settings' })
+    expect(backAction('comfort', document, 'support')).toEqual({ kind: 'view', view: 'support' })
+    // Opened from a link or a reload, it knows of no page before it.
+    expect(backAction('comfort')).toEqual({ kind: 'view', view: 'garden' })
+    expect(backAction('comfort', document, 'comfort')).toEqual({ kind: 'view', view: 'garden' })
+  })
+
   it('returns any other page to the garden', () => {
     for (const view of ['care', 'today', 'journal', 'settings'] as const)
       expect(backAction(view)).toEqual({ kind: 'view', view: 'garden' })
@@ -224,5 +240,48 @@ describe('putBackAt, back from breathing', () => {
       </main>`
     putBackAt({ breathe: 'support', scrollY: 1400 })
     expect(document.querySelector('a.breathe-link')).toHaveFocus()
+  })
+})
+
+describe('putBackAt, back from the comfort plan', () => {
+  afterEach(() => {
+    document.body.replaceChildren()
+    vi.restoreAllMocks()
+  })
+
+  it('focuses the way into the plan on the page that offered it', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1>Settings</h1>
+        <a class="guide-link" href="#/guide/seeds">What does this do?</a>
+        <a class="comfort-link" href="#/comfort">Your comfort plan</a>
+      </main>`
+    putBackAt({ comfort: true, scrollY: 2400 })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2400, behavior: 'instant' })
+    expect(document.querySelector('a.comfort-link')).toHaveFocus()
+  })
+
+  it('focuses Today’s heading once the gentle day, and its line, are over', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1>Today</h1>
+        <a class="breathe-link" href="#/breathe">Breathe now</a>
+      </main>`
+    putBackAt({ comfort: true, scrollY: 640 })
+    expect(document.querySelector('h1')).toHaveFocus()
+  })
+
+  it('focuses the plan’s own way to support, back from the support page', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1 tabindex="-1">My comfort plan</h1>
+        <p class="card comfort-support">It is not a substitute for help.
+          <a class="comfort-link" href="#/support">If you need support now</a></p>
+      </main>`
+    putBackAt({ support: true, scrollY: 300 })
+    expect(document.querySelector('a[href="#/support"]')).toHaveFocus()
   })
 })

@@ -19,7 +19,6 @@ import { activeCustomBackdrop } from '../lib/customBackdrops'
 import { hasGardenPassFeature } from '../lib/gardenPass'
 import { flightPatternFor } from '../lib/flightPatterns'
 import { CustomBackdropImage } from './CustomBackdropImage'
-import { isAndroidApp } from '../lib/platform'
 import { jarForPlant, jarSpokenName } from '../lib/jars'
 import {
   DAILY_SEED_REWARD,
@@ -472,7 +471,8 @@ export function GardenView({
 
       {sceneUnavailable && (
         <p role="status">
-          {isAndroidApp()
+          {/* Inline, so each build carries only its own wording. */}
+          {import.meta.env.VITE_PLATFORM === 'android'
             ? 'This scene could not be opened. Sunlit Meadow is shown instead.'
             : 'This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.'}
         </p>

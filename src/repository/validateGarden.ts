@@ -8,46 +8,72 @@ import {
   MAX_OUTFITS_WORN,
   presetName,
 } from '../lib/companionDiary'
-import { JAR_LETTERS, JAR_NUMBERS, jarCharacters, jarColors } from '../data/jars'
+import { jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
-import { isValidBrightness, isValidCustomBackdropCollection } from '../lib/customBackdrops'
+import { plants as plantCatalogue, species as speciesCatalogue } from '../data/content'
+import {
+  decodedByteLength,
+  isSightingPhoto,
+  isSupportedMimeType,
+  isValidBase64,
+  isValidBrightness,
+  isValidCustomBackdropCollection,
+  MAX_SIGHTING_PHOTOS,
+  MAX_SIGHTINGS,
+  SIGHTING_PHOTO_MAX_BYTES,
+} from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
-import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } from '../lib/date'
+import {
+  isLocalDate,
+  RECAP_GRACE_CHOICES,
+  RECAP_OPENS_CHOICES,
+  toLocalDate,
+} from '../lib/date'
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { clampVolume } from '../lib/sound'
 import { isRegionId } from '../lib/region'
 import { isSunday } from '../lib/letters'
 import { isReminderTime } from '../lib/reminderTime'
+import {
+  COMFORT_ITEMS,
+  COMFORT_SECTIONS,
+  comfortText,
+  phoneNumber,
+} from '../lib/comfortPlan'
 import type {
   AmbientTrackId,
   AppState,
+  ComfortItem,
+  ComfortPlan,
+  ComfortSection,
   GrownAlongside,
   OutfitPreset,
   OutfitSlot,
   PlantInstance,
+  Sighting,
 } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
-export const CURRENT_STATE_VERSION = 7
-
-/** The jars a version 6 build keeps: it drops any other, silently. */
-const VERSION_6_JAR_CHARACTERS = new Set<string>([...JAR_LETTERS, ...JAR_NUMBERS])
+export const CURRENT_STATE_VERSION = 8
 
 /**
- * The version a garden is stored and exported at.
+ * The version a garden is stored and exported at: 8, for every garden.
  *
- * Version 7 holds nothing new but a jar's accented letter or mark. A build
- * that knows only version 6 reads a garden at 6 as its own, and would keep
- * every jar but those, silently, with their placements and the Nectar they
- * cost; a garden at 7 it sets aside untouched, as the work of a newer
- * version, and a backup at 7 it refuses. So a garden is written at 7 only
- * once it holds such a jar. Every other garden stays at 6, and an older app
- * can still read it and its backups.
+ * Version 8 brought the field book's sightings, a collection no earlier build
+ * knows. A build that knew only 7 would read a garden at 7 as its own and
+ * write it back without them, so every garden is written at 8 from now on:
+ * such a build cannot open the raised database at all, and it sets aside a
+ * backup at 8, untouched, as a newer version's work, rather than restore it
+ * without its sightings.
+ *
+ * Before this, a garden went to 7 only once it held a jar a version 6 build
+ * would drop, and otherwise stayed at 6 so that build could still read it.
+ * Version 8 supersedes that: it is for every garden, jars or not.
  */
-export function storedVersionOf(state: Pick<AppState, 'jars'>): AppState['version'] {
-  return state.jars.some((jar) => !VERSION_6_JAR_CHARACTERS.has(jar.character)) ? 7 : 6
+export function storedVersionOf(): AppState['version'] {
+  return CURRENT_STATE_VERSION
 }
 
 /**
@@ -774,6 +800,50 @@ function checkOutfitPresets(value: unknown): OutfitPreset[] | undefined {
   return changed ? presets : (value as OutfitPreset[])
 }
 
+/**
+ * The comfort plan (lib/comfortPlan), kept in the profile: its known lists,
+ * each line's words trimmed and cut to what the page keeps, a number only
+ * for a person and only in the characters a number has, and no more lines
+ * than a list keeps. Anything that is not a line with words is dropped. A
+ * line with no id of its own, or a twin's, is given one rather than lost.
+ * The very same plan when nothing needed changing; undefined when nothing is
+ * left, or there never was a plan, so a garden without one stays as it was.
+ */
+function checkComfortPlan(value: unknown): ComfortPlan | undefined {
+  if (!isRecord(value)) return undefined
+  const plan: ComfortPlan = {}
+  const ids = new Set<string>()
+  let changed = false
+  for (const [section, list] of Object.entries(value)) {
+    const known = COMFORT_SECTIONS.includes(section as ComfortSection) && Array.isArray(list)
+    const items: ComfortItem[] = []
+    for (const raw of known ? (list as unknown[]) : []) {
+      if (!isRecord(raw) || typeof raw.text !== 'string') continue
+      const text = comfortText(raw.text)
+      if (!text || items.length === COMFORT_ITEMS) continue
+      const id = typeof raw.id === 'string' && raw.id && !ids.has(raw.id) ? raw.id : createId()
+      ids.add(id)
+      const phone =
+        section === 'people' && typeof raw.phone === 'string' ? phoneNumber(raw.phone) : ''
+      const item: ComfortItem = phone ? { id, text, phone } : { id, text }
+      if (
+        id !== raw.id ||
+        text !== raw.text ||
+        phone !== (raw.phone ?? '') ||
+        Object.keys(raw).length !== Object.keys(item).length
+      ) {
+        changed = true
+      }
+      items.push(item)
+    }
+    if (items.length > 0) plan[section as ComfortSection] = items
+    // A list cut short, emptied or dropped is a change; an empty one is kept as none.
+    if (items.length === 0 || items.length !== (list as unknown[]).length) changed = true
+  }
+  if (Object.keys(plan).length === 0) return undefined
+  return changed ? plan : value
+}
+
 /** Counts that can be earned again: whole, finite, never negative. */
 function balance(value: unknown, ctx: Context): number {
   if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
@@ -971,6 +1041,10 @@ function checkProfile(
   const outfitPresets = checkOutfitPresets(value.outfitPresets)
   if (outfitPresets) profile.outfitPresets = outfitPresets
   else delete profile.outfitPresets
+  // The comfort plan lives here too, for the same reason (Profile.comfortPlan).
+  const comfortPlan = checkComfortPlan(value.comfortPlan)
+  if (comfortPlan) profile.comfortPlan = comfortPlan
+  else delete profile.comfortPlan
   return profile
 }
 
@@ -1000,6 +1074,108 @@ function checkInventory(value: unknown, ctx: Context): Record<string, number> {
     }
   }
   return inventory
+}
+
+const SPECIES_IDS = new Set(speciesCatalogue.map((item) => item.id))
+const PLANT_IDS = new Set(plantCatalogue.map((item) => item.id))
+
+/**
+ * A sighting's photo as a Blob: as storage keeps it, or as a backup carries
+ * it, base64 beside its type (lib/sightingPhotos), decoded here so the rest
+ * of the garden only ever sees Blobs. Undefined for anything else.
+ */
+function sightingPhotoOf(value: unknown): Blob | undefined {
+  if (isSightingPhoto(value)) return value
+  if (
+    !isRecord(value) ||
+    !isSupportedMimeType(value.mimeType) ||
+    !isValidBase64(value.imageData) ||
+    decodedByteLength(value.imageData) > SIGHTING_PHOTO_MAX_BYTES
+  ) {
+    return undefined
+  }
+  // A plain loop: Uint8Array.from with a mapping function is many times
+  // slower, and a restore of a full field book reads megabytes this way.
+  const binary = atob(value.imageData)
+  const bytes = new Uint8Array(binary.length)
+  for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at)
+  return new Blob([bytes], { type: value.mimeType })
+}
+
+/**
+ * A sighting, kept only when what it names and the day it was seen are
+ * real: a butterfly or plant the catalogue knows, on a real local date.
+ * Otherwise it is dropped and counted, as a damaged plant is.
+ *
+ * The day is not held against this device's clock, as a check-in's is not:
+ * a clock set back (a phone flat for a while, before it finds the network's
+ * time) would otherwise drop every sighting since, photos and all, and the
+ * next sighting written would make that for good. Only a sighting being
+ * written down has to be on a day already seen (lib/sightings).
+ *
+ * A photo that is not a photo refuses the whole garden instead, as a
+ * damaged personal image does: a photograph cannot be taken again, and a
+ * restore must never report success having dropped one. A photo a file
+ * marks as left out (lib/sightingPhotos: its bytes could not be read when
+ * the file was made) was lost before the file was; its sighting is kept
+ * without it, and counted.
+ */
+function checkSighting(raw: unknown, ctx: Context, ids: Set<string>): Sighting | undefined {
+  if (
+    !isRecord(raw) ||
+    !(raw.kind === 'butterfly'
+      ? SPECIES_IDS.has(raw.speciesId as string)
+      : raw.kind === 'plant' && PLANT_IDS.has(raw.plantId as string)) ||
+    !isLocalDate(raw.date)
+  ) {
+    ctx.repaired += 1
+    return undefined
+  }
+  const leftOut = isRecord(raw.photo) && raw.photo.unreadable === true
+  const photo = raw.photo === undefined || leftOut ? undefined : sightingPhotoOf(raw.photo)
+  if (raw.photo !== undefined && !photo && !leftOut) {
+    ctx.refused ??= 'One of its photos is damaged.'
+    return undefined
+  }
+  const idOk = typeof raw.id === 'string' && raw.id !== '' && !ids.has(raw.id)
+  const id = idOk ? (raw.id as string) : createId()
+  ids.add(id)
+  // Words are kept as words, whatever type they arrived as; only a blank
+  // note is left out, as the field book never stores an empty one.
+  const note = raw.note === undefined ? '' : asText(raw.note, ctx)
+  const noteOk = note.trim() ? note === raw.note : raw.note === undefined
+  if (idOk && typeof raw.createdAt === 'string' && photo === raw.photo && noteOk) {
+    return raw as unknown as Sighting
+  }
+  if (!idOk || typeof raw.createdAt !== 'string' || leftOut) ctx.repaired += 1
+  const sighting: UnknownRecord = { ...raw, id, photo, note, createdAt: stamp(raw.createdAt) }
+  if (!photo) delete sighting.photo
+  if (!note.trim()) delete sighting.note
+  return sighting as unknown as Sighting
+}
+
+/**
+ * The field book (lib/sightings). Absent from every garden and backup made
+ * before version 8, so it is defaulted rather than required. One that is
+ * there but is not a list, or holds more than this build keeps, refuses the
+ * garden, as an image collection does: it may hold photographs, and they
+ * are not to be dropped.
+ */
+function checkSightings(value: unknown, ctx: Context): Sighting[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    ctx.refused ??= 'Its field book is damaged.'
+    return []
+  }
+  const ids = new Set<string>()
+  const sightings = sanitise(value, ctx, (raw, c) => checkSighting(raw, c, ids))
+  if (
+    sightings.length > MAX_SIGHTINGS ||
+    sightings.filter((sighting) => sighting.photo).length > MAX_SIGHTING_PHOTOS
+  ) {
+    ctx.refused ??= 'Its field book holds more than this version can keep.'
+  }
+  return sightings
 }
 
 /**
@@ -1144,6 +1320,7 @@ export function validateGarden(value: unknown): GardenValidation {
   // tolerated rather than required the way `moods` is above.
   const recaps = migrateRecaps(candidate.recaps, ctx)
   const moonlight = migrateMoonlight(candidate.moonlight)
+  const sightings = checkSightings(candidate.sightings, ctx)
 
   if (ctx.refused) return { repaired: ctx.repaired, refused: ctx.refused }
 
@@ -1160,7 +1337,7 @@ export function validateGarden(value: unknown): GardenValidation {
 
   const state: AppState = {
     ...(candidate as unknown as AppState),
-    version: storedVersionOf({ jars }),
+    version: storedVersionOf(),
     profile,
     goals,
     completions,
@@ -1185,6 +1362,7 @@ export function validateGarden(value: unknown): GardenValidation {
     selectedFlightPatternId: selected as AppState['selectedFlightPatternId'],
     jars,
     jarPlacements,
+    sightings,
   }
   return { state, repaired: ctx.repaired }
 }

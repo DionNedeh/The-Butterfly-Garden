@@ -1,4 +1,13 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   moodLevels,
   moodNames,
@@ -24,6 +33,7 @@ import {
 import { onThisDay } from '../lib/onThisDay'
 import { promptById } from '../lib/prompts'
 import { careRhythm } from '../lib/rhythm'
+import { seenInTheWild, subjectKey, type ChangeSightings } from '../lib/sightings'
 import type {
   AppState,
   MoodChoice,
@@ -41,8 +51,13 @@ import { EarlierEntry } from './journal/EarlierEntry'
 import { Letters } from './journal/Letters'
 import { OnThisDayCard } from './journal/OnThisDayCard'
 import { StarToggle } from './journal/StarToggle'
+import { SeenInTheWild } from './sightings/SeenInTheWild'
+import { YearLink } from './year/YearLink'
 import type { StarredKind } from '../lib/letters'
 import './journal/journal.css'
+
+// The field book of sightings, with its form, arrives when the field notes open.
+const FieldBook = lazy(() => import('./sightings/FieldBook'))
 
 /** The timeline grows for as long as the garden is kept, so it is paged. */
 const TIMELINE_PAGE_SIZE = 30
@@ -60,6 +75,9 @@ export function JournalView({
   openLetter,
   onReadLetter,
   onSetStarred,
+  onChangeSightings,
+  onOpenYear,
+  returnedFromYear,
 }: {
   state: AppState
   onUpdateMood: (entry: MoodEntry) => void
@@ -78,6 +96,12 @@ export function JournalView({
   onReadLetter?: (sunday: string) => void
   /** Star a line for letters to quote, or not. Without it, no star is offered. */
   onSetStarred?: (kind: StarredKind, id: string, starred: boolean) => void
+  /** Log, change and cross out sightings. Without it, the field book is not offered. */
+  onChangeSightings?: ChangeSightings
+  /** Open "Your garden's year", at a year or this one. Without it, not offered. */
+  onOpenYear?: (year?: number) => void
+  /** Back from the year's page: focus returns to the link that opened it. */
+  returnedFromYear?: boolean
 }) {
   const [editingRecap, setEditingRecap] = useState<RecapEntry>()
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
@@ -182,6 +206,8 @@ export function JournalView({
     () => Array.from(fieldNotes.values()).reduce((sum, note) => sum + note.count, 0),
     [fieldNotes],
   )
+  // Each butterfly's latest sighting in the wild, for its card's stamp.
+  const seen = useMemo(() => seenInTheWild(state.sightings), [state.sightings])
   // A day from a month or a year ago, unless it was put away for today.
   const gardenStart = gardenStartDate(state.profile)
   const offered = useMemo(
@@ -207,6 +233,14 @@ export function JournalView({
           </h1>
           <p>
             Your words are kept as you wrote them, without scores or analysis.
+            {onOpenYear && (
+              <YearLink
+                state={state}
+                today={today}
+                onOpen={onOpenYear}
+                focusOnArrival={returnedFromYear}
+              />
+            )}
           </p>
         </div>
       </header>
@@ -253,6 +287,7 @@ export function JournalView({
               const note = fieldNotes.get(definition.id)
               const creature = note?.first
               const welcomedOn = creature && formatWelcomedOn(creature)
+              const wild = seen.get(subjectKey({ kind: 'butterfly', speciesId: definition.id }))
               return (
                 <article
                   className={`species-card ${creature ? '' : 'undiscovered'}`}
@@ -264,8 +299,11 @@ export function JournalView({
                       label={definition.commonName}
                     />
                   ) : (
+                    // An image, as a welcomed one's drawing is: a plain div may
+                    // not be named, and axe counts a name on one as serious.
                     <div
                       className="unknown-butterfly"
+                      role="img"
                       aria-label="Not yet discovered"
                     >
                       <span className="unknown-wing unknown-wing-left" />
@@ -280,7 +318,7 @@ export function JournalView({
                         ? definition.scientificName
                         : 'Not yet welcomed'}
                     </em>
-                    {welcomedOn && <small>Welcomed on {welcomedOn}</small>}
+                    {welcomedOn && <small>Welcomed in your garden on {welcomedOn}</small>}
                     {creature && note && (
                       <small>
                         {note.count > 1
@@ -288,12 +326,24 @@ export function JournalView({
                           : `Welcomed as ${creature.name}`}
                       </small>
                     )}
+                    <SeenInTheWild seen={wild} />
                     {note && <FieldFacts speciesId={definition.id} level={bondLevel(note.bond)} />}
                   </div>
                 </article>
               )
             })}
         </div>
+        {fieldNotesOpen && onChangeSightings && (
+          <Suspense
+            fallback={
+              <p className="subtle-copy" role="status">
+                Opening your field book…
+              </p>
+            }
+          >
+            <FieldBook state={state} today={today} onChangeSightings={onChangeSightings} />
+          </Suspense>
+        )}
       </details>
 
       {/* A rhythm rather than a streak: nothing here falls back to zero after

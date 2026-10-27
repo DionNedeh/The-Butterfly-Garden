@@ -1,0 +1,98 @@
+/* My comfort plan (components/ComfortPlanView): five short lists in the
+   gardener's own words. Colours come only from the theme's variables and
+   the shared rules (.settings-note, .subtle-copy, .danger-text), which the
+   night theme already redefines, so it needs nothing of its own at night.
+   Nothing here moves. */
+.comfort-support {
+  border-left: 5px solid var(--forest);
+}
+
+.comfort-support .comfort-link {
+  /* On a line of its own, so the way to people is never lost mid-sentence. */
+  display: flex;
+  width: fit-content;
+  margin-top: 0.4rem;
+}
+
+.comfort-section h2 {
+  font-size: clamp(1.25rem, 2.6vw, 1.6rem);
+}
+
+.comfort-example {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.comfort-lines {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.comfort-line {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.6rem 0.8rem;
+}
+
+.comfort-words {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.comfort-phone {
+  display: block;
+  color: var(--muted);
+}
+
+.comfort-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+/* Every control a full touch target, the quiet text ones included. */
+.comfort-view .text-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.comfort-call {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* A move that has nowhere to go says so, and does not look pressable. */
+.comfort-actions .text-button[aria-disabled='true'] {
+  color: var(--muted);
+  cursor: default;
+}
+
+.comfort-actions .text-button[aria-disabled='true']::after {
+  display: none;
+}
+
+.comfort-form {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 32rem;
+}
+
+.comfort-form label small {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.comfort-form .settings-note {
+  margin: 0;
+}
+
+.comfort-private {
+  max-width: 60ch;
+}

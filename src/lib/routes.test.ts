@@ -16,6 +16,8 @@ const EVERY_VIEW: AppView[] = [
   'notices',
   'support',
   'breathe',
+  'year',
+  'comfort',
 ]
 
 describe('pages in the address bar', () => {
@@ -55,6 +57,23 @@ describe('pages in the address bar', () => {
   it('gives breathing with a butterfly an address of its own, without where it came from', () => {
     expect(hashForRoute({ view: 'breathe', from: 'today' })).toBe('#/breathe')
     expect(routeFromHash('#/breathe')).toEqual({ view: 'breathe' })
+  })
+
+  it('gives the year looked back on an address, this year’s plain and another’s by number', () => {
+    expect(hashForRoute({ view: 'year' })).toBe('#/year')
+    expect(hashForRoute({ view: 'year', year: 2025, from: 'journal' })).toBe('#/year/2025')
+    expect(routeFromHash('#/year/2025')).toEqual({ view: 'year', year: 2025 })
+    expect(routeFromHash('#/year/2025/')).toEqual({ view: 'year', year: 2025 })
+    // Only four digits name a year; anything else names no page.
+    expect(routeFromHash('#/year/25')).toBeUndefined()
+    expect(routeFromHash('#/year/twenty')).toBeUndefined()
+    // Only the year's page has a year in its address.
+    expect(hashForRoute({ view: 'journal', year: 2025 })).toBe('#/journal')
+  })
+
+  it('gives the comfort plan an address of its own, without where it came from', () => {
+    expect(hashForRoute({ view: 'comfort', from: 'today' })).toBe('#/comfort')
+    expect(routeFromHash('#/comfort')).toEqual({ view: 'comfort' })
   })
 
   it('sends a reloaded recap to Today, where tonight’s is offered', () => {
@@ -167,5 +186,33 @@ describe('the way back from breathing', () => {
     expect(
       returnFrom({ view: 'today', from: 'support', fromPlace: { breathe: 'support', scrollY: 0 } }),
     ).toBeUndefined()
+  })
+})
+
+describe('the way back from the comfort plan', () => {
+  it('returns to the page that offered it, at its link', () => {
+    const fromPlace = { comfort: true, scrollY: 2400 }
+    expect(returnFrom({ view: 'comfort', from: 'settings', fromPlace })).toEqual({
+      view: 'settings',
+      companionId: undefined,
+      restore: fromPlace,
+    })
+    // Back to it from the support page it opened, it still knows the way.
+    expect(
+      returnFrom({
+        view: 'comfort',
+        from: 'today',
+        fromPlace: { comfort: true, scrollY: 640 },
+        restore: { support: true, scrollY: 300 },
+      }),
+    ).toEqual({ view: 'today', companionId: undefined, restore: { comfort: true, scrollY: 640 } })
+    // Where it was pressed stays out of the address, both ways.
+    expect(hashForRoute({ view: 'comfort', from: 'settings', fromPlace })).toBe('#/comfort')
+    expect(hashForRoute({ view: 'settings', restore: fromPlace })).toBe('#/settings')
+  })
+
+  it('offers none for a plan opened from its address', () => {
+    expect(returnFrom({ view: 'comfort' })).toBeUndefined()
+    expect(returnFrom({ view: 'comfort', from: 'comfort' })).toBeUndefined()
   })
 })

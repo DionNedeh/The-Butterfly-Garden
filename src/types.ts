@@ -44,6 +44,10 @@ export type AppView =
   | 'support'
   /** Breathing with a butterfly: from Today, the recap and the support page. */
   | 'breathe'
+  /** "Your garden's year", a look back on a year: from the Journal. */
+  | 'year'
+  /** My comfort plan: from the support page, Settings, and a gentle day. */
+  | 'comfort'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
@@ -277,7 +281,36 @@ export interface Profile {
    * nothing else.
    */
   letterQuotes?: 'never'
+  /**
+   * The gardener's comfort plan, written for harder days (lib/comfortPlan).
+   * Kept in the profile, as saved looks are, because an older build carries
+   * the profile through whole. Optional, and absent rather than empty when
+   * nothing is written, so an older garden or backup simply has none.
+   */
+  comfortPlan?: ComfortPlan
 }
+
+/** The comfort plan's lists, in the order its page shows them. */
+export type ComfortSection = 'helps' | 'people' | 'places' | 'kindWords' | 'matters'
+
+/** One line of a comfort plan, in the gardener's own words. */
+export interface ComfortItem {
+  id: string
+  /** The words, trimmed and at most COMFORT_TEXT_LENGTH; for a person, their name. */
+  text: string
+  /**
+   * For a person, a number to call: digits, plus signs, spaces and dashes.
+   * Optional, since someone to reach may be someone to visit.
+   */
+  phone?: string
+}
+
+/**
+ * A private page for harder days. Each list is short, in the order the
+ * gardener chose, and absent when empty; a plan with every list empty is not
+ * stored at all. It is never quoted anywhere else in the garden.
+ */
+export type ComfortPlan = Partial<Record<ComfortSection, ComfortItem[]>>
 
 /** Image formats a garden image may be stored as. */
 export type CustomBackdropMimeType = 'image/jpeg' | 'image/png' | 'image/webp'
@@ -574,8 +607,11 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  /** 6, or 7 once the garden holds a jar a version 6 build would drop (storedVersionOf). */
-  version: 6 | 7
+  /**
+   * The version every garden is stored and exported at (storedVersionOf):
+   * 8, since the field book's sightings, which no earlier build knows.
+   */
+  version: 8
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -599,6 +635,38 @@ export interface AppState {
   selectedFlightPatternId: FlightPatternId
   jars: JarInstance[]
   jarPlacements: JarPlacement[]
+  /**
+   * Real butterflies and plants the gardener noticed out in the world, in the
+   * order they were written down (lib/sightings). At most MAX_SIGHTINGS, and
+   * at most MAX_SIGHTING_PHOTOS of them with a photo (lib/customBackdrops).
+   */
+  sightings: Sighting[]
+}
+
+/** What a sighting names: a butterfly or a plant from the field guide. */
+export type SightingSubject =
+  | { kind: 'butterfly'; speciesId: string }
+  | { kind: 'plant'; plantId: string }
+
+/**
+ * A butterfly or plant seen in the wild and written in the field book. It
+ * earns nothing: no Sunlight, Nectar or Stardust. Noticing is the point.
+ */
+export type Sighting = SightingSubject & {
+  id: string
+  /** The local day it was seen (YYYY-MM-DD), never after the day it was written down. */
+  date: string
+  /** A few words, as the gardener wrote them. Absent rather than empty. */
+  note?: string
+  /**
+   * A photo, redrawn and re-encoded on this device as a personal image is
+   * (lib/imageImport), which leaves behind everything the camera wrote into
+   * the file, where it was taken included. Kept as a Blob, so fifty photos
+   * are not held in memory as text; a backup carries it as base64
+   * (lib/sightingPhotos), as it carries a personal image.
+   */
+  photo?: Blob
+  createdAt: string
 }
 
 export interface SpeciesDefinition {
@@ -630,6 +698,8 @@ export type ReflectionPromptFamily =
   | 'processing'
   | 'rest'
   | 'connection'
+  /** Good things noticed in nature, after McEwan et al. 2019. */
+  | 'nature'
   | 'free'
 
 export interface ReflectionPrompt {

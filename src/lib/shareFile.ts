@@ -46,15 +46,28 @@ function isAbort(error: unknown): boolean {
  * Share text as a file. Throws when the browser refuses (a type it will not
  * share after all, or no user gesture), so callers can say so.
  */
-export async function shareTextFile(
+export function shareTextFile(
   fileName: string,
   mimeType: string,
   text: string,
   title: string,
 ): Promise<ShareOutcome> {
+  return shareFile(fileName, mimeType, text, title)
+}
+
+/**
+ * Share text or bytes (a postcard's image) as a file, the same way. Throws
+ * when the browser refuses, so callers can say so.
+ */
+export async function shareFile(
+  fileName: string,
+  mimeType: string,
+  contents: BlobPart,
+  title: string,
+): Promise<ShareOutcome> {
   if (import.meta.env.VITE_PLATFORM === 'android')
     throw new Error('Sharing a file is only offered in the browser.')
-  const file = new File([text], fileName, { type: mimeType })
+  const file = new File([contents], fileName, { type: mimeType })
   if (!navigator.canShare({ files: [file] }))
     throw new Error('This browser will not share that file.')
   try {

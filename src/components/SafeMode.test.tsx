@@ -3,10 +3,11 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
 import { saveTextFile } from '../lib/download'
-import { verifyBackdropImages } from '../lib/imageImport'
+import { verifyGardenImages } from '../lib/imageImport'
 import { createInitialState } from '../lib/progression'
 import { reloadApp } from '../lib/reload'
 import { gardenRepository } from '../repository/gardenRepository'
+import { ArrayBufferFileReader, unreadablePhoto } from '../test/fileReader'
 import type { AppState } from '../types'
 import { SafeMode } from './SafeMode'
 
@@ -14,7 +15,7 @@ vi.mock('../lib/download', async (original) => ({
   ...(await original<typeof import('../lib/download')>()),
   saveTextFile: vi.fn(),
 }))
-vi.mock('../lib/imageImport', () => ({ verifyBackdropImages: vi.fn() }))
+vi.mock('../lib/imageImport', () => ({ verifyGardenImages: vi.fn() }))
 vi.mock('../lib/reload', () => ({ reloadApp: vi.fn() }))
 
 const save = vi.mocked(saveTextFile)
@@ -43,7 +44,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   save.mockReset()
-  vi.mocked(verifyBackdropImages).mockReset()
+  vi.mocked(verifyGardenImages).mockReset()
   vi.mocked(reloadApp).mockReset()
 })
 
@@ -57,7 +58,7 @@ describe('safe mode', () => {
     const user = renderSafeMode()
     save.mockResolvedValueOnce('started')
     await user.click(screen.getByRole('button', { name: "Download what's stored" }))
-    expect(note()).toHaveTextContent(/^Download started/)
+    await waitFor(() => expect(note()).toHaveTextContent(/^Download started/))
     expect(save).toHaveBeenCalledWith(
       expect.stringMatching(/^butterfly-garden-everything-stored-\d{4}-\d\d-\d\d\.json$/),
       'application/json',
@@ -66,18 +67,49 @@ describe('safe mode', () => {
 
     save.mockResolvedValueOnce('saved')
     await user.click(screen.getByRole('button', { name: "Download what's stored" }))
-    expect(note()).toHaveTextContent(/^Saved\./)
+    await waitFor(() => expect(note()).toHaveTextContent(/^Saved\./))
+  })
+
+  it('keeps everything stored when a photo cannot be read, leaving out that photo alone, and says so', async () => {
+    vi.stubGlobal('FileReader', ArrayBufferFileReader)
+    const sound = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' })
+    readRaw.mockResolvedValueOnce({
+      stores: {
+        moods: { current: [{ id: 'm', note: 'Still here.' }] },
+        sightings: { current: [{ id: 'lost', photo: unreadablePhoto() }, { id: 'kept', photo: sound }] },
+      },
+    })
+    const user = renderSafeMode()
+    save.mockResolvedValueOnce('started')
+    await user.click(screen.getByRole('button', { name: "Download what's stored" }))
+    await waitFor(() =>
+      expect(note()).toHaveTextContent(
+        /^Download started\..* One photo in the field book could not be read on this device, so the file keeps its sighting without it\.$/,
+      ),
+    )
+    const written = JSON.parse(save.mock.calls[0][2]) as {
+      stores: { moods: unknown; sightings: { current: Array<{ photo: unknown }> } }
+    }
+    expect(written.stores.moods).toEqual({ current: [{ id: 'm', note: 'Still here.' }] })
+    expect(written.stores.sightings.current.map((item) => item.photo)).toEqual([
+      { mimeType: 'image/webp', unreadable: true },
+      { mimeType: 'image/webp', imageData: 'AQID' },
+    ])
+    // A copy was kept, so starting again is allowed.
+    await user.click(screen.getByRole('button', { name: 'Start a new garden instead…' }))
+    expect(screen.getByRole('button', { name: 'Delete and start again' })).toBeEnabled()
+    vi.unstubAllGlobals()
   })
 
   it('says so when nothing was saved, or the store could not be read', async () => {
     const user = renderSafeMode()
     save.mockResolvedValueOnce('cancelled')
     await user.click(screen.getByRole('button', { name: "Download what's stored" }))
-    expect(note()).toHaveTextContent('Nothing was saved.')
+    await waitFor(() => expect(note()).toHaveTextContent('Nothing was saved.'))
 
     readRaw.mockRejectedValueOnce(new Error('blocked'))
     await user.click(screen.getByRole('button', { name: "Download what's stored" }))
-    expect(note()).toHaveTextContent('What is stored could not be read just now.')
+    await waitFor(() => expect(note()).toHaveTextContent('What is stored could not be read just now.'))
   })
 
   it('starts again only after a copy is kept, and only when asked twice', async () => {
@@ -129,13 +161,13 @@ describe('restoring from safe mode', () => {
     const [restored, options] = replace.mock.calls[0]
     expect(restored.profile?.gardenName).toBe('From The File')
     expect(options).toEqual({ snapshot: true })
-    expect(verifyBackdropImages).not.toHaveBeenCalled()
+    expect(verifyGardenImages).not.toHaveBeenCalled()
     expect(reloadApp).toHaveBeenCalledOnce()
   })
 
   it('checks the images in a backup before replacing anything', async () => {
     const replace = vi.spyOn(gardenRepository, 'replace').mockResolvedValue([])
-    vi.mocked(verifyBackdropImages).mockRejectedValueOnce(
+    vi.mocked(verifyGardenImages).mockRejectedValueOnce(
       new Error('The image “Meadow” could not be verified.'),
     )
     const garden: AppState = {
@@ -158,7 +190,7 @@ describe('restoring from safe mode', () => {
     const user = renderSafeMode()
     await user.upload(restoreInput(), backupFile(garden))
     expect(await screen.findByText(/could not be verified/)).toBeInTheDocument()
-    expect(verifyBackdropImages).toHaveBeenCalledOnce()
+    expect(verifyGardenImages).toHaveBeenCalledOnce()
     expect(replace).not.toHaveBeenCalled()
   })
 

@@ -33,11 +33,24 @@ export function weekEndingOn(sunday: string): LetterWeek {
   return { monday: addDaysToLocalDate(sunday, -6), sunday }
 }
 
-function inWeek(week: LetterWeek, localDate: string | undefined): localDate is string {
-  return localDate !== undefined && localDate >= week.monday && localDate <= week.sunday
+/**
+ * A span of local calendar days, both ends included: a letter's week, or the
+ * year the Journal looks back on (lib/gardenYear), counted by the same rules.
+ */
+export interface DayRange {
+  first: string
+  last: string
 }
 
-/** What the gardener did in a week, each thing counted once a day at most. */
+function rangeOf(week: LetterWeek): DayRange {
+  return { first: week.monday, last: week.sunday }
+}
+
+function inRange(range: DayRange, localDate: string | undefined): localDate is string {
+  return localDate !== undefined && localDate >= range.first && localDate <= range.last
+}
+
+/** What the gardener did in a span of days, each thing counted once a day at most. */
 export interface WeekCounts {
   /** Days with a check-in, whether written that day or later for it. */
   checkIns: number
@@ -93,34 +106,37 @@ function dayOf(instant: string): string | undefined {
   return Number.isFinite(time) && time > 0 ? toLocalDate(new Date(time)) : undefined
 }
 
-function countsIn(state: AppState, week: LetterWeek): WeekCounts {
+/** What the gardener did between these days, as a letter counts it. */
+export function countsIn(state: AppState, range: DayRange): WeekCounts {
   const daysOf = (entries: readonly { localDate: string }[]) =>
-    new Set(entries.map((entry) => entry.localDate).filter((date) => inWeek(week, date))).size
+    new Set(entries.map((entry) => entry.localDate).filter((date) => inRange(range, date))).size
   const evenings = new Set(
     [...state.moonlight, ...state.recaps]
       .map((entry) => entry.localDate)
-      .filter((date) => inWeek(week, date)),
+      .filter((date) => inRange(range, date)),
   )
   return {
     checkIns: daysOf(state.moods),
     reflections: daysOf(state.reflections),
-    goals: state.completions.filter((completion) => inWeek(week, completion.localDate)).length,
+    goals: state.completions.filter((completion) => inRange(range, completion.localDate)).length,
     evenings: evenings.size,
     caredFor: state.creatures
       .filter((creature) =>
-        Object.values(creature.careDates).some((dates) => dates?.some((date) => inWeek(week, date))),
+        Object.values(creature.careDates).some((dates) =>
+          dates?.some((date) => inRange(range, date)),
+        ),
       )
       .map((creature) => creature.name),
   }
 }
 
 /**
- * Each companion's beginnings that fell in the week: welcomed, hatched,
- * became a chrysalis, emerged. The days are the ones its story on Care tells
- * (lib/companionStory), so the two never disagree, and a day the garden did
- * not keep is left out rather than guessed.
+ * Each companion's beginnings that fell between these days: welcomed,
+ * hatched, became a chrysalis, emerged. The days are the ones its story on
+ * Care tells (lib/companionStory), so the two never disagree, and a day the
+ * garden did not keep is left out rather than guessed.
  */
-function arrivalsIn(state: AppState, week: LetterWeek): WeekArrival[] {
+export function arrivalsIn(state: AppState, range: DayRange): WeekArrival[] {
   const arrivals: WeekArrival[] = []
   for (const creature of state.creatures) {
     const story = companionStory(creature, state.profile)
@@ -132,7 +148,7 @@ function arrivalsIn(state: AppState, week: LetterWeek): WeekArrival[] {
     }
     for (const kind of ARRIVAL_KINDS) {
       const localDate = days[kind]
-      if (!inWeek(week, localDate)) continue
+      if (!inRange(range, localDate)) continue
       arrivals.push({
         kind,
         name: creature.name,
@@ -151,42 +167,43 @@ function lengthOf(text: string): number {
 }
 
 /**
- * The line to quote: only from an entry the gardener starred, for a day of
- * this week, and never when they chose not to be quoted. Of several, the
- * longest, as the fullest; then the later day; then a reflection over a
- * check-in's note, so the choice never changes on its own.
+ * Whether `a` is the better line to quote than `b`: the longer, as the
+ * fuller; then the later day; then a reflection over a check-in's note, so
+ * the choice never changes on its own. Negative when `a` comes first.
  */
-function quoteIn(state: AppState, week: LetterWeek, quotes: LetterQuotes): LetterQuote | undefined {
-  if (quotes === 'never') return undefined
+function quoteOrder(a: LetterQuote, b: LetterQuote): number {
+  return (
+    lengthOf(b.text) - lengthOf(a.text) ||
+    b.localDate.localeCompare(a.localDate) ||
+    (a.kind === b.kind ? 0 : a.kind === 'reflection' ? -1 : 1)
+  )
+}
+
+/**
+ * The lines that may be quoted from these days, the best first: only from
+ * entries the gardener starred, and none at all when they chose never to be
+ * quoted. A letter quotes the first; the year keeps a few (lib/gardenYear).
+ */
+export function starredLinesIn(
+  state: AppState,
+  range: DayRange,
+  quotes: LetterQuotes,
+): LetterQuote[] {
+  if (quotes === 'never') return []
   const candidates: LetterQuote[] = []
   const consider = (
     entry: { localDate: string; starred?: true },
     words: string,
     kind: StarredKind,
   ) => {
-    if (entry.starred !== true || !inWeek(week, entry.localDate)) return
+    if (entry.starred !== true || !inRange(range, entry.localDate)) return
     const text = firstLineOfText(words)
     if (text) candidates.push({ text, localDate: entry.localDate, kind })
   }
   for (const mood of state.moods) consider(mood, mood.note, 'check-in')
   for (const reflection of state.reflections) consider(reflection, reflection.body, 'reflection')
-  let best: LetterQuote | undefined
-  for (const candidate of candidates) {
-    if (!best) {
-      best = candidate
-      continue
-    }
-    const longer = lengthOf(candidate.text) - lengthOf(best.text)
-    const later = candidate.localDate.localeCompare(best.localDate)
-    if (
-      longer > 0 ||
-      (longer === 0 && later > 0) ||
-      (longer === 0 && later === 0 && candidate.kind === 'reflection')
-    ) {
-      best = candidate
-    }
-  }
-  return best
+  // A stable sort: lines alike in every way keep the garden's order.
+  return candidates.sort(quoteOrder)
 }
 
 /**
@@ -199,11 +216,12 @@ export function summariseWeek(
   quotes: LetterQuotes = letterQuotesOf(state.profile),
 ): WeekSummary {
   const week = weekEndingOn(sunday)
-  const quote = quoteIn(state, week, quotes)
+  const range = rangeOf(week)
+  const quote = starredLinesIn(state, range, quotes).at(0)
   return {
     week,
-    counts: countsIn(state, week),
-    arrivals: arrivalsIn(state, week),
+    counts: countsIn(state, range),
+    arrivals: arrivalsIn(state, range),
     ...(quote ? { quote } : {}),
   }
 }
@@ -260,7 +278,7 @@ function actsOf(counts: WeekCounts, numbers: boolean): string[] {
 }
 
 /** "a Monarch", "an American Lady". */
-function withArticle(name: string): string {
+export function withArticle(name: string): string {
   return `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`
 }
 

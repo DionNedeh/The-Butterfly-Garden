@@ -348,6 +348,34 @@ test('the back gesture leaves breathing for the page that offered it, mid-sessio
   expect(errors).toEqual([])
 })
 
+test('the back gesture leaves the comfort plan for the page that opened it', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  await page.getByRole('link', { name: 'Write a comfort plan' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'My comfort plan' })).toBeVisible()
+  const people = page.getByRole('region', { name: 'People I can reach' })
+  await people.getByRole('textbox', { name: 'Name' }).fill('Sam')
+  await people.getByRole('textbox', { name: 'Phone number (optional)' }).fill('0161 496 0000')
+  await people.getByRole('button', { name: 'Add to People I can reach' }).click()
+  // The phone's dialler takes the number, as it does on the support page.
+  await expect(people.getByRole('link', { name: 'Call Sam' })).toHaveAttribute(
+    'href',
+    'tel:01614960000',
+  )
+  expect(await seriousViolations(page, 'Comfort plan in the Android app')).toEqual([])
+
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  // At the link that opened it, as its Back button leaves it.
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeFocused()
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeInViewport()
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('a calendar reminder goes through the app, which carries no calendar files of its own', async ({
   page,
 }) => {
@@ -368,4 +396,68 @@ test('a calendar reminder goes through the app, which carries no calendar files 
   // The files for common times are the PWA's alone.
   const response = await page.request.get('/reminders/morning-0800.ics')
   expect(response.headers()['content-type'] ?? '').not.toMatch(/text\/calendar/)
+})
+
+test('a sighting is logged with a photo in the app, and the back gesture puts its form away', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Guide')
+  const log = page.getByRole('button', { name: 'Log a sighting of Monarch' })
+  await log.click()
+  const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'Log a sighting' })).toBeFocused()
+  // On the Monarch whose card opened it: a small dot beside its name, chosen.
+  const monarch = dialog.getByRole('radio', { name: /^Monarch/ })
+  await expect(monarch).toBeChecked()
+  expect((await monarch.boundingBox())!.width).toBeLessThanOrEqual(24)
+  // Back closes the form and stays on the Guide, with focus where it was.
+  await pressBack(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(log).toBeFocused()
+  await expect(page.getByRole('heading', { level: 1, name: 'How the garden works' })).toBeVisible()
+
+  await log.click()
+  await dialog.getByLabel('Add a photo, if you like').setInputFiles('src/assets/thumb-cottage-bloom.webp')
+  await expect(dialog.getByRole('img', { name: 'Your photo for this sighting' })).toBeVisible()
+  expect(await seriousViolations(page, 'Android sighting form')).toEqual([])
+  await dialog.getByRole('button', { name: 'Save sighting' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(log).toBeFocused()
+  await expect(page.getByText(/Saved to your field book/)).toBeVisible()
+})
+
+test('the year’s postcard is saved through the app, and the back gesture returns to the Journal', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await goTo(page, 'Journal')
+  // A quiet link most of the year; a line of its own in December and January.
+  const link = page.getByRole('link', { name: /^(Your garden’s year|look back on your garden’s \d{4})$/ })
+  await link.click()
+  await expect(page.getByRole('heading', { level: 1, name: /^Your garden’s \d{4}$/ })).toBeFocused()
+
+  const postcard = page.getByRole('region', { name: 'A postcard of your garden' })
+  await postcard.getByRole('button', { name: 'Make a postcard' }).click()
+  await expect(postcard.getByRole('status')).toHaveText('Your postcard is ready.')
+  await expect(postcard.getByRole('img', { name: /^A postcard of Sunlit Sanctuary for \d{4}/ })).toBeVisible()
+  // The app has its own save screen and no share sheet of the browser's.
+  await expect(postcard.getByRole('button', { name: /^Share/ })).toHaveCount(0)
+  expect(await seriousViolations(page, 'Your garden’s year in the Android app')).toEqual([])
+  // A browser has no native side, so the app says the image could not be
+  // saved rather than claiming it was.
+  await postcard.getByRole('button', { name: 'Save image' }).click()
+  await expect(postcard.getByRole('status')).toHaveText(
+    'The postcard could not be saved there. Try choosing another place.',
+  )
+
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+  await expect(link).toBeFocused()
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+  expect(errors).toEqual([])
 })

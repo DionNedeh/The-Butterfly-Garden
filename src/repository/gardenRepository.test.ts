@@ -171,6 +171,18 @@ function fullGarden(): AppState {
       },
     ],
     ownedItemIds: ['sprout-cap'],
+    // A sighting without a photo: a backup carries it as written. One with a
+    // photo, which a file carries as text, has a test of its own.
+    sightings: [
+      {
+        id: 'sighting-1',
+        date: '2026-09-08',
+        kind: 'butterfly',
+        speciesId: 'monarch',
+        note: 'On the milkweed by the gate.',
+        createdAt: '2026-09-08T11:00:00.000Z',
+      },
+    ],
   }
 }
 
@@ -221,7 +233,7 @@ describe('garden repository', () => {
     await gardenRepository.save(state)
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
-      state: { version: 6, seeds: 4 },
+      state: { version: 8, seeds: 4 },
     })
   })
 
@@ -376,7 +388,7 @@ describe('garden repository', () => {
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
       state: {
-        version: 6,
+        version: 8,
         seeds: 7,
         nectar: 0,
         ownedFlightPatternIds: ['gentle-drift'],
@@ -412,7 +424,7 @@ describe('garden repository', () => {
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
       state: {
-        version: 6,
+        version: 8,
         nectar: 15,
         ownedFlightPatternIds: ['gentle-drift', 'petal-hop'],
         selectedFlightPatternId: 'petal-hop',
@@ -443,7 +455,7 @@ describe('garden repository', () => {
     it('withholds a garden written by a newer client instead of discarding it', async () => {
       const real = createInitialState('Future', 'Future Garden')
       await gardenRepository.save(real)
-      await writeRaw({ ...real, version: 8, seeds: 99 })
+      await writeRaw({ ...real, version: CURRENT_STATE_VERSION + 1, seeds: 99 })
 
       const result = await gardenRepository.load()
       expect(result.status).toBe('withheld')
@@ -457,7 +469,7 @@ describe('garden repository', () => {
           string,
           unknown
         >
-        expect(stored.version).toBe(8)
+        expect(stored.version).toBe(CURRENT_STATE_VERSION + 1)
         expect(stored.seeds).toBe(99)
       } finally {
         db.close()
@@ -466,7 +478,7 @@ describe('garden repository', () => {
 
     it('classifies records by why they could not be read', () => {
       expect(classifyRecord(createEmptyState())).toBe('readable')
-      expect(classifyRecord({ ...createEmptyState(), version: 8 })).toBe(
+      expect(classifyRecord({ ...createEmptyState(), version: CURRENT_STATE_VERSION + 1 })).toBe(
         'incompatible',
       )
       expect(classifyRecord({ broken: true })).toBe('malformed')
@@ -507,7 +519,7 @@ describe('garden repository', () => {
         garden: state,
       }
       expect(readImportedState(envelope)).toMatchObject({
-        version: 6,
+        version: 8,
         seeds: 6,
       })
     })
@@ -598,8 +610,8 @@ describe('garden repository', () => {
       for (const collection of GARDEN_COLLECTIONS) {
         expect(Array.isArray(restored?.[collection])).toBe(true)
       }
-      // No jar a version 6 build would drop, so it stays at 6 (storedVersionOf).
-      expect(restored?.version).toBe(6)
+      // Every garden is stored at the newest version (storedVersionOf).
+      expect(restored?.version).toBe(CURRENT_STATE_VERSION)
     })
 
     it('refuses a backup from a newer build without touching the garden', () => {
@@ -715,8 +727,8 @@ describe('garden repository', () => {
       const result = await gardenRepository.load()
       expect(result.status).toBe('loaded')
       expect(result.state.customBackdrops).toEqual([])
-      // No jar a version 6 build would drop, so it stays at 6 (storedVersionOf).
-      expect(result.state.version).toBe(6)
+      // Every garden is stored at the newest version (storedVersionOf).
+      expect(result.state.version).toBe(CURRENT_STATE_VERSION)
       expect(await gardenRepository.quarantined()).toHaveLength(0)
     })
 
@@ -887,8 +899,9 @@ describe('garden repository', () => {
       // installed databases gain the store, then update the numbers here.
       // Version 6 added the snapshots and drafts stores, which are not
       // collections of the garden, so the collection count stayed at 12.
-      expect(GARDEN_COLLECTIONS).toHaveLength(12)
-      expect(DATABASE_VERSION).toBe(6)
+      // Version 7 added the sightings, the thirteenth.
+      expect(GARDEN_COLLECTIONS).toHaveLength(13)
+      expect(DATABASE_VERSION).toBe(7)
     })
 
     it('creates every part store when an older database is upgraded', () => {
@@ -1138,7 +1151,7 @@ describe('moving a pre-split garden across', () => {
     const result = await gardenRepository.load()
     expect(result.status).toBe('loaded')
     expect(result.state).toMatchObject({
-      version: 6,
+      version: 8,
       seeds: 12,
       nectar: 34,
       moods: original.moods,
@@ -1165,9 +1178,9 @@ describe('moving a pre-split garden across', () => {
 
     await expect(gardenRepository.load()).resolves.toMatchObject({
       status: 'loaded',
-      state: { version: 6, nectar: 15, jars: [], jarPlacements: [] },
+      state: { version: 8, nectar: 15, jars: [], jarPlacements: [] },
     })
-    expect(await readStore('meta')).toMatchObject({ version: 6, nectar: 15 })
+    expect(await readStore('meta')).toMatchObject({ version: 8, nectar: 15 })
     expect(await readStore('placements')).toEqual([])
   })
 
@@ -1246,8 +1259,8 @@ describe('moving a pre-split garden across', () => {
 
     const result = await gardenRepository.load()
     expect(result.status).toBe('loaded')
-    // No jar a version 6 build would drop, so it stays at 6 (storedVersionOf).
-    expect(result.state.version).toBe(6)
+    // Every garden is stored at the newest version (storedVersionOf).
+    expect(result.state.version).toBe(CURRENT_STATE_VERSION)
     for (const [collection] of newest) {
       expect(result.state[collection]).toEqual([])
     }
@@ -1256,8 +1269,7 @@ describe('moving a pre-split garden across', () => {
 
     // Reading it also brought the stored layout up to date, so the record no
     // longer relies on being read at the older version: it is stored at the
-    // newest version that brought a collection (6; a garden goes to 7 only
-    // for a jar a version 6 build would drop).
+    // newest version that brought a collection (8, the sightings').
     expect(await readStore('meta')).toMatchObject({
       version: Math.max(...newest.map(([, since]) => since)),
     })
@@ -1324,7 +1336,7 @@ describe('moving a pre-split garden across', () => {
     const db = await openDB('butterfly-garden')
     try {
       const meta = (await db.get('meta', 'current')) as Record<string, unknown>
-      await db.put('meta', { ...meta, version: 8, seeds: 77 }, 'current')
+      await db.put('meta', { ...meta, version: CURRENT_STATE_VERSION + 1, seeds: 77 }, 'current')
     } finally {
       db.close()
     }
@@ -1334,7 +1346,7 @@ describe('moving a pre-split garden across', () => {
     expect(result.reason).toBe('incompatible')
 
     // The newer garden must survive untouched.
-    expect(await readStore('meta')).toMatchObject({ version: 8, seeds: 77 })
+    expect(await readStore('meta')).toMatchObject({ version: CURRENT_STATE_VERSION + 1, seeds: 77 })
   })
 })
 
@@ -1437,13 +1449,13 @@ describe("adopting another tab's change", () => {
   it('still withholds a garden a newer client wrote', async () => {
     await gardenRepository.save(maturedGarden())
     const meta = (await readStore('meta')) as Record<string, unknown>
-    await writeStore('meta', { ...meta, version: 8 })
+    await writeStore('meta', { ...meta, version: CURRENT_STATE_VERSION + 1 })
 
     const result = await gardenRepository.adopt(['meta'])
     expect(result.status).toBe('withheld')
     expect(result.reason).toBe('incompatible')
     // Untouched, exactly as the invariant requires.
-    expect(await readStore('meta')).toMatchObject({ version: 8 })
+    expect(await readStore('meta')).toMatchObject({ version: CURRENT_STATE_VERSION + 1 })
   })
 })
 
@@ -1476,24 +1488,46 @@ describe('the version a garden is stored at', () => {
     }
   }
 
-  it('is 7 only once a jar holds a letter or mark a version 6 build would drop', async () => {
+  it('is 8 for every garden, jars or not, so no older build writes one back without its sightings', async () => {
     const base = createInitialState('Tester', 'Test Garden')
     const plainJar = { id: 'a', character: 'A', colorId: 'blue' as const, purchasedAt: '2026-10-27T09:00:00.000Z' }
     const accented = { ...plainJar, id: 'e', character: 'É' }
-    expect(storedVersionOf({ jars: [plainJar] })).toBe(6)
-    expect(storedVersionOf({ jars: [plainJar, accented] })).toBe(7)
-    expect(storedVersionOf({ jars: [{ ...plainJar, character: '!' }] })).toBe(7)
+    expect(CURRENT_STATE_VERSION).toBe(8)
+    expect(storedVersionOf()).toBe(8)
 
+    // A garden with only plain jars, which used to stay at 6.
     await gardenRepository.save({ ...base, jars: [plainJar] })
-    expect(await readStore('meta')).toMatchObject({ version: 6 })
+    expect(await readStore('meta')).toMatchObject({ version: 8 })
     await gardenRepository.save({ ...base, jars: [plainJar, accented] })
-    expect(await readStore('meta')).toMatchObject({ version: 7 })
-    // This build reads it back, as a version 6 build would not (it sets a
-    // garden from a newer version aside, untouched).
+    expect(await readStore('meta')).toMatchObject({ version: 8 })
     const result = await gardenRepository.load()
     expect(result.status).toBe('loaded')
     expect(result.state.jars.map((jar) => jar.character)).toEqual(['A', 'É'])
-    expect(result.state.version).toBe(7)
-    expect(CURRENT_STATE_VERSION).toBe(7)
+    expect(result.state.version).toBe(8)
+  })
+
+  it('brings a garden a build of 3.1 stored at 7 up to 8, with an empty field book', async () => {
+    const base = createInitialState('Tester', 'Test Garden')
+    const accented = { id: 'e', character: 'É', colorId: 'blue' as const, purchasedAt: '2026-10-27T09:00:00.000Z' }
+    await gardenRepository.save({ ...base, jars: [accented] })
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      const tx = db.transaction(['meta', 'sightings'], 'readwrite')
+      await Promise.all([
+        tx.objectStore('meta').put({ ...meta, version: 7 }, 'current'),
+        tx.objectStore('sightings').delete('current'),
+        tx.done,
+      ])
+    } finally {
+      db.close()
+    }
+
+    const result = await gardenRepository.load()
+    expect(result.status).toBe('loaded')
+    expect(result.state.sightings).toEqual([])
+    expect(result.state.jars).toHaveLength(1)
+    expect(await readStore('meta')).toMatchObject({ version: 8 })
+    expect(await readStore('sightings')).toEqual([])
   })
 })

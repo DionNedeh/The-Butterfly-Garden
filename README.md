@@ -36,6 +36,11 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   soft tone; finishing counts as care once a day
 - A weekly letter from Marigold on Sunday evening, saying what the week held
   without scores, and quoting only lines you star in the journal, or none
+- Your garden's year: a look back at the weather, your companions and the
+  lines you starred, ending in a postcard of the garden made on the device,
+  kept or shared only when you choose
+- My comfort plan: a private page in your own words for harder days, with
+  people to call, reached from the support page, Settings and a gentle day
 - Sunlight rewards capped at five per day, converting to Nectar, and a rhythm
   in the journal: days cared for in the last seven and this month, which a
   missed day never resets, and which Settings can hide
@@ -67,6 +72,10 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   opening up as your bond grows), seed guidance, and selectable companions
 - My region, which marks the butterflies and plants native where you garden
   and suggests what to plant for them, with no location read
+- A field book of butterflies and plants seen in the wild, with a note and an
+  optional photo (stripped of its location), a pressed-flower stamp in the
+  field notes, a month's line of what to look for, and links to nature
+  counts that open in the browser
 - A Guide with contents, one search, and "What does this do?" links from the
   meters and settings that bring you back where you were
 - Seven illustrated backdrops and up to three personal images with crop, zoom,

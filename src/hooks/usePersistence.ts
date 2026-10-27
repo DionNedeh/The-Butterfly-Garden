@@ -13,7 +13,9 @@ import {
   type LoadResult,
 } from '../repository/gardenRepository'
 import { isQuietWrite } from '../lib/quietWrites'
-import type { AppState } from '../types'
+import { hasPictures } from '../lib/customBackdrops'
+import type { FileCopy } from '../lib/sightingPhotos'
+import type { AppState, CustomBackdrop, Sighting } from '../types'
 import type { useMediaSaves } from './useMediaSaves'
 
 /** Tabs tell each other when the shared garden changed underneath them. */
@@ -263,22 +265,41 @@ export function usePersistence(
         const previous = persistedRef.current
         // Keep the old scene active on quota/decode write failure. The editor
         // still owns the unsaved draft; unrelated in-memory edits survive.
+        // A sighting's photo that would not go in comes back out (the photo
+        // stored before, if any), or every later write would carry it, and
+        // fail too; the field book says it was not kept.
         if (failed.length && previous) {
-          setState((current) =>
-            current && failed.some((record) => current.customBackdrops.includes(record))
-              ? {
-                  ...current,
-                  customBackdrops: previous.customBackdrops,
-                  profile: current.profile
+          setState((current) => {
+            if (!current) return current
+            let kept = current
+            if (failed.some((record) => current.customBackdrops.includes(record as CustomBackdrop)))
+              kept = {
+                ...kept,
+                customBackdrops: previous.customBackdrops,
+                profile: current.profile
+                  ? {
+                      ...current.profile,
+                      selectedCustomBackdropId:
+                        previous.profile?.selectedCustomBackdropId,
+                    }
+                  : undefined,
+              }
+            const refused = (sighting: Sighting) =>
+              sighting.photo !== undefined && failed.includes(sighting.photo)
+            if (current.sightings.some(refused))
+              kept = {
+                ...kept,
+                sightings: current.sightings.map((sighting) =>
+                  refused(sighting)
                     ? {
-                        ...current.profile,
-                        selectedCustomBackdropId:
-                          previous.profile?.selectedCustomBackdropId,
+                        ...sighting,
+                        photo: previous.sightings.find((item) => item.id === sighting.id)?.photo,
                       }
-                    : undefined,
-                }
-              : current,
-          )
+                    : sighting,
+                ),
+              }
+            return kept
+          })
         }
         setPersistence((current) => ({ ...current, writeError: errorMessage(error) }))
       }
@@ -357,21 +378,10 @@ export function usePersistence(
        * The newest set-aside copy of a garden this build could not read, as a
        * file the gardener can keep, or undefined when there is none.
        */
-      quarantinedCopy: async (): Promise<string | undefined> => {
+      quarantinedCopy: async (): Promise<FileCopy | undefined> => {
         const [newest] = await repository.quarantined()
-        if (!newest) return undefined
-        return JSON.stringify(
-          {
-            format: 'the-butterfly-garden-set-aside',
-            exportedAt: new Date().toISOString(),
-            appVersion: __APP_VERSION__,
-            reason: newest.reason,
-            storedAt: newest.storedAt,
-            garden: newest.raw,
-          },
-          null,
-          2,
-        )
+        // Its photos are Blobs, which go into a file as text (lib/sightingPhotos).
+        return newest && (await import('../lib/sightingPhotos')).setAsideCopy(newest)
       },
       /** How many set-aside copies are kept. */
       countQuarantined: async (): Promise<number> =>
@@ -404,9 +414,9 @@ export function usePersistence(
         let written: GardenPart[]
         const startedAt = new Date().toISOString()
         try {
-          if (imported.customBackdrops.length) {
-            const { verifyBackdropImages } = await import('../lib/imageImport')
-            await verifyBackdropImages(imported.customBackdrops)
+          if (hasPictures(imported)) {
+            const { verifyGardenImages } = await import('../lib/imageImport')
+            await verifyGardenImages(imported)
           }
           // Replaced rather than saved: a restore swaps the whole document,
           // and writing only the difference from the garden being replaced can

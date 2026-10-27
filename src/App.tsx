@@ -8,7 +8,6 @@ import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { BottomNav, PrimaryNav } from './components/Navigation'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { RecoveryScreen } from './components/RecoveryScreen'
 import { ViewProblem } from './components/ViewProblem'
 import { SplashScreen } from './components/SplashScreen'
 
@@ -62,6 +61,12 @@ const TodayView = lazy(() =>
 const Onboarding = lazy(() =>
   import('./components/Onboarding').then((m) => ({ default: m.Onboarding })),
 )
+// Only for a stored garden that could not be read, which is rare. Should its
+// chunk not load either, the shell's last resort, safe mode, offers the same
+// copy and restore.
+const RecoveryScreen = lazy(() =>
+  import('./components/RecoveryScreen').then((m) => ({ default: m.RecoveryScreen })),
+)
 const NoticesView = lazy(() =>
   import('./components/NoticesView').then((m) => ({ default: m.NoticesView })),
 )
@@ -70,6 +75,12 @@ const SupportView = lazy(() =>
 )
 const BreathingView = lazy(() =>
   import('./components/BreathingView').then((m) => ({ default: m.BreathingView })),
+)
+const YearView = lazy(() =>
+  import('./components/YearView').then((m) => ({ default: m.YearView })),
+)
+const ComfortPlanView = lazy(() =>
+  import('./components/ComfortPlanView').then((m) => ({ default: m.ComfortPlanView })),
 )
 // Only ever shown on the address the garden moved from, never in the app.
 const MovedBanner = lazy(() =>
@@ -84,13 +95,6 @@ const UpdatePrompt = lazy(() =>
     () => ({ default: () => null }),
   ),
 )
-
-/** What the support page's own back button says, for the page that opened it. */
-const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
-  settings: 'Back to Settings',
-  today: 'Back to Today',
-  guide: 'Back to the Guide',
-}
 import { ambientTrackName } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
 import { useEffectiveTheme } from './hooks/useEffectiveTheme'
@@ -147,10 +151,11 @@ function currentUrl(): string {
 }
 
 /**
- * Puts the gardener back where they pressed a "What does this do?" link or a
- * way into breathing, once the page they return to is drawn. Rendered after
- * the page, inside the same Suspense, so it runs after the page's own first
- * focus (Care's chip) and never before the page is there.
+ * Puts the gardener back where they pressed a "What does this do?" link, a
+ * way into breathing or into the comfort plan, or the plan's way to support,
+ * once the page they return to is drawn. Rendered after the page, inside the
+ * same Suspense, so it runs after the page's own first focus (Care's chip,
+ * the plan's heading) and never before the page is there.
  */
 function PutBack({ place }: { place: LinkPlace }) {
   useEffect(() => putBackAt(place), [place])
@@ -264,8 +269,27 @@ function App() {
     navigate({ view: next, onPass: options.onPass })
   /** The page "If you need support now" was opened from, to return to. */
   const [supportFrom, setSupportFrom] = useState<AppView>('garden')
+  /**
+   * The comfort plan as it was when it opened the support page, to come back
+   * to: the page that opened the plan and the place on it, and the place of
+   * the plan's own way to support, so that the support page's Back and then
+   * the plan's put the gardener back at each in turn.
+   */
+  const [planLeft, setPlanLeft] = useState<Route>({ view: 'comfort' })
   const openSupport = () => {
-    setSupportFrom(route.view)
+    // Out of a comfort plan the support page opened, back to that support
+    // page as it was, so the two never send the gardener round in a loop.
+    if (route.view !== 'comfort' || route.from !== 'support') {
+      setSupportFrom(route.view)
+      if (route.view === 'comfort') {
+        setPlanLeft({
+          view: 'comfort',
+          from: route.from,
+          fromPlace: route.fromPlace,
+          restore: { support: true, scrollY: window.scrollY },
+        })
+      }
+    }
     setView('support')
   }
   useEffect(() => {
@@ -338,8 +362,8 @@ function App() {
   // would expect: the open dialog first, then the recap to Today, then any
   // page to the garden, and only then out of the app. The handler is
   // registered once and reads the current page from a ref, with the page a
-  // "What does this do?" link or a way into breathing left, which back
-  // returns the Guide or breathing to.
+  // "What does this do?" link or a way into breathing or the comfort plan
+  // left, which back returns the Guide, breathing or the plan to.
   const routeRef = useRef(route)
   useEffect(() => {
     routeRef.current = route
@@ -352,11 +376,14 @@ function App() {
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
         else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
-          // Out of the Guide or breathing, back does what its Back button
-          // does: the same companion on Care, and the gardener where they
-          // were on the page.
+          // Out of the Guide, breathing or the comfort plan, back does what
+          // its Back button does: the same companion on Care, and the
+          // gardener where they were on the page.
           const back = returnFrom(current)
-          const next = back?.view === action.view ? back : { view: action.view }
+          const next: Route = back?.view === action.view ? back : { view: action.view }
+          // Out of a year looked back on, the Journal puts focus back on the
+          // link that opened it, as the page's own Back button does.
+          if (current.view === 'year') next.from = 'year'
           // Android's back walks up a fixed ladder (lib/backNavigation), not
           // through history, so each step replaces the address.
           if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
@@ -370,9 +397,14 @@ function App() {
 
   // The Android app follows Google Play's answer about the Garden Pass; reading
   // it here re-renders the whole garden whenever that answer changes, so
-  // every Pass check below sees it at once.
+  // every Pass check below sees it at once. The platform checks in this file
+  // that only the app needs are inline, rather than isAndroidApp(), so the web
+  // build leaves out what only the app says and does.
   const pass = usePassStatus()
-  useEffect(() => (isAndroidApp() ? trackPassStatus() : undefined), [])
+  useEffect(
+    () => (import.meta.env.VITE_PLATFORM === 'android' ? trackPassStatus() : undefined),
+    [],
+  )
 
   // The theme on screen, chosen or followed (lib/theme). Everything that
   // matches the theme reads this, never profile.theme, which is only the
@@ -465,12 +497,14 @@ function App() {
     // a newcomer. The recovery screen says what happened and what to do.
     if (garden.persistence.readOnly) {
       return (
-        <RecoveryScreen
-          reason={garden.persistence.reason}
-          onRestore={garden.importGarden}
-          onDownloadSetAside={garden.quarantinedCopy}
-          onStartFresh={garden.startFresh}
-        />
+        <Suspense fallback={<SplashScreen />}>
+          <RecoveryScreen
+            reason={garden.persistence.reason}
+            onRestore={garden.importGarden}
+            onDownloadSetAside={garden.quarantinedCopy}
+            onStartFresh={garden.startFresh}
+          />
+        </Suspense>
       )
     }
     return (
@@ -562,6 +596,16 @@ function App() {
       fromPlace: { breathe: way, goalId, scrollY: fromRecap ? 0 : window.scrollY },
     })
   }
+  /**
+   * My comfort plan, remembering the page that offered it and where on it, as
+   * breathing does, so that leaving puts the gardener back at its link.
+   */
+  const openComfort = () =>
+    navigate({
+      view: 'comfort',
+      from: activeView,
+      fromPlace: { comfort: true, scrollY: window.scrollY },
+    })
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -698,7 +742,7 @@ function App() {
             {garden.persistence.reason === 'incompatible'
               ? 'It was written by a newer version of the app. Nothing has been changed or deleted — update the app, or restore a backup from Settings.'
               : garden.persistence.reason === 'unavailable'
-                ? isAndroidApp()
+                ? import.meta.env.VITE_PLATFORM === 'android'
                   ? 'The app could not open its storage on this phone. Your garden is still here; try closing and reopening the app.'
                   : 'This browser would not open its local storage. Your garden is still on this device; try reopening the app.'
                 : 'The stored garden could not be read, so a copy has been set aside untouched. Restore a backup from Settings, or start fresh.'}
@@ -727,7 +771,7 @@ function App() {
           <strong>Your last change could not be saved.</strong>
           <span>{garden.persistence.writeError}</span>
           <span>
-            {isAndroidApp()
+            {import.meta.env.VITE_PLATFORM === 'android'
               ? 'Recent edits are only held in memory. Save a backup from Settings before closing the app.'
               : 'Recent edits are only in this tab. Export a backup from Settings before closing it.'}
           </span>
@@ -772,7 +816,7 @@ function App() {
           )}
 
         {activeView === 'garden' &&
-          isAndroidApp() &&
+          import.meta.env.VITE_PLATFORM === 'android' &&
           pass.lapsed &&
           pass.state !== 'active' && (
             <aside className="release-notice pass-lapse-notice">
@@ -901,6 +945,7 @@ function App() {
               onUncompleteGoal={garden.uncompleteGoal}
               onRestoreGoal={garden.restoreGoal}
               onOpenSupport={openSupport}
+              onOpenComfort={openComfort}
               onSetGentleDay={garden.setGentleDay}
               onChooseNextPlant={garden.chooseNextPlant}
               onOpenCare={() => setView('care')}
@@ -945,6 +990,7 @@ function App() {
                 if (back) navigate(back)
               }}
               onOpenSection={(section) => navigate({ ...route, section })}
+              onChangeSightings={garden.changeSightings}
             />
           )}
           {activeView === 'whats-new' && <WhatsNewView />}
@@ -956,10 +1002,20 @@ function App() {
           )}
           {activeView === 'support' && (
             <SupportView
-              onBack={() => setView(supportFrom)}
-              backLabel={SUPPORT_BACK_LABELS[supportFrom] ?? 'Back to the garden'}
+              onBack={() => (supportFrom === 'comfort' ? navigate(planLeft) : setView(supportFrom))}
+              from={supportFrom}
               state={state}
               onBreathe={() => openBreathe('support')}
+              onOpenComfort={openComfort}
+            />
+          )}
+          {activeView === 'comfort' && (
+            <ComfortPlanView
+              plan={profile.comfortPlan}
+              onChange={garden.changeComfortPlan}
+              onOpenSupport={openSupport}
+              from={route.from}
+              onBack={() => navigate(returnFrom(route) ?? { view: 'garden' })}
             />
           )}
           {activeView === 'breathe' && (
@@ -985,6 +1041,18 @@ function App() {
               openLetter={route.letter}
               onReadLetter={garden.readLetter}
               onSetStarred={garden.setStarred}
+              onChangeSightings={garden.changeSightings}
+              onOpenYear={(year) => navigate({ view: 'year', year, from: 'journal' })}
+              returnedFromYear={route.from === 'year'}
+            />
+          )}
+          {activeView === 'year' && (
+            <YearView
+              state={state}
+              today={today}
+              year={route.year}
+              onChooseYear={(year) => navigate({ ...route, year }, { replace: true })}
+              onBack={() => navigate({ view: route.from ?? 'journal', from: 'year' })}
             />
           )}
           {activeView === 'settings' && (
@@ -1011,6 +1079,7 @@ function App() {
               onOpenGardenPass={() => setView('shop', { onPass: true })}
               onOpenNotices={() => setView('notices')}
               onOpenSupport={openSupport}
+              onOpenComfort={openComfort}
               onSetDayCountsHidden={garden.setDayCountsHidden}
               onSetRecapHours={garden.setRecapHours}
               onChooseTheme={(choice) => {

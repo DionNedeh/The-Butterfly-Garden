@@ -10,8 +10,10 @@ import { publishersOf, speciesFacts } from '../data/speciesFacts'
 import { regionMark, type RegionMarks } from '../lib/regionMarks'
 import { hasEveryWord, normaliseForSearch } from '../lib/searchText'
 import { listed } from '../lib/plural'
-import type { AppState, RegionId } from '../types'
+import { subjectKey, type WildRecord } from '../lib/sightings'
+import type { AppState, RegionId, SightingSubject } from '../types'
 import { ButterflySprite } from './sprites/ButterflySprite'
+import { SeenInTheWild } from './sightings/SeenInTheWild'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
 import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
@@ -22,18 +24,25 @@ import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
  * The Guide's search finds species here too: `words` are its words, already
  * normalised (lib/searchText). With a `region` chosen in Settings, each
  * species and host plant says whether it is native there (data/regions);
- * without one, nothing is marked.
+ * without one, nothing is marked. Each butterfly and plant seen in the wild
+ * carries the field book's stamp, and can be logged from its card.
  */
 export function SpeciesDirectory({
   state,
   onShowSeed,
   words = [],
   region,
+  seen,
+  onLogSighting,
 }: {
   state: AppState
   onShowSeed: (id: string) => void
   words?: readonly string[]
   region?: RegionId
+  /** When each butterfly and plant was last seen in the wild, by subjectKey. */
+  seen?: ReadonlyMap<string, WildRecord>
+  /** Open the sighting form on this butterfly or plant; without it, none is offered. */
+  onLogSighting?: (subject: SightingSubject, opener: HTMLElement) => void
 }) {
   const [filter, setFilter] = useState('all')
   const all = useMemo(() => speciesAcquisitionRecords(state), [state])
@@ -115,6 +124,9 @@ export function SpeciesDirectory({
             <div>
               <h3>{item.speciesName}</h3>
               <RegionMarkLine marks={speciesRegions[item.speciesId]} region={region} />
+              <SeenInTheWild
+                seen={seen?.get(subjectKey({ kind: 'butterfly', speciesId: item.speciesId }))}
+              />
               <p className="seed-recipe">
                 Plant <strong>{item.hostPlantNames.join(' or ')}</strong>
               </p>
@@ -127,21 +139,52 @@ export function SpeciesDirectory({
                       region={region}
                       subject={item.hostPlantNames[index]}
                     />
+                    <SeenInTheWild
+                      seen={seen?.get(subjectKey({ kind: 'plant', plantId: id }))}
+                      subject={item.hostPlantNames[index]}
+                    />
                     <p className="subtle-copy">
                       {next
                         ? `Next with your current garden: ${species.find((entry) => entry.id === next)?.commonName}.`
                         : 'Its supported species are already developing. A future planting can welcome another once one has emerged.'}
                     </p>
-                    <button
-                      className="secondary-button compact"
-                      onClick={() => onShowSeed(id)}
-                    >
-                      Show {item.hostPlantNames[index]} seed
-                    </button>
+                    <div className="species-plant-actions">
+                      <button
+                        className="secondary-button compact"
+                        onClick={() => onShowSeed(id)}
+                      >
+                        Show {item.hostPlantNames[index]} seed
+                      </button>
+                      {onLogSighting && (
+                        <button
+                          className="secondary-button compact sighting-log"
+                          aria-label={`Log a sighting of ${item.hostPlantNames[index]}`}
+                          onClick={(event) =>
+                            onLogSighting({ kind: 'plant', plantId: id }, event.currentTarget)
+                          }
+                        >
+                          Log a sighting
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               })}
               <CheckedWith speciesId={item.speciesId} />
+              {onLogSighting && (
+                <button
+                  className="secondary-button sighting-log"
+                  aria-label={`Log a sighting of ${item.speciesName}`}
+                  onClick={(event) =>
+                    onLogSighting(
+                      { kind: 'butterfly', speciesId: item.speciesId },
+                      event.currentTarget,
+                    )
+                  }
+                >
+                  Log a sighting
+                </button>
+              )}
             </div>
           </article>
         ))}

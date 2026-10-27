@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { gardenRepository } from '../repository/gardenRepository'
 import { datedFileName, saveTextFile } from '../lib/download'
+import { storedCopy } from '../lib/storedCopy'
 
 /**
  * Shown in place of a single page that failed to draw.
@@ -15,16 +15,16 @@ export function ViewProblem({ onHome }: { onHome: () => void }) {
   const download = async () => {
     setNote(undefined)
     try {
-      const raw = await gardenRepository.readRaw()
+      const copy = await storedCopy()
       const outcome = await saveTextFile(
         datedFileName('everything-stored'),
         'application/json',
-        JSON.stringify(raw, null, 2),
+        copy.text,
       )
       setNote(
         outcome === 'cancelled'
           ? 'Nothing was saved.'
-          : 'Keep that file: it holds everything this app has stored.',
+          : `Keep that file: it holds everything this app has stored.${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
       setNote('What is stored could not be read just now.')

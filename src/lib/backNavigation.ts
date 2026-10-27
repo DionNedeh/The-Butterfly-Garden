@@ -14,8 +14,10 @@ export type BackAction =
  * editor; each carries `data-dismiss-on-back`), then a page that
  * was opened from another page back to it (the Moonlight recap to Today; the
  * privacy policy, the notices and the support page to Settings; the Guide,
- * opened by a "What does this do?" link, and breathing with a butterfly, to
- * the page `from` that opened them), then any other page back to the garden.
+ * opened by a "What does this do?" link, breathing with a butterfly and the
+ * comfort plan, to the page `from` that opened them; a year looked back on to
+ * the page that opened it, or else the Journal, where it lives), then any
+ * other page back to the garden.
  * Only from the garden itself does it leave the app.
  */
 export function backAction(
@@ -29,10 +31,11 @@ export function backAction(
   const layer = root.querySelector<HTMLElement>('[data-dismiss-on-back]')
   if (layer) return { kind: 'dismiss', element: layer }
   if (view === 'recap') return { kind: 'view', view: 'today' }
-  if ((view === 'guide' || view === 'breathe') && from && from !== view)
+  if ((view === 'guide' || view === 'breathe' || view === 'comfort') && from && from !== view)
     return { kind: 'view', view: from }
   if (view === 'privacy' || view === 'notices' || view === 'support')
     return { kind: 'view', view: 'settings' }
+  if (view === 'year') return { kind: 'view', view: from && from !== view ? from : 'journal' }
   if (view && view !== 'garden') return { kind: 'view', view: 'garden' }
   return { kind: 'leave' }
 }
@@ -56,12 +59,13 @@ export function requestDialogClose(dialog: HTMLDialogElement): void {
 }
 
 /**
- * Put the gardener back where they pressed a "What does this do?" link or a
- * way into breathing, once its page is drawn again: scrolled as it was, with
- * focus on that link, so the Back button that took them there (gone with the
- * Guide, or with breathing) leaves focus somewhere. If the link has gone since
- * (a region cleared in another tab, a goal deleted), focus goes to the page's
- * heading, never to the page itself.
+ * Put the gardener back where they pressed a "What does this do?" link, a
+ * way into breathing or into the comfort plan, or the plan's way to support,
+ * once its page is drawn again: scrolled as it was, with focus on that link,
+ * so the Back button that took them there (gone with the Guide, breathing,
+ * the plan or the support page) leaves focus somewhere. If the link has gone
+ * since (a region cleared in another tab, a goal deleted, a gentle day over),
+ * focus goes to the page's heading, never to the page itself.
  */
 export function putBackAt(place: LinkPlace, root: ParentNode = document): void {
   window.scrollTo({ top: place.scrollY, behavior: 'instant' })
@@ -81,13 +85,17 @@ export function putBackAt(place: LinkPlace, root: ParentNode = document): void {
  * stands in once the goal is done; the support page has one link. The step
  * offered under Today's check-in is put away once taken, so the check-in it
  * followed stands in, as it does for "Not now". The recap is collected on the
- * way in, which leaves Today's heading.
+ * way in, which leaves Today's heading. A page that offers the comfort plan
+ * (the support page, Settings, Today on a gentle day) has one link to it, and
+ * the plan one line to the support page.
  */
 function linkAt(place: LinkPlace, root: ParentNode): HTMLElement | null {
   if (place.section !== undefined)
     return root.querySelector<HTMLElement>(
       `a.guide-link[href="${hashForRoute({ view: 'guide', section: place.section })}"]`,
     )
+  if (place.comfort) return root.querySelector<HTMLElement>('a.comfort-link')
+  if (place.support) return root.querySelector<HTMLElement>('.comfort-support a')
   switch (place.breathe) {
     case 'goal': {
       // By the row's own data, not a selector: a goal's id is any text.

@@ -27,12 +27,12 @@ import {
   type RecycledJar,
   type RecycleOutcome,
 } from '../lib/jars'
+import { changeComfortPlan } from '../lib/comfortPlan'
 import { adoptGoal, performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import type { ThemeChoice } from '../lib/theme'
 import * as looks from '../lib/outfitPresets'
 import { removePlant } from '../lib/plantManagement'
-import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
@@ -54,6 +54,8 @@ import {
   wearOutfitPreset,
   type WearLookResult,
 } from '../lib/wardrobe'
+import type { ChangeSightings } from '../lib/sightings'
+import type { FileCopy } from '../lib/sightingPhotos'
 import { gardenRepository } from '../repository/gardenRepository'
 import { storedVersionOf } from '../repository/validateGarden'
 import type {
@@ -61,6 +63,7 @@ import type {
   AppearanceTheme,
   AppState,
   CheckInDetails,
+  ComfortPlan,
   CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
@@ -216,7 +219,32 @@ export function useGardenState() {
     /** Make a purchase and say how it went. */
     const purchase = (buy: (current: AppState) => PurchaseResult): PurchaseOutcome =>
       settle(buy, { kind: 'unavailable', reason: 'unknown' })
+    /**
+     * Change the field book's sightings, and say whether the garden took it.
+     * The field book's own rules (lib/sightings, fieldBookActions) arrive
+     * with the pages that log a sighting, never with the garden's first
+     * load; this applies what they work out, on the newest garden, as a
+     * purchase is. Only the sightings can change here: a sighting earns
+     * nothing.
+     */
+    const changeSightings: ChangeSightings = (change) => {
+      const now = new Date()
+      const run = (current: AppState) => {
+        const sightings = change(current.sightings, now)
+        const state = sightings === current.sightings ? current : { ...current, sightings }
+        return { state, outcome: state !== current }
+      }
+      return settle(run, false)
+    }
+    // A new photo is answered for as a personal image is (useMediaSaves):
+    // once it is on disk, or once it would not go in and has been taken back
+    // out, so that "saved" is said only of what was.
+    changeSightings.photoSaved = (photo) =>
+      media.waitFor(photo, (notCarried) => {
+        if (!stateRef.current?.sightings.some((sighting) => sighting.photo === photo)) notCarried()
+      })
     return {
+      changeSightings,
       /**
        * Make the garden, with any starter goals chosen on the way in. They
        * are added by the same reducer as a goal added on Today, as daily
@@ -420,9 +448,11 @@ export function useGardenState() {
         if (!hasGardenPassFeature('custom-backdrops'))
           return {
             ok: false,
-            message: isAndroidApp()
-              ? 'Your own backdrops come with the Garden Pass.'
-              : 'Custom backdrops are not available in this release.',
+            // Inline, so each build carries only its own wording.
+            message:
+              import.meta.env.VITE_PLATFORM === 'android'
+                ? 'Your own backdrops come with the Garden Pass.'
+                : 'Custom backdrops are not available in this release.',
           }
         const current = stateRef.current
         if (!current) return { ok: false, message: 'Open your garden first.' }
@@ -517,6 +547,12 @@ export function useGardenState() {
       /** Star a check-in's note or a reflection for letters to quote, or not. */
       setStarred: (kind: StarredKind, id: string, starred: boolean) =>
         update((current) => setStarred(current, kind, id, starred)),
+      /**
+       * Change the comfort plan by one of its edits (lib/comfortPlanEdits),
+       * which its page brings with it, so the first load carries none of them.
+       */
+      changeComfortPlan: (change: (plan: ComfortPlan) => ComfortPlan) =>
+        update((current) => changeComfortPlan(current, change)),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**
@@ -527,21 +563,25 @@ export function useGardenState() {
        * of it would be an empty file that a later restore trusts. The set-aside
        * copy is what can be downloaded instead (see `quarantinedCopy`).
        */
-      exportGarden: (): string | undefined => {
+      exportGarden: async (): Promise<FileCopy | undefined> => {
         if (readOnlyRef.current) return undefined
-        return JSON.stringify(
-          {
-            format: 'the-butterfly-garden',
-            exportedAt: new Date().toISOString(),
-            appVersion: __APP_VERSION__,
-            // At the version an older app can tell apart (storedVersionOf).
-            garden: stateRef.current
-              ? { ...stateRef.current, version: storedVersionOf(stateRef.current) }
-              : stateRef.current,
-          },
-          null,
-          2,
-        )
+        // At the version an older app can tell apart (storedVersionOf).
+        const garden = stateRef.current && {
+          ...stateRef.current,
+          version: storedVersionOf(),
+        }
+        const file = {
+          format: 'the-butterfly-garden',
+          exportedAt: new Date().toISOString(),
+          appVersion: __APP_VERSION__,
+          garden,
+        }
+        // A sighting's photo is a Blob, which goes into the file as text, as
+        // a personal image always has (lib/sightingPhotos); one that cannot
+        // be read is left out, and said so, rather than fail the backup.
+        return garden?.sightings.some((sighting) => sighting.photo)
+          ? (await import('../lib/sightingPhotos')).fileCopy(file)
+          : { text: JSON.stringify(file, null, 2) }
       },
       /**
        * A copy from `exportGarden` reached the gardener: saved, downloaded or

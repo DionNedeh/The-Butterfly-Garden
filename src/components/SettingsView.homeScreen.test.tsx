@@ -29,7 +29,7 @@ function renderSettings() {
       onUpdateProfile={vi.fn()}
       onSelectAmbientTrack={vi.fn()}
       onSelectBackdrop={vi.fn()}
-      onExportGarden={vi.fn(() => '{}')}
+      onExportGarden={vi.fn(() => ({ text: '{}' }))}
       onImportGarden={vi.fn(() => Promise.resolve({ ok: true, message: 'Restored.' }))}
       onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
     />,
