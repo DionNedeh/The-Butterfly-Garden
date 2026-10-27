@@ -1,4 +1,5 @@
 import { inspectImportedState } from '../repository/gardenRepository'
+import { photosIn } from './customBackdrops'
 import type { AppState } from '../types'
 
 /** What a backup file holds, shown before it replaces anything. */
@@ -16,6 +17,9 @@ export interface BackupPreview {
     goals: number
     butterflies: number
     images: number
+    /** Sightings in the field book, and how many of them have a photo. */
+    sightings: number
+    photos: number
   }
   /** The first and last day anything was written, YYYY-MM-DD. */
   firstDay?: string
@@ -75,6 +79,8 @@ export function previewBackup(text: string): BackupPreview {
         (creature) => creature.stage === 'butterfly',
       ).length,
       images: state.customBackdrops.length,
+      sightings: state.sightings.length,
+      photos: photosIn(state.sightings).count,
     },
     firstDay: days[0],
     lastDay: days[days.length - 1],

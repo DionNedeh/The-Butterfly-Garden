@@ -23,6 +23,7 @@ import {
   type StorageStatus,
 } from '../lib/storage'
 import { homeScreenAdvice } from '../lib/install'
+import { MAX_SIGHTING_PHOTOS, photosIn } from '../lib/customBackdrops'
 import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
@@ -281,8 +282,12 @@ export function SettingsView({
   ) => void
   onSelectAmbientTrack: (trackId: AmbientTrackId) => void
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
-  /** Undefined while the garden is read-only: see useGardenState. */
-  onExportGarden: () => string | undefined
+  /**
+   * The backup's text, at once or once its photos are read (a sighting's
+   * photo is a Blob). Undefined while the garden is read-only: see
+   * useGardenState.
+   */
+  onExportGarden: () => string | undefined | Promise<string | undefined>
   /** A backup reached the gardener; `madeAt` is when it was exported. */
   onBackupMade?: (madeAt: Date) => void
   /** When the backup reminder is judged; the app passes noon of the day. */
@@ -354,6 +359,8 @@ export function SettingsView({
   const [undoDismissed, setUndoDismissed] = useState<string>()
   const [setAsideCount, setSetAsideCount] = useState(0)
   const [storage, setStorage] = useState<StorageStatus>()
+  // The field book's photos, which every backup carries: how many, and their size.
+  const fieldBookPhotos = photosIn(state.sightings)
   // The moment the backup reminder is worked out for: the app's own (noon of
   // the day, shared with the badge on Settings), or when the page opened.
   const [openedAt] = useState(() => new Date())
@@ -393,8 +400,8 @@ export function SettingsView({
   }
 
   /** The backup file's text, or undefined (and why) while it cannot be made. */
-  const exportBackup = () => {
-    const text = onExportGarden()
+  const exportBackup = async () => {
+    const text = await onExportGarden()
     if (text === undefined)
       setBackupNote(
         'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
@@ -413,7 +420,7 @@ export function SettingsView({
   const saveBackup = async () => {
     setBackupNote(undefined)
     const madeAt = new Date()
-    const text = exportBackup()
+    const text = await exportBackup()
     if (text === undefined) return
     try {
       const outcome = await saveTextFile(
@@ -445,7 +452,7 @@ export function SettingsView({
   const shareBackup = async () => {
     setBackupNote(undefined)
     const madeAt = new Date()
-    const text = exportBackup()
+    const text = await exportBackup()
     if (text === undefined) return
     try {
       const outcome = await shareTextFile(
@@ -1027,6 +1034,13 @@ export function SettingsView({
                     and{' '}
                     {counted(pendingRestore.counts.images, 'image of your own', 'images of your own')}
                   </li>
+                  {pendingRestore.counts.sightings > 0 && (
+                    <li>
+                      {counted(pendingRestore.counts.sightings, 'sighting', 'sightings')} in
+                      the field book, with{' '}
+                      {counted(pendingRestore.counts.photos, 'photo', 'photos')}
+                    </li>
+                  )}
                 </>
               )}
               {pendingRestore.firstDay && pendingRestore.lastDay && (
@@ -1129,6 +1143,14 @@ export function SettingsView({
               )}
             </div>
           </div>
+        )}
+        {fieldBookPhotos.count > 0 && (
+          <p className="settings-note">
+            Your field book keeps{' '}
+            {counted(fieldBookPhotos.count, 'photo', 'photos')} of what you saw
+            in the wild, about {formatBytes(fieldBookPhotos.bytes)}, of the{' '}
+            {MAX_SIGHTING_PHOTOS} it can hold. They are in every backup.
+          </p>
         )}
         {!android && storage && storage.protection !== 'unknown' && (
           <div className="storage-status">

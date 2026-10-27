@@ -4,6 +4,7 @@ import type {
   CustomBackdrop,
   CustomBackdropCrop,
   CustomBackdropMimeType,
+  Sighting,
 } from '../types'
 
 /**
@@ -399,4 +400,66 @@ export function activeCustomBackdrop(
     (theme === 'night' ? find(state.profile?.nightCustomBackdropId) : undefined) ??
     find(state.profile?.selectedCustomBackdropId)
   )
+}
+
+/*
+ * The field book's photos (lib/sightings), and how many sightings it keeps.
+ * Kept here, beside the personal images' limits, because one pipeline makes
+ * both kinds of picture (lib/imageImport), and checking a stored garden
+ * needs both limits before any page that shows a sighting has loaded.
+ */
+
+/**
+ * Sightings a field book keeps. Generous: years of noticing, written down
+ * most days, still fit. A sighting without a photo is a few dozen bytes.
+ */
+export const MAX_SIGHTINGS = 2000
+
+/**
+ * Photos a field book keeps. Each is carried in every backup, so this keeps
+ * an ordinary backup small enough to send and to restore.
+ */
+export const MAX_SIGHTING_PHOTOS = 50
+
+/**
+ * A photo's longest edge, in pixels: enough to see what was seen, and half
+ * the edge a personal image keeps, since it is never a whole screen's backdrop.
+ */
+export const SIGHTING_PHOTO_MAX_EDGE = 1024
+
+/** A photo's largest size once re-encoded. */
+export const SIGHTING_PHOTO_MAX_BYTES = 400 * 1024
+
+/**
+ * Whether a value is a photo the field book can keep: a Blob in one of the
+ * formats a personal image may be, of a size a re-encoded photo can be.
+ */
+export function isSightingPhoto(value: unknown): value is Blob {
+  return (
+    value instanceof Blob &&
+    isSupportedMimeType(value.type) &&
+    value.size > 0 &&
+    value.size <= SIGHTING_PHOTO_MAX_BYTES
+  )
+}
+
+/** How many of these sightings have a photo, and how many bytes they take. */
+export function photosIn(sightings: readonly Sighting[]): { count: number; bytes: number } {
+  let count = 0
+  let bytes = 0
+  for (const sighting of sightings) {
+    if (!sighting.photo) continue
+    count += 1
+    bytes += sighting.photo.size
+  }
+  return { count, bytes }
+}
+
+/**
+ * Whether a garden brings pictures of the gardener's own, a personal image
+ * or a sighting's photo, which a restore checks as pictures before anything
+ * is replaced (lib/imageImport).
+ */
+export function hasPictures(garden: Pick<AppState, 'customBackdrops' | 'sightings'>): boolean {
+  return garden.customBackdrops.length > 0 || garden.sightings.some((sighting) => sighting.photo)
 }

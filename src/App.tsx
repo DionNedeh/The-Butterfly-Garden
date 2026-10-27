@@ -8,7 +8,6 @@ import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { BottomNav, PrimaryNav } from './components/Navigation'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { RecoveryScreen } from './components/RecoveryScreen'
 import { ViewProblem } from './components/ViewProblem'
 import { SplashScreen } from './components/SplashScreen'
 
@@ -61,6 +60,12 @@ const TodayView = lazy(() =>
 )
 const Onboarding = lazy(() =>
   import('./components/Onboarding').then((m) => ({ default: m.Onboarding })),
+)
+// Only for a stored garden that could not be read, which is rare. Should its
+// chunk not load either, the shell's last resort, safe mode, offers the same
+// copy and restore.
+const RecoveryScreen = lazy(() =>
+  import('./components/RecoveryScreen').then((m) => ({ default: m.RecoveryScreen })),
 )
 const NoticesView = lazy(() =>
   import('./components/NoticesView').then((m) => ({ default: m.NoticesView })),
@@ -465,12 +470,14 @@ function App() {
     // a newcomer. The recovery screen says what happened and what to do.
     if (garden.persistence.readOnly) {
       return (
-        <RecoveryScreen
-          reason={garden.persistence.reason}
-          onRestore={garden.importGarden}
-          onDownloadSetAside={garden.quarantinedCopy}
-          onStartFresh={garden.startFresh}
-        />
+        <Suspense fallback={<SplashScreen />}>
+          <RecoveryScreen
+            reason={garden.persistence.reason}
+            onRestore={garden.importGarden}
+            onDownloadSetAside={garden.quarantinedCopy}
+            onStartFresh={garden.startFresh}
+          />
+        </Suspense>
       )
     }
     return (
@@ -945,6 +952,7 @@ function App() {
                 if (back) navigate(back)
               }}
               onOpenSection={(section) => navigate({ ...route, section })}
+              onChangeSightings={garden.changeSightings}
             />
           )}
           {activeView === 'whats-new' && <WhatsNewView />}
@@ -985,6 +993,7 @@ function App() {
               openLetter={route.letter}
               onReadLetter={garden.readLetter}
               onSetStarred={garden.setStarred}
+              onChangeSightings={garden.changeSightings}
             />
           )}
           {activeView === 'settings' && (

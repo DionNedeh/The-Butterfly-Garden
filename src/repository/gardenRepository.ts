@@ -66,7 +66,9 @@ export type Drafts = Record<string, string>
  *     collection existed has no key for it.
  *     -- pinned by "gives every collection a value when a backup predates it".
  *  6. Decide whether it belongs in a backup. It does unless it is a cache;
- *     export carries the whole document.
+ *     export carries the whole document. Anything JSON cannot hold, such as
+ *     a sighting's photo Blob, goes into a file as text (lib/sightingPhotos)
+ *     and is turned back in validateGarden.
  */
 export const COLLECTION_STORES = {
   goals: 'goals',
@@ -81,6 +83,7 @@ export const COLLECTION_STORES = {
   sunlight: 'sunlight',
   jarPlacements: 'placements',
   jars: 'jars',
+  sightings: 'sightings',
 } as const
 
 export type GardenCollection = keyof typeof COLLECTION_STORES
@@ -108,6 +111,7 @@ export const COLLECTION_SINCE_VERSION: Partial<
   recaps: 5,
   moonlight: 5,
   customBackdrops: 6,
+  sightings: 8,
 }
 
 /** The newest version that brought a collection with it. */
@@ -304,6 +308,10 @@ interface GardenDatabase extends DBSchema {
     key: 'current'
     value: AppState['jarPlacements']
   }
+  sightings: {
+    key: 'current'
+    value: AppState['sightings']
+  }
   quarantine: {
     key: string
     value: QuarantineRecord
@@ -344,8 +352,11 @@ export const DATABASE_NAME = 'butterfly-garden'
  * Moonlight moved both, and deliberately: it added two stores (this number)
  * and two fields to the document (AppState.version). Version 6 adds the
  * `snapshots` and `drafts` stores only, so the document version stays put.
+ * Version 7 adds `sightings`, which moved the document to version 8 as well:
+ * a build at 6 can no longer open the database, and so cannot write the
+ * garden back without the field book.
  */
-export const DATABASE_VERSION = 6
+export const DATABASE_VERSION = 7
 
 /** How many set-aside copies of an unreadable garden are kept. */
 const QUARANTINE_LIMIT = 3
@@ -427,8 +438,8 @@ function storeFor(part: GardenPart): StoreNames<GardenDatabase> {
 
 function metaOf(state: AppState, revision: number): GardenMeta {
   return {
-    // 6 or 7, by what the garden holds (validateGarden's storedVersionOf).
-    version: storedVersionOf(state),
+    // Every garden is stored at the newest version (storedVersionOf).
+    version: storedVersionOf(),
     profile: state.profile,
     seeds: state.seeds,
     nectar: state.nectar,
@@ -900,8 +911,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     if (migrated) {
       persistedRevision = revisionOf(meta)
       // Behind the newest version that brought a collection, that is: a
-      // garden kept at 6 because it needs no more (storedVersionOf) is not
-      // behind, and is not rewritten whole on every launch.
+      // garden already there is not rewritten whole on every launch.
       const behind =
         typeof storedVersion === 'number' &&
         storedVersion < LATEST_COLLECTION_VERSION
@@ -1158,7 +1168,9 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     },
 
     /**
-     * Every record in the database, as stored, for safe mode.
+     * Every record in the database, as stored, for safe mode. A sighting's
+     * photo is a Blob here: whoever writes this to a file writes it as text
+     * first (lib/sightingPhotos).
      *
      * Opened without a version so it reads whatever is there without
      * upgrading anything: this runs when something has already gone wrong,

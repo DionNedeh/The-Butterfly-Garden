@@ -574,8 +574,11 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  /** 6, or 7 once the garden holds a jar a version 6 build would drop (storedVersionOf). */
-  version: 6 | 7
+  /**
+   * The version every garden is stored and exported at (storedVersionOf):
+   * 8, since the field book's sightings, which no earlier build knows.
+   */
+  version: 8
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -599,6 +602,38 @@ export interface AppState {
   selectedFlightPatternId: FlightPatternId
   jars: JarInstance[]
   jarPlacements: JarPlacement[]
+  /**
+   * Real butterflies and plants the gardener noticed out in the world, in the
+   * order they were written down (lib/sightings). At most MAX_SIGHTINGS, and
+   * at most MAX_SIGHTING_PHOTOS of them with a photo (lib/customBackdrops).
+   */
+  sightings: Sighting[]
+}
+
+/** What a sighting names: a butterfly or a plant from the field guide. */
+export type SightingSubject =
+  | { kind: 'butterfly'; speciesId: string }
+  | { kind: 'plant'; plantId: string }
+
+/**
+ * A butterfly or plant seen in the wild and written in the field book. It
+ * earns nothing: no Sunlight, Nectar or Stardust. Noticing is the point.
+ */
+export type Sighting = SightingSubject & {
+  id: string
+  /** The local day it was seen (YYYY-MM-DD), never after the day it was written down. */
+  date: string
+  /** A few words, as the gardener wrote them. Absent rather than empty. */
+  note?: string
+  /**
+   * A photo, redrawn and re-encoded on this device as a personal image is
+   * (lib/imageImport), which leaves behind everything the camera wrote into
+   * the file, where it was taken included. Kept as a Blob, so fifty photos
+   * are not held in memory as text; a backup carries it as base64
+   * (lib/sightingPhotos), as it carries a personal image.
+   */
+  photo?: Blob
+  createdAt: string
 }
 
 export interface SpeciesDefinition {
@@ -630,6 +665,8 @@ export type ReflectionPromptFamily =
   | 'processing'
   | 'rest'
   | 'connection'
+  /** Good things noticed in nature, after McEwan et al. 2019. */
+  | 'nature'
   | 'free'
 
 export interface ReflectionPrompt {

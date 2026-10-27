@@ -4,8 +4,10 @@ import {
   inspectImportedState,
 } from '../repository/gardenRepository'
 import { readBackupFile } from '../lib/backupFile'
+import { hasPictures } from '../lib/customBackdrops'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
+import { storedCopy } from '../lib/storedCopy'
 
 /**
  * What the gardener sees when the app itself could not draw.
@@ -23,11 +25,10 @@ export function SafeMode({ error }: { error: Error }) {
   const downloadStored = async () => {
     setNote(undefined)
     try {
-      const raw = await gardenRepository.readRaw()
       const outcome = await saveTextFile(
         datedFileName('everything-stored'),
         'application/json',
-        JSON.stringify(raw, null, 2),
+        await storedCopy(),
       )
       if (outcome === 'cancelled') {
         setNote('Nothing was saved.')
@@ -67,9 +68,9 @@ export function SafeMode({ error }: { error: Error }) {
         )
         return
       }
-      if (inspection.state.customBackdrops.length) {
-        const { verifyBackdropImages } = await import('../lib/imageImport')
-        await verifyBackdropImages(inspection.state.customBackdrops)
+      if (hasPictures(inspection.state)) {
+        const { verifyGardenImages } = await import('../lib/imageImport')
+        await verifyGardenImages(inspection.state)
       }
       await gardenRepository.replace(inspection.state, { snapshot: true })
       reloadApp()

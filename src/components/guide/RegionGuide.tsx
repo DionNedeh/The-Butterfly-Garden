@@ -3,6 +3,7 @@ import { namesMarked } from '../../lib/regionGuide'
 import { regionName } from '../../lib/regionMarks'
 import { listed } from '../../lib/plural'
 import type { RegionId } from '../../types'
+import { NatureProjects } from '../sightings/NatureProjects'
 
 /**
  * "Butterflies where you live": the Guide's section for the region chosen in
@@ -69,6 +70,7 @@ export function RegionGuide({ region }: { region: RegionId }) {
         </p>
       )}
       <p className="checked-with">{tips.credit}</p>
+      <NatureProjects region={region} />
     </section>
   )
 }
