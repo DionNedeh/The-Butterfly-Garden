@@ -420,29 +420,40 @@ describe('room for every butterfly', () => {
   })
 
   it('keeps every lane inside the scene, its aura and the title clear', () => {
+    // Thousands of keyframes: gathered and checked once, since an expect per
+    // coordinate made this one test take seconds on a busy machine.
+    const strays: string[] = []
     for (const pattern of flightPatterns) {
       for (const scene of [GARDEN, GARDEN_PHONE, SCENE, PHONE]) {
         for (const aloft of [2, 3, 4, 7, 12]) {
           for (const calm of [false, true]) {
             const margin = scene.auraMargin ?? 0
             const top = scene.safeTop ?? 0
+            const at = `${pattern.id} ${scene.bounds.width}x${scene.bounds.height} aloft ${aloft}${calm ? ' calm' : ''}`
             for (const generated of flock(pattern.id, { ...scene, calm }, undefined, aloft)) {
               const halfWidth = (scene.sprite.width * generated.scale) / 2 + margin
               const halfHeight = (scene.sprite.height * generated.scale) / 2 + margin
               for (const frame of generated.keyframes) {
-                expect(frame.x).toBeGreaterThanOrEqual(halfWidth - 0.01)
-                expect(frame.x).toBeLessThanOrEqual(scene.bounds.width - halfWidth + 0.01)
-                expect(frame.y).toBeGreaterThanOrEqual(top + halfHeight - 0.01)
-                expect(frame.y).toBeLessThanOrEqual(scene.bounds.height - halfHeight + 0.01)
+                if (
+                  frame.x < halfWidth - 0.01 ||
+                  frame.x > scene.bounds.width - halfWidth + 0.01 ||
+                  frame.y < top + halfHeight - 0.01 ||
+                  frame.y > scene.bounds.height - halfHeight + 0.01
+                ) {
+                  strays.push(`${at}: (${frame.x}, ${frame.y})`)
+                }
               }
               const first = generated.keyframes[0]
               const last = generated.keyframes[generated.keyframes.length - 1]
-              expect([last.x, last.y, last.facing]).toEqual([first.x, first.y, first.facing])
+              if (last.x !== first.x || last.y !== first.y || last.facing !== first.facing) {
+                strays.push(`${at}: the loop does not close`)
+              }
             }
           }
         }
       }
     }
+    expect(strays).toEqual([])
   })
 
   it('still rests a full garden apart when motion is switched off', () => {

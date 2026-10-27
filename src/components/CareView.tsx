@@ -26,6 +26,7 @@ import { NameArrival } from './NameArrival'
 import { CompanionFlight } from './CompanionFlight'
 import { CompanionStory } from './care/CompanionStory'
 import { OutfitLooks } from './care/OutfitLooks'
+import { UndoToast, type UndoOffer } from './UndoToast'
 // Only Care draws these, so they arrive with it rather than with the
 // stylesheet every page waits for.
 import './care/care.css'
@@ -101,6 +102,7 @@ export function CareView({
   // offered a name, so the portrait shows the companion the offer is about.
   const [selectedId, setSelectedId] = useState<string | undefined>(openOn ?? arrival?.id)
   const [nameDraft, setNameDraft] = useState<string>()
+  const [undoOffer, setUndoOffer] = useState<UndoOffer>()
   const selected =
     ordered.find((creature) => creature.id === selectedId) ?? ordered[0]
 
@@ -479,6 +481,7 @@ export function CareView({
           onRename={onRenamePreset}
           onDelete={onDeletePreset}
           onRestore={onRestorePreset}
+          onOfferUndo={setUndoOffer}
         />
       </section>
 
@@ -491,6 +494,8 @@ export function CareView({
           <p>{definition.fact}</p>
         </section>
       )}
+      {/* The page's own child, so it is fixed to the screen (see OutfitLooks). */}
+      <UndoToast offer={undoOffer} onDone={() => setUndoOffer(undefined)} />
     </div>
   )
 }

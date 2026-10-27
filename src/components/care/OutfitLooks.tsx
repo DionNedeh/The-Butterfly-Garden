@@ -5,7 +5,7 @@ import { presetFor, presetSaveProblem, suggestPresetName } from '../../lib/outfi
 import { listed } from '../../lib/plural'
 import type { WearLookResult } from '../../lib/wardrobe'
 import type { CreatureInstance, OutfitPreset } from '../../types'
-import { UndoToast, type UndoOffer } from '../UndoToast'
+import type { UndoOffer } from '../UndoToast'
 import { describeLookWorn } from './lookMessage'
 
 /** The pieces of a look, by name, in the wardrobe's slot order. */
@@ -46,6 +46,7 @@ export function OutfitLooks({
   onRename,
   onDelete,
   onRestore,
+  onOfferUndo,
 }: {
   creature: CreatureInstance
   presets: readonly OutfitPreset[]
@@ -54,12 +55,17 @@ export function OutfitLooks({
   onRename: (presetId: string, name: string) => void
   onDelete: (presetId: string) => void
   onRestore: (preset: OutfitPreset, index: number) => void
+  /**
+   * Show an Undo offer. The page draws it, not this card: the card is
+   * transformed by its entrance animation, which would pin a fixed toast
+   * to the card rather than to the screen.
+   */
+  onOfferUndo: (offer: UndoOffer) => void
 }) {
   const id = useId()
   const [editing, setEditing] = useState<Editing>()
   // Said for one companion only: choosing another starts quiet.
   const [said, setSaid] = useState<{ creatureId: string; text: string }>()
-  const [undoOffer, setUndoOffer] = useState<UndoOffer>()
   const root = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const saveButton = useRef<HTMLButtonElement>(null)
@@ -273,7 +279,7 @@ export function OutfitLooks({
                       onClick={() => {
                         onDelete(preset.id)
                         pendingFocus.current = { to: 'heading' }
-                        setUndoOffer({
+                        onOfferUndo({
                           message: `${preset.name} deleted.`,
                           undo: () => {
                             // The Undo button goes with the toast; focus goes
@@ -297,7 +303,6 @@ export function OutfitLooks({
       <p className="look-status" role="status">
         {said?.creatureId === creature.id ? said.text : ''}
       </p>
-      <UndoToast offer={undoOffer} onDone={() => setUndoOffer(undefined)} />
     </div>
   )
 }

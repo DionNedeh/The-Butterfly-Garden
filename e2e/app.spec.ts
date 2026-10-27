@@ -1597,12 +1597,32 @@ test('a look saved on one companion is worn by another, and their story kept', a
   await expect(page.locator('.look-status')).toHaveText('Fern is wearing Little cap.')
 
   await page.getByText('Fern’s story').click()
-  await expect(page.getByText('Outfits worn')).toBeVisible()
+  const worn = page.locator('.story-list div', { hasText: 'Outfits worn' }).locator('dd')
+  await expect(worn).toHaveText('Sprout Cap')
   expect(await seriousViolations(page, 'Care with saved looks and a story')).toEqual([])
 
-  // Kept: the look is still there after a reload, and the shop knows who
-  // wears the cap and what fits whom.
+  // Kept: the look is still there after a reload, Fern's diary has the cap
+  // written down (not only worn now), and the shop knows who wears the cap
+  // and what fits whom.
   await reloadAfterSave(page)
+  const fernsDiary = await page.evaluate(
+    () =>
+      new Promise<unknown>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const get = db.transaction('creatures', 'readonly').objectStore('creatures').get('current')
+          get.onsuccess = () => {
+            db.close()
+            const creatures = get.result as Array<{ id: string; outfitsWorn?: string[] }>
+            resolve(creatures.find((creature) => creature.id === 'fern')?.outfitsWorn)
+          }
+          get.onerror = () => reject(get.error)
+        }
+      }),
+  )
+  expect(fernsDiary).toEqual(['sprout-cap'])
   await goTo(page, 'Care')
   await expect(page.getByRole('button', { name: 'Wear Little cap' })).toBeVisible()
   await goTo(page, 'Shop')

@@ -399,5 +399,13 @@ describe('the bond and the companion’s story', () => {
     expect(handlers.onSavePreset).toHaveBeenCalledWith(sol.id, 'Sol’s look')
     await user.click(screen.getByRole('button', { name: 'Wear Bow' }))
     expect(handlers.onWearPreset).toHaveBeenCalledWith(sol.id, 'bow')
+
+    // Deleting offers Undo from the page itself, not from inside the card,
+    // whose entrance animation would pin a fixed toast to it.
+    await user.click(screen.getByRole('button', { name: 'Delete Bow' }))
+    expect(handlers.onDeletePreset).toHaveBeenCalledWith('bow')
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    expect(undo.closest('.card')).toBeNull()
+    expect(undo.closest('.care-view')).not.toBeNull()
   })
 })

@@ -12,7 +12,7 @@ import {
 import { createInitialState } from '../../lib/progression'
 import { equipOutfitItem, wearOutfitPreset } from '../../lib/wardrobe'
 import type { AppState, CreatureInstance, OutfitPreset } from '../../types'
-import { UNDO_MS } from '../UndoToast'
+import { UNDO_MS, UndoToast, type UndoOffer } from '../UndoToast'
 import { OutfitLooks } from './OutfitLooks'
 
 /**
@@ -34,6 +34,8 @@ function garden(looks?: OutfitPreset[]): AppState {
 /** The saved looks over a garden that really changes, as Care's would. */
 function Looks({ initial, creatureId = 'sol' }: { initial: AppState; creatureId?: string }) {
   const [state, setState] = useState(initial)
+  // Care draws the Undo offer, outside the transformed card.
+  const [offer, setOffer] = useState<UndoOffer>()
   const creature = state.creatures.find((entry) => entry.id === creatureId)!
   return (
     <>
@@ -54,7 +56,9 @@ function Looks({ initial, creatureId = 'sol' }: { initial: AppState; creatureId?
         onRestore={(preset, index) =>
           setState((current) => restoreOutfitPreset(current, preset, index))
         }
+        onOfferUndo={setOffer}
       />
+      <UndoToast offer={offer} onDone={() => setOffer(undefined)} />
       <output data-testid="outfit">{JSON.stringify(creature.outfit)}</output>
     </>
   )
@@ -103,6 +107,7 @@ describe('saving a look', () => {
       onRename: vi.fn(),
       onDelete: vi.fn(),
       onRestore: vi.fn(),
+      onOfferUndo: vi.fn(),
     }
     const { rerender } = render(<OutfitLooks creature={sol} {...props} />)
     await user.click(screen.getByRole('button', { name: 'Save this look' }))

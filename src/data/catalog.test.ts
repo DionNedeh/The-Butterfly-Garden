@@ -5,7 +5,6 @@ import { observations, plants, species } from './content'
 import { flightPatterns } from './flightPatterns'
 import { jarCharacters, jarColors } from './jars'
 import { ambientTracks } from './ambientTracks'
-import { closetSlots } from './closet'
 
 /**
  * The catalogs are plain data that several screens cross-reference by id. A
@@ -85,16 +84,6 @@ describe('content catalogs', () => {
       (item) => item.kind === 'cosmetic' && (!item.slot || !item.stages?.length),
     )
     expect(broken.map((item) => item.id)).toEqual([])
-  })
-
-  it('lists every cosmetic in the closet storage checks, in its own slot', () => {
-    // Storage checks a stored outfit against the closet list rather than the
-    // whole shop (see data/closet). A piece missing from it would be dropped
-    // from every look and diary on the next load.
-    const cosmetics = Object.fromEntries(
-      shopItems.filter((item) => item.kind === 'cosmetic').map((item) => [item.id, item.slot]),
-    )
-    expect(closetSlots).toEqual(cosmetics)
   })
 
   it('prices ordinary items and leaves Garden Pass content unpriced', () => {

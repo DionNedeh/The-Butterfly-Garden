@@ -1,7 +1,7 @@
 import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
 import { getCareAction } from '../data/careActions'
-import { closetSlots } from '../data/closet'
+import { getShopItem } from '../data/shopItems'
 import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, presetName } from '../lib/companionDiary'
 import { jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
@@ -597,8 +597,10 @@ function checkCareCounts(value: unknown): Record<string, number> | undefined {
 
 /** Whether an id names a piece the closet could hold, in this slot if one is given. */
 function isCosmetic(itemId: unknown, slot?: string): itemId is string {
-  if (typeof itemId !== 'string' || !Object.hasOwn(closetSlots, itemId)) return false
-  return !slot || closetSlots[itemId] === slot
+  if (typeof itemId !== 'string') return false
+  const item = getShopItem(itemId)
+  if (item?.kind !== 'cosmetic') return false
+  return !slot || item.slot === slot
 }
 
 /** Known cosmetics, each once, in the order worn, no more than the diary keeps. */
