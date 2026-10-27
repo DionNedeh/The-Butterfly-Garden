@@ -11,6 +11,7 @@ vi.mock('../lib/native', () => ({ saveTextDocument: vi.fn() }))
  */
 async function renderAndroidSettings(
   state = createInitialState('Tester', 'Test Garden'),
+  extra: { onChooseTheme?: () => void; onSetTextSize?: () => void } = {},
 ) {
   vi.stubEnv('VITE_PLATFORM', 'android')
   vi.resetModules()
@@ -31,6 +32,7 @@ async function renderAndroidSettings(
         Promise.resolve({ ok: true, message: 'Restored.' }),
       )}
       onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
+      {...extra}
     />,
   )
   return { save: vi.mocked(native.saveTextDocument), onExportGarden, onBackupMade }
@@ -97,6 +99,14 @@ describe('SettingsView in the Android app', () => {
     await user.click(screen.getByRole('button', { name: 'Save a backup' }))
     expect(
       await screen.findByText(/could not be saved there/i),
+    ).toBeInTheDocument()
+  })
+
+  it('speaks of the phone when following its dark setting, and of its own text size', async () => {
+    await renderAndroidSettings(undefined, { onChooseTheme: vi.fn(), onSetTextSize: vi.fn() })
+    expect(screen.getByText('Night whenever this phone is set to dark.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Your phone’s own text size applies as well, so the two add up.'),
     ).toBeInTheDocument()
   })
 

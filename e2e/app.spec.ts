@@ -520,6 +520,72 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   )
 })
 
+test('follows the device, and the switch in the header stops following', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const shell = page.locator('.app-shell')
+  const themes = page.getByRole('group', { name: 'Theme' })
+  await themes.getByRole('radio', { name: /^Follow device/ }).check()
+  await expect(shell).toHaveClass(/theme-sunlight/)
+
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await expect(shell).toHaveClass(/theme-night/)
+  // The browser's own bars match the garden, not only the device.
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    'content',
+    '#07131f',
+  )
+  await page
+    .getByRole('button', { name: 'Switch to sunlight mode and stop following your device' })
+    .click()
+  await expect(shell).toHaveClass(/theme-sunlight/)
+  await expect(themes.getByRole('radio', { name: /^Sunlight/ })).toBeChecked()
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    'content',
+    '#f7f3e8',
+  )
+})
+
+test('sets a larger text size that the header and the dock make room for', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const rootSize = () => page.evaluate(() => document.documentElement.style.fontSize)
+  const sizes = page.getByRole('group', { name: 'Text size' })
+  await sizes.getByRole('radio', { name: /^Largest/ }).check()
+  await expect.poll(rootSize).toBe('125%')
+  expect(await seriousViolations(page, 'Settings at the largest text size')).toEqual([])
+
+  await goTo(page, 'Garden')
+  // The header's pills wrap at its end rather than sliding over the icon.
+  const icon = await page.locator('.brand img').boundingBox()
+  const actions = await page.locator('.header-actions').boundingBox()
+  expect(actions!.x).toBeGreaterThanOrEqual(icon!.x + icon!.width - 1)
+  // Every label in the dock stays inside its own tab.
+  const spilling = await page
+    .locator('.bottom-nav button:visible')
+    .evaluateAll((buttons) =>
+      buttons
+        .filter((button) => {
+          const label = button.querySelector('span')?.getBoundingClientRect()
+          const tab = button.getBoundingClientRect()
+          return label !== undefined && (label.left < tab.left - 0.5 || label.right > tab.right + 0.5)
+        })
+        .map((button) => button.textContent),
+    )
+  expect(spilling).toEqual([])
+  expect(await seriousViolations(page, 'The garden at the largest text size')).toEqual([])
+
+  // Back to the usual size, which leaves the root as it always was.
+  await goTo(page, 'Settings')
+  await sizes.getByRole('radio', { name: /^Comfortable/ }).check()
+  await expect.poll(rootSize).toBe('')
+})
+
 test('guide explains how plants grow and when eggs appear', async ({
   page,
 }) => {
@@ -1088,6 +1154,34 @@ test.describe('rounding out the day', () => {
     await reloadAfterSave(page)
     await goTo(page, 'Journal')
     await expect(page.getByText('Walked to the river.')).toBeVisible()
+  })
+
+  test('ends by fading the garden to night, and lets the sound fade', async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date('2026-09-09T01:00:00.000Z'))
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await page.getByRole('button', { name: /^Turn on / }).click()
+
+    await goTo(page, 'Today')
+    await page.getByRole('button', { name: 'Begin' }).click()
+    await page.getByRole('button', { name: 'Continue' }).click()
+    for (let step = 0; step < 4; step += 1) {
+      await page.getByRole('button', { name: 'Skip this one' }).click()
+    }
+    // The ordinary finish is still the first choice.
+    const finishes = page.locator('.recap-finish button')
+    await expect(finishes.first()).toHaveText('Collect Moonlight')
+    expect(await seriousViolations(page, 'The end of the recap')).toEqual([])
+    await page.getByRole('button', { name: 'Fade the garden to night and close' }).click()
+
+    // Collected, night, and back in the garden with focus on its name.
+    await expect(page.locator('#garden-title')).toBeFocused()
+    await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
+    await expect(page.locator('.stardust-wallet strong')).toHaveText('1')
+    await goTo(page, 'Settings')
+    await expect(page.getByText(/The sound fades away at/)).toBeVisible()
   })
 })
 

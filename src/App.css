@@ -2189,7 +2189,8 @@
   }
 
   .mood-grid {
-    grid-template-columns: repeat(5, minmax(100px, 1fr));
+    /* rem, so a larger text size widens the weathers with their names. */
+    grid-template-columns: repeat(5, minmax(6.25rem, 1fr));
     overflow-x: auto;
     /* Keep selected rings and hover lift inside the scrollport on every edge. */
     padding-block: 0.4rem;
@@ -2335,7 +2336,7 @@
   }
 
   .mood-grid {
-    grid-template-columns: repeat(5, 95px);
+    grid-template-columns: repeat(5, 5.95rem);
   }
 
   .mood-button {
@@ -2981,6 +2982,11 @@
 
 .header-actions {
   gap: 0.45rem;
+  /* With larger text (Settings → Text size) the pills can outgrow a phone's
+     header; they wrap to a second row at the end rather than sliding over
+     the garden's icon. At the usual size they fit on one. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 @media (max-width: 1280px) {

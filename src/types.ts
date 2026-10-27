@@ -46,6 +46,13 @@ export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
 export type AppearanceTheme = 'sunlight' | 'night'
+/**
+ * What the theme follows in place of the gardener's own choice: the device's
+ * dark setting, or the gardener's evening (lib/theme).
+ */
+export type ThemeFollows = 'device' | 'evening'
+/** A text size larger than the usual one (lib/textSize). */
+export type TextSize = 'larger' | 'largest'
 export type AmbientTrackId = 'garden-chimes' | 'garden' | 'piano-music'
 export type FlightPatternId =
   | 'gentle-drift'
@@ -108,7 +115,18 @@ export interface Profile {
   ambientSound?: boolean
   /** Soundscape played while ambient sound is enabled. */
   ambientTrack?: AmbientTrackId
+  /**
+   * The theme chosen by hand. While `themeFollows` is set it waits underneath,
+   * so an older build, which follows nothing, still opens on this.
+   */
   theme?: AppearanceTheme
+  /**
+   * Follow the device's dark setting, or the gardener's evening, instead of
+   * `theme`. Optional: without it the theme is the one chosen by hand.
+   */
+  themeFollows?: ThemeFollows
+  /** Text larger than usual. Optional: without it, the usual size. */
+  textSize?: TextSize
   selectedBackdropId?: GardenBackdropId
   unlockedBackdropIds?: GardenBackdropId[]
   /**

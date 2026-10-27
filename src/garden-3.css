@@ -181,6 +181,17 @@ textarea:focus {
   border: 1px solid #c0c8ac;
   box-shadow: 0 14px 35px #203c2920;
   isolation: isolate;
+  /* Room for the row of plants (App.css .garden-plants), which is placed
+     over the foot of the scene: a long garden name, or larger text, grows
+     the scene instead of running under the plants. The plants and the
+     flight space are positioned against the padding box, so they do not
+     move; at the usual size the heading never reaches this far. */
+  padding-bottom: 180px;
+}
+@media (max-width: 620px) {
+  .garden-hero {
+    padding-bottom: 150px;
+  }
 }
 .garden-hero::before {
   background: linear-gradient(
@@ -1232,8 +1243,12 @@ textarea:focus {
   .bottom-nav .more-tab {
     display: grid;
   }
+  /* Five labels share a phone's width. With larger text "Journal" would
+     outgrow its tab, so the tabs give up most of their side padding, and on
+     the narrowest phones the label stops growing before it would overflow. */
   .bottom-nav button {
-    font-size: 0.7rem;
+    font-size: min(0.7rem, 3.6vw);
+    padding-inline: 0.15rem;
   }
   /* Just above the one-row dock rather than the two-row one. */
   .undo-region {

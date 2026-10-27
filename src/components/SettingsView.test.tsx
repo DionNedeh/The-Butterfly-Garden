@@ -131,6 +131,83 @@ describe('SettingsView garden motion', () => {
   })
 })
 
+describe('SettingsView theme and text size', () => {
+  /** A garden with these profile choices. */
+  function gardenWith(profile: Partial<NonNullable<AppState['profile']>>): AppState {
+    const seed = createInitialState('Tester', 'Test Garden')
+    return { ...seed, profile: { ...seed.profile!, ...profile } }
+  }
+
+  it('offers four themes, each named by its visible label, and chooses one at once', async () => {
+    const user = userEvent.setup()
+    const { onChooseTheme } = renderSettings(undefined, { onChooseTheme: vi.fn() })
+    const group = screen.getByRole('group', { name: 'Theme' })
+    const radios = within(group).getAllByRole('radio')
+    expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual([
+      'sunlight',
+      'night',
+      'device',
+      'evening',
+    ])
+    expect(within(group).getByRole('radio', { name: /^Sunlight/ })).toBeChecked()
+    expect(within(group).getByRole('radio', { name: /^Night/ })).not.toBeChecked()
+
+    await user.click(within(group).getByRole('radio', { name: /^Follow device/ }))
+    expect(onChooseTheme).toHaveBeenLastCalledWith('device')
+    await user.click(within(group).getByRole('radio', { name: /^Follow evening/ }))
+    expect(onChooseTheme).toHaveBeenLastCalledWith('evening')
+    await user.click(within(group).getByRole('radio', { name: /^Night/ }))
+    expect(onChooseTheme).toHaveBeenLastCalledWith('night')
+  })
+
+  it('shows what the garden follows, and when a followed evening is night', () => {
+    renderSettings(undefined, {
+      onChooseTheme: vi.fn(),
+      state: gardenWith({ theme: 'night', themeFollows: 'evening', recapOpensHour: 21 }),
+    })
+    const group = screen.getByRole('group', { name: 'Theme' })
+    expect(within(group).getByRole('radio', { name: /^Follow evening/ })).toBeChecked()
+    // The hand-chosen night waits underneath, but is not what is chosen now.
+    expect(within(group).getByRole('radio', { name: /^Night/ })).not.toBeChecked()
+    expect(
+      within(group).getByText(/^Night from 9\sPM, when your evening starts, until 6\sAM\.$/),
+    ).toBeInTheDocument()
+    expect(within(group).getByText('Night whenever this device is set to dark.')).toBeInTheDocument()
+  })
+
+  it('offers three text sizes, each shown at its own size, and sets one at once', async () => {
+    const user = userEvent.setup()
+    const { onSetTextSize } = renderSettings(undefined, {
+      onSetTextSize: vi.fn(),
+      state: gardenWith({ textSize: 'larger' }),
+    })
+    const group = screen.getByRole('group', { name: 'Text size' })
+    expect(within(group).getAllByRole('radio')).toHaveLength(3)
+    expect(within(group).getByRole('radio', { name: /^Larger/ })).toBeChecked()
+    expect(within(group).getByText('Largest').style.fontSize).toBe('1.25em')
+
+    await user.click(within(group).getByRole('radio', { name: /^Largest/ }))
+    expect(onSetTextSize).toHaveBeenLastCalledWith('largest')
+    // Comfortable is the usual size, which stores nothing.
+    await user.click(within(group).getByRole('radio', { name: /^Comfortable/ }))
+    expect(onSetTextSize).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('starts at Comfortable', () => {
+    renderSettings(undefined, { onSetTextSize: vi.fn() })
+    expect(screen.getByRole('radio', { name: /^Comfortable/ })).toBeChecked()
+    // The phone's own text size is the Android app's to mention.
+    expect(screen.queryByText(/own text size/)).not.toBeInTheDocument()
+    // Only the text size was offered here, so there is no theme group.
+    expect(screen.queryByRole('group', { name: 'Theme' })).not.toBeInTheDocument()
+  })
+
+  it('has no card for the look when neither can be changed', () => {
+    renderSettings()
+    expect(screen.queryByRole('region', { name: 'How the garden looks' })).not.toBeInTheDocument()
+  })
+})
+
 describe('SettingsView rhythm, sound and support', () => {
   it('hides and shows day counts at once', async () => {
     const user = userEvent.setup()

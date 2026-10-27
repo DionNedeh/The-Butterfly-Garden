@@ -15,6 +15,7 @@ import { hasGardenPassFeature } from '../lib/gardenPass'
 import { buyJar, placeJar, removeJarPlacement } from '../lib/jars'
 import { performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
+import type { ThemeChoice } from '../lib/theme'
 import { removePlant } from '../lib/plantManagement'
 import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
@@ -24,6 +25,7 @@ import { buyShopItem, equipOutfitItem, unequipOutfitSlot } from '../lib/wardrobe
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
   AmbientTrackId,
+  AppearanceTheme,
   AppState,
   CustomBackdrop,
   FlightPatternId,
@@ -36,6 +38,7 @@ import type {
   OutfitSlot,
   RecapEntry,
   ReflectionEntry,
+  TextSize,
 } from '../types'
 import { useMediaSaves, type MediaResult } from './useMediaSaves'
 import { usePersistence } from './usePersistence'
@@ -286,7 +289,13 @@ export function useGardenState() {
         update((current) => act.setRecapHours(current, hours)),
       selectAmbientTrack: (ambientTrack: AmbientTrackId) =>
         update((current) => act.selectAmbientTrack(current, ambientTrack)),
-      toggleTheme: () => update(act.toggleTheme),
+      /** The header's switch, from the theme `showing` (it may be followed). */
+      toggleTheme: (showing?: AppearanceTheme) =>
+        update((current) => act.toggleTheme(current, showing)),
+      chooseTheme: (choice: ThemeChoice) =>
+        update((current) => act.chooseTheme(current, choice)),
+      setTextSize: (size: TextSize | undefined) =>
+        update((current) => act.setTextSize(current, size)),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**
