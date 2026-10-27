@@ -112,6 +112,13 @@ describe('the sighting form', () => {
     expect(within(dialog).getByText(/Nothing about where it was taken is kept/)).toBeInTheDocument()
   })
 
+  it('holds the auto-lock while it is open, as nothing in it is kept as a draft', () => {
+    // components/lock/LockWatch waits on what is marked so: locking would
+    // take the form, and what it holds, away.
+    const { dialog } = renderForm()
+    expect(dialog).toHaveAttribute('data-auto-lock-waits')
+  })
+
   it('logs a butterfly from the list, today, with a few words', async () => {
     const { user, onSave, onClose } = renderForm()
     await user.click(screen.getByRole('radio', { name: 'Painted Lady' }))

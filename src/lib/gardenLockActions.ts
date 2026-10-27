@@ -1,4 +1,4 @@
-import { SYNC_CHANNEL } from '../hooks/usePersistence'
+import { SYNC_CHANNEL, type SyncMessage } from '../hooks/usePersistence'
 import { gardenRepository } from '../repository/gardenRepository'
 import { flushDrafts, resetDrafts } from './drafts'
 import {
@@ -39,11 +39,14 @@ async function relock(...change: Parameters<typeof gardenRepository.relock>): Pr
   }
 }
 
-/** Tell the other tabs the lock changed, or (`now`) that the garden was just locked. */
-function tellOtherTabs(now = false) {
+/**
+ * Tell the other tabs the lock changed (by default), that the garden was just
+ * locked, or that the auto-lock was chosen anew.
+ */
+function tellOtherTabs(message: SyncMessage = { type: 'garden-lock' }) {
   if (typeof BroadcastChannel === 'undefined') return
   const channel = new BroadcastChannel(SYNC_CHANNEL)
-  channel.postMessage(now ? { type: 'garden-lock', now: true } : { type: 'garden-lock' })
+  channel.postMessage(message)
   channel.close()
 }
 
@@ -160,7 +163,7 @@ export async function lockGarden(everywhere: boolean): Promise<void> {
   await flushDrafts()
   await gardenRepository.lockNow()
   resetDrafts()
-  if (everywhere) tellOtherTabs(true)
+  if (everywhere) tellOtherTabs({ type: 'garden-lock', now: true })
 }
 
 /**
@@ -265,9 +268,14 @@ function autoLockOf(record: LockRecord | undefined): AutoLockMinutes | undefined
   return isAutoLockMinutes(record?.autoLockMinutes) ? record.autoLockMinutes : undefined
 }
 
-/** Lock by itself after `minutes` hidden, or never. */
+/**
+ * Lock by itself after `minutes` hidden, or never: here, and in every other
+ * tab with the garden open, which takes the new time at once
+ * (components/lock/LockWatch).
+ */
 export async function chooseAutoLock(minutes: AutoLockMinutes | undefined): Promise<void> {
   const record = await storedLock()
   await gardenRepository.writeLock(withAutoLock(record, minutes), record)
   setAutoLockMinutes(minutes)
+  tellOtherTabs({ type: 'garden-auto-lock' })
 }

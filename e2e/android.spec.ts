@@ -531,6 +531,85 @@ test('a locked garden opens to the lock screen, where the back gesture leaves th
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused(deriving)
 })
 
+/** Android sending the app to the background, or bringing it back, as Capacitor reports it. */
+async function setAppActive(page: Page, isActive: boolean) {
+  await page.evaluate(async (active) => {
+    const { Capacitor } = window as unknown as { Capacitor: CapacitorGlobal }
+    await Capacitor.Plugins.App.notifyListeners('appStateChange', { isActive: active })
+  }, isActive)
+}
+
+test('the auto-lock waits while a sighting is written and its photo chosen, and locks once it is put away', async ({
+  page,
+}) => {
+  test.slow()
+  const deriving = { timeout: 30_000 }
+  const passcode = 'curlew on the estuary'
+  const note = 'Two of them over the buddleia'
+  // The page's own clock, run forward below. Until then it keeps time as usual.
+  await page.clock.install()
+  await page.goto('/')
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const lockSection = page.getByRole('region', { name: 'The garden lock' })
+  await lockSection.getByRole('button', { name: 'Lock my garden…' }).click()
+  const setup = page.getByRole('dialog', { name: 'Choose a passcode' })
+  await setup.getByLabel('Passcode', { exact: true }).fill(passcode)
+  await setup.getByLabel('The same passcode again').fill(passcode)
+  await setup.getByRole('button', { name: 'Next: your recovery code' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Save your recovery code' })
+  const words = await sheet.getByRole('listitem').allTextContents()
+  await sheet.getByRole('button', { name: 'I have kept the words' }).click()
+  const check = page.getByRole('dialog', { name: 'Check two words' })
+  for (const field of await check.getByRole('textbox', { name: /^Word \d+$/ }).all()) {
+    const label = (await field.evaluate((element) => element.closest('label')?.textContent)) ?? ''
+    await field.fill(words[Number(/\d+/.exec(label)?.[0]) - 1])
+  }
+  await check.getByRole('button', { name: 'Lock my garden' }).click()
+  await page.getByRole('dialog', { name: 'Your garden is locked' }).getByRole('button', { name: 'Done' }).click(deriving)
+  const choice = lockSection.getByRole('combobox', { name: 'Lock by itself' })
+  await choice.selectOption({ label: 'After 1 minute out of sight' })
+  await expect(lockSection.getByRole('status')).toHaveText(
+    'Saved. The garden will lock itself after that long out of sight.',
+  )
+  await expect(choice).toHaveAccessibleDescription(/^It waits while you are choosing a photo or a file/)
+
+  // A sighting begun, and a photo chosen: the picker sends the app to the
+  // background for longer than the auto-lock allows.
+  await goTo(page, 'Guide')
+  await page.getByRole('button', { name: 'Log a sighting of Monarch' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
+  await dialog.getByLabel('A few words, if you like').fill(note)
+  const chooser = page.waitForEvent('filechooser')
+  await dialog.getByLabel('Add a photo, if you like').click()
+  await setAppActive(page, false)
+  await page.clock.fastForward('05:00')
+  await setAppActive(page, true)
+  await (await chooser).setFiles('src/assets/thumb-cottage-bloom.webp')
+  const resting = page.getByRole('heading', { level: 1, name: 'Your garden is resting' })
+  await expect(dialog.getByRole('img', { name: 'Your photo for this sighting' })).toBeVisible()
+  await expect(dialog.getByLabel('A few words, if you like')).toHaveValue(note)
+  await expect(resting).toHaveCount(0)
+
+  // Still open with its words, out of sight again: it waits.
+  await setAppActive(page, false)
+  await page.clock.fastForward('05:00')
+  await setAppActive(page, true)
+  await expect(dialog.getByLabel('A few words, if you like')).toHaveValue(note)
+  await expect(resting).toHaveCount(0)
+
+  // Saved and put away, the next time out of sight counts as ever.
+  await dialog.getByRole('button', { name: 'Save sighting' }).click()
+  await expect(dialog).toHaveCount(0)
+  await setAppActive(page, false)
+  await page.clock.fastForward('01:30')
+  await setAppActive(page, true)
+  await expect(resting).toBeVisible()
+  await page.getByLabel('Passcode', { exact: true }).fill(passcode)
+  await page.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'How the garden works' })).toBeFocused(deriving)
+})
+
 test('a protected backup goes to the app’s own save screen, and says honestly when it could not be saved', async ({
   page,
 }) => {

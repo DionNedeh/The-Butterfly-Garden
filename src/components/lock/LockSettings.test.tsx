@@ -226,6 +226,10 @@ describe('while the lock is on and open', { timeout: 30_000 }, () => {
     render(<LockSettings />)
     const choice = await screen.findByRole('combobox', { name: 'Lock by itself' })
     expect(choice).toHaveValue('')
+    // What it waits for, said beside the choice (components/lock/LockWatch).
+    expect(choice).toHaveAccessibleDescription(
+      'It waits while you are choosing a photo or a file, or have a sighting, a goal or a garden image open to edit, so nothing you are part-way through is lost.',
+    )
     expect(within(choice).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Never',
       'After 1 minute out of sight',
@@ -238,6 +242,23 @@ describe('while the lock is on and open', { timeout: 30_000 }, () => {
     expect((await gardenRepository.readLock())?.autoLockMinutes).toBe(5)
     await user.selectOptions(choice, 'Never')
     await waitFor(async () => expect((await gardenRepository.readLock())?.autoLockMinutes).toBeUndefined())
+  })
+
+  it('tells other tabs when it chooses a new time, and nothing else', async () => {
+    await lockedAndOpen()
+    const other = new FakeBroadcastChannel('butterfly-garden-sync')
+    const heard: unknown[] = []
+    other.onmessage = (event) => heard.push(event.data)
+    const user = userEvent.setup()
+    render(<LockSettings />)
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Lock by itself' }),
+      'After 15 minutes out of sight',
+    )
+    await waitFor(() => expect(heard).toEqual([{ type: 'garden-auto-lock' }]))
+    // Not the lock switched, which would have every tab read the garden again.
+    expect((await gardenRepository.readLock())?.autoLockMinutes).toBe(15)
+    other.close()
   })
 
   it('changes the passcode, asking for the current one, and seals the garden under a new key', async () => {
