@@ -77,8 +77,11 @@ export function CareView({
   openOn?: string
   /** A companion's own flight pattern, or none for the garden's. */
   onChooseFlight?: (creatureId: string, patternId: FlightPatternId | undefined) => void
-  /** Open the Guide at a section, from a "What does this do?" link. */
-  onOpenGuide?: (section: string) => void
+  /**
+   * Open the Guide at a section, from a "What does this do?" link, naming
+   * the companion shown, whom the way back returns to.
+   */
+  onOpenGuide?: (section: string, companionId: string) => void
 }) {
   const ordered = useMemo(
     () =>
@@ -334,7 +337,13 @@ export function CareView({
                 {milestone.stardust} {currencyLabel('stardust')}, {milestone.nectar}{' '}
                 {currencyLabel('nectar')}
               </p>
-              {onOpenGuide && <GuideLink section="bond" topic="Bond levels" onOpen={onOpenGuide} />}
+              {onOpenGuide && (
+                <GuideLink
+                  section="bond"
+                  topic="Bond levels"
+                  onOpen={(section) => onOpenGuide(section, selected.id)}
+                />
+              )}
             </div>
 
             {isButterfly && onChooseFlight && (

@@ -342,6 +342,30 @@ describe('a plant’s jars', () => {
     })
     expect(screen.getByRole('button', { name: /^View Milkweed.*with Blue A jar$/ })).toBeInTheDocument()
   })
+
+  it('says a jar’s mark by its name, so a "!" jar and a "?" jar do not sound alike', () => {
+    const plantedAt = '2026-10-01T12:00:00.000Z'
+    renderGarden({
+      plants: [
+        { id: 'milkweed-1', plantId: 'milkweed', growth: 3, plantedAt },
+        { id: 'aster-1', plantId: 'aster', growth: 3, plantedAt },
+      ],
+      jars: [
+        { id: 'x1', character: '!', colorId: 'blue', purchasedAt: plantedAt },
+        { id: 'q1', character: '?', colorId: 'blue', purchasedAt: plantedAt },
+      ],
+      jarPlacements: [
+        { jarId: 'x1', plantId: 'milkweed-1' },
+        { jarId: 'q1', plantId: 'aster-1' },
+      ],
+    })
+    expect(
+      screen.getByRole('button', { name: /^View Milkweed.*with Blue exclamation mark jar$/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /^View Aster.*with Blue question mark jar$/ }),
+    ).toBeInTheDocument()
+  })
 })
 
 describe('the species welcomed figure', () => {

@@ -119,14 +119,50 @@ describe('every tab together', () => {
     const tab = await freshTab()
     tab.followUpdates()
     // The garden's sync channel is another channel altogether.
-    new FakeBroadcastChannel('butterfly-garden-sync').postMessage({ type: 'reload-for-update' })
+    new FakeBroadcastChannel('butterfly-garden-sync').postMessage({
+      type: 'reload-for-update',
+      from: __BUILD_ID__,
+    })
     const other = new FakeBroadcastChannel('butterfly-garden-update')
-    other.postMessage({ type: 'garden-saved' })
+    other.postMessage({ type: 'garden-saved', from: __BUILD_ID__ })
     other.postMessage(undefined)
+    other.postMessage(null)
+    other.postMessage('reload-for-update')
+    // An update message must say which build it leaves, as a name.
+    other.postMessage({ type: 'reload-for-update' })
+    other.postMessage({ type: 'reload-for-update', from: 7 })
     await Promise.resolve()
     expect(tab.reloadApp).not.toHaveBeenCalled()
-    other.postMessage({ type: 'reload-for-update' })
+    other.postMessage({ type: 'reload-for-update', from: __BUILD_ID__ })
     await vi.waitFor(() => expect(tab.reloadApp).toHaveBeenCalledOnce())
+  })
+
+  it('names the build the sender is leaving', async () => {
+    const tab = await freshTab()
+    const heard = vi.fn()
+    new FakeBroadcastChannel('butterfly-garden-update').onmessage = (event) => {
+      heard(event.data)
+    }
+    tab.reloadOtherTabs()
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ type: 'reload-for-update', from: __BUILD_ID__ })
+    expect(__BUILD_ID__).toMatch(/^[0-9a-f]{16}$/)
+  })
+
+  it('stays put when the message comes from a build this tab has already left', async () => {
+    // A tab its own service worker moved to the new version a moment ago,
+    // then told late by a tab still on the old one: it does not reload again.
+    const tab = await freshTab()
+    // Nothing to wait for, so a reload would follow within the moment below.
+    vi.spyOn(tab.gardenRepository, 'settled').mockResolvedValue()
+    tab.followUpdates()
+    const other = new FakeBroadcastChannel('butterfly-garden-update')
+    other.postMessage({ type: 'reload-for-update', from: 'a-build-before-this-one' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(tab.reloadApp).not.toHaveBeenCalled()
+    // A tab still on the build the sender is leaving does reload.
+    other.postMessage({ type: 'reload-for-update', from: __BUILD_ID__ })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(tab.reloadApp).toHaveBeenCalledOnce()
   })
 
   it('leaves the sender’s channel closed once it has spoken', async () => {

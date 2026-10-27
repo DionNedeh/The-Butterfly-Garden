@@ -9,7 +9,7 @@ import {
   hasGardenPassFeature,
 } from '../lib/gardenPass'
 import type { JarRestoreOutcome, RecycledJar, RecycleOutcome } from '../lib/jars'
-import { jarName as nameJar } from '../lib/jarStacks'
+import { jarName as nameJar, jarSpokenName } from '../lib/jars'
 import { stageLabels, STAGE_ORDER } from '../lib/lifecycle'
 import { fitsCreature, wearersByItem } from '../lib/wardrobe'
 import type { PurchaseOutcome } from '../lib/purchase'
@@ -29,10 +29,11 @@ import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { GardenPassPanel } from './shop/GardenPassPanel'
 import { FilterSheet } from './shop/FilterSheet'
 import { PurchaseToast, type PurchaseNote } from './shop/PurchaseToast'
-import { purchaseMessage, type PurchaseSubject } from './shop/purchaseMessage'
+import { purchaseWords, type PurchaseSubject } from './shop/purchaseMessage'
 import { JarCharacterPicker } from './shop/JarCharacterPicker'
 import { JarShelf } from './shop/JarShelf'
 import { UndoToast, type UndoOffer } from './UndoToast'
+import { JarCharacter, Spoken } from './Spoken'
 import { motionPreference } from '../lib/motion'
 // Only the shop draws these, so they arrive with it rather than with the
 // stylesheet every page waits for.
@@ -179,10 +180,13 @@ export function ShopView({
     setSheetOpen(false)
     filterButton.current?.focus()
   }
-  /** Words in the shop's toast, in place of any undo on offer. */
-  const say = (text: string) => {
+  /**
+   * Words in the shop's toast, in place of any undo on offer, and the same
+   * words as a screen reader should say them where they differ.
+   */
+  const say = (text: string, spoken?: string) => {
     setUndo(undefined)
-    setNote((previous) => ({ text, key: (previous?.key ?? 0) + 1 }))
+    setNote((previous) => ({ text, spoken, key: (previous?.key ?? 0) + 1 }))
   }
   /**
    * Say what a purchase came to, in the words of the reducer's outcome.
@@ -191,8 +195,10 @@ export function ShopView({
    * it still looks unavailable, but it keeps focus when a purchase empties
    * the purse, and pressing it says why, and by how much, instead of nothing.
    */
-  const tell = (outcome: PurchaseOutcome, subject: PurchaseSubject) =>
-    say(purchaseMessage(outcome, subject))
+  const tell = (outcome: PurchaseOutcome, subject: PurchaseSubject) => {
+    const { text, spoken } = purchaseWords(outcome, subject)
+    say(text, spoken)
+  }
   const offerUndo = (offer: UndoOffer) => {
     setNote(undefined)
     setUndo(offer)
@@ -206,6 +212,8 @@ export function ShopView({
     })
   }
   const jarName = nameJar(color, character)
+  /** The jar as it is said: a mark by its name (lib/jars). */
+  const spokenJarName = jarSpokenName(color, character)
   // One set of filters, drawn inline on a wide screen or inside the sheet on
   // a phone, so there is never a second search field to keep in step.
   const filters = (
@@ -506,7 +514,7 @@ export function ShopView({
                 <JarSprite character={character} colorId={color} size={128} />
                 <strong>
                   {jarColors.find((value) => value.id === color)?.label}{' '}
-                  {character}
+                  <JarCharacter character={character} />
                 </strong>
                 <small>
                   {state.jars.length} / {JAR_CAPACITY} keepsakes ·{' '}
@@ -526,14 +534,20 @@ export function ShopView({
                       : undefined
                   }
                   onClick={() =>
-                    tell(onPurchaseJar(character, color), { name: jarName, kind: 'jar' })
+                    tell(onPurchaseJar(character, color), {
+                      name: jarName,
+                      spokenName: spokenJarName,
+                      kind: 'jar',
+                    })
                   }
                 >
-                  {state.jars.length >= JAR_CAPACITY
-                    ? 'Your jar shelf is full'
-                    : state.nectar < JAR_PRICE
-                      ? 'Not enough Nectar'
-                      : `Buy ${jarName}`}
+                  {state.jars.length >= JAR_CAPACITY ? (
+                    'Your jar shelf is full'
+                  ) : state.nectar < JAR_PRICE ? (
+                    'Not enough Nectar'
+                  ) : (
+                    <Spoken text={`Buy ${jarName}`} spoken={`Buy ${spokenJarName}`} />
+                  )}
                 </button>
               </div>
             </div>

@@ -26,6 +26,21 @@ const UPDATE_CHANNEL = 'butterfly-garden-update'
 /** What one tab says to the others when an update has been applied. */
 interface UpdateMessage {
   type: 'reload-for-update'
+  /**
+   * The build the sender is leaving (vite.config.ts names each build). Only
+   * a tab still on that build reloads. One its own service worker has
+   * already moved to the new build stays as it is, however late the message
+   * comes: a tab the service worker was not looking after sends it only when
+   * its wait to hear the update land runs out (components/UpdatePrompt).
+   */
+  from: string
+}
+
+/** Whether something said on the channel is an update message at all. */
+function isUpdateMessage(data: unknown): data is UpdateMessage {
+  if (typeof data !== 'object' || data === null) return false
+  const { type, from } = data as Partial<Record<keyof UpdateMessage, unknown>>
+  return type === 'reload-for-update' && typeof from === 'string'
 }
 
 /** How often an open, visible garden asks whether a new version is out. */
@@ -64,23 +79,27 @@ export async function reloadForUpdate(): Promise<void> {
   reloadApp()
 }
 
-/** Tell every other open tab of the app to load the new version too. */
+/**
+ * Tell every other open tab of the app that is still on this build to load
+ * the new version too.
+ */
 export function reloadOtherTabs(): void {
   if (typeof BroadcastChannel === 'undefined') return
   const channel = new BroadcastChannel(UPDATE_CHANNEL)
-  channel.postMessage({ type: 'reload-for-update' } satisfies UpdateMessage)
+  channel.postMessage({ type: 'reload-for-update', from: __BUILD_ID__ } satisfies UpdateMessage)
   channel.close()
 }
 
 /**
- * Reload this tab whenever another applies an update. Every tab listens, on
- * every screen, onboarding and recovery included. Returns how to stop.
+ * Reload this tab whenever another on the same build applies an update.
+ * Every tab listens, on every screen, onboarding and recovery included.
+ * Returns how to stop.
  */
 export function followUpdates(): () => void {
   if (typeof BroadcastChannel === 'undefined') return () => undefined
   const channel = new BroadcastChannel(UPDATE_CHANNEL)
-  channel.onmessage = (event: MessageEvent<UpdateMessage | undefined>) => {
-    if (event.data?.type === 'reload-for-update') void reloadForUpdate()
+  channel.onmessage = (event: MessageEvent<unknown>) => {
+    if (isUpdateMessage(event.data) && event.data.from === __BUILD_ID__) void reloadForUpdate()
   }
   return () => channel.close()
 }

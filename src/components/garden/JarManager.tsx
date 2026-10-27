@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { plants } from '../../data/content'
 import { jarColors } from '../../data/jars'
-import { jarForPlant } from '../../lib/jars'
-import { jarName, stackJars, stackKey } from '../../lib/jarStacks'
+import { jarForPlant, jarSpokenName } from '../../lib/jars'
+import { stackJars, stackKey } from '../../lib/jarStacks'
 import type { AppState } from '../../types'
+import { JarCharacter } from '../Spoken'
 import { JarSprite } from '../sprites/JarSprite'
 import './jarManager.css'
 
@@ -67,7 +68,7 @@ export function JarManager({
     return state.jarPlacements.flatMap((placement) => {
       const jar = jarsById.get(placement.jarId)
       const name = plantNames.get(plantOf.get(placement.plantId) ?? '')
-      return jar && name ? [{ jar, label: `${colorLabel(jar.colorId)} ${jar.character} on ${name}` }] : []
+      return jar && name ? [{ jar, plantName: name }] : []
     })
   }, [state.jars, state.jarPlacements, state.plants])
   const toPlace = state.jars.length - (jarHere ? 1 : 0)
@@ -118,7 +119,8 @@ export function JarManager({
                 </span>
                 <div>
                   <strong>
-                    {colorLabel(jarHere.colorId)} {jarHere.character} jar
+                    {colorLabel(jarHere.colorId)} <JarCharacter character={jarHere.character} />{' '}
+                    jar
                   </strong>
                   <small>Placed on this plant spot.</small>
                 </div>
@@ -164,7 +166,7 @@ export function JarManager({
                         pendingFocus.current = { to: 'stack', key: stack.key }
                         onPlaceJar(stack.loose[0].id, plantId)
                       }}
-                      aria-label={`Place ${jarName(stack.colorId, stack.character)} on ${plantName}${count > 1 ? `, ${count} on the shelf` : ''}`}
+                      aria-label={`Place ${jarSpokenName(stack.colorId, stack.character)} on ${plantName}${count > 1 ? `, ${count} on the shelf` : ''}`}
                     >
                       <span className="jar-display" aria-hidden="true">
                         <JarSprite character={stack.character} colorId={stack.colorId} />
@@ -186,7 +188,7 @@ export function JarManager({
                       pendingFocus.current = { to: 'return' }
                       onPlaceJar(jar.id, plantId)
                     }}
-                    aria-label={`Move from ${heldBy} ${jarName(jar.colorId, jar.character)} on ${plantName}`}
+                    aria-label={`Move from ${heldBy} ${jarSpokenName(jar.colorId, jar.character)} on ${plantName}`}
                   >
                     <span className="jar-display" aria-hidden="true">
                       <JarSprite character={jar.character} colorId={jar.colorId} />
@@ -204,12 +206,12 @@ export function JarManager({
         <details className="placed-jars-list">
           <summary>Placed jars ({placed.length})</summary>
           <ul>
-            {placed.map(({ jar, label }) => (
+            {placed.map(({ jar, plantName: on }) => (
               <li key={jar.id}>
                 <span className="jar-display small" aria-hidden="true">
                   <JarSprite character={jar.character} colorId={jar.colorId} />
                 </span>
-                {label}
+                {colorLabel(jar.colorId)} <JarCharacter character={jar.character} /> on {on}
               </li>
             ))}
           </ul>

@@ -130,16 +130,19 @@ test('an update applied in one tab reloads every other, keeping what they were w
   // Words typed a moment ago, before a draft would normally be written down.
   await page.locator('#daily-reflection').fill('Words typed just before the update')
   const reloaded = [page.waitForEvent('load'), other.waitForEvent('load')]
-  // The tab that applied the update says so on the tabs' own channel. It is
-  // sent from a page of the same address that is not the app, so the sender
-  // is not itself reloaded in the middle of saying it.
+  // The tab that applied the update says so on the tabs' own channel, naming
+  // the build it leaves: the one these tabs are on. It is sent from a page of
+  // the same address that is not the app, so the sender is not itself
+  // reloaded in the middle of saying it.
+  const build = await page.evaluate(() => document.documentElement.dataset.build)
+  expect(build).toBeTruthy()
   const sender = await context.newPage()
   await sender.goto('/The-Butterfly-Garden/privacy.html')
-  await sender.evaluate(() => {
+  await sender.evaluate((from) => {
     const channel = new BroadcastChannel('butterfly-garden-update')
-    channel.postMessage({ type: 'reload-for-update' })
+    channel.postMessage({ type: 'reload-for-update', from })
     channel.close()
-  })
+  }, build)
   await Promise.all(reloaded)
   await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible()
   await expect(page.locator('#daily-reflection')).toHaveValue('Words typed just before the update')

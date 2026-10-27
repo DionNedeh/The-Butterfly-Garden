@@ -90,6 +90,20 @@ describe('the offer of a new version', () => {
     expect(reloadForUpdate).toHaveBeenCalledOnce()
   })
 
+  it('calls off its fallback once the new version takes over, so no tab is told twice', async () => {
+    vi.useFakeTimers()
+    sw.waiting = true
+    render(<UpdatePrompt />)
+    act(() => screen.getByRole('button', { name: 'Update now' }).click())
+    await vi.advanceTimersByTimeAsync(1_000)
+    act(() => sw.options?.onNeedReload?.())
+    expect(reloadOtherTabs).toHaveBeenCalledOnce()
+    // Well past the moment the fallback would have spoken.
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(reloadOtherTabs).toHaveBeenCalledOnce()
+    expect(reloadForUpdate).toHaveBeenCalledOnce()
+  })
+
   it('waits for Later, handing focus to the page’s heading as it goes', async () => {
     sw.waiting = true
     const user = userEvent.setup()

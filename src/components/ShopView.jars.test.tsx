@@ -284,7 +284,54 @@ describe('the jar builder’s characters', () => {
     for (const button of marks)
       expect(button.getAttribute('aria-label')?.startsWith(`${button.textContent} `)).toBe(true)
     await user.click(screen.getByRole('button', { name: '. dot' }))
-    await user.click(screen.getByRole('button', { name: 'Buy Blue . jar' }))
+    // The glyph is shown on the button; its name is what is said.
+    const buy = screen.getByRole('button', { name: 'Buy Blue dot jar' })
+    expect(within(buy).getByText('Buy Blue . jar')).toHaveAttribute('aria-hidden', 'true')
+    await user.click(buy)
     expect(handlers.onPurchaseJar).toHaveBeenLastCalledWith('.', 'blue')
+  })
+
+  it('tells a "!" jar from a "?" jar in everything it says of them', async () => {
+    const { user } = renderLiveShop(garden({ jars: [jar('x1', '!'), jar('q1', '?')] }))
+
+    // The shelf shows each glyph and says its name (the jar drawn beside it
+    // is a picture, hidden from screen readers).
+    const [bang, query] = shelf().getAllByRole('listitem')
+    expect(within(bang).getByText('!', { selector: 'span' })).toHaveAttribute('aria-hidden', 'true')
+    expect(within(bang).getByText('exclamation mark')).toHaveClass('sr-only')
+    expect(within(query).getByText('?', { selector: 'span' })).toHaveAttribute('aria-hidden', 'true')
+    expect(within(query).getByText('question mark')).toHaveClass('sr-only')
+    expect(recycleButton('Blue exclamation mark jar')).not.toBe(
+      recycleButton('Blue question mark jar'),
+    )
+
+    // Buying one says which, in the toast and on the button.
+    await user.click(screen.getByText('Accents and marks'))
+    await user.click(screen.getByRole('button', { name: '? question mark' }))
+    await user.click(screen.getByRole('button', { name: 'Buy Blue question mark jar' }))
+    const bought = `for ${JAR_PRICE} Nectar. Place it from a plant's detail panel in Garden.`
+    expect(screen.getByText(`Blue ? jar added, ${bought}`)).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText(`Blue question mark jar added, ${bought}`)).toHaveClass('sr-only')
+    await user.click(screen.getByRole('button', { name: '! exclamation mark' }))
+    expect(screen.getByRole('button', { name: 'Buy Blue exclamation mark jar' })).toBeInTheDocument()
+
+    // Recycling one says which, and so does its Undo's refusal.
+    await user.click(recycleButton('Blue exclamation mark jar'))
+    const recycled = `recycled, for ${JAR_RECYCLE_NECTAR} Nectar.`
+    expect(screen.getByText(`Blue ! jar ${recycled}`)).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText(`Blue exclamation mark jar ${recycled}`)).toHaveClass('sr-only')
+  })
+
+  it('says which mark it was when Undo cannot put a recycled jar back', async () => {
+    const { handlers, user } = renderShop(garden({ jars: [jar('x1', '!')] }))
+    handlers.onRestoreJar.mockReturnValueOnce({ kind: 'full' })
+    await user.click(recycleButton('Blue exclamation mark jar'))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(
+      screen.getByText('Your jar shelf is full again, so the Blue exclamation mark jar stays recycled.'),
+    ).toHaveClass('sr-only')
+    expect(
+      screen.getByText('Your jar shelf is full again, so the Blue ! jar stays recycled.'),
+    ).toHaveAttribute('aria-hidden', 'true')
   })
 })

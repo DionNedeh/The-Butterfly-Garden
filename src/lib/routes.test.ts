@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppView } from '../types'
-import { hashForRoute, routeFromHash, urlForRoute } from './routes'
+import { hashForRoute, returnFromGuide, routeFromHash, urlForRoute } from './routes'
 
 const EVERY_VIEW: AppView[] = [
   'garden',
@@ -68,6 +68,14 @@ describe('pages in the address bar', () => {
     expect(hashForRoute({ view: 'guide', section: 'bond', from: 'care' })).toBe('#/guide/bond')
   })
 
+  it('keeps where a "What does this do?" link was pressed out of the address', () => {
+    const fromPlace = { section: 'bond', scrollY: 480, companionId: 'zed' }
+    expect(hashForRoute({ view: 'guide', section: 'bond', from: 'care', fromPlace })).toBe(
+      '#/guide/bond',
+    )
+    expect(hashForRoute({ view: 'care', companionId: 'zed', restore: fromPlace })).toBe('#/care')
+  })
+
   it('names no section that is not plain words', () => {
     expect(routeFromHash('#/guide/Bond')).toBeUndefined()
     expect(routeFromHash('#/guide/a/b')).toBeUndefined()
@@ -85,5 +93,44 @@ describe('pages in the address bar', () => {
     expect(
       urlForRoute({ view: 'today' }, { pathname: '/The-Butterfly-Garden/', search: '?a=1' }),
     ).toBe('/The-Butterfly-Garden/?a=1#/today')
+  })
+})
+
+describe('the way back from the Guide', () => {
+  it('returns to the page its link left, for the same companion, at the same place', () => {
+    const fromPlace = { section: 'bond', scrollY: 480, companionId: 'zed' }
+    expect(returnFromGuide({ view: 'guide', section: 'bond', from: 'care', fromPlace })).toEqual({
+      view: 'care',
+      companionId: 'zed',
+      restore: fromPlace,
+    })
+    // Another section chosen in the Guide since does not move the way back.
+    expect(
+      returnFromGuide({
+        view: 'guide',
+        section: 'stardust',
+        from: 'settings',
+        fromPlace: { section: 'seeds', scrollY: 1200 },
+      }),
+    ).toEqual({
+      view: 'settings',
+      companionId: undefined,
+      restore: { section: 'seeds', scrollY: 1200 },
+    })
+  })
+
+  it('offers none from a Guide opened any other way, or from another page', () => {
+    expect(returnFromGuide({ view: 'guide' })).toBeUndefined()
+    expect(returnFromGuide({ view: 'guide', section: 'bond' })).toBeUndefined()
+    expect(returnFromGuide({ view: 'guide', from: 'guide' })).toBeUndefined()
+    expect(returnFromGuide({ view: 'care', from: 'today' })).toBeUndefined()
+  })
+
+  it('still returns to the page when no place was kept', () => {
+    expect(returnFromGuide({ view: 'guide', section: 'sunlight', from: 'today' })).toEqual({
+      view: 'today',
+      companionId: undefined,
+      restore: undefined,
+    })
   })
 })

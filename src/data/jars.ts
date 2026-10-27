@@ -20,6 +20,20 @@ export const JAR_NUMBERS = '0123456789'
 export const JAR_ACCENTED = 'ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÖØŒÙÚÛÜ'
 export const JAR_MARKS = '!?&+.*'
 
+/**
+ * What each mark is called, wherever a jar is spoken of. A lone "!" or "?"
+ * is passed over in silence by a screen reader at its usual punctuation
+ * level, so without these a "!" jar and a "?" jar would sound the same.
+ */
+export const JAR_MARK_NAMES: Readonly<Record<string, string>> = {
+  '!': 'exclamation mark',
+  '?': 'question mark',
+  '&': 'ampersand',
+  '+': 'plus',
+  '.': 'dot',
+  '*': 'asterisk',
+}
+
 /** Every character a jar can carry, in the order the shop shows them. */
 export const jarCharacters = [...JAR_LETTERS, ...JAR_NUMBERS, ...JAR_ACCENTED, ...JAR_MARKS]
 

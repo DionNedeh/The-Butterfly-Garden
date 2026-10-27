@@ -1,7 +1,28 @@
-import { JAR_CAPACITY, JAR_PRICE, jarCharacters, jarColors } from '../data/jars'
+import { JAR_CAPACITY, JAR_MARK_NAMES, JAR_PRICE, jarCharacters, jarColors } from '../data/jars'
 import type { AppState, JarColorId, JarInstance } from '../types'
 import { createId } from './id'
 import { payFor, refuse, type PurchaseResult } from './purchase'
+
+/**
+ * "Blue A jar": how the shop and the garden show a jar's name.
+ *
+ * Here rather than with the shelf's stacking (lib/jarStacks): the garden's
+ * plant buttons, which the app shell draws, name their jars too.
+ */
+export function jarName(colorId: string, character: string): string {
+  const color = jarColors.find((entry) => entry.id === colorId)
+  return `${color?.label ?? 'Custom'} ${character} jar`
+}
+
+/**
+ * "Blue exclamation mark jar": a jar's name as it is said, in every label
+ * and announcement. A mark is said by its name (JAR_MARK_NAMES), which a
+ * screen reader would otherwise pass over; letters, numbers and accented
+ * capitals are said as they are, so their name is the one shown.
+ */
+export function jarSpokenName(colorId: string, character: string): string {
+  return jarName(colorId, JAR_MARK_NAMES[character] ?? character)
+}
 
 export function normalizeJarCharacter(character: string): string | undefined {
   const normalized = character.trim().toUpperCase()

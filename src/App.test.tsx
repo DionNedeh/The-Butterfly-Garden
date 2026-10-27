@@ -193,6 +193,10 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     await user.click(screen.getByRole('button', { name: 'Back to Today' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
     expect(window.location.hash).toBe('#/today')
+    // Focus goes back to the link pressed, not to the page.
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /^What does this do\? Sunlight/ })).toHaveFocus(),
+    )
   })
 
   it('opens the Guide at a section a link names, with no way back to offer', async () => {

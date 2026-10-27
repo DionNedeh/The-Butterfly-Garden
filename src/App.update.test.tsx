@@ -83,7 +83,10 @@ describe('an update applied in another tab', { timeout: 20_000 }, () => {
     storedGarden(undefined)
     render(<App />)
     await screen.findByRole('heading', { name: /welcome to your butterfly garden/i }, { timeout: 3000 })
-    new FakeBroadcastChannel('butterfly-garden-update').postMessage({ type: 'reload-for-update' })
+    new FakeBroadcastChannel('butterfly-garden-update').postMessage({
+      type: 'reload-for-update',
+      from: __BUILD_ID__,
+    })
     await waitFor(() => expect(reloadApp).toHaveBeenCalledOnce())
   })
 

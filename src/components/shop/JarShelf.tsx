@@ -2,13 +2,16 @@ import { useEffect, useMemo, useRef } from 'react'
 import { jarColors } from '../../data/jars'
 import {
   JAR_RECYCLE_NECTAR,
+  jarName,
+  jarSpokenName,
   type JarRestoreOutcome,
   type RecycledJar,
   type RecycleOutcome,
 } from '../../lib/jars'
-import { jarName, stackJars, type JarStack } from '../../lib/jarStacks'
+import { stackJars, type JarStack } from '../../lib/jarStacks'
 import type { AppState } from '../../types'
 import type { UndoOffer } from '../UndoToast'
+import { JarCharacter } from '../Spoken'
 import { JarSprite } from '../sprites/JarSprite'
 
 /** Where a stack's jars are, in a few words. */
@@ -46,8 +49,11 @@ export function JarShelf({
   onRestore: (recycled: RecycledJar) => JarRestoreOutcome
   /** Show the one undo the shop offers at a time. */
   onOfferUndo: (offer: UndoOffer) => void
-  /** Say something in the shop's polite toast. */
-  onSay: (text: string) => void
+  /**
+   * Say something in the shop's polite toast: the words shown, and the same
+   * words as a screen reader should say them where they differ.
+   */
+  onSay: (text: string, spoken?: string) => void
 }) {
   const stacks = useMemo(() => stackJars(jars, jarPlacements), [jars, jarPlacements])
   const heading = useRef<HTMLHeadingElement>(null)
@@ -70,24 +76,30 @@ export function JarShelf({
     // The newest of the stack: most often the one bought by mistake.
     const jar = stack.loose.at(-1)
     if (!jar) return
+    // Every sentence twice: as shown, with the jar's glyph, and as said,
+    // with a mark's name, so a "!" jar and a "?" jar never sound alike.
     const name = jarName(stack.colorId, stack.character)
+    const spokenName = jarSpokenName(stack.colorId, stack.character)
     const outcome = onRecycle(jar.id)
     pendingFocus.current = stack.key
     if (outcome.kind !== 'recycled') {
-      onSay(
+      const words = (named: string) =>
         outcome.kind === 'placed'
-          ? `The ${name} is on a plant now, so it was not recycled.`
-          : `The ${name} was recycled already, so nothing changed.`,
-      )
+          ? `The ${named} is on a plant now, so it was not recycled.`
+          : `The ${named} was recycled already, so nothing changed.`
+      onSay(words(name), words(spokenName))
       return
     }
     const { recycled } = outcome
+    const message = (named: string) => `${named} recycled, for ${recycled.nectar} Nectar.`
     onOfferUndo({
-      message: `${name} recycled, for ${recycled.nectar} Nectar.`,
+      message: message(name),
+      spoken: message(spokenName),
       undo: () => {
-        const refusal = undoRefusal(onRestore(recycled), name)
+        const restored = onRestore(recycled)
+        const refusal = undoRefusal(restored, name)
         pendingFocus.current = refusal ? null : stack.key
-        if (refusal) onSay(refusal)
+        if (refusal) onSay(refusal, undoRefusal(restored, spokenName))
       },
     })
   }
@@ -123,7 +135,7 @@ export function JarShelf({
                 </span>
                 <span className="jar-stack-copy">
                   <strong>
-                    {label} {stack.character}
+                    {label} <JarCharacter character={stack.character} />
                     {count > 1 && (
                       <>
                         <span aria-hidden="true"> ×{count}</span>
@@ -136,7 +148,7 @@ export function JarShelf({
                 {stack.loose.length > 0 && (
                   <button
                     className="secondary-button"
-                    aria-label={`Recycle for ${JAR_RECYCLE_NECTAR} Nectar: one ${jarName(stack.colorId, stack.character)}`}
+                    aria-label={`Recycle for ${JAR_RECYCLE_NECTAR} Nectar: one ${jarSpokenName(stack.colorId, stack.character)}`}
                     onClick={() => recycle(stack)}
                   >
                     Recycle for {JAR_RECYCLE_NECTAR} Nectar

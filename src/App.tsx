@@ -100,7 +100,12 @@ import { useRecapWindow } from './hooks/useRecapWindow'
 import { usePassStatus } from './hooks/usePassStatus'
 import { setPassStatus, trackPassStatus } from './lib/passEntitlement'
 import { dismissPassLapseNotice } from './lib/playBilling'
-import { backAction, requestDialogClose, requestDismiss } from './lib/backNavigation'
+import {
+  backAction,
+  putBackAt,
+  requestDialogClose,
+  requestDismiss,
+} from './lib/backNavigation'
 import {
   leaveApp,
   onAppActiveChange,
@@ -123,12 +128,29 @@ import { nextMorning, paintBrowserBars } from './lib/theme'
 import { useDraft } from './lib/drafts'
 import { heardTrack, soundVolumeOf } from './lib/sound'
 import { isArrival, movedTo } from './lib/hosting'
-import { routeFromHash, urlForRoute, type Route } from './lib/routes'
+import {
+  returnFromGuide,
+  routeFromHash,
+  urlForRoute,
+  type LinkPlace,
+  type Route,
+} from './lib/routes'
 import { Celebrations } from './components/Celebrations'
 
 function currentUrl(): string {
   const { pathname, search, hash } = window.location
   return `${pathname}${search}${hash}`
+}
+
+/**
+ * Puts the gardener back where they pressed a "What does this do?" link, once
+ * the page they return to is drawn. Rendered after the page, inside the same
+ * Suspense, so it runs after the page's own first focus (Care's chip) and
+ * never before the page is there.
+ */
+function PutBack({ place }: { place: LinkPlace }) {
+  useEffect(() => putBackAt(place), [place])
+  return null
 }
 
 interface InstallPromptEvent extends Event {
@@ -224,7 +246,9 @@ function App() {
   /** Set only when something asks for the shop's Garden Pass tab. */
   const shopOpensOnPass = route.view === 'shop' && route.onPass === true
   const navigate = (next: Route, options: { replace?: boolean } = {}) => {
-    window.scrollTo({ top: 0, behavior: 'instant' })
+    // A page opens at its top, except one being returned to, which PutBack
+    // scrolls back to where it was.
+    if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
     const url = urlForRoute(next)
     if (url !== currentUrl()) {
       if (options.replace) window.history.replaceState(null, '', url)
@@ -309,27 +333,30 @@ function App() {
   // Android's back gesture walks back through the app the way a gardener
   // would expect: the open dialog first, then the recap to Today, then any
   // page to the garden, and only then out of the app. The handler is
-  // registered once and reads the current page from a ref.
-  const viewRef = useRef(view)
-  // The page a "What does this do?" link left, which back returns the Guide to.
-  const fromRef = useRef(route.from)
+  // registered once and reads the current page from a ref, with the page a
+  // "What does this do?" link left, which back returns the Guide to.
+  const routeRef = useRef(route)
   useEffect(() => {
-    viewRef.current = view
-    fromRef.current = route.from
-  }, [view, route.from])
+    routeRef.current = route
+  }, [route])
   useEffect(
     () =>
       onBackButton(() => {
-        const action = backAction(viewRef.current, document, fromRef.current)
+        const current = routeRef.current
+        const action = backAction(current.view, document, current.from)
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
         else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
+          // Out of the Guide, back does what its Back button does: the same
+          // companion on Care, and the gardener where they were on the page.
+          const back = returnFromGuide(current)
+          const next = back?.view === action.view ? back : { view: action.view }
           // Android's back walks up a fixed ladder (lib/backNavigation), not
           // through history, so each step replaces the address.
-          window.scrollTo({ top: 0, behavior: 'instant' })
-          const url = urlForRoute({ view: action.view })
+          if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
+          const url = urlForRoute(next)
           if (url !== currentUrl()) window.history.replaceState(null, '', url)
-          setRoute({ view: action.view })
+          setRoute(next)
         } else void leaveApp()
       }),
     [],
@@ -504,9 +531,17 @@ function App() {
       : undefined
   const inRecap = view === 'recap' && openedRecapDate !== undefined
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
-  /** The Guide at one of its sections, remembering the page to return to. */
-  const openGuideAt = (section: string) =>
-    navigate({ view: 'guide', section, from: activeView })
+  /**
+   * The Guide at one of its sections, remembering the page to return to and
+   * where on it the link was: how far down, and on Care, whose link it was.
+   */
+  const openGuideAt = (section: string, companionId?: string) =>
+    navigate({
+      view: 'guide',
+      section,
+      from: activeView,
+      fromPlace: { section, scrollY: window.scrollY, companionId },
+    })
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -879,7 +914,10 @@ function App() {
               onOpenSupport={openSupport}
               section={route.section}
               returnTo={route.from}
-              onReturn={() => route.from && setView(route.from)}
+              onReturn={() => {
+                const back = returnFromGuide(route)
+                if (back) navigate(back)
+              }}
               onOpenSection={(section) => navigate({ ...route, section })}
             />
           )}
@@ -959,6 +997,7 @@ function App() {
               onChooseNightBackdrop={garden.chooseNightBackdrop}
             />
           )}
+          {route.restore && <PutBack place={route.restore} />}
         </Suspense>
         </ErrorBoundary>
       </main>

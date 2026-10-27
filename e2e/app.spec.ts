@@ -1801,6 +1801,8 @@ test('the Guide finds things, marks what lives where you garden, and explains a 
   ).toBeFocused()
   await page.getByRole('button', { name: 'Back to Today' }).click()
   await expect(page).toHaveURL(/#\/today$/)
+  // Back where they were: focus on the link pressed, not on the page.
+  await expect(page.getByRole('link', { name: /^What does this do\? Sunlight/ })).toBeFocused()
 
   // A region chosen by hand, never from a location.
   await goTo(page, 'Settings')
