@@ -784,6 +784,46 @@ describe('every action, through the hook', () => {
     expect(garden().profile?.outfitPresets).toEqual([renamed])
   })
 
+  it('recycles a jar for half its Nectar, and Undo puts it back while that Nectar is there', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => {
+      result.current.purchaseJar('É', 'pink')
+    })
+    const jar = garden().jars[0]
+    const nectar = garden().nectar
+    let recycled: ReturnType<typeof result.current.recycleJar> | undefined
+    act(() => {
+      recycled = result.current.recycleJar(jar.id)
+    })
+    expect(recycled).toEqual({ kind: 'recycled', recycled: { jar, index: 0, nectar: 3 } })
+    expect(garden().jars).toEqual([])
+    expect(garden().nectar).toBe(nectar + 3)
+    // A second press in the same moment is told the jar has gone already.
+    act(() => {
+      expect(result.current.recycleJar(jar.id)).toEqual({ kind: 'missing' })
+    })
+
+    if (recycled?.kind !== 'recycled') throw new Error('Expected a recycle')
+    const undo = recycled.recycled
+    act(() => {
+      expect(result.current.restoreJar(undo)).toEqual({ kind: 'restored' })
+    })
+    expect(garden().jars).toEqual([jar])
+    expect(garden().nectar).toBe(nectar)
+    act(() => {
+      expect(result.current.restoreJar(undo)).toEqual({ kind: 'back' })
+    })
+  })
+
+  it('recycles nothing, and puts nothing back, before the garden has loaded', () => {
+    vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useGardenState())
+    expect(result.current.recycleJar('jar')).toEqual({ kind: 'missing' })
+    const jar = { id: 'jar', character: 'A', colorId: 'blue' as const, purchasedAt: '' }
+    expect(result.current.restoreJar({ jar, index: 0, nectar: 3 })).toEqual({ kind: 'back' })
+  })
+
   it('wears nothing before the garden has loaded', () => {
     vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
     const { result } = renderHook(() => useGardenState())
@@ -1304,6 +1344,28 @@ describe('saving one of the gardener’s images', () => {
     expect(result.current.state?.profile?.selectedCustomBackdropId).toBeUndefined()
   })
 
+  it('chooses an image for the night, and goes back to the day’s', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a'), image('b')] })
+    act(() => result.current.selectCustomBackdrop('a'))
+    act(() => result.current.chooseNightBackdrop('b'))
+    expect(result.current.state?.profile?.nightCustomBackdropId).toBe('b')
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBe('a')
+    act(() => result.current.chooseNightBackdrop(undefined))
+    expect(result.current.state?.profile?.nightCustomBackdropId).toBeUndefined()
+  })
+
+  it('saves an image without choosing it for the day, when asked', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a'), image('b')] })
+    act(() => result.current.selectCustomBackdrop('a'))
+    let saved: Promise<{ ok: boolean }> | undefined
+    act(() => {
+      saved = result.current.saveCustomBackdrop({ ...image('b'), brightness: -20 }, false)
+    })
+    expect(await saved).toEqual({ ok: true })
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBe('a')
+    expect(result.current.state?.customBackdrops.find((entry) => entry.id === 'b')?.brightness).toBe(-20)
+  })
+
   it('clears a notice when a new garden begins', async () => {
     const { result } = await renderWith()
     const other = new BroadcastChannel('butterfly-garden-sync')
@@ -1425,5 +1487,19 @@ describe('the day the garden was opened', () => {
     expect(result.current.state?.profile?.gardenPace).toBe('keep-giving')
     act(() => result.current.setGardenPace(undefined))
     expect(result.current.state?.profile).not.toHaveProperty('gardenPace')
+  })
+
+  it('chooses a region, and none again', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(0),
+    })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() => result.current.setRegion('north-america'))
+    expect(result.current.state?.profile?.region).toBe('north-america')
+    act(() => result.current.setRegion(undefined))
+    expect(result.current.state?.profile).not.toHaveProperty('region')
   })
 })

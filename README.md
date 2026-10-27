@@ -48,12 +48,20 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   card to meet any of them with a tap
 - An optional "Keep giving" pace, where a plant in bloom blooms again, and a
   small welcome back after a few days away
-- A searchable shop with outfit previews, coloured glass jars, and twelve flight
-  patterns, which says plainly what each purchase did or why it did not
+- A searchable shop with outfit previews, coloured glass jars (stacked on a
+  shelf, recyclable for half their Nectar, with accented capitals and a few
+  marks), and twelve flight patterns, which says plainly what each purchase
+  did or why it did not
 - New eggs arrive with a name of their own, and can be given another
 - On phones, five tabs and a More sheet
-- 25 real butterfly species with field notes, seed guidance, and selectable companions
-- Seven illustrated backdrops and up to three personal images with crop and zoom
+- 25 real butterfly species with checked field notes (three facts each,
+  opening up as your bond grows), seed guidance, and selectable companions
+- My region, which marks the butterflies and plants native where you garden
+  and suggests what to plant for them, with no location read
+- A Guide with contents, one search, and "What does this do?" links from the
+  meters and settings that bring you back where you were
+- Seven illustrated backdrops and up to three personal images with crop, zoom,
+  quarter turns and brightness, and a different image by night if you like
 - The Garden Pass: a Google Play subscription in the Android app, and a free
   preview in the PWA (no payment is taken on the web)
 - Five soundscapes synthesised on device — no audio files are downloaded —
@@ -63,7 +71,10 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   off to the phone, reachable from Settings, the Guide and a stormy check-in
 - Backup and restore to a JSON file including your personal backdrop images
 - IndexedDB persistence with no account, analytics, or cloud transfer
-- Installable offline PWA and GitHub Pages deployment
+- Installable offline PWA and GitHub Pages deployment, with a one-time guide
+  to the Home Screen on iPhone and iPad, an hourly look for updates while it
+  is open, *Update now* reloading every open tab together, and *What's new*
+  opening once after an update
 - An Android app for Google Play, built with Capacitor from the same code
 - Reduced-motion, night mode (by hand, following the device, or following the
   evening), three text sizes, and responsive mobile support

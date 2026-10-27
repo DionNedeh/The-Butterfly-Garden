@@ -26,7 +26,7 @@ async function openGarden(garden: AppState = stored()) {
   vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
   const user = userEvent.setup()
   render(<App />)
-  await screen.findByRole('heading', { level: 1, name: garden.profile?.gardenName }, { timeout: 3000 })
+  await screen.findByRole('heading', { level: 1, name: garden.profile?.gardenName }, { timeout: LAZY_PAGE_MS })
   return user
 }
 
@@ -41,15 +41,24 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   window.history.replaceState(null, '', '/')
+  Reflect.deleteProperty(document, 'visibilityState')
 })
 
 // Each test renders the whole app; the first walks into every lazily loaded
 // page. That outgrows Vitest's five seconds on a busy CI runner with coverage
 // on, without anything being wrong.
 const WHOLE_APP_TIMEOUT_MS = 20_000
+/**
+ * How long a page loaded for the first time may take to appear. Pages arrive
+ * as lazy chunks, which a busy machine (a loaded CI runner) can take seconds
+ * to transform; finding one sooner is what every wait expects.
+ */
+const LAZY_PAGE_MS = 8000
 
 describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
-  it('opens every page from the navigation, and the address follows', async () => {
+  // Seven pages, each loaded for the first time: on a busy machine that is
+  // the slowest test here, so it has the time a loaded CI runner needs.
+  it('opens every page from the navigation, and the address follows', { timeout: 60_000 }, async () => {
     const user = await openGarden()
     const pages: Array<[string, RegExp | string, string]> = [
       ['Care', /care & nurture|the nursery is quiet/i, '#/care'],
@@ -63,7 +72,7 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     for (const [label, heading, hash] of pages) {
       await user.click(primaryNav().getByRole('button', { name: label }))
       expect(
-        await screen.findByRole('heading', { level: 1, name: heading }, { timeout: 3000 }),
+        await screen.findByRole('heading', { level: 1, name: heading }, { timeout: 8000 }),
       ).toBeInTheDocument()
       expect(window.location.hash).toBe(hash)
       expect(primaryNav().getByRole('button', { name: label })).toHaveAttribute(
@@ -84,21 +93,21 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     const more = dock.getByRole('button', { name: 'More' })
     await user.click(more)
     await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Settings' }))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' }, { timeout: 3000 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' }, { timeout: LAZY_PAGE_MS })).toBeInTheDocument()
     expect(window.location.hash).toBe('#/settings')
     expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull()
     expect(more).toHaveAttribute('aria-current', 'page')
     expect(more).toHaveFocus()
 
     await user.click(dock.getByRole('button', { name: 'Today' }))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Today' }, { timeout: 3000 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Today' }, { timeout: LAZY_PAGE_MS })).toBeInTheDocument()
     expect(more).not.toHaveAttribute('aria-current')
   })
 
   it('follows Back to the page before', async () => {
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Journal' }))
-    await screen.findByRole('heading', { level: 1, name: 'Journal' }, { timeout: 3000 })
+    await screen.findByRole('heading', { level: 1, name: 'Journal' }, { timeout: LAZY_PAGE_MS })
     act(() => {
       window.history.pushState(null, '', '/')
       window.dispatchEvent(new PopStateEvent('popstate'))
@@ -140,7 +149,10 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
   })
 
   it('offers the release notes once, and remembers they were read', async () => {
-    // A garden from before this release; new ones start having seen it.
+    // A garden from before this release; new ones start having seen it. The
+    // tab opens unseen, so the notes wait on the garden's notice rather than
+    // opening by themselves (App.update.test.tsx).
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
     const seed = stored()
     const user = await openGarden({
       ...seed,
@@ -164,19 +176,50 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
   it('opens support from the Guide and returns there', async () => {
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Guide' }))
-    await user.click(await screen.findByRole('button', { name: 'If you need support now' }, { timeout: 3000 }))
+    await user.click(await screen.findByRole('button', { name: 'If you need support now' }, { timeout: LAZY_PAGE_MS }))
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'If you need support now' }, { timeout: 3000 }),
+      await screen.findByRole('heading', { level: 1, name: 'If you need support now' }, { timeout: LAZY_PAGE_MS }),
     ).toBeInTheDocument()
     expect(window.location.hash).toBe('#/support')
     await user.click(screen.getByRole('button', { name: 'Back to the Guide' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'How the garden works' })).toBeInTheDocument()
   })
 
+  it('opens the Guide where a "What does this do?" link points, and goes back', async () => {
+    const user = await openGarden()
+    await user.click(primaryNav().getByRole('button', { name: 'Today' }))
+    await user.click(
+      await screen.findByRole('link', { name: /^What does this do\? Sunlight/ }, { timeout: LAZY_PAGE_MS }),
+    )
+    const heading = await screen.findByRole(
+      'heading',
+      { level: 2, name: 'Sunlight — care for yourself first' },
+      { timeout: LAZY_PAGE_MS },
+    )
+    expect(window.location.hash).toBe('#/guide/sunlight')
+    await waitFor(() => expect(heading).toHaveFocus())
+    await user.click(screen.getByRole('button', { name: 'Back to Today' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/today')
+    // Focus goes back to the link pressed, not to the page.
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /^What does this do\? Sunlight/ })).toHaveFocus(),
+    )
+  })
+
+  it('opens the Guide at a section a link names, with no way back to offer', async () => {
+    window.history.replaceState(null, '', '/#/guide/bond')
+    await openGardenAt('How the garden works')
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Bond levels' })).toHaveFocus(),
+    )
+    expect(screen.queryByRole('button', { name: /^Back to/ })).toBeNull()
+  })
+
   it('starts the fade-out when the sound is turned on, and turns the sound off at the end', async () => {
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    await user.selectOptions(await screen.findByLabelText('Fade out after', {}, { timeout: 3000 }), '15')
+    await user.selectOptions(await screen.findByLabelText('Fade out after', {}, { timeout: LAZY_PAGE_MS }), '15')
     expect(screen.getByText('The timer starts when the sound is turned on.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Turn on / }))
     expect(screen.getByText(/The sound fades away at/)).toBeInTheDocument()
@@ -199,7 +242,7 @@ async function openGardenAt(heading: string) {
   vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
   render(<App />)
   expect(
-    await screen.findByRole('heading', { level: 1, name: heading }, { timeout: 3000 }),
+    await screen.findByRole('heading', { level: 1, name: heading }, { timeout: LAZY_PAGE_MS }),
   ).toBeInTheDocument()
 }
 
@@ -337,7 +380,7 @@ describe('a theme that follows', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     const setDark = stubDevice(true)
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: 3000 })
+    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: LAZY_PAGE_MS })
     await user.click(within(themes).getByRole('radio', { name: /^Follow device/ }))
     expect(shell()).toHaveClass('theme-night')
     await user.click(within(themes).getByRole('radio', { name: /^Sunlight/ }))
@@ -354,7 +397,7 @@ describe('the text size', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     const user = await openGarden(storedWith({ textSize: 'largest' }))
     expect(root.style.fontSize).toBe('125%')
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    const sizes = await screen.findByRole('group', { name: 'Text size' }, { timeout: 3000 })
+    const sizes = await screen.findByRole('group', { name: 'Text size' }, { timeout: LAZY_PAGE_MS })
     await user.click(within(sizes).getByRole('radio', { name: /^Larger/ }))
     expect(root.style.fontSize).toBe('112.5%')
     await user.click(within(sizes).getByRole('radio', { name: /^Comfortable/ }))
@@ -381,8 +424,8 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
   /** Open tonight's recap from Today and walk to its last screen. */
   async function walkToTheEnd(user: ReturnType<typeof userEvent.setup>) {
     await user.click(primaryNav().getByRole('button', { name: 'Today' }))
-    await user.click(await screen.findByRole('button', { name: 'Begin' }, { timeout: 3000 }))
-    await screen.findByRole('heading', { name: 'Here is your day.' }, { timeout: 3000 })
+    await user.click(await screen.findByRole('button', { name: 'Begin' }, { timeout: LAZY_PAGE_MS }))
+    await screen.findByRole('heading', { name: 'Here is your day.' }, { timeout: LAZY_PAGE_MS })
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     for (let step = 0; step < 4; step += 1) {
       await user.click(screen.getByRole('button', { name: 'Skip this one' }))
@@ -404,7 +447,7 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
 
     // The fade-out runs, as if it had been chosen in Settings.
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    expect(await screen.findByText(/The sound fades away at/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(await screen.findByText(/The sound fades away at/, {}, { timeout: LAZY_PAGE_MS })).toBeInTheDocument()
     expect(screen.getByLabelText('Fade out after')).toHaveValue('15')
     // Night is held for tonight only: the theme chosen is still Sunlight,
     // and it is back in the morning.
@@ -435,7 +478,7 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
       screen.getByRole('button', { name: 'Switch to night mode and stop following your device' }),
     ).toBeInTheDocument()
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: 3000 })
+    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: LAZY_PAGE_MS })
     expect(within(themes).getByRole('radio', { name: /^Follow device/ })).toBeChecked()
   })
 
@@ -450,7 +493,7 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
     expect(shell()).toHaveClass('theme-night')
 
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: 3000 })
+    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: LAZY_PAGE_MS })
     expect(within(themes).getByRole('radio', { name: /^Follow evening/ })).toBeChecked()
     // No sound was playing, so no fade was started.
     expect(screen.getByLabelText('Fade out after')).toHaveValue('')
@@ -479,7 +522,7 @@ describe('the sound you can shape', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
     const lastProfile = () => save.mock.calls.at(-1)?.[0].profile
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    const slider = await screen.findByRole('slider', { name: 'Volume' }, { timeout: 3000 })
+    const slider = await screen.findByRole('slider', { name: 'Volume' }, { timeout: LAZY_PAGE_MS })
 
     fireEvent.input(slider, { target: { value: '30' } })
     fireEvent.change(slider)
@@ -516,11 +559,11 @@ describe('meeting a butterfly, and a flight of its own', { timeout: WHOLE_APP_TI
   it('opens Care on the companion from its card, and flies the pattern chosen there', async () => {
     const user = await openGarden(twoCompanions())
     await user.click(screen.getByRole('button', { name: 'Meet Sol, Monarch' }))
-    const card = await screen.findByRole('dialog', { name: 'Sol' }, { timeout: 3000 })
+    const card = await screen.findByRole('dialog', { name: 'Sol' }, { timeout: LAZY_PAGE_MS })
     await user.click(within(card).getByRole('button', { name: 'Care for Sol' }))
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: 3000 }),
+      await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: LAZY_PAGE_MS }),
     ).toBeInTheDocument()
     expect(window.location.hash).toBe('#/care')
     const tab = screen.getByRole('tab', { name: /Sol/ })
@@ -538,7 +581,7 @@ describe('meeting a butterfly, and a flight of its own', { timeout: WHOLE_APP_TI
 
     // Care from the navigation opens as usual, on the first companion.
     await user.click(primaryNav().getByRole('button', { name: 'Care' }))
-    expect(await screen.findByRole('tab', { name: /Ash/ }, { timeout: 3000 })).toHaveAttribute(
+    expect(await screen.findByRole('tab', { name: /Ash/ }, { timeout: LAZY_PAGE_MS })).toHaveAttribute(
       'aria-selected',
       'true',
     )
@@ -557,7 +600,7 @@ describe('coming back after a few days away', { timeout: WHOLE_APP_TIMEOUT_MS },
     const user = await openGarden(storedWith({ lastVisitOn }))
     // The spy openGarden set up, which spying again hands back.
     const save = vi.spyOn(gardenRepository, 'save')
-    const card = await screen.findByRole('group', { name: 'Welcome back' }, { timeout: 3000 })
+    const card = await screen.findByRole('group', { name: 'Welcome back' }, { timeout: LAZY_PAGE_MS })
     // It never says how long, and the visit was written down once.
     expect(card).not.toHaveTextContent(/\b(\d+|days?|weeks?|missed|lost)\b/i)
     await waitFor(() =>
@@ -608,7 +651,7 @@ describe('the garden pace', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     expect(screen.queryByText('Next bloom')).toBeNull()
 
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
-    const pace = await screen.findByRole('group', { name: 'Garden pace' }, { timeout: 3000 })
+    const pace = await screen.findByRole('group', { name: 'Garden pace' }, { timeout: LAZY_PAGE_MS })
     await user.click(within(pace).getByRole('radio', { name: /^Keep giving/ }))
     expect(within(pace).getByRole('radio', { name: /^Keep giving/ })).toBeChecked()
 

@@ -649,3 +649,61 @@ describe('Settings: garden pace', () => {
     expect(screen.queryByRole('group', { name: 'Garden pace' })).not.toBeInTheDocument()
   })
 })
+
+describe('SettingsView region', () => {
+  it('offers a region, unset at first, and says where it is chosen from', async () => {
+    const user = userEvent.setup()
+    const { onSetRegion } = renderSettings(undefined, { onSetRegion: vi.fn() })
+    const region = screen.getByRole('combobox', { name: 'My region' })
+    expect(region).toHaveValue('')
+    expect(within(region).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Not chosen',
+      'North America',
+      'UK and Europe',
+      'Australia and New Zealand',
+      'Elsewhere',
+    ])
+    expect(screen.getByText(/the garden never asks where you are/)).toBeInTheDocument()
+    await user.selectOptions(region, 'europe')
+    expect(onSetRegion).toHaveBeenLastCalledWith('europe')
+  })
+
+  it('sets the region back to none, and links to the Guide once one is chosen', async () => {
+    const user = userEvent.setup()
+    const onSetRegion = vi.fn()
+    const onOpenGuide = vi.fn()
+    const state = createInitialState('Tester', 'Test Garden')
+    render(
+      <SettingsView
+        state={{ ...state, profile: { ...state.profile!, region: 'australasia' } }}
+        persistence={{ readOnly: false }}
+        onUpdateProfile={vi.fn()}
+        onSelectAmbientTrack={vi.fn()}
+        onSelectBackdrop={vi.fn()}
+        onExportGarden={vi.fn(() => '{}')}
+        onImportGarden={vi.fn(() => Promise.resolve({ ok: true, message: '' }))}
+        onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
+        onSetRegion={onSetRegion}
+        onOpenGuide={onOpenGuide}
+        onSetGardenPace={vi.fn()}
+        onSetRecapHours={vi.fn()}
+      />,
+    )
+    const region = screen.getByRole('combobox', { name: 'My region' })
+    expect(region).toHaveValue('australasia')
+    await user.click(screen.getByRole('link', { name: /^What does this do\? Where you live/ }))
+    expect(onOpenGuide).toHaveBeenCalledWith('region')
+    await user.click(screen.getByRole('link', { name: /^What does this do\? Moonlight/ }))
+    expect(onOpenGuide).toHaveBeenCalledWith('moonlight')
+    await user.click(screen.getByRole('link', { name: /^What does this do\? Seeds/ }))
+    expect(onOpenGuide).toHaveBeenCalledWith('seeds')
+    await user.selectOptions(region, '')
+    expect(onSetRegion).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('offers no Guide links without a way to open the Guide', () => {
+    renderSettings(undefined, { onSetRegion: vi.fn(), onSetGardenPace: vi.fn() })
+    expect(screen.queryByRole('link', { name: /^What does this do/ })).toBeNull()
+  })
+})
+

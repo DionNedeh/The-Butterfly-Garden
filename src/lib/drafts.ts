@@ -34,12 +34,15 @@ function scheduleWrite() {
   }, WRITE_DELAY_MS)
 }
 
-/** Write any pending draft now, for example as the page is being hidden. */
-export function flushDrafts() {
-  if (writeTimer === undefined) return
+/**
+ * Write any pending draft now, for example as the page is being hidden.
+ * Settles once it is written, so a reload can wait for it.
+ */
+export function flushDrafts(): Promise<void> {
+  if (writeTimer === undefined) return Promise.resolve()
   clearTimeout(writeTimer)
   writeTimer = undefined
-  void gardenRepository.writeDrafts(drafts)
+  return gardenRepository.writeDrafts(drafts)
 }
 
 /** A day named in a draft's key, as in `reflection:2026-10-26:…`. */
@@ -114,7 +117,7 @@ function subscribe(listener: () => void) {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushDrafts()
+    if (document.visibilityState === 'hidden') void flushDrafts()
   })
 }
 

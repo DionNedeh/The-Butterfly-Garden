@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
-import type { AppState } from '../types'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import type { AppState, AppView } from '../types'
 import { SpeciesDirectory } from './SpeciesDirectory'
+import { RegionGuide } from './guide/RegionGuide'
 import { STAGE_CARE_DAYS } from '../lib/lifecycle'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
@@ -15,8 +16,18 @@ import type { IconName } from '../types'
 import { Icon } from './Icons'
 import { isAndroidApp } from '../lib/platform'
 import { formatHour, recapHoursOf, recapOpensAt, type RecapHours } from '../lib/date'
+import { hashForRoute } from '../lib/routes'
+import { counted } from '../lib/plural'
+import { regionGuideWords } from '../lib/regionGuide'
+import { hasEveryWord, normaliseForSearch, searchWords } from '../lib/searchText'
+// Only the Guide draws these, so they arrive with it.
+import './guide/guide.css'
 
 interface GuideSection {
+  /** Its name in the address, `#/guide/{id}`, and in the table of contents' links. */
+  id: string
+  /** The table of contents' few words for it. */
+  short: string
   icon: IconName
   eyebrow: string
   title: string
@@ -28,6 +39,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'sun',
       eyebrow: 'The heart of the garden',
+      id: 'sunlight',
+      short: 'Sunlight',
       title: 'Sunlight — care for yourself first',
       paragraphs: [
         `Everything begins with your own self-care. Checking in with your mood, completing a goal, or writing a reflection each earn one Sunlight, up to ${DAILY_SUNLIGHT_CAP} per day.`,
@@ -37,6 +50,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'moon',
       eyebrow: 'Closing the day',
+      id: 'moonlight',
+      short: 'Moonlight',
       title: 'Moonlight — round out the evening',
       paragraphs: [
         `From ${recapOpensAt(opensHour)} you can round out your day: a few short questions about how it ended up, what went well, and what you would rather not carry into tomorrow. Every question can be skipped, and the recap is kept in your journal.`,
@@ -47,6 +62,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'seed',
       eyebrow: 'Growing things',
+      id: 'seeds',
+      short: 'Seeds and plants',
       title: 'Seeds, plants, and butterfly eggs',
       paragraphs: [
         `Each seed plants one flower, shrub, or tree (${PLANT_SEED_COST} seed per plant, up to ${PLANT_CAPACITY} spaces in the scene). Host plants shelter particular butterfly species; nectar plants feed everyone. Shared host plants prefer a species you have not welcomed yet.`,
@@ -58,6 +75,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'care',
       eyebrow: 'From egg to wings',
+      id: 'life-cycle',
+      short: 'Life cycle',
       title: 'The life cycle and care days',
       paragraphs: [
         `Every companion passes through four stages: egg, caterpillar, chrysalis, butterfly. Each stage before butterfly needs ${STAGE_CARE_DAYS} days of care to advance — and the days never need to be consecutive. Care on Monday, rest all week, care twice more later: that counts.`,
@@ -68,6 +87,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'leaf',
       eyebrow: 'Daily tending',
+      id: 'care',
+      short: 'Care',
       title: 'Care activities and supplies',
       paragraphs: [
         'Each stage has its own care menu: eggs like warmth, mist, and lullabies; caterpillars love fresh leaves, berry treats, dew baths, playtime, and being tucked in; chrysalises want mist, sunbeams, and encouragement; butterflies enjoy nectar sips, fruit, puddling baths, grooming, and flying with you.',
@@ -77,14 +98,19 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'care',
       eyebrow: 'A friendship meter',
+      id: 'bond',
+      short: 'Bond levels',
       title: 'Bond levels',
       paragraphs: [
         'Every care activity earns bond points (supply-based ones earn more). Each bond level rewards you with Stardust and Nectar, and there is no ceiling — a butterfly you have loved for months keeps giving back.',
+        'A deeper bond also shares more about a companion’s kind: a second fact at bond level 3 and a third at level 5, on the Care page and in your field notes.',
       ],
     },
     {
       icon: 'nectar',
       eyebrow: 'Two currencies',
+      id: 'nectar-and-stardust',
+      short: 'Nectar and Stardust',
       title: 'Nectar and Stardust',
       paragraphs: [
         'Nectar is the everyday currency: earned from Sunlight, spent on supplies, outfits, jars, and flight patterns.',
@@ -94,6 +120,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'bow',
       eyebrow: 'Dress-up',
+      id: 'boutique',
+      short: 'Boutique',
       title: 'The Boutique and wardrobe',
       paragraphs: [
         "Cosmetics come in three slots — headwear, accessories, and auras — and each lists the life stages it fits. Buy once, dress everyone: your whole garden shares one closet, managed from each companion's wardrobe on the Care page.",
@@ -103,6 +131,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'crown',
       eyebrow: 'Something to look forward to',
+      id: 'garden-pass',
+      short: 'Garden Pass',
       title: 'The Garden Pass',
       paragraphs: [
         isAndroidApp()
@@ -113,6 +143,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'today',
       eyebrow: 'Gentle structure',
+      id: 'goals',
+      short: 'Goals',
       title: 'Goals, skipping, and snoozing',
       paragraphs: [
         'Goals can repeat daily, on chosen weekdays, or happen just once. Completing one earns Sunlight — though repeating the same completed activity never creates extra Sunlight, and recurrence follows the calendar date on this device (daylight-saving changes are handled for you).',
@@ -122,6 +154,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'flight',
       eyebrow: 'Life in the scene',
+      id: 'companions',
+      short: 'Companions',
       title: 'Companions in the garden',
       paragraphs: [
         'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly in the garden to meet it: its card says who it is, has a Pet button for a little burst of hearts, and opens Care for a companion. On the Care page, a tap on any stage, egg to butterfly, gives the hearts straight away.',
@@ -131,6 +165,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'journal',
       eyebrow: 'Kept as you wrote it',
+      id: 'journal',
+      short: 'Journal',
       title: 'Journal and your rhythm',
       paragraphs: [
         'The Journal holds your dated moods, reflections, and butterfly field notes. Personal entries can be edited or deleted at any time, and nothing you write is scored or analyzed.',
@@ -140,6 +176,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'journal',
       eyebrow: 'Seeing the month',
+      id: 'calendar',
+      short: 'Calendar',
       title: 'The calendar planner',
       paragraphs: [
         "The calendar on the Today page shows your whole month: dots for the goals landing on each day, suns for days you gathered Sunlight, and your mood's weather. Tap any upcoming day to plan a one-time goal for it — future you will find it waiting on the right morning.",
@@ -148,15 +186,19 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'shop',
       eyebrow: 'Keepsakes',
+      id: 'jars',
+      short: 'Letter jars',
       title: 'Letter jars',
       paragraphs: [
-        "Letter and number jars are decorative keepsakes for your plant spots: uppercase A–Z and 0–9 in eight colors, one reusable jar per purchase. Place, move, or return them from a plant's detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.",
-        'Removing a plant returns its jar safely to inventory. Like all shop purchases, jars are local, permanent, and non-refundable.',
+        "Letter and number jars are decorative keepsakes for your plant spots: A–Z, 0–9, accented capitals such as É and Ñ, and a few marks (! ? & + . *), in eight colors, one reusable jar per purchase. Place, move, or return them from a plant's detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.",
+        'Removing a plant returns its jar safely to inventory. In the Shop, alike jars share a row on your shelf, and a jar that is not on a plant can be recycled for half its Nectar, with a few seconds to undo. Like all shop purchases, jars stay on this device.',
       ],
     },
     {
       icon: 'flight',
       eyebrow: 'Ways of flying',
+      id: 'flight',
+      short: 'Flight patterns',
       title: 'Flight patterns',
       paragraphs: [
         'Flight patterns change how your butterflies move through the garden scene — drifting, petal-hopping, figure eights, spirals. Buy them in the Shop, choose the active one on the Flight page.',
@@ -165,6 +207,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'music',
       eyebrow: 'Set the mood',
+      id: 'sound',
+      short: 'Sound',
       title: 'Your garden soundscape',
       paragraphs: [
         'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, soft rain, dawn birdsong, or an original classical-style piano loop in Settings, and how loud it plays. Night can bring the piano, if you like. Everything is generated on your device, works offline, and can be toggled off at any time.',
@@ -173,6 +217,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'settings',
       eyebrow: 'Take it with you',
+      id: 'offline',
+      short: 'Offline',
       title: isAndroidApp() ? 'Offline and updates' : 'Install, offline, and updates',
       paragraphs: [
         isAndroidApp()
@@ -183,6 +229,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     {
       icon: 'moon',
       eyebrow: 'Yours alone',
+      id: 'privacy',
+      short: 'Privacy',
       title: 'Privacy, backdrops, and starting over',
       paragraphs: [
         'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether, and Text size makes every word larger.',
@@ -195,21 +243,115 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
   ]
 }
 
+/** The Guide's own way back, by the page a "What does this do?" link left. */
+const RETURN_LABELS: Partial<Record<AppView, string>> = {
+  today: 'Back to Today',
+  care: 'Back to Care',
+  settings: 'Back to Settings',
+  recap: 'Back to Moonlight',
+}
+
+/** The heading a section's link takes focus to. */
+function headingId(section: string): string {
+  return section === 'species' ? 'species-title' : `guide-${section}`
+}
+
 export function GuideView({
   state,
   onShowSeed,
   onOpenSupport,
+  section,
+  returnTo,
+  onReturn,
+  onOpenSection,
 }: {
   state: AppState
   onShowSeed: (id: string) => void
   onOpenSupport?: () => void
+  /** The section the address names, which takes focus when it arrives. */
+  section?: string
+  /** The page a "What does this do?" link left, for the way back. */
+  returnTo?: AppView
+  onReturn?: () => void
+  /** Put a section in the address, as following its link does. */
+  onOpenSection?: (section: string) => void
 }) {
   const { opensHour, graceEndsHour } = recapHoursOf(state.profile)
+  const region = state.profile?.region
   // Rebuilt only when the gardener's evening moves, not on every garden change.
   const sections = useMemo(
     () => guideSections({ opensHour, graceEndsHour }),
     [opensHour, graceEndsHour],
   )
+  // What a search can find in each section, normalised once.
+  const searchable = useMemo(
+    () =>
+      new Map(
+        sections.map((item) => [
+          item.id,
+          normaliseForSearch([item.short, item.eyebrow, item.title, ...item.paragraphs].join(' ')),
+        ]),
+      ),
+    [sections],
+  )
+  const regionWords = useMemo(
+    () => (region ? normaliseForSearch(regionGuideWords(region)) : ''),
+    [region],
+  )
+
+  const [query, setQuery] = useState('')
+  // Typing stays quick while the sections and species filter behind it. A
+  // cleared search applies at once, so a section it was hiding can take focus.
+  const deferredQuery = useDeferredValue(query)
+  const words = useMemo(() => searchWords(query === '' ? '' : deferredQuery), [query, deferredQuery])
+  const searching = words.length > 0
+  const shown = searching
+    ? sections.filter((item) => hasEveryWord(searchable.get(item.id) ?? '', words))
+    : sections
+  const regionShown = region !== undefined && (!searching || hasEveryWord(regionWords, words))
+  const sectionsMatching = shown.length + (regionShown ? 1 : 0)
+
+  // A section named by the address takes focus once it is drawn: on arrival,
+  // when Back or Forward changes it, and when its link is followed again.
+  // A search hiding it is cleared, adjusting state while rendering, as React
+  // advises, rather than in an effect after a frame of the wrong thing.
+  const [arrivedAt, setArrivedAt] = useState(section)
+  if (section !== arrivedAt) {
+    setArrivedAt(section)
+    if (section !== undefined) setQuery('')
+  }
+  const focusWanted = useRef(section)
+  useEffect(() => {
+    focusWanted.current = section
+  }, [section])
+  const [, askForFocus] = useState(0)
+  const contents = [
+    { id: 'species', short: 'Find your next companion' },
+    ...(region ? [{ id: 'region', short: 'Where you live' }] : []),
+    ...sections.map(({ id, short }) => ({ id, short })),
+  ]
+  useEffect(() => {
+    const wanted = focusWanted.current
+    if (wanted === undefined) return
+    const heading = document.getElementById(headingId(wanted))
+    if (heading) heading.focus()
+    // Drawn, or never will be: a name in the address the Guide has no section
+    // for simply opens it at the top. One that is known but not yet drawn,
+    // while a cleared search settles, is tried again after the next render.
+    if (heading || !contents.some((item) => item.id === wanted)) focusWanted.current = undefined
+  })
+
+  const follow = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return
+    event.preventDefault()
+    setQuery('')
+    focusWanted.current = id
+    onOpenSection?.(id)
+    askForFocus((count) => count + 1)
+  }
+
+  const returnLabel = returnTo ? RETURN_LABELS[returnTo] : undefined
   return (
     <div className="view guide-view">
       <header className="page-header">
@@ -221,17 +363,56 @@ export function GuideView({
             of butterflies in tiny hats.
           </p>
         </div>
+        {returnLabel && onReturn && (
+          <button className="secondary-button guide-return" onClick={onReturn}>
+            <span aria-hidden="true">←</span> {returnLabel}
+          </button>
+        )}
       </header>
-      <SpeciesDirectory state={state} onShowSeed={onShowSeed} />
+      <nav className="card guide-contents" aria-labelledby="guide-contents-title">
+        <h2 id="guide-contents-title">In this guide</h2>
+        <label className="guide-search">
+          Search the guide
+          <input
+            type="search"
+            value={query}
+            placeholder="Try Stardust, Monarch or Milkweed…"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <ul>
+          {contents.map((item) => (
+            <li key={item.id}>
+              <a
+                href={hashForRoute({ view: 'guide', section: item.id })}
+                onClick={(event) => follow(event, item.id)}
+              >
+                {item.short}
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="subtle-copy guide-search-status" role="status">
+          {searching
+            ? sectionsMatching > 0
+              ? `${counted(sectionsMatching, 'section matches', 'sections match')}.`
+              : 'No section matches. The butterflies below may.'
+            : ''}
+        </p>
+      </nav>
+      <SpeciesDirectory state={state} onShowSeed={onShowSeed} words={words} region={region} />
+      {region && regionShown && <RegionGuide region={region} />}
       <div className="guide-grid">
-        {sections.map((section) => (
-          <section className="card guide-card" key={section.title}>
+        {shown.map((item) => (
+          <section className="card guide-card" key={item.id}>
             <span className="guide-icon">
-              <Icon name={section.icon} size={24} />
+              <Icon name={item.icon} size={24} />
             </span>
-            <p className="eyebrow">{section.eyebrow}</p>
-            <h2>{section.title}</h2>
-            {section.paragraphs.map((paragraph) => (
+            <p className="eyebrow">{item.eyebrow}</p>
+            <h2 id={headingId(item.id)} tabIndex={-1}>
+              {item.title}
+            </h2>
+            {item.paragraphs.map((paragraph) => (
               <p key={paragraph.slice(0, 24)}>{paragraph}</p>
             ))}
           </section>

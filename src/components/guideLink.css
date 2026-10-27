@@ -1,0 +1,17 @@
+/* "What does this do?": small beside a meter, but a full touch target. The
+   colours are the theme's own link colours, so night needs nothing more. */
+.guide-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 0.3rem;
+  color: var(--forest);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.guide-link:hover {
+  color: var(--forest-dark);
+}

@@ -37,6 +37,17 @@ describe('field notes by species', () => {
     expect(notes.get('queen')?.count).toBe(1)
   })
 
+  it('keeps the deepest bond with any butterfly of the species, for its facts', () => {
+    const notes = fieldNotesBySpecies([
+      creature('Sol', { bond: 12 }),
+      creature('Luna', { bond: 45 }),
+      creature('Pip', { bond: 3 }),
+      // Not yet a butterfly, so not in the field notes at all.
+      creature('Egg', { stage: 'egg', bond: 90 }),
+    ])
+    expect(notes.get('monarch')?.bond).toBe(45)
+  })
+
   it('names the first of a species to be welcomed, wherever it sits in the garden', () => {
     const notes = fieldNotesBySpecies([
       creature('Later', { discoveredAt: '2026-05-01T12:00:00.000Z' }),

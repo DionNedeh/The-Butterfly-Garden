@@ -11,7 +11,6 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { RecoveryScreen } from './components/RecoveryScreen'
 import { ViewProblem } from './components/ViewProblem'
 import { SplashScreen } from './components/SplashScreen'
-import { UpdatePrompt } from './components/UpdatePrompt'
 
 /**
  * The garden and Today are what the app opens on; everything else is fetched
@@ -73,6 +72,15 @@ const SupportView = lazy(() =>
 const MovedBanner = lazy(() =>
   import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
 )
+// The offer of a new version, and the hourly look for one, arrive once the
+// garden is on screen. A chunk that cannot be fetched shows nothing, rather
+// than taking the garden down with it.
+const UpdatePrompt = lazy(() =>
+  import('./components/UpdatePrompt').then(
+    (m) => ({ default: m.UpdatePrompt }),
+    () => ({ default: () => null }),
+  ),
+)
 
 /** What the support page's own back button says, for the page that opened it. */
 const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
@@ -86,11 +94,18 @@ import { useEffectiveTheme } from './hooks/useEffectiveTheme'
 import { useFadeOut, type FadeOutMinutes } from './hooks/useFadeOut'
 import { useGardenState, type StarterGoal } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
+import { useWhatsNewOnce } from './hooks/useWhatsNewOnce'
+import { followUpdates } from './lib/appUpdate'
 import { useRecapWindow } from './hooks/useRecapWindow'
 import { usePassStatus } from './hooks/usePassStatus'
 import { setPassStatus, trackPassStatus } from './lib/passEntitlement'
 import { dismissPassLapseNotice } from './lib/playBilling'
-import { backAction, requestDialogClose, requestDismiss } from './lib/backNavigation'
+import {
+  backAction,
+  putBackAt,
+  requestDialogClose,
+  requestDismiss,
+} from './lib/backNavigation'
 import {
   leaveApp,
   onAppActiveChange,
@@ -113,12 +128,29 @@ import { nextMorning, paintBrowserBars } from './lib/theme'
 import { useDraft } from './lib/drafts'
 import { heardTrack, soundVolumeOf } from './lib/sound'
 import { isArrival, movedTo } from './lib/hosting'
-import { routeFromHash, urlForRoute, type Route } from './lib/routes'
+import {
+  returnFromGuide,
+  routeFromHash,
+  urlForRoute,
+  type LinkPlace,
+  type Route,
+} from './lib/routes'
 import { Celebrations } from './components/Celebrations'
 
 function currentUrl(): string {
   const { pathname, search, hash } = window.location
   return `${pathname}${search}${hash}`
+}
+
+/**
+ * Puts the gardener back where they pressed a "What does this do?" link, once
+ * the page they return to is drawn. Rendered after the page, inside the same
+ * Suspense, so it runs after the page's own first focus (Care's chip) and
+ * never before the page is there.
+ */
+function PutBack({ place }: { place: LinkPlace }) {
+  useEffect(() => putBackAt(place), [place])
+  return null
 }
 
 interface InstallPromptEvent extends Event {
@@ -214,7 +246,9 @@ function App() {
   /** Set only when something asks for the shop's Garden Pass tab. */
   const shopOpensOnPass = route.view === 'shop' && route.onPass === true
   const navigate = (next: Route, options: { replace?: boolean } = {}) => {
-    window.scrollTo({ top: 0, behavior: 'instant' })
+    // A page opens at its top, except one being returned to, which PutBack
+    // scrolls back to where it was.
+    if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
     const url = urlForRoute(next)
     if (url !== currentUrl()) {
       if (options.replace) window.history.replaceState(null, '', url)
@@ -299,24 +333,30 @@ function App() {
   // Android's back gesture walks back through the app the way a gardener
   // would expect: the open dialog first, then the recap to Today, then any
   // page to the garden, and only then out of the app. The handler is
-  // registered once and reads the current page from a ref.
-  const viewRef = useRef(view)
+  // registered once and reads the current page from a ref, with the page a
+  // "What does this do?" link left, which back returns the Guide to.
+  const routeRef = useRef(route)
   useEffect(() => {
-    viewRef.current = view
-  }, [view])
+    routeRef.current = route
+  }, [route])
   useEffect(
     () =>
       onBackButton(() => {
-        const action = backAction(viewRef.current)
+        const current = routeRef.current
+        const action = backAction(current.view, document, current.from)
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
         else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
+          // Out of the Guide, back does what its Back button does: the same
+          // companion on Care, and the gardener where they were on the page.
+          const back = returnFromGuide(current)
+          const next = back?.view === action.view ? back : { view: action.view }
           // Android's back walks up a fixed ladder (lib/backNavigation), not
           // through history, so each step replaces the address.
-          window.scrollTo({ top: 0, behavior: 'instant' })
-          const url = urlForRoute({ view: action.view })
+          if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
+          const url = urlForRoute(next)
           if (url !== currentUrl()) window.history.replaceState(null, '', url)
-          setRoute({ view: action.view })
+          setRoute(next)
         } else void leaveApp()
       }),
     [],
@@ -389,6 +429,26 @@ function App() {
       window.removeEventListener('beforeinstallprompt', handleInstall)
     }
   }, [])
+
+  // When another tab applies an update, this one reloads with it, whatever
+  // it shows (lib/appUpdate). The Android app has one window and no service
+  // worker; the check is inline so its build leaves all of this out.
+  useEffect(
+    () => (import.meta.env.VITE_PLATFORM === 'android' ? undefined : followUpdates()),
+    [],
+  )
+
+  // After an update, What's new opens by itself once (hooks/useWhatsNewOnce).
+  useWhatsNewOnce({
+    screen:
+      garden.loading || !splashDone ? 'loading' : garden.state?.profile ? 'garden' : 'no-garden',
+    readOnly: garden.persistence.readOnly,
+    lastSeenReleaseId: garden.state?.profile?.lastSeenReleaseId,
+    onOpen: () => {
+      garden.markReleaseSeen(currentRelease.id)
+      setView('whats-new')
+    },
+  })
 
   if (garden.loading || !splashDone) {
     return <SplashScreen />
@@ -471,6 +531,17 @@ function App() {
       : undefined
   const inRecap = view === 'recap' && openedRecapDate !== undefined
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
+  /**
+   * The Guide at one of its sections, remembering the page to return to and
+   * where on it the link was: how far down, and on Care, whose link it was.
+   */
+  const openGuideAt = (section: string, companionId?: string) =>
+    navigate({
+      view: 'guide',
+      section,
+      from: activeView,
+      fromPlace: { section, scrollY: window.scrollY, companionId },
+    })
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -743,6 +814,7 @@ function App() {
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
               onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
+              theme={theme}
             />
           )}
           {activeView === 'care' && (
@@ -761,6 +833,7 @@ function App() {
               onGoToShop={() => setView('shop')}
               openOn={route.companionId}
               onChooseFlight={garden.chooseCompanionFlight}
+              onOpenGuide={openGuideAt}
             />
           )}
           {activeView === 'shop' && (
@@ -768,6 +841,8 @@ function App() {
               state={state}
               onPurchasePattern={garden.purchaseFlightPattern}
               onPurchaseJar={garden.purchaseJar}
+              onRecycleJar={garden.recycleJar}
+              onRestoreJar={garden.restoreJar}
               onPurchaseItem={garden.purchaseItem}
               onOpenCare={() => setView('care')}
               onOpenFlight={() => setView('flight-patterns')}
@@ -776,6 +851,7 @@ function App() {
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
+              onChooseNightBackdrop={garden.chooseNightBackdrop}
             />
           )}
           {activeView === 'flight-patterns' && (
@@ -808,6 +884,7 @@ function App() {
               recap={offeredRecap}
               moonlightCollected={recapCollected}
               openAtCheckIn={route.checkIn}
+              onOpenGuide={openGuideAt}
               onOpenRecap={() => {
                 setRecapOpenedFor(recapTarget)
                 setView('recap')
@@ -824,6 +901,7 @@ function App() {
               }
               onClose={() => setView('today')}
               onFadeToNight={fadeToNight}
+              onOpenGuide={openGuideAt}
             />
           )}
           {activeView === 'guide' && (
@@ -834,6 +912,13 @@ function App() {
                 setView('garden')
               }}
               onOpenSupport={openSupport}
+              section={route.section}
+              returnTo={route.from}
+              onReturn={() => {
+                const back = returnFromGuide(route)
+                if (back) navigate(back)
+              }}
+              onOpenSection={(section) => navigate({ ...route, section })}
             />
           )}
           {activeView === 'whats-new' && <WhatsNewView />}
@@ -907,14 +992,22 @@ function App() {
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
+              onSetRegion={garden.setRegion}
+              onOpenGuide={openGuideAt}
+              onChooseNightBackdrop={garden.chooseNightBackdrop}
             />
           )}
+          {route.restore && <PutBack place={route.restore} />}
         </Suspense>
         </ErrorBoundary>
       </main>
 
       <BottomNav items={navItems} current={activeView} onNavigate={setView} />
-      <UpdatePrompt />
+      {import.meta.env.VITE_PLATFORM !== 'android' && (
+        <Suspense fallback={null}>
+          <UpdatePrompt />
+        </Suspense>
+      )}
     </div>
   )
 }

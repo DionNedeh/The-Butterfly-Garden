@@ -5,6 +5,7 @@ import {
   CURRENT_STATE_VERSION,
   classifyRecord,
   migrateState,
+  storedVersionOf,
   validateGarden,
 } from './validateGarden'
 
@@ -55,7 +56,8 @@ export type Drafts = Record<string, string>
  *  3. Raise `DATABASE_VERSION`, so the store is actually created.
  *     -- pinned by "every part store exists in the database it opens".
  *  4. Raise `CURRENT_STATE_VERSION` (in validateGarden.ts; every lower version
- *     stays readable automatically) and give the collection a
+ *     stays readable automatically), have `storedVersionOf` write the new
+ *     version for every garden from then on, and give the collection a
  *     `COLLECTION_SINCE_VERSION` entry. Without that entry every garden in the
  *     wild is read as damaged.
  *     -- pinned by "loads a stored garden from before every new collection".
@@ -107,6 +109,11 @@ export const COLLECTION_SINCE_VERSION: Partial<
   moonlight: 5,
   customBackdrops: 6,
 }
+
+/** The newest version that brought a collection with it. */
+const LATEST_COLLECTION_VERSION = Math.max(
+  ...Object.values(COLLECTION_SINCE_VERSION).filter((version) => version !== undefined),
+)
 
 /**
  * Whether an absent collection is explained by the version the garden was
@@ -393,7 +400,8 @@ function storeFor(part: GardenPart): StoreNames<GardenDatabase> {
 
 function metaOf(state: AppState, revision: number): GardenMeta {
   return {
-    version: state.version,
+    // 6 or 7, by what the garden holds (validateGarden's storedVersionOf).
+    version: storedVersionOf(state),
     profile: state.profile,
     seeds: state.seeds,
     nectar: state.nectar,
@@ -864,9 +872,12 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     const migrated = candidate ? migrateState(candidate) : undefined
     if (migrated) {
       persistedRevision = revisionOf(meta)
+      // Behind the newest version that brought a collection, that is: a
+      // garden kept at 6 because it needs no more (storedVersionOf) is not
+      // behind, and is not rewritten whole on every launch.
       const behind =
         typeof storedVersion === 'number' &&
-        storedVersion < CURRENT_STATE_VERSION
+        storedVersion < LATEST_COLLECTION_VERSION
       if (!behind) {
         persisted = migrated
         return { status: 'loaded', state: migrated }
@@ -968,6 +979,15 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         persistedRevision = revision
         return dirty
       })
+    },
+
+    /**
+     * Settles once every write already asked for has finished, whether it
+     * was kept or refused. An update's reload waits on it, so a change made
+     * a moment before is never cut off half-written.
+     */
+    async settled(): Promise<void> {
+      await queue
     },
 
     /**

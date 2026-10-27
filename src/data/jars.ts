@@ -5,10 +5,37 @@ export const JAR_PRICE = 6
 /** Enough for a name or a short word on every plant spot, several times over. */
 export const JAR_CAPACITY = 60
 
-export const jarCharacters = [
-  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
-  ...'0123456789'.split(''),
-]
+/** The letters and numbers the shop has always made. */
+export const JAR_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+export const JAR_NUMBERS = '0123456789'
+
+/**
+ * Accented capitals and a few marks, for names and little messages.
+ *
+ * Every one is drawn by the fonts the app ships, in the latin subset the PWA
+ * keeps offline (jarGlyphs.test.ts reads the font files to be sure). ♥, ★, ☀,
+ * ☾ and ✿ are not in them: a phone would draw those in a font of its own,
+ * different on every device, so they are left out until a font carries them.
+ */
+export const JAR_ACCENTED = 'ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÖØŒÙÚÛÜ'
+export const JAR_MARKS = '!?&+.*'
+
+/**
+ * What each mark is called, wherever a jar is spoken of. A lone "!" or "?"
+ * is passed over in silence by a screen reader at its usual punctuation
+ * level, so without these a "!" jar and a "?" jar would sound the same.
+ */
+export const JAR_MARK_NAMES: Readonly<Record<string, string>> = {
+  '!': 'exclamation mark',
+  '?': 'question mark',
+  '&': 'ampersand',
+  '+': 'plus',
+  '.': 'dot',
+  '*': 'asterisk',
+}
+
+/** Every character a jar can carry, in the order the shop shows them. */
+export const jarCharacters = [...JAR_LETTERS, ...JAR_NUMBERS, ...JAR_ACCENTED, ...JAR_MARKS]
 
 /** The cream label every jar's letter is printed on. */
 export const JAR_LABEL = '#fff9e8'

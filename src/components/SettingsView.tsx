@@ -18,17 +18,23 @@ import { canShareFile, shareTextFile } from '../lib/shareFile'
 import { isAndroidApp } from '../lib/platform'
 import {
   formatBytes,
-  isAppleMobileBrowser,
-  isInstalledApp,
   requestPersistentStorage,
   storageStatus,
   type StorageStatus,
 } from '../lib/storage'
+import { homeScreenAdvice } from '../lib/install'
 import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
-import type { AmbientTrackId, AppState, GardenBackdropId, GardenPace, TextSize } from '../types'
+import type {
+  AmbientTrackId,
+  AppState,
+  GardenBackdropId,
+  GardenPace,
+  RegionId,
+  TextSize,
+} from '../types'
 import { motionPreference, type MotionPreference } from '../lib/motion'
 import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
@@ -36,6 +42,8 @@ import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { releaseName } from '../data/currentRelease'
 import { soundVolumeOf } from '../lib/sound'
 import { SoundSwitches, SoundVolume } from './SoundControls'
+import { GuideLink } from './GuideLink'
+import { RegionSetting } from './RegionSetting'
 import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
@@ -255,6 +263,9 @@ export function SettingsView({
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
   onSelectCustomBackdrop,
+  onSetRegion,
+  onOpenGuide,
+  onChooseNightBackdrop,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -310,6 +321,11 @@ export function SettingsView({
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
   onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
+  /** Where the gardener gardens, for the Guide's native marks, or none. */
+  onSetRegion?: (region: RegionId | undefined) => void
+  /** Open the Guide at a section, from a "What does this do?" link. */
+  onOpenGuide?: (section: string) => void
+  onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -340,6 +356,8 @@ export function SettingsView({
   const [canShareBackup] = useState(() =>
     canShareFile(datedFileName(''), 'application/json'),
   )
+  /** iPhone and iPad, not yet on the Home Screen: how to put it there. */
+  const [homeScreen] = useState(homeScreenAdvice)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Inline rather than isAndroidApp(): the bundler folds only an inline
   // check, which keeps the Android-only cards and Play calls out of the PWA.
@@ -769,6 +787,12 @@ export function SettingsView({
                 The Moonlight recap opens in your evening. Up past midnight, it
                 still offers the day before until your late night ends. For
                 shift work and night owls.
+                {onOpenGuide && (
+                  <>
+                    {' '}
+                    <GuideLink section="moonlight" topic="Moonlight" onOpen={onOpenGuide} />
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -798,6 +822,12 @@ export function SettingsView({
           <p className="section-explainer">
             A day of care is a day you earn Sunlight. Changing the pace keeps
             every plant, egg and day of care where it is.
+            {onOpenGuide && (
+              <>
+                {' '}
+                <GuideLink section="seeds" topic="Seeds, plants and eggs" onOpen={onOpenGuide} />
+              </>
+            )}
           </p>
           <fieldset className="motion-options">
             <legend className="sr-only">Garden pace</legend>
@@ -820,6 +850,14 @@ export function SettingsView({
         </section>
       )}
 
+      {onSetRegion && (
+        <RegionSetting
+          region={profile?.region}
+          onChoose={onSetRegion}
+          onOpenGuide={onOpenGuide}
+        />
+      )}
+
       {onSaveCustomBackdrop &&
         onDeleteCustomBackdrop &&
         onSelectCustomBackdrop && (
@@ -829,6 +867,7 @@ export function SettingsView({
             onSaveCustomBackdrop={onSaveCustomBackdrop}
             onDeleteCustomBackdrop={onDeleteCustomBackdrop}
             onSelectCustomBackdrop={onSelectCustomBackdrop}
+            onChooseNightBackdrop={onChooseNightBackdrop}
           />
         )}
       <section className="card">
@@ -1085,24 +1124,24 @@ export function SettingsView({
                 `The garden and the app use about ${formatBytes(storage.usage)} here.`}
             </p>
             {storage.protection === 'best-effort' && (
-              <>
-                {isAppleMobileBrowser() && !isInstalledApp() && (
-                  <p>
-                    On iPhone and iPad, Safari clears a site's storage after
-                    seven days without a visit. Add the garden to your Home
-                    Screen (Share → Add to Home Screen) to keep it, and keep a
-                    backup too.
-                  </p>
-                )}
-                <button
-                  className="text-button"
-                  onClick={() => void askToKeepStorage()}
-                >
-                  Ask the browser again
-                </button>
-              </>
+              <button
+                className="text-button"
+                onClick={() => void askToKeepStorage()}
+              >
+                Ask the browser again
+              </button>
             )}
           </div>
+        )}
+        {/* The garden's Home Screen guide is shown once; this line stays,
+            whatever the browser says about storage, until it agrees to keep
+            the garden or the garden is on the Home Screen. */}
+        {!android && homeScreen && storage && storage.protection !== 'protected' && (
+          <p className="settings-note">
+            {homeScreen === 'safari'
+              ? 'On iPhone and iPad, Safari may clear what a website keeps after seven days of use without a visit. Add the garden to your Home Screen to keep it (Share, then Add to Home Screen, then Add), and keep a backup too.'
+              : 'On iPhone and iPad, a browser may clear what a website keeps after seven days of use without a visit. Add the garden to your Home Screen to keep it (your browser’s Share menu, then Add to Home Screen, then Add), and keep a backup too.'}
+          </p>
         )}
       </section>
 

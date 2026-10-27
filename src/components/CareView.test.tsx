@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -281,6 +281,15 @@ describe('opened for one companion, and a flight of its own', () => {
     expect(screen.getByLabelText('Name for Briar')).toBeInTheDocument()
   })
 
+  it('names the companion shown when its bond meter’s link is pressed', async () => {
+    const user = userEvent.setup()
+    const onOpenGuide = vi.fn()
+    renderCare(gardenOfButterflies(), { onOpenGuide })
+    await user.click(screen.getByRole('tab', { name: /Clove/ }))
+    await user.click(screen.getByRole('link', { name: /^What does this do\? Bond levels/ }))
+    expect(onOpenGuide).toHaveBeenCalledExactlyOnceWith('bond', 'c')
+  })
+
   it('opens as usual, and leaves focus alone, when asked for nobody in particular', () => {
     renderCare(gardenOfButterflies())
     expect(screen.getByRole('tab', { name: /Aster/ })).toHaveAttribute('aria-selected', 'true')
@@ -409,3 +418,43 @@ describe('the bond and the companion’s story', () => {
     expect(undo.closest('.care-view')).not.toBeNull()
   })
 })
+
+describe('CareView field guide', () => {
+  function withBond(bond: number): AppState {
+    const base = createInitialState('Tester', 'Test Garden')
+    return { ...base, creatures: base.creatures.map((creature) => ({ ...creature, bond })) }
+  }
+
+  function factCard() {
+    return within(screen.getByRole('heading', { level: 2, name: 'Monarch' }).closest('section')!)
+  }
+
+  it('shares the first fact, and says which bond level shares the next', () => {
+    renderCare(withBond(0))
+    expect(factCard().getAllByText(/./, { selector: '.field-fact' })).toHaveLength(1)
+    expect(factCard().getByText('Monarch caterpillars rely on milkweed, the only plants they can eat.')).toBeInTheDocument()
+    expect(factCard().getByText('Bond level 3 shares another.')).toBeInTheDocument()
+  })
+
+  it('shares a second fact at bond level 3 and the third at level 5', () => {
+    renderCare(withBond(BOND_PER_LEVEL * 2))
+    expect(factCard().getAllByText(/./, { selector: '.field-fact' })).toHaveLength(2)
+    expect(factCard().getByText('Bond level 5 shares another.')).toBeInTheDocument()
+  })
+
+  it('says nothing more to come once all three are shared', () => {
+    renderCare(withBond(BOND_PER_LEVEL * 4))
+    expect(factCard().getAllByText(/./, { selector: '.field-fact' })).toHaveLength(3)
+    expect(factCard().queryByText(/shares another/)).toBeNull()
+  })
+
+  it('links the bond meter to what bond levels do', async () => {
+    const user = userEvent.setup()
+    const onOpenGuide = vi.fn()
+    const state = withBond(0)
+    renderCare(state, { onOpenGuide })
+    await user.click(screen.getByRole('link', { name: 'What does this do? Bond levels, in the Guide' }))
+    expect(onOpenGuide).toHaveBeenCalledWith('bond', state.creatures[0].id)
+  })
+})
+

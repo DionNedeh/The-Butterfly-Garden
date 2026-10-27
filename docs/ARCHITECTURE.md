@@ -45,6 +45,7 @@ tells other tabs which parts it wrote.
 | The app shell, pages, hash routes, error boundaries | `App.tsx`, `lib/routes.ts` |
 | The navigation: header, dock, and on phones five tabs and More | `App.tsx` (the pages), `lib/navigation.ts` (dock order, badges) |
 | What a purchase did, or why it did not | `lib/purchase.ts`, beside the shop's rules in `lib/wardrobe.ts`, `lib/jars.ts`, `lib/flightPatterns.ts` |
+| Jars: the characters (each checked against the bundled fonts), recycling and its undo, alike jars stacked, a mark said by its name | `data/jars.ts` (with the marks' spoken names), `lib/jars.ts` (buy, place, recycle, undo; `jarName` shown, `jarSpokenName` said), `lib/jarStacks.ts`, `components/Spoken.tsx` (a glyph shown, its name said), `components/shop/JarShelf.tsx`, `components/garden/JarManager.tsx` (loaded with a plant's panel) |
 | The header's tabs, the phone's five-tab dock and its More sheet | `components/Navigation.tsx`, `lib/navigation.ts` |
 | Last-resort screens | `main.tsx` → `SafeMode` (nothing could draw); `RecoveryScreen` (stored garden unreadable); `ViewProblem` (one page failed) |
 | Types of everything stored | `types.ts` |
@@ -56,11 +57,13 @@ tells other tabs which parts it wrote.
 | Ideas for goals, their two-minute versions, a balanced mix | `data/goalSuggestions.ts` (loaded with Today and onboarding only), `lib/goalSuggestions.ts` |
 | Restoring a chosen file | `lib/backupFile.ts` (size and read), `lib/backupPreview.ts` (what it holds) |
 | Suggesting a fresh backup | `lib/backupReminder.ts` (when, and in what words); `lib/shareFile.ts` (*Share backup…* in a browser that can) |
-| A gardener's own images | `lib/imageImport.ts` (header check before decode, resize), `lib/customBackdrops.ts` (limits, crop) |
+| A gardener's own images, by day and by night | `lib/imageImport.ts` (the checks before decoding; resizing and quarter turns in one draw), `lib/customBackdrops.ts` (limits, crop, which image shows by day and which by night), `lib/backdropEdits.ts` (the editor's turns and brightness) |
 | The Garden Pass: who may use what | `lib/gardenPass.ts`, the only access boundary; `lib/passEntitlement.ts`, `lib/playBilling.ts` behind it |
 | Android: back gesture, files, billing | `lib/backNavigation.ts`, `lib/native.ts`, `android/app/src/main/java/…` |
 | Moving the PWA to another address | `lib/hosting.ts`, `docs/moving-the-garden.md` |
 | The installed PWA: icons, shortcuts, screenshots | `pwaManifest.ts`; `scripts/pwa-assets.mjs` renders the shortcut icons and screenshots |
+| A new version of the PWA: the hourly look, *Update now* in every tab at once, *What's new* once after | `components/UpdatePrompt.tsx` (loaded after the garden), `hooks/useUpdateCheck.ts`, `lib/appUpdate.ts` (the tabs' own channel, whose message names the build it leaves, `__BUILD_ID__` from `vite.config.ts`, and a reload that puts drafts and writes on disk first), `hooks/useWhatsNewOnce.ts`; `data/currentRelease.ts` (which release this is, in the first load), `data/releases.ts` (its notes, read on *What's new* alone) |
+| Adding the garden to an iPhone's or iPad's Home Screen | `lib/install.ts` (who is advised, and in which words), `components/garden/HomeScreenGuide.tsx` (the garden's one-time card), put away in this browser's own storage by `lib/install.ts`, apart from the garden and its drafts, and a line in Settings' storage note |
 | Moments worth saying aloud | `lib/gardenEvents.ts` → `lib/announcer.ts` → `Celebrations` |
 | The garden pace: Classic, or Keep giving (a host in bloom blooms again) | `lib/gardenPace.ts` (the rule), `awardSunlight` in `lib/progression.ts` (the bloom), `lib/plantManagement.ts` (what the plant's panel says) |
 | The last visit, and a small welcome back after a few days away | `lib/visits.ts` (noted at most once a day by `useGardenState`), `lib/welcomeBack.ts` (the line), `components/garden/WelcomeBack.tsx` (loaded only on such a day) |
@@ -68,6 +71,9 @@ tells other tabs which parts it wrote.
 | Motion preferences and animation | `lib/motion.ts`, `hooks/useFlightMotion.ts`, `components/sprites/` |
 | Where each butterfly flies, and meeting one | `lib/flightMotion.ts` (a lane of sky each), `lib/flightPatterns.ts` (`flightPatternFor`: a companion's own pattern or the garden's), `components/ButterflyCard.tsx` (the card a tap opens, with Pet and *Care for {name}*) |
 | The theme, chosen or followed (device, evening), and text size | `lib/theme.ts` (the rule), `hooks/useEffectiveTheme.ts` (when it turns), `lib/textSize.ts`; the shell applies them in `App.tsx` |
+| The Guide as a reference: its contents, its search, and a "What does this do?" link from each meter | `components/GuideView.tsx` (sections, `#/guide/{section}` in `lib/routes.ts`), `lib/searchText.ts` (the same search as the Journal's), `components/GuideLink.tsx`; the Guide's Back button and Android's back return to the page a link left, the same companion on Care, scrolled as it was with focus on the link (`returnFromGuide` in `lib/routes.ts`, `lib/backNavigation.ts`) |
+| Each species' three facts, shared as a bond grows, and where they were checked | `data/speciesFacts.ts` (loaded with Care, the Journal and the Guide, not the garden), `lib/speciesFacts.ts` (bond levels 1, 3 and 5), `components/FieldFacts.tsx` |
+| My region: native marks and planting tips, chosen by hand | `lib/region.ts` (the ids a stored garden may hold), `lib/regionMarks.ts` (the words), `data/regions.ts` (what is native where, with sources), `lib/regionGuide.ts`, `components/guide/RegionGuide.tsx`, `components/RegionSetting.tsx` |
 | The soundscapes: what plays, how loud, and when it rests | `data/ambientTracks.ts` (the list), `lib/sound.ts` (volume, night's piano, the switches), `hooks/useAmbientSound.ts` (the audio context, its level, pauses and the fade-out), `lib/soundscapes.ts` (the synthesis, loaded when the sound first starts) |
 
 ## Invariants

@@ -1018,6 +1018,64 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   await expect(page.getByText(/This plant spot is empty/i)).toBeVisible()
 })
 
+test('stacks alike jars, recycles one for half its Nectar, and Undo takes it back', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    state.nectar = 18
+  })
+  await page.reload()
+  await goTo(page, 'Shop')
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Jars', exact: true })
+    .click()
+
+  // An accented capital, from the fold beneath the letters and numbers.
+  // The fold is a 44px target like every control (laid out, not mid-animation).
+  const accents = page.locator('.jar-more-characters summary')
+  expect(await accents.evaluate((fold) => (fold as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44)
+  await page.getByText('Accents and marks').click()
+  await page.getByRole('button', { name: 'É', exact: true }).click()
+  await page.getByRole('button', { name: 'Buy Blue É jar' }).click()
+  await page.getByRole('button', { name: 'Buy Blue É jar' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('6')
+
+  // Two alike jars are one row on the shelf.
+  const shelf = page.getByRole('region', { name: 'Your jars' })
+  await expect(shelf.getByRole('listitem')).toHaveCount(1)
+  await expect(shelf.getByRole('listitem')).toContainText('Blue É ×2')
+
+  const recycle = shelf.getByRole('button', {
+    name: 'Recycle for 3 Nectar: one Blue É jar',
+  })
+  await recycle.click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('9')
+  await expect(shelf.getByRole('listitem')).not.toContainText('×2')
+  await expect(recycle).toBeFocused()
+  await expect(page.getByText('Blue É jar recycled, for 3 Nectar.')).toBeVisible()
+  expect(await seriousViolations(page, 'the jar shelf, with Undo')).toEqual([])
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('6')
+  await expect(shelf.getByRole('listitem')).toContainText('Blue É ×2')
+  await expect(recycle).toBeFocused()
+
+  // In the garden the two are one choice, which places one of them.
+  await goTo(page, 'Garden')
+  await page.getByRole('button', { name: /View Milkweed/i }).click()
+  await page
+    .getByRole('button', { name: 'Place Blue É jar on Milkweed, 2 on the shelf' })
+    .click()
+  await expect(
+    page.getByRole('button', { name: /View Milkweed.*Blue É jar/i }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Place Blue É jar on Milkweed', exact: true }),
+  ).toBeFocused()
+})
+
 test('shows plant details, protects active hosts, and frees a full garden space', async ({
   page,
 }) => {
@@ -1568,6 +1626,60 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   )
 })
 
+test('a personal image turns, takes a brightness, and shows only by night', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  await enterGarden(page)
+  await goTo(page, 'Shop')
+  await page.getByRole('button', { name: 'Backdrops', exact: true }).click()
+  await page.getByRole('button', { name: /Add your own backdrop/ }).click()
+  const editor = page.getByRole('dialog')
+  await editor
+    .locator('input[type=file]')
+    .setInputFiles('src/assets/garden-cottage-bloom.webp')
+  await editor.getByLabel('Image name').fill('Evening light')
+  // Pressed from the keyboard, the button keeps focus while the turn is made
+  // and after; the turn is in the stored pixels, 1600 by 900 turned upright.
+  const right = editor.getByRole('button', { name: 'Turn right' })
+  await right.focus()
+  await page.keyboard.press('Enter')
+  await expect(editor.locator('.custom-scene-image')).toHaveJSProperty('naturalWidth', 900)
+  await expect(right).toHaveAttribute('aria-disabled', 'false')
+  await expect(right).toBeFocused()
+  const brightness = editor.getByLabel('Brightness')
+  await brightness.fill('-30')
+  await expect(brightness).toHaveAttribute('aria-valuetext', '30% darker')
+  await expect(editor.locator('.custom-scene-image')).toHaveCSS('filter', 'brightness(0.7)')
+  expect(await seriousViolations(page, 'Backdrop editor, turned and darkened')).toEqual([])
+  await editor.getByRole('button', { name: 'Save & use backdrop' }).click()
+  await expect(editor).not.toBeVisible()
+
+  // By day, a built-in scene; by night, the image.
+  await page
+    .locator('.scene-card')
+    .filter({ has: page.getByRole('heading', { name: 'Sunlit Meadow', exact: true }) })
+    .getByRole('button')
+    .click()
+  const byNight = page.getByRole('group', { name: 'By night' })
+  await expect(byNight.getByRole('radio', { name: /^The same as by day/ })).toBeChecked()
+  await byNight.getByRole('radio', { name: 'Evening light' }).check()
+  await expect(byNight.getByRole('radio', { name: 'Evening light' })).toBeChecked()
+  expect(await seriousViolations(page, 'Backdrops by night')).toEqual([])
+
+  await goTo(page, 'Garden')
+  const image = page.locator('.custom-scene-layer img')
+  await expect(image).toHaveCount(0)
+  await page.getByRole('button', { name: 'Switch to night mode' }).click()
+  await expect(image).toBeVisible()
+  await expect(image).toHaveJSProperty('naturalWidth', 900)
+  await expect(image).toHaveCSS('filter', 'brightness(0.7)')
+  // The heading over it is never filtered.
+  await expect(page.locator('.garden-heading h1')).toHaveCSS('filter', 'none')
+  await page.getByRole('button', { name: 'Switch to sunlight mode' }).click()
+  await expect(image).toHaveCount(0)
+})
+
 test('a look saved on one companion is worn by another, and their story kept', async ({
   page,
 }) => {
@@ -1676,6 +1788,46 @@ test('species seed guidance opens the right seed without planting it', async ({
   await expect(page.locator('.seed-highlight')).toContainText('Milkweed')
   await expect(page.locator('.seed-highlight')).toBeInViewport()
   await expect(page.locator('.garden-plant')).toHaveCount(2)
+})
+
+test('the Guide finds things, marks what lives where you garden, and explains a meter', async ({
+  page,
+}) => {
+  await enterGarden(page)
+
+  // "What does this do?" beside Today's Sunlight, and the way back.
+  await goTo(page, 'Today')
+  await page.getByRole('link', { name: /^What does this do\? Sunlight/ }).click()
+  await expect(page).toHaveURL(/#\/guide\/sunlight$/)
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Sunlight — care for yourself first' }),
+  ).toBeFocused()
+  await page.getByRole('button', { name: 'Back to Today' }).click()
+  await expect(page).toHaveURL(/#\/today$/)
+  // Back where they were: focus on the link pressed, not on the page.
+  await expect(page.getByRole('link', { name: /^What does this do\? Sunlight/ })).toBeFocused()
+
+  // A region chosen by hand, never from a location.
+  await goTo(page, 'Settings')
+  await page.getByLabel('My region').selectOption('europe')
+  await goTo(page, 'Guide')
+  const contents = page.getByRole('navigation', { name: 'In this guide' })
+  await contents.getByRole('link', { name: 'Where you live' }).click()
+  await expect(page).toHaveURL(/#\/guide\/region$/)
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Butterflies where you live' }),
+  ).toBeFocused()
+  await expect(page.getByText('Holly and ivy, for holly blues')).toBeVisible()
+
+  // One search for the sections and the butterflies.
+  await page.getByRole('searchbox', { name: 'Search the guide' }).fill('red admiral')
+  await expect(page.locator('.species-card')).toHaveCount(1)
+  await expect(
+    page.locator('.species-card').getByText(/^Native to the UK and Europe/).first(),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Letter jars' })).toHaveCount(0)
+  await page.waitForTimeout(300)
+  expect(await seriousViolations(page, 'Guide with a region and a search')).toEqual([])
 })
 
 test.describe('the garden in flight', () => {

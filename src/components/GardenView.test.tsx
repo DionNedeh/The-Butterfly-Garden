@@ -313,6 +313,61 @@ describe('GardenView plant protection', () => {
   })
 })
 
+describe('a plant’s jars', () => {
+  it('opens the jar panel with the plant, alike jars stacked, and places one of them', async () => {
+    const user = userEvent.setup()
+    const jar = (id: string) => ({
+      id,
+      character: 'É',
+      colorId: 'pink' as const,
+      purchasedAt: '2026-10-27T12:00:00.000Z',
+    })
+    const { handlers, state } = renderGarden({ jars: [jar('e1'), jar('e2')] })
+
+    await user.click(screen.getByRole('button', { name: /^View Milkweed/ }))
+    // Loaded with the panel, not with the garden.
+    const place = await screen.findByRole('button', {
+      name: 'Place Pink É jar on Milkweed, 2 on the shelf',
+    })
+    await user.click(place)
+    expect(handlers.onPlaceJar).toHaveBeenCalledWith('e1', state.plants[0].id)
+  })
+
+  it('names a plant’s jar in the scene', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    renderGarden({
+      jars: [{ id: 'a1', character: 'A', colorId: 'blue', purchasedAt: '' }],
+      jarPlacements: [{ jarId: 'a1', plantId: seed.plants[0].id }],
+      plants: seed.plants,
+    })
+    expect(screen.getByRole('button', { name: /^View Milkweed.*with Blue A jar$/ })).toBeInTheDocument()
+  })
+
+  it('says a jar’s mark by its name, so a "!" jar and a "?" jar do not sound alike', () => {
+    const plantedAt = '2026-10-01T12:00:00.000Z'
+    renderGarden({
+      plants: [
+        { id: 'milkweed-1', plantId: 'milkweed', growth: 3, plantedAt },
+        { id: 'aster-1', plantId: 'aster', growth: 3, plantedAt },
+      ],
+      jars: [
+        { id: 'x1', character: '!', colorId: 'blue', purchasedAt: plantedAt },
+        { id: 'q1', character: '?', colorId: 'blue', purchasedAt: plantedAt },
+      ],
+      jarPlacements: [
+        { jarId: 'x1', plantId: 'milkweed-1' },
+        { jarId: 'q1', plantId: 'aster-1' },
+      ],
+    })
+    expect(
+      screen.getByRole('button', { name: /^View Milkweed.*with Blue exclamation mark jar$/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /^View Aster.*with Blue question mark jar$/ }),
+    ).toBeInTheDocument()
+  })
+})
+
 describe('the species welcomed figure', () => {
   it('counts distinct species, not butterflies', () => {
     // Three butterflies, two species. Counting creatures reported three, which

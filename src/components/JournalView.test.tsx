@@ -226,6 +226,27 @@ describe('butterflies welcomed', () => {
     expect(within(queen).getByText('Welcomed as Pip')).toBeInTheDocument()
   })
 
+  it('shares more of a species’ facts as the deepest bond with it grows', async () => {
+    const user = userEvent.setup()
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [
+        { ...butterfly('Sol', 'monarch', '2026-03-03T15:00:00.000Z'), bond: 25 },
+        { ...butterfly('Luna', 'monarch', '2026-04-03T15:00:00.000Z'), bond: 2 },
+        butterfly('Pip', 'queen', '2026-05-03T15:00:00.000Z'),
+      ],
+    })
+    await user.click(screen.getByText('Butterflies welcomed'))
+    // Sol's bond is level 3: two of three facts, and word of the third.
+    const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
+    expect(within(monarch).getAllByText(/./, { selector: '.field-fact' })).toHaveLength(2)
+    expect(within(monarch).getByText('Bond level 5 shares another.')).toBeInTheDocument()
+    // A new friend: the first fact, and the second still to come.
+    const queen = screen.getByText('Queen').closest('article') as HTMLElement
+    expect(within(queen).getAllByText(/./, { selector: '.field-fact' })).toHaveLength(1)
+    expect(within(queen).getByText('Bond level 3 shares another.')).toBeInTheDocument()
+  })
+
   it('leaves the date off a card whose arrival is unknown', async () => {
     const user = userEvent.setup()
     renderJournal({

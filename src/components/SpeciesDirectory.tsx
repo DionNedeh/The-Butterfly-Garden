@@ -1,30 +1,63 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   speciesAcquisitionRecords,
   nextSpeciesForPlant,
   distinctSpeciesRaised,
 } from '../lib/speciesAcquisition'
 import { species } from '../data/content'
-import type { AppState } from '../types'
+import { plantRegions, speciesRegions } from '../data/regions'
+import { publishersOf, speciesFacts } from '../data/speciesFacts'
+import { regionMark, type RegionMarks } from '../lib/regionMarks'
+import { hasEveryWord, normaliseForSearch } from '../lib/searchText'
+import { listed } from '../lib/plural'
+import type { AppState, RegionId } from '../types'
 import { ButterflySprite } from './sprites/ButterflySprite'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
 import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 
+/**
+ * Every species, what to plant for it, and what the garden would bring next.
+ *
+ * The Guide's search finds species here too: `words` are its words, already
+ * normalised (lib/searchText). With a `region` chosen in Settings, each
+ * species and host plant says whether it is native there (data/regions);
+ * without one, nothing is marked.
+ */
 export function SpeciesDirectory({
   state,
   onShowSeed,
+  words = [],
+  region,
 }: {
   state: AppState
   onShowSeed: (id: string) => void
+  words?: readonly string[]
+  region?: RegionId
 }) {
-  const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
-  const records = speciesAcquisitionRecords(state).filter(
+  const all = useMemo(() => speciesAcquisitionRecords(state), [state])
+  // What a search can find in each species, normalised once per change of
+  // garden or region rather than on every keystroke.
+  const searchable = useMemo(
+    () =>
+      new Map(
+        all.map((item) => {
+          const regionWords = regionMark(speciesRegions[item.speciesId], region)?.label ?? ''
+          const scientific = species.find((entry) => entry.id === item.speciesId)?.scientificName
+          return [
+            item.speciesId,
+            normaliseForSearch(
+              `${item.speciesName} ${scientific ?? ''} ${item.hostPlantNames.join(' ')} ${regionWords}`,
+            ),
+          ]
+        }),
+      ),
+    [all, region],
+  )
+  const records = all.filter(
     (item) =>
-      `${item.speciesName} ${item.hostPlantNames.join(' ')}`
-        .toLowerCase()
-        .includes(query.toLowerCase()) &&
+      hasEveryWord(searchable.get(item.speciesId) ?? '', words) &&
       (filter === 'all' || item.progress === filter),
   )
   return (
@@ -32,7 +65,9 @@ export function SpeciesDirectory({
       <div className="section-heading">
         <div>
           <p className="eyebrow">Every butterfly begins somewhere</p>
-          <h2 id="species-title">Find your next companion</h2>
+          <h2 id="species-title" tabIndex={-1}>
+            Find your next companion
+          </h2>
         </div>
         <span className="count-badge">
           {distinctSpeciesRaised(state)} / {species.length} raised
@@ -44,15 +79,6 @@ export function SpeciesDirectory({
         stage then takes three care days, at your pace.
       </p>
       <div className="shop-filters">
-        <label className="shop-search">
-          Find a butterfly or seed
-          <input
-            type="search"
-            value={query}
-            placeholder="Try Monarch or Milkweed…"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
         <label>
           Your collection
           <select
@@ -88,6 +114,7 @@ export function SpeciesDirectory({
             </div>
             <div>
               <h3>{item.speciesName}</h3>
+              <RegionMarkLine marks={speciesRegions[item.speciesId]} region={region} />
               <p className="seed-recipe">
                 Plant <strong>{item.hostPlantNames.join(' or ')}</strong>
               </p>
@@ -95,6 +122,11 @@ export function SpeciesDirectory({
                 const next = nextSpeciesForPlant(state, id)
                 return (
                   <div key={id}>
+                    <RegionMarkLine
+                      marks={plantRegions[id]}
+                      region={region}
+                      subject={item.hostPlantNames[index]}
+                    />
                     <p className="subtle-copy">
                       {next
                         ? `Next with your current garden: ${species.find((entry) => entry.id === next)?.commonName}.`
@@ -109,6 +141,7 @@ export function SpeciesDirectory({
                   </div>
                 )
               })}
+              <CheckedWith speciesId={item.speciesId} />
             </div>
           </article>
         ))}
@@ -138,4 +171,41 @@ export function SpeciesDirectory({
       </details>
     </section>
   )
+}
+
+/**
+ * A species' or plant's mark for the gardener's region: "Native to North
+ * America", with a note when the region would overstate it. Nothing at all
+ * for one that does not live there, or for "Elsewhere".
+ */
+function RegionMarkLine({
+  marks,
+  region,
+  subject,
+}: {
+  marks: RegionMarks | undefined
+  region: RegionId | undefined
+  /** A plant's name, so its mark is not read as the butterfly's. */
+  subject?: string
+}) {
+  const mark = regionMark(marks, region)
+  if (!mark) return null
+  return (
+    <p className={`region-mark ${mark.presence}`}>
+      {subject && <strong>{subject}: </strong>}
+      {mark.label}
+      {mark.note && (
+        <>
+          . <small>{mark.note}</small>
+        </>
+      )}
+    </p>
+  )
+}
+
+/** Who the species' facts, name and host plant were checked with. */
+function CheckedWith({ speciesId }: { speciesId: string }) {
+  const sources = speciesFacts[speciesId]?.sources
+  if (!sources) return null
+  return <p className="checked-with">Checked with {listed(publishersOf(sources))}.</p>
 }

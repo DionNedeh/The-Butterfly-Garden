@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { shopItems } from '../data/shopItems'
 import { flightPatterns } from '../data/flightPatterns'
-import { jarCharacters, jarColors, JAR_PRICE, JAR_CAPACITY } from '../data/jars'
+import { jarColors, JAR_PRICE, JAR_CAPACITY } from '../data/jars'
 import { balanceFor, currencyLabel } from '../lib/currency'
-import { GARDEN_PASS_PREVIEW_NOTICE, hasGardenPassFeature } from '../lib/gardenPass'
+import {
+  canWearItem,
+  GARDEN_PASS_PREVIEW_NOTICE,
+  hasGardenPassFeature,
+} from '../lib/gardenPass'
+import type { JarRestoreOutcome, RecycledJar, RecycleOutcome } from '../lib/jars'
+import { jarName as nameJar, jarSpokenName } from '../lib/jars'
 import { stageLabels, STAGE_ORDER } from '../lib/lifecycle'
 import { fitsCreature, wearersByItem } from '../lib/wardrobe'
 import type { PurchaseOutcome } from '../lib/purchase'
@@ -23,7 +29,11 @@ import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { GardenPassPanel } from './shop/GardenPassPanel'
 import { FilterSheet } from './shop/FilterSheet'
 import { PurchaseToast, type PurchaseNote } from './shop/PurchaseToast'
-import { purchaseMessage, type PurchaseSubject } from './shop/purchaseMessage'
+import { purchaseWords, type PurchaseSubject } from './shop/purchaseMessage'
+import { JarCharacterPicker } from './shop/JarCharacterPicker'
+import { JarShelf } from './shop/JarShelf'
+import { UndoToast, type UndoOffer } from './UndoToast'
+import { JarCharacter, Spoken } from './Spoken'
 import { motionPreference } from '../lib/motion'
 // Only the shop draws these, so they arrive with it rather than with the
 // stylesheet every page waits for.
@@ -50,6 +60,8 @@ export function ShopView({
   state,
   onPurchasePattern,
   onPurchaseJar,
+  onRecycleJar,
+  onRestoreJar,
   onPurchaseItem,
   onOpenCare = () => {},
   onOpenFlight = () => {},
@@ -59,6 +71,10 @@ export function ShopView({
   state: AppState
   onPurchasePattern: (id: FlightPatternId) => PurchaseOutcome
   onPurchaseJar: (character: string, color: JarColorId) => PurchaseOutcome
+  /** Recycle a jar on no plant for half its Nectar (lib/jars). */
+  onRecycleJar: (jarId: string) => RecycleOutcome
+  /** Undo a recycle, while the Nectar it brought is still there. */
+  onRestoreJar: (recycled: RecycledJar) => JarRestoreOutcome
   onPurchaseItem: (id: string, quantity?: number) => PurchaseOutcome
   onOpenCare?: () => void
   onOpenFlight?: () => void
@@ -77,6 +93,9 @@ export function ShopView({
   const [character, setCharacter] = useState('A')
   const [color, setColor] = useState<JarColorId>('blue')
   const [note, setNote] = useState<PurchaseNote>()
+  // One toast at a time, in the one place toasts appear: a purchase's words
+  // put away the last undo, and an undo puts away the last purchase's words.
+  const [undo, setUndo] = useState<UndoOffer>()
   // On a phone the filters wait in a sheet behind one button, so the
   // collection itself starts on the first screen.
   const phone = useMediaQuery(PHONE_WIDTH)
@@ -132,8 +151,10 @@ export function ShopView({
         (slot === 'all' || item.slot === slot) &&
         (stage === 'all' || item.stages?.some((value) => value === stage)) &&
         (currency === 'all' || item.currency === currency) &&
+        // A Pass piece is owned while the Pass is open, as it can be worn
+        // then (canWearItem), and not once it has closed.
         (ownership === 'all' ||
-          state.ownedItemIds.includes(item.id) === (ownership === 'owned')) &&
+          canWearItem(state.ownedItemIds, item) === (ownership === 'owned')) &&
         (!fitsCompanion || fitsCreature(item, fitsCompanion)) &&
         (!affordableOnly || balanceFor(state, item.currency) >= item.cost),
     )
@@ -160,17 +181,28 @@ export function ShopView({
     filterButton.current?.focus()
   }
   /**
+   * Words in the shop's toast, in place of any undo on offer, and the same
+   * words as a screen reader should say them where they differ.
+   */
+  const say = (text: string, spoken?: string) => {
+    setUndo(undefined)
+    setNote((previous) => ({ text, spoken, key: (previous?.key ?? 0) + 1 }))
+  }
+  /**
    * Say what a purchase came to, in the words of the reducer's outcome.
    *
    * A purchase that cannot go through is aria-disabled rather than disabled:
    * it still looks unavailable, but it keeps focus when a purchase empties
    * the purse, and pressing it says why, and by how much, instead of nothing.
    */
-  const tell = (outcome: PurchaseOutcome, subject: PurchaseSubject) =>
-    setNote((previous) => ({
-      text: purchaseMessage(outcome, subject),
-      key: (previous?.key ?? 0) + 1,
-    }))
+  const tell = (outcome: PurchaseOutcome, subject: PurchaseSubject) => {
+    const { text, spoken } = purchaseWords(outcome, subject)
+    say(text, spoken)
+  }
+  const offerUndo = (offer: UndoOffer) => {
+    setNote(undefined)
+    setUndo(offer)
+  }
   const buyItem = (id: string, quantity: number) => {
     const item = shopItems.find((entry) => entry.id === id)
     tell(onPurchaseItem(id, quantity), {
@@ -179,7 +211,9 @@ export function ShopView({
       quantity,
     })
   }
-  const jarName = `${jarColors.find((value) => value.id === color)?.label} ${character} jar`
+  const jarName = nameJar(color, character)
+  /** The jar as it is said: a mark by its name (lib/jars). */
+  const spokenJarName = jarSpokenName(color, character)
   // One set of filters, drawn inline on a wide screen or inside the sheet on
   // a phone, so there is never a second search field to keep in step.
   const filters = (
@@ -320,6 +354,8 @@ export function ShopView({
             onClick={() => {
               setTab(item.id)
               reset()
+              // A jar's undo belongs to the shelf it was offered beside.
+              setUndo(undefined)
             }}
           >
             {item.label}
@@ -437,89 +473,94 @@ export function ShopView({
         </>
       )}
       {tab === 'jars' && (
-        <section className="card jar-shop-panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Letters from the garden</p>
-              <h2>Buy letters and numbers</h2>
-              <p>
-                Spell a name, a date, a little reminder. Each jar is yours to
-                move and reuse.
-              </p>
+        <>
+          <section className="card jar-shop-panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Letters from the garden</p>
+                <h2>Buy letters and numbers</h2>
+                <p>
+                  Spell a name, a date, a little reminder. Each jar is yours to
+                  move and reuse, and alike jars stack on your shelf.
+                </p>
+              </div>
+              <span className="pattern-cost">{JAR_PRICE} Nectar each</span>
             </div>
-            <span className="pattern-cost">{JAR_PRICE} Nectar each</span>
-          </div>
-          <div className="jar-shop-layout">
-            <div>
-              <h3>Character</h3>
-              <div className="jar-character-grid" aria-label="Jar characters">
-                {jarCharacters.map((value) => (
-                  <button
-                    key={value}
-                    className={character === value ? 'selected' : ''}
-                    aria-pressed={character === value}
-                    onClick={() => setCharacter(value)}
-                  >
-                    {value}
-                  </button>
-                ))}
+            <div className="jar-shop-layout">
+              <div>
+                <h3>Character</h3>
+                <JarCharacterPicker value={character} onChange={setCharacter} />
+              </div>
+              <div>
+                <h3>Colour</h3>
+                <div className="jar-color-grid" aria-label="Jar colors">
+                  {jarColors.map((value) => (
+                    <button
+                      key={value.id}
+                      className={color === value.id ? 'selected' : ''}
+                      aria-pressed={color === value.id}
+                      onClick={() => setColor(value.id)}
+                    >
+                      <span
+                        className="colour-dot"
+                        style={{ background: value.fill }}
+                      />
+                      {value.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="jar-purchase-preview">
+                <JarSprite character={character} colorId={color} size={128} />
+                <strong>
+                  {jarColors.find((value) => value.id === color)?.label}{' '}
+                  <JarCharacter character={character} />
+                </strong>
+                <small>
+                  {state.jars.length} / {JAR_CAPACITY} keepsakes ·{' '}
+                  {
+                    state.jars.filter(
+                      (jar) =>
+                        jar.character === character && jar.colorId === color,
+                    ).length
+                  }{' '}
+                  matching
+                </small>
+                <button
+                  className="primary-button"
+                  aria-disabled={
+                    state.nectar < JAR_PRICE || state.jars.length >= JAR_CAPACITY
+                      ? true
+                      : undefined
+                  }
+                  onClick={() =>
+                    tell(onPurchaseJar(character, color), {
+                      name: jarName,
+                      spokenName: spokenJarName,
+                      kind: 'jar',
+                    })
+                  }
+                >
+                  {state.jars.length >= JAR_CAPACITY ? (
+                    'Your jar shelf is full'
+                  ) : state.nectar < JAR_PRICE ? (
+                    'Not enough Nectar'
+                  ) : (
+                    <Spoken text={`Buy ${jarName}`} spoken={`Buy ${spokenJarName}`} />
+                  )}
+                </button>
               </div>
             </div>
-            <div>
-              <h3>Colour</h3>
-              <div className="jar-color-grid" aria-label="Jar colors">
-                {jarColors.map((value) => (
-                  <button
-                    key={value.id}
-                    className={color === value.id ? 'selected' : ''}
-                    aria-pressed={color === value.id}
-                    onClick={() => setColor(value.id)}
-                  >
-                    <span
-                      className="colour-dot"
-                      style={{ background: value.fill }}
-                    />
-                    {value.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="jar-purchase-preview">
-              <JarSprite character={character} colorId={color} size={128} />
-              <strong>
-                {jarColors.find((value) => value.id === color)?.label}{' '}
-                {character}
-              </strong>
-              <small>
-                {state.jars.length} / {JAR_CAPACITY} keepsakes ·{' '}
-                {
-                  state.jars.filter(
-                    (jar) =>
-                      jar.character === character && jar.colorId === color,
-                  ).length
-                }{' '}
-                matching
-              </small>
-              <button
-                className="primary-button"
-                aria-disabled={
-                  state.nectar < JAR_PRICE || state.jars.length >= JAR_CAPACITY
-                    ? true
-                    : undefined
-                }
-                onClick={() =>
-                  tell(onPurchaseJar(character, color), { name: jarName, kind: 'jar' })
-                }
-              >
-                {state.jars.length >= JAR_CAPACITY
-                  ? 'Your jar shelf is full'
-                  : state.nectar < JAR_PRICE
-                    ? 'Not enough Nectar'
-                    : `Buy ${jarName}`}
-              </button>
-            </div>
-          </div>
-        </section>
+          </section>
+          <JarShelf
+            jars={state.jars}
+            jarPlacements={state.jarPlacements}
+            onRecycle={onRecycleJar}
+            onRestore={onRestoreJar}
+            onOfferUndo={offerUndo}
+            onSay={say}
+          />
+        </>
       )}
       {tab === 'flight' && (
         <section>
@@ -585,6 +626,7 @@ export function ShopView({
         <ItemPreview item={preview} onClose={() => setPreview(undefined)} />
       )}
       <PurchaseToast note={note} onDone={() => setNote(undefined)} />
+      <UndoToast offer={undo} onDone={() => setUndo(undefined)} />
     </div>
   )
 }

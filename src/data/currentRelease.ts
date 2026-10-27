@@ -1,14 +1,15 @@
 /**
- * Which release this build is, apart from what each release says.
+ * Which release this build is, apart from what its notes say.
  *
- * The shell needs only the newest release's id and version (to know whether
- * the notes are unread, and to name the version); the notes' text belongs to
- * What's new, which loads with that page. data/releases.ts lists the notes,
- * newest first, and its test checks that the first one is this one.
+ * The garden needs this much on every launch: whether its gardener has read
+ * this release's notes, and what to call the release. The notes themselves
+ * (data/releases) are read on the What's new page alone, so they stay out of
+ * the first load however long they grow. data/releases.test.ts checks that
+ * the newest entry there is this one.
  */
-export const currentRelease = { id: 'release-3-0', version: '3.0.0' } as const
+export const currentRelease = { id: 'release-3-1', version: '3.1.0' } as const
 
-/** "3.0" from "3.0.0": how the app speaks of a release. */
+/** "3.1" from "3.1.0": how the app speaks of a release. */
 export function releaseName(release: { version: string } = currentRelease): string {
   return release.version.split('.').slice(0, 2).join('.')
 }

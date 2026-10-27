@@ -10,3 +10,9 @@ interface ImportMetaEnv {
 
 /** package.json's version, injected by vite.config.ts. */
 declare const __APP_VERSION__: string
+
+/**
+ * This build's name: a digest of what it was built from, injected by
+ * vite.config.ts. Unlike the version, it changes whenever the app does.
+ */
+declare const __BUILD_ID__: string

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { backAction, requestDialogClose, requestDismiss } from './backNavigation'
+import { backAction, putBackAt, requestDialogClose, requestDismiss } from './backNavigation'
 
 /** An open dialog, with a stand-in close() since jsdom has none. */
 function openDialog() {
@@ -57,6 +57,16 @@ describe('backAction', () => {
     expect(backAction('support')).toEqual({ kind: 'view', view: 'settings' })
   })
 
+  it('returns the Guide to the page a "What does this do?" link left', () => {
+    expect(backAction('guide', document, 'care')).toEqual({ kind: 'view', view: 'care' })
+    expect(backAction('guide', document, 'recap')).toEqual({ kind: 'view', view: 'recap' })
+    // Opened from the navigation, it goes back to the garden as before.
+    expect(backAction('guide')).toEqual({ kind: 'view', view: 'garden' })
+    expect(backAction('guide', document, 'guide')).toEqual({ kind: 'view', view: 'garden' })
+    // Only the Guide remembers where it came from.
+    expect(backAction('journal', document, 'care')).toEqual({ kind: 'view', view: 'garden' })
+  })
+
   it('returns any other page to the garden', () => {
     for (const view of ['care', 'today', 'journal', 'settings'] as const)
       expect(backAction(view)).toEqual({ kind: 'view', view: 'garden' })
@@ -86,5 +96,49 @@ describe('requestDialogClose', () => {
     requestDialogClose(dialog)
     expect(onCancel).toHaveBeenCalled()
     expect(close).not.toHaveBeenCalled()
+  })
+})
+
+describe('putBackAt', () => {
+  afterEach(() => {
+    document.body.replaceChildren()
+    vi.restoreAllMocks()
+  })
+
+  /** A page with a heading and two "What does this do?" links far down it. */
+  function page() {
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1>Settings</h1>
+        <a class="guide-link" href="#/guide/moonlight">What does this do?</a>
+        <a class="guide-link" href="#/guide/seeds">What does this do?</a>
+      </main>`
+    return {
+      heading: document.querySelector('h1')!,
+      seeds: document.querySelector<HTMLElement>('a[href="#/guide/seeds"]')!,
+    }
+  }
+
+  it('scrolls back to where the page was and focuses the link pressed', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const { seeds } = page()
+    putBackAt({ section: 'seeds', scrollY: 1200 })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1200, behavior: 'instant' })
+    expect(seeds).toHaveFocus()
+  })
+
+  it('focuses the page’s heading when the link has gone, never the page itself', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const { heading } = page()
+    putBackAt({ section: 'region', scrollY: 900 })
+    expect(heading).toHaveFocus()
+    expect(heading).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('does nothing more than scroll on a page with neither', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    putBackAt({ section: 'seeds', scrollY: 40 })
+    expect(scrollTo).toHaveBeenCalledOnce()
+    expect(document.body).toHaveFocus()
   })
 })

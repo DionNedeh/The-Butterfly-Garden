@@ -27,6 +27,8 @@ import { CompanionFlight } from './CompanionFlight'
 import { CompanionStory } from './care/CompanionStory'
 import { OutfitLooks } from './care/OutfitLooks'
 import { UndoToast, type UndoOffer } from './UndoToast'
+import { FieldFacts } from './FieldFacts'
+import { GuideLink } from './GuideLink'
 // Only Care draws these, so they arrive with it rather than with the
 // stylesheet every page waits for.
 import './care/care.css'
@@ -56,6 +58,7 @@ export function CareView({
   onGoToShop,
   openOn,
   onChooseFlight,
+  onOpenGuide,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -74,6 +77,11 @@ export function CareView({
   openOn?: string
   /** A companion's own flight pattern, or none for the garden's. */
   onChooseFlight?: (creatureId: string, patternId: FlightPatternId | undefined) => void
+  /**
+   * Open the Guide at a section, from a "What does this do?" link, naming
+   * the companion shown, whom the way back returns to.
+   */
+  onOpenGuide?: (section: string, companionId: string) => void
 }) {
   const ordered = useMemo(
     () =>
@@ -329,6 +337,13 @@ export function CareView({
                 {milestone.stardust} {currencyLabel('stardust')}, {milestone.nectar}{' '}
                 {currencyLabel('nectar')}
               </p>
+              {onOpenGuide && (
+                <GuideLink
+                  section="bond"
+                  topic="Bond levels"
+                  onOpen={(section) => onOpenGuide(section, selected.id)}
+                />
+              )}
             </div>
 
             {isButterfly && onChooseFlight && (
@@ -491,7 +506,8 @@ export function CareView({
         <section className="card species-fact-card">
           <p className="eyebrow">Field guide</p>
           <h2>{definition.commonName}</h2>
-          <p>{definition.fact}</p>
+          {/* A deeper bond shares more of what the species is like. */}
+          <FieldFacts speciesId={definition.id} level={level} />
         </section>
       )}
       {/* The page's own child, so it is fixed to the screen (see OutfitLooks). */}

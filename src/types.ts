@@ -58,6 +58,12 @@ export type TextSize = 'larger' | 'largest'
  * (lib/gardenPace). Classic is the absence of a choice, so it stores nothing.
  */
 export type GardenPace = 'keep-giving'
+/**
+ * Where the gardener said they garden, chosen in Settings (lib/region): the
+ * Guide then marks which butterflies and plants are native there. Never
+ * worked out from a location.
+ */
+export type RegionId = 'north-america' | 'europe' | 'australasia' | 'elsewhere'
 export type AmbientTrackId =
   | 'garden-chimes'
   | 'garden'
@@ -162,6 +168,13 @@ export interface Profile {
    * built-in selection stays underneath as the fallback.
    */
   selectedCustomBackdropId?: string
+  /**
+   * One of the gardener's images to show while the garden is at night (the
+   * theme on screen, chosen or followed). Optional: without it, or while it
+   * names no image that is there, the night shows what the day does. An older
+   * build ignores it and shows `selectedCustomBackdropId` day and night.
+   */
+  nightCustomBackdropId?: string
   /** The newest release notes this gardener has already seen. */
   lastSeenReleaseId?: string
   /**
@@ -237,6 +250,11 @@ export interface Profile {
    * none, so an older garden or backup simply has none.
    */
   outfitPresets?: OutfitPreset[]
+  /**
+   * The region the gardener chose in Settings, for the Guide's native marks
+   * and planting tips. Optional: without it the Guide shows neither.
+   */
+  region?: RegionId
 }
 
 /** Image formats a garden image may be stored as. */
@@ -280,6 +298,12 @@ export interface CustomBackdrop {
   /** Base64, without a data-URL prefix. */
   imageData: string
   crop: CustomBackdropCrop
+  /**
+   * Lighter or darker, in percent from -40 to +20, so the garden's heading
+   * reads well on it. Applied as the image is drawn, never baked into
+   * `imageData`, so it can be changed back. Optional: without it, as taken.
+   */
+  brightness?: number
 }
 
 export interface Goal {
@@ -496,7 +520,8 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  version: 6
+  /** 6, or 7 once the garden holds a jar a version 6 build would drop (storedVersionOf). */
+  version: 6 | 7
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -530,7 +555,6 @@ export interface SpeciesDefinition {
   wingColors: [string, string]
   visualPattern: string
   wingShape: ButterflyWingShape
-  fact: string
 }
 
 export interface PlantDefinition {

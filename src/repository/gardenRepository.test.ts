@@ -24,6 +24,7 @@ import {
   readImportedState,
   sameCollection,
 } from './gardenRepository'
+import { storedVersionOf } from './validateGarden'
 
 afterEach(async () => {
   await gardenRepository.clear().catch(() => undefined)
@@ -222,6 +223,24 @@ describe('garden repository', () => {
       status: 'loaded',
       state: { version: 6, seeds: 4 },
     })
+  })
+
+  it('settles only once the writes already asked for are done, kept or refused', async () => {
+    await expect(gardenRepository.settled()).resolves.toBeUndefined()
+    const order: string[] = []
+    const saving = gardenRepository
+      .save({ ...createEmptyState(), seeds: 7 })
+      .then(() => order.push('saved'))
+    await gardenRepository.settled().then(() => order.push('settled'))
+    await saving
+    expect(order).toEqual(['saved', 'settled'])
+    // A refused write still lets it settle.
+    const stale = createGardenRepository()
+    await stale.load()
+    await gardenRepository.save({ ...createEmptyState(), seeds: 8 })
+    const refused = stale.save({ ...createEmptyState(), seeds: 9 }).catch(() => 'refused')
+    await stale.settled()
+    await expect(refused).resolves.toBe('refused')
   })
 
   it('keeps saved looks and a companion’s diary through a save and a load', async () => {
@@ -424,7 +443,7 @@ describe('garden repository', () => {
     it('withholds a garden written by a newer client instead of discarding it', async () => {
       const real = createInitialState('Future', 'Future Garden')
       await gardenRepository.save(real)
-      await writeRaw({ ...real, version: 7, seeds: 99 })
+      await writeRaw({ ...real, version: 8, seeds: 99 })
 
       const result = await gardenRepository.load()
       expect(result.status).toBe('withheld')
@@ -438,7 +457,7 @@ describe('garden repository', () => {
           string,
           unknown
         >
-        expect(stored.version).toBe(7)
+        expect(stored.version).toBe(8)
         expect(stored.seeds).toBe(99)
       } finally {
         db.close()
@@ -447,7 +466,7 @@ describe('garden repository', () => {
 
     it('classifies records by why they could not be read', () => {
       expect(classifyRecord(createEmptyState())).toBe('readable')
-      expect(classifyRecord({ ...createEmptyState(), version: 7 })).toBe(
+      expect(classifyRecord({ ...createEmptyState(), version: 8 })).toBe(
         'incompatible',
       )
       expect(classifyRecord({ broken: true })).toBe('malformed')
@@ -579,7 +598,8 @@ describe('garden repository', () => {
       for (const collection of GARDEN_COLLECTIONS) {
         expect(Array.isArray(restored?.[collection])).toBe(true)
       }
-      expect(restored?.version).toBe(CURRENT_STATE_VERSION)
+      // No jar a version 6 build would drop, so it stays at 6 (storedVersionOf).
+      expect(restored?.version).toBe(6)
     })
 
     it('refuses a backup from a newer build without touching the garden', () => {
@@ -695,7 +715,8 @@ describe('garden repository', () => {
       const result = await gardenRepository.load()
       expect(result.status).toBe('loaded')
       expect(result.state.customBackdrops).toEqual([])
-      expect(result.state.version).toBe(CURRENT_STATE_VERSION)
+      // No jar a version 6 build would drop, so it stays at 6 (storedVersionOf).
+      expect(result.state.version).toBe(6)
       expect(await gardenRepository.quarantined()).toHaveLength(0)
     })
 
@@ -709,6 +730,59 @@ describe('garden repository', () => {
       expect(image?.crop).toEqual(stored.crop)
       expect(image?.width).toBe(stored.width)
       expect(image?.height).toBe(stored.height)
+    })
+
+    it("restores an older backup's images exactly, with nothing chosen for the night", () => {
+      // A file from before brightness and the night image: the same envelope,
+      // records without either field.
+      const older = JSON.parse(
+        JSON.stringify({
+          format: 'the-butterfly-garden',
+          exportedAt: '2026-09-09T00:00:00.000Z',
+          appVersion: '3.0.0',
+          garden: {
+            ...fullGarden(),
+            profile: { ...fullGarden().profile!, selectedCustomBackdropId: 'image-1' },
+          },
+        }),
+      ) as unknown
+      const restored = readImportedState(older)
+      expect(restored?.customBackdrops).toEqual([stored])
+      expect(restored?.customBackdrops[0]).not.toHaveProperty('brightness')
+      expect(restored?.profile?.selectedCustomBackdropId).toBe('image-1')
+      expect(restored?.profile).not.toHaveProperty('nightCustomBackdropId')
+    })
+
+    it('carries brightness and the night image through a backup and a save', async () => {
+      const second = { ...stored, id: 'image-2', name: 'By lamplight', brightness: -30 }
+      const garden = {
+        ...fullGarden(),
+        customBackdrops: [{ ...stored, brightness: 10 }, second],
+        profile: {
+          ...fullGarden().profile!,
+          selectedCustomBackdropId: 'image-1',
+          nightCustomBackdropId: 'image-2',
+        },
+      }
+      const file = JSON.parse(
+        JSON.stringify({ format: 'the-butterfly-garden', exportedAt: '2026-10-27T00:00:00.000Z', garden }),
+      ) as unknown
+      const restored = readImportedState(file)
+      expect(restored?.customBackdrops.map((image) => image.brightness)).toEqual([10, -30])
+      expect(restored?.profile?.nightCustomBackdropId).toBe('image-2')
+
+      await gardenRepository.replace(restored!)
+      const reopened = await gardenRepository.load()
+      expect(reopened.status).toBe('loaded')
+      expect(reopened.state.customBackdrops).toEqual(garden.customBackdrops)
+      expect(reopened.state.profile?.nightCustomBackdropId).toBe('image-2')
+    })
+
+    it('restores a backup with a hand-edited brightness, showing that image as taken', () => {
+      const restored = readImportedState({
+        garden: { ...fullGarden(), customBackdrops: [{ ...stored, brightness: 'very' }] },
+      })
+      expect(restored?.customBackdrops[0]).toEqual(stored)
     })
 
     it('refuses a backup whose images are damaged rather than dropping them', () => {
@@ -1172,7 +1246,8 @@ describe('moving a pre-split garden across', () => {
 
     const result = await gardenRepository.load()
     expect(result.status).toBe('loaded')
-    expect(result.state.version).toBe(CURRENT_STATE_VERSION)
+    // No jar a version 6 build would drop, so it stays at 6 (storedVersionOf).
+    expect(result.state.version).toBe(6)
     for (const [collection] of newest) {
       expect(result.state[collection]).toEqual([])
     }
@@ -1180,9 +1255,11 @@ describe('moving a pre-split garden across', () => {
     expect(await gardenRepository.quarantined()).toHaveLength(0)
 
     // Reading it also brought the stored layout up to date, so the record no
-    // longer relies on being read at the older version.
+    // longer relies on being read at the older version: it is stored at the
+    // newest version that brought a collection (6; a garden goes to 7 only
+    // for a jar a version 6 build would drop).
     expect(await readStore('meta')).toMatchObject({
-      version: CURRENT_STATE_VERSION,
+      version: Math.max(...newest.map(([, since]) => since)),
     })
     for (const store of stores) {
       expect(await readStore(store)).toEqual([])
@@ -1247,7 +1324,7 @@ describe('moving a pre-split garden across', () => {
     const db = await openDB('butterfly-garden')
     try {
       const meta = (await db.get('meta', 'current')) as Record<string, unknown>
-      await db.put('meta', { ...meta, version: 7, seeds: 77 }, 'current')
+      await db.put('meta', { ...meta, version: 8, seeds: 77 }, 'current')
     } finally {
       db.close()
     }
@@ -1257,7 +1334,7 @@ describe('moving a pre-split garden across', () => {
     expect(result.reason).toBe('incompatible')
 
     // The newer garden must survive untouched.
-    expect(await readStore('meta')).toMatchObject({ version: 7, seeds: 77 })
+    expect(await readStore('meta')).toMatchObject({ version: 8, seeds: 77 })
   })
 })
 
@@ -1360,13 +1437,13 @@ describe("adopting another tab's change", () => {
   it('still withholds a garden a newer client wrote', async () => {
     await gardenRepository.save(maturedGarden())
     const meta = (await readStore('meta')) as Record<string, unknown>
-    await writeStore('meta', { ...meta, version: 7 })
+    await writeStore('meta', { ...meta, version: 8 })
 
     const result = await gardenRepository.adopt(['meta'])
     expect(result.status).toBe('withheld')
     expect(result.reason).toBe('incompatible')
     // Untouched, exactly as the invariant requires.
-    expect(await readStore('meta')).toMatchObject({ version: 7 })
+    expect(await readStore('meta')).toMatchObject({ version: 8 })
   })
 })
 
@@ -1386,5 +1463,37 @@ describe('reporting what a write touched', () => {
     const state = maturedGarden()
     await gardenRepository.save(state)
     await expect(gardenRepository.save({ ...state })).resolves.toEqual([])
+  })
+})
+
+describe('the version a garden is stored at', () => {
+  async function readStore(name: string): Promise<unknown> {
+    const db = await openDB('butterfly-garden')
+    try {
+      return await db.get(name, 'current')
+    } finally {
+      db.close()
+    }
+  }
+
+  it('is 7 only once a jar holds a letter or mark a version 6 build would drop', async () => {
+    const base = createInitialState('Tester', 'Test Garden')
+    const plainJar = { id: 'a', character: 'A', colorId: 'blue' as const, purchasedAt: '2026-10-27T09:00:00.000Z' }
+    const accented = { ...plainJar, id: 'e', character: 'É' }
+    expect(storedVersionOf({ jars: [plainJar] })).toBe(6)
+    expect(storedVersionOf({ jars: [plainJar, accented] })).toBe(7)
+    expect(storedVersionOf({ jars: [{ ...plainJar, character: '!' }] })).toBe(7)
+
+    await gardenRepository.save({ ...base, jars: [plainJar] })
+    expect(await readStore('meta')).toMatchObject({ version: 6 })
+    await gardenRepository.save({ ...base, jars: [plainJar, accented] })
+    expect(await readStore('meta')).toMatchObject({ version: 7 })
+    // This build reads it back, as a version 6 build would not (it sets a
+    // garden from a newer version aside, untouched).
+    const result = await gardenRepository.load()
+    expect(result.status).toBe('loaded')
+    expect(result.state.jars.map((jar) => jar.character)).toEqual(['A', 'É'])
+    expect(result.state.version).toBe(7)
+    expect(CURRENT_STATE_VERSION).toBe(7)
   })
 })

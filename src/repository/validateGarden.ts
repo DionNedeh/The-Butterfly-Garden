@@ -3,19 +3,38 @@ import { flightPatterns } from '../data/flightPatterns'
 import { getCareAction } from '../data/careActions'
 import { getShopItem } from '../data/shopItems'
 import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, presetName } from '../lib/companionDiary'
-import { jarCharacters, jarColors } from '../data/jars'
+import { JAR_LETTERS, JAR_NUMBERS, jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
-import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
+import { isValidBrightness, isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
 import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } from '../lib/date'
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { clampVolume } from '../lib/sound'
+import { isRegionId } from '../lib/region'
 import type { AmbientTrackId, AppState, OutfitPreset, OutfitSlot, PlantInstance } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
-export const CURRENT_STATE_VERSION = 6
+export const CURRENT_STATE_VERSION = 7
+
+/** The jars a version 6 build keeps: it drops any other, silently. */
+const VERSION_6_JAR_CHARACTERS = new Set<string>([...JAR_LETTERS, ...JAR_NUMBERS])
+
+/**
+ * The version a garden is stored and exported at.
+ *
+ * Version 7 holds nothing new but a jar's accented letter or mark. A build
+ * that knows only version 6 reads a garden at 6 as its own, and would keep
+ * every jar but those, silently, with their placements and the Nectar they
+ * cost; a garden at 7 it sets aside untouched, as the work of a newer
+ * version, and a backup at 7 it refuses. So a garden is written at 7 only
+ * once it holds such a jar. Every other garden stays at 6, and an older app
+ * can still read it and its backups.
+ */
+export function storedVersionOf(state: Pick<AppState, 'jars'>): AppState['version'] {
+  return state.jars.some((jar) => !VERSION_6_JAR_CHARACTERS.has(jar.character)) ? 7 : 6
+}
 
 /**
  * Every state version this build can read: all of them up to the current one.
@@ -704,6 +723,26 @@ function imagesChecked(value: unknown): boolean {
   return typeof value === 'object' && value !== null && checkedImageCollections.has(value)
 }
 
+/**
+ * An image's brightness that is not a number in range is dropped, not
+ * refused: the picture itself is sound, and showing it as taken loses
+ * nothing. The same list comes back when nothing was dropped, so an image
+ * collection is not rewritten for want of a change.
+ */
+function withBrightnessInRange(value: unknown): unknown {
+  if (!Array.isArray(value) || imagesChecked(value)) return value
+  let dropped = false
+  const records = value.map((record: unknown) => {
+    if (!isRecord(record) || record.brightness === undefined || isValidBrightness(record.brightness))
+      return record
+    dropped = true
+    const copy = { ...record }
+    delete copy.brightness
+    return copy
+  })
+  return dropped ? records : value
+}
+
 const AMBIENT_TRACK_IDS = new Set<string>(
   ambientTracks.map((track) => track.id),
 )
@@ -772,6 +811,10 @@ function checkProfile(
   ) {
     delete profile.recapGraceEndsHour
   }
+  // The night's image: dropped when it is not an id, and the day's shows.
+  if (value.nightCustomBackdropId !== undefined && typeof value.nightCustomBackdropId !== 'string') {
+    delete profile.nightCustomBackdropId
+  }
   if (value.theme !== undefined && !THEMES.has(value.theme as string)) {
     ctx.repaired += 1
     delete profile.theme
@@ -810,6 +853,11 @@ function checkProfile(
   // Classic is the absence of a pace, so anything but Keep giving is Classic.
   if (value.gardenPace !== undefined && value.gardenPace !== 'keep-giving') {
     delete profile.gardenPace
+  }
+  // An unknown region is dropped, not guessed at: without one the Guide
+  // simply marks nothing, as it did before there was a choice.
+  if (value.region !== undefined && !isRegionId(value.region)) {
+    delete profile.region
   }
   // Visits are days that have happened: a date in the future could hold
   // back a welcome, or show one, on the wrong day.
@@ -971,7 +1019,7 @@ export function validateGarden(value: unknown): GardenValidation {
    * dropped them. Refusing sends it down the withheld path instead, which
    * leaves the stored garden untouched and says so.
    */
-  const storedCustomBackdrops = candidate.customBackdrops
+  const storedCustomBackdrops = withBrightnessInRange(candidate.customBackdrops)
   if (storedCustomBackdrops !== undefined && !imagesChecked(storedCustomBackdrops)) {
     if (!isValidCustomBackdropCollection(storedCustomBackdrops)) {
       return { repaired: 0, refused: 'One of its images is damaged.' }
@@ -996,10 +1044,21 @@ export function validateGarden(value: unknown): GardenValidation {
 
   if (ctx.refused) return { repaired: ctx.repaired, refused: ctx.refused }
 
+  const profile = checkProfile(candidate.profile, ctx)
+  // A night image the garden no longer holds (removed in a build that did
+  // not know about night images) would have every night say the image is
+  // unavailable; without one, the night shows what the day does.
+  if (
+    profile?.nightCustomBackdropId !== undefined &&
+    !customBackdrops.some((image) => image.id === profile.nightCustomBackdropId)
+  ) {
+    delete profile.nightCustomBackdropId
+  }
+
   const state: AppState = {
     ...(candidate as unknown as AppState),
-    version: 6,
-    profile: checkProfile(candidate.profile, ctx),
+    version: storedVersionOf({ jars }),
+    profile,
     goals,
     completions,
     moods,

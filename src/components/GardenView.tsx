@@ -10,7 +10,6 @@ import {
 } from 'react'
 import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
-import { jarColors } from '../data/jars'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
 import { distinctSpeciesRaised } from '../lib/speciesAcquisition'
 import { FlyingButterfly } from './FlyingButterfly'
@@ -21,14 +20,14 @@ import { hasGardenPassFeature } from '../lib/gardenPass'
 import { flightPatternFor } from '../lib/flightPatterns'
 import { CustomBackdropImage } from './CustomBackdropImage'
 import { isAndroidApp } from '../lib/platform'
-import { availableJars, jarForPlant } from '../lib/jars'
+import { jarForPlant, jarSpokenName } from '../lib/jars'
 import {
   DAILY_SEED_REWARD,
   EMERGENCE_SEED_REWARD,
   MAX_PLANT_GROWTH,
   PLANT_SEED_COST,
 } from '../lib/progression'
-import type { AppState, OutfitSlot } from '../types'
+import type { AppState, AppearanceTheme, OutfitSlot } from '../types'
 import {
   PLANT_CAPACITY,
   plantBloomNote,
@@ -50,19 +49,25 @@ import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
 import { welcomeBackToday } from '../lib/visits'
+import { homeScreenAdvice, isHomeScreenGuidePutAway, putAwayHomeScreenGuide } from '../lib/install'
 
 /** Only on a return after a few days away, so the first load carries none of it. */
 const WelcomeBack = lazy(() =>
   import('./garden/WelcomeBack').then((m) => ({ default: m.WelcomeBack })),
+)
+/** Only on an iPhone or iPad in a browser, until put away. */
+const HomeScreenGuide = lazy(() =>
+  import('./garden/HomeScreenGuide').then((m) => ({ default: m.HomeScreenGuide })),
+)
+/** A plant's jars, only once a plant is chosen. */
+const JarManager = lazy(() =>
+  import('./garden/JarManager').then((m) => ({ default: m.JarManager })),
 )
 
 /** Catalogs are static, so index them once at module load instead of scanning
  *  them inside every render loop. */
 const plantsById = new Map(plants.map((plant) => [plant.id, plant]))
 const speciesById = new Map(species.map((item) => [item.id, item]))
-const jarColorsById = new Map<string, (typeof jarColors)[number]>(
-  jarColors.map((color) => [color.id, color]),
-)
 /** Marigold flies with the companions but is the garden's guide, not one. */
 const GUIDE_ID = 'marigold-guide'
 /** Only asked for once a butterfly is tapped, so it is not in the first load. */
@@ -85,16 +90,6 @@ const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
  */
 const PLANT_SPRITE_SIZE = 84
 
-function jarStyle(colorId: string): CSSProperties {
-  const color = jarColorsById.get(colorId) ?? jarColors[0]
-  return {
-    '--jar-fill': color.fill,
-    '--jar-text': color.text,
-    '--jar-border': color.border,
-    '--jar-highlight': color.highlight,
-  } as CSSProperties
-}
-
 export function GardenView({
   state,
   onPlant,
@@ -108,6 +103,7 @@ export function GardenView({
   seedFocus,
   onOpenGuide,
   onPutAwayWelcomeBack,
+  theme,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
@@ -123,6 +119,8 @@ export function GardenView({
   onOpenGuide?: () => void
   /** Put away the welcome back after a few days away (lib/visits). */
   onPutAwayWelcomeBack?: () => void
+  /** The theme on screen, chosen or followed: night shows the night's image. */
+  theme?: AppearanceTheme
 }) {
   const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
   const seedTray = useRef<HTMLElement>(null)
@@ -258,54 +256,10 @@ export function GardenView({
   const selectedPlantIsVisible = selectedPlant
     ? visiblePlantIds.has(selectedPlant.id)
     : false
-  const selectedPlantJar = selectedPlant
-    ? jarForPlant(state, selectedPlant.id)
-    : undefined
-  // What the grid below actually offers: every jar except the one already on
-  // this plant. Jars sitting on another plant move here when chosen.
-  const placeableJars = state.jars.filter(
-    (jar) => jar.id !== selectedPlantJar?.id,
-  )
-  const unplacedJarCount = availableJars(state).length
-  /** Which plant each placed jar is sitting on, by jar id. */
-  const plantNameByJarId = useMemo(() => {
-    const gardenPlantsById = new Map(
-      state.plants.map((plant) => [plant.id, plant]),
-    )
-    const names = new Map<string, string>()
-    for (const placement of state.jarPlacements) {
-      const plant = gardenPlantsById.get(placement.plantId)
-      const definition = plant ? plantsById.get(plant.plantId) : undefined
-      names.set(placement.jarId, definition?.name ?? 'another spot')
-    }
-    return names
-  }, [state.jarPlacements, state.plants])
-
-  const placedJarSummaries = useMemo(() => {
-    const jarsById = new Map(state.jars.map((jar) => [jar.id, jar]))
-    const gardenPlantsById = new Map(
-      state.plants.map((plant) => [plant.id, plant]),
-    )
-    return state.jarPlacements
-      .map((placement) => {
-        const jar = jarsById.get(placement.jarId)
-        const plant = gardenPlantsById.get(placement.plantId)
-        const plantDefinition = plant
-          ? plantsById.get(plant.plantId)
-          : undefined
-        const color = jar ? jarColorsById.get(jar.colorId) : undefined
-        if (!jar || !plant || !plantDefinition || !color) return undefined
-        return {
-          placement,
-          jar,
-          label: `${color.label} ${jar.character} on ${plantDefinition.name}`,
-        }
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item))
-  }, [state.jarPlacements, state.jars, state.plants])
   const customBackdrop = activeCustomBackdrop(
     state,
     hasGardenPassFeature('custom-backdrops'),
+    theme,
   )
   const [failedImage, setFailedImage] = useState<string>()
   const sceneId = state.profile
@@ -343,6 +297,12 @@ export function GardenView({
   const today = toLocalDate()
   const welcomeBack =
     onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
+  // On an iPhone or iPad in a browser, how to keep the garden on the Home
+  // Screen (lib/install), until put away. The answer cannot change while the
+  // page is open, so it is asked once. Put away is remembered by this browser
+  // alone: a backup carried to another iPhone still offers it there.
+  const [homeScreen] = useState(homeScreenAdvice)
+  const [homeScreenGuidePutAway, setHomeScreenGuidePutAway] = useState(isHomeScreenGuidePutAway)
 
   return (
     <div className="view garden-view">
@@ -410,13 +370,11 @@ export function GardenView({
           {visiblePlants.map((plant, index) => {
             const definition = plantsById.get(plant.plantId)
             const placedJar = jarForPlant(state, plant.id)
-            const placedJarColor = placedJar
-              ? jarColorsById.get(placedJar.colorId)
-              : undefined
-            const jarLabel =
-              placedJar && placedJarColor
-                ? ` with ${placedJarColor.label} ${placedJar.character} jar`
-                : ''
+            // Said, not shown: a mark by its name (lib/jars), so plants with
+            // a "!" jar and a "?" jar do not sound alike.
+            const jarLabel = placedJar
+              ? ` with ${jarSpokenName(placedJar.colorId, placedJar.character)}`
+              : ''
             return (
               <button
                 type="button"
@@ -443,11 +401,7 @@ export function GardenView({
                   swayDelay={index * -0.7}
                 />
                 {placedJar && (
-                  <span
-                    className="jar-display plant-jar"
-                    style={jarStyle(placedJar.colorId)}
-                    aria-hidden="true"
-                  >
+                  <span className="jar-display plant-jar" aria-hidden="true">
                     <JarSprite
                       character={placedJar.character}
                       colorId={placedJar.colorId}
@@ -493,6 +447,20 @@ export function GardenView({
         )}
       </div>
 
+      {homeScreen && !homeScreenGuidePutAway && (
+        <Suspense fallback={null}>
+          <HomeScreenGuide
+            advice={homeScreen}
+            onPutAway={() => {
+              // The card leaves with its button; focus goes to the garden's name.
+              gardenTitle.current?.focus()
+              putAwayHomeScreenGuide()
+              setHomeScreenGuidePutAway(true)
+            }}
+          />
+        </Suspense>
+      )}
+
       {sceneUnavailable && (
         <p role="status">
           {isAndroidApp()
@@ -500,7 +468,9 @@ export function GardenView({
             : 'This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.'}
         </p>
       )}
-      {state.profile?.selectedCustomBackdropId && !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
+      {(state.profile?.selectedCustomBackdropId ||
+        (theme === 'night' && state.profile?.nightCustomBackdropId)) &&
+        !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
       {failedImage && (
         <p role="status">
           Your image could not be displayed. The built-in scene is shown; your
@@ -656,128 +626,18 @@ export function GardenView({
                 </dd>
               </div>
             </dl>
-            <div className="jar-manager" aria-labelledby="jar-manager-title">
-              <div className="section-heading compact-heading">
-                <div>
-                  <p className="eyebrow">Jar inventory</p>
-                  <h3 id="jar-manager-title">Decorate this plant spot</h3>
-                </div>
-                <span className="count-badge">
-                  {placeableJars.length} to place
-                </span>
-              </div>
-              {!selectedPlantIsVisible ? (
-                <p className="empty-copy">
-                  Jars can be placed on the eight visible garden spots. Remove
-                  plants above the limit to bring this plant into the scene.
-                </p>
-              ) : (
-                <>
-                  <div className="current-jar-card">
-                    {selectedPlantJar ? (
-                      <>
-                        <span
-                          className="jar-display"
-                          style={jarStyle(selectedPlantJar.colorId)}
-                          aria-hidden="true"
-                        >
-                          <JarSprite
-                            character={selectedPlantJar.character}
-                            colorId={selectedPlantJar.colorId}
-                          />
-                        </span>
-                        <div>
-                          <strong>
-                            {jarColorsById.get(selectedPlantJar.colorId)
-                              ?.label ?? 'Custom'}{' '}
-                            {selectedPlantJar.character} jar
-                          </strong>
-                          <small>Placed on this plant spot.</small>
-                        </div>
-                        <button
-                          type="button"
-                          className="secondary-button compact"
-                          onClick={() => onRemoveJarPlacement(selectedPlant.id)}
-                        >
-                          Return to inventory
-                        </button>
-                      </>
-                    ) : (
-                      <p className="empty-copy">
-                        This plant spot is empty. Choose a jar below to cover
-                        the base — {unplacedJarCount} of your jars{' '}
-                        {unplacedJarCount === 1 ? 'is' : 'are'} not on a plant
-                        yet.
-                      </p>
-                    )}
-                  </div>
-
-                  <div
-                    className="jar-inventory-grid"
-                    aria-label="Available jars"
-                  >
-                    {placeableJars.length === 0 ? (
-                      <p className="empty-copy">
-                        {selectedPlantJar
-                          ? 'No other jars are ready to place here.'
-                          : 'No jars are waiting in inventory. Buy letters and numbers in the Shop with Nectar.'}
-                      </p>
-                    ) : (
-                      placeableJars.map((jar) => {
-                        const color = jarColorsById.get(jar.colorId)
-                        const colorLabel = color?.label ?? 'Custom'
-                        const heldBy = plantNameByJarId.get(jar.id)
-                        const action = heldBy ? `Move from ${heldBy}` : 'Place'
-                        return (
-                          <button
-                            type="button"
-                            key={jar.id}
-                            className="jar-inventory-button"
-                            onClick={() => onPlaceJar(jar.id, selectedPlant.id)}
-                            aria-label={`${action} ${colorLabel} ${jar.character} jar on ${selectedPlantDefinition.name}`}
-                          >
-                            <span
-                              className="jar-display"
-                              style={jarStyle(jar.colorId)}
-                              aria-hidden="true"
-                            >
-                              <JarSprite
-                                character={jar.character}
-                                colorId={jar.colorId}
-                              />
-                            </span>
-                            <span>{colorLabel}</span>
-                            <small>{action}</small>
-                          </button>
-                        )
-                      })
-                    )}
-                  </div>
-                </>
-              )}
-              {placedJarSummaries.length > 0 && (
-                <details className="placed-jars-list">
-                  <summary>Placed jars ({placedJarSummaries.length})</summary>
-                  <ul>
-                    {placedJarSummaries.map(({ placement, jar, label }) => (
-                      <li key={placement.jarId}>
-                        <span
-                          className="jar-display small"
-                          style={jarStyle(jar.colorId)}
-                          aria-hidden="true"
-                        >
-                          <JarSprite
-                            character={jar.character}
-                            colorId={jar.colorId}
-                          />
-                        </span>
-                        {label}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
+            {/* Its own boundary: the App's would put the whole page away
+                while the jar panel loads. */}
+            <Suspense fallback={null}>
+              <JarManager
+                state={state}
+                plantId={selectedPlant.id}
+                plantName={selectedPlantDefinition.name}
+                visible={selectedPlantIsVisible}
+                onPlaceJar={onPlaceJar}
+                onRemoveJarPlacement={onRemoveJarPlacement}
+              />
+            </Suspense>
             <div className="plant-removal">
               {removalBlocker && (
                 <p className="protected-plant-note">

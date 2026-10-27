@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Spoken } from './Spoken'
 
 /** How long an undo stays on offer. */
 export const UNDO_MS = 6000
@@ -6,6 +7,11 @@ export const UNDO_MS = 6000
 export interface UndoOffer {
   /** What just happened, in a few words: "Water the plants marked done." */
   message: string
+  /**
+   * The same words as a screen reader should say them, where they differ:
+   * "Blue exclamation mark jar recycled" for the "Blue ! jar" shown.
+   */
+  spoken?: string
   undo: () => void
 }
 
@@ -40,7 +46,9 @@ export function UndoToast({ offer, onDone }: { offer?: UndoOffer; onDone: () => 
           onFocus={() => setHeldOffer(offer)}
           onBlur={() => setHeldOffer(undefined)}
         >
-          <span>{offer.message}</span>
+          <span>
+            <Spoken text={offer.message} spoken={offer.spoken} />
+          </span>
           <button
             className="text-button"
             onClick={() => {
