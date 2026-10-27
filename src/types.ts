@@ -144,6 +144,19 @@ export interface Profile {
    * the day before. Optional: without it, 4am.
    */
   recapGraceEndsHour?: number
+  /**
+   * When the gardener last kept a copy of the garden (an ISO timestamp): a
+   * backup saved, downloaded or shared, or a restore, since the garden then
+   * is exactly a file they hold. Settings uses it to suggest a fresh copy
+   * now and then (lib/backupReminder). Optional: an older garden has no copy
+   * on record.
+   *
+   * A backup file is written before this is set, so the value inside any file
+   * is from the copy before it. A restore replaces that with the moment of
+   * the restore, so a file never brings a stale or hand-edited date that
+   * would keep the reminder quiet on a new device.
+   */
+  lastBackupAt?: string
 }
 
 /** Image formats a garden image may be stored as. */

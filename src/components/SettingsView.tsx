@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import { previewBackup, type BackupPreview } from '../lib/backupPreview'
+import { backupReminder } from '../lib/backupReminder'
 import {
   formatHour,
   formatJournalDate,
@@ -12,6 +13,7 @@ import {
   type RecapHours,
 } from '../lib/date'
 import { datedFileName, saveTextFile } from '../lib/download'
+import { canShareFile, shareTextFile } from '../lib/shareFile'
 import { isAndroidApp } from '../lib/platform'
 import {
   formatBytes,
@@ -146,6 +148,7 @@ export function SettingsView({
   onSelectAmbientTrack,
   onSelectBackdrop,
   onExportGarden,
+  onBackupMade,
   onImportGarden,
   onUndoRestore,
   onDownloadSetAside,
@@ -177,6 +180,8 @@ export function SettingsView({
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
   /** Undefined while the garden is read-only: see useGardenState. */
   onExportGarden: () => string | undefined
+  /** A backup reached the gardener; `madeAt` is when it was exported. */
+  onBackupMade?: (madeAt: Date) => void
   onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
   onUndoRestore?: (
     snapshotId: string,
@@ -221,6 +226,19 @@ export function SettingsView({
   const [undoDismissed, setUndoDismissed] = useState<string>()
   const [setAsideCount, setSetAsideCount] = useState(0)
   const [storage, setStorage] = useState<StorageStatus>()
+  /**
+   * The moment the backup reminder is worked out for: when the page opened,
+   * moved on whenever a backup is made here, so the copy just made is never
+   * mistaken for one from a clock running ahead.
+   */
+  const [reminderNow, setReminderNow] = useState(() => new Date())
+  /**
+   * Whether this browser can hand the backup file to another app. Asked once;
+   * always false in the Android app, which has its own save screen.
+   */
+  const [canShareBackup] = useState(() =>
+    canShareFile(datedFileName(''), 'application/json'),
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Inline rather than isAndroidApp(): the bundler folds only an inline
   // check, which keeps the Android-only cards and Play calls out of the PWA.
@@ -242,6 +260,21 @@ export function SettingsView({
     }
   }, [onCountSetAside, android])
 
+  const backupMade = (madeAt: Date) => {
+    setReminderNow(new Date())
+    onBackupMade?.(madeAt)
+  }
+
+  /** The backup file's text, or undefined (and why) while it cannot be made. */
+  const exportBackup = () => {
+    const text = onExportGarden()
+    if (text === undefined)
+      setBackupNote(
+        'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
+      )
+    return text
+  }
+
   /**
    * One button, the right way for each build. On Android the gardener picks
    * where the file goes, and Android reports whether it was written, so
@@ -252,19 +285,19 @@ export function SettingsView({
    */
   const saveBackup = async () => {
     setBackupNote(undefined)
-    const text = onExportGarden()
-    if (text === undefined) {
-      setBackupNote(
-        'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
-      )
-      return
-    }
+    const madeAt = new Date()
+    const text = exportBackup()
+    if (text === undefined) return
     try {
       const outcome = await saveTextFile(
         datedFileName(''),
         'application/json',
         text,
       )
+      // A started download counts: the browser will not say whether it
+      // finished, and asking again every visit would be the wrong answer to
+      // that. Backing out of Android's save screen does not.
+      if (outcome !== 'cancelled') backupMade(madeAt)
       setBackupNote(
         outcome === 'saved'
           ? 'Backup saved. Keep the file somewhere safe.'
@@ -278,6 +311,28 @@ export function SettingsView({
           ? 'The backup could not be saved there. Try choosing another place.'
           : 'This browser would not start the download.',
       )
+    }
+  }
+
+  /** Hand the backup to an app the gardener picks: Files, a drive, a message. */
+  const shareBackup = async () => {
+    setBackupNote(undefined)
+    const madeAt = new Date()
+    const text = exportBackup()
+    if (text === undefined) return
+    try {
+      const outcome = await shareTextFile(
+        datedFileName(''),
+        'application/json',
+        text,
+        'The Butterfly Garden backup',
+      )
+      // Closing the share sheet is a choice, not a failure: nothing to say.
+      if (outcome === 'cancelled') return
+      backupMade(madeAt)
+      setBackupNote('Backup shared. Keep the file somewhere safe.')
+    } catch {
+      setBackupNote('This browser would not share the file. Download it instead.')
     }
   }
 
@@ -353,6 +408,10 @@ export function SettingsView({
       : undefined
   const profile = state.profile
   const recapHours = recapHoursOf(profile)
+  // Nothing to suggest about a garden that cannot be saved right now.
+  const reminder = persistence.readOnly
+    ? undefined
+    : backupReminder(state, reminderNow)
   // Availability rather than earned unlocks: a Garden Pass scene is choosable
   // while access holds, and is never recorded as permanently earned.
   const nameNote = noteForName(name)
@@ -619,8 +678,13 @@ export function SettingsView({
         <p className="section-explainer">
           {android
             ? 'Your garden lives only in this app, on this phone. A backup file is the only sure way to move it to another phone or bring it back if the app is uninstalled or its storage is cleared. Nothing is uploaded — you choose where the file is saved.'
-            : 'Your garden lives only in this browser. A backup file is the only way to move it to another device or bring it back after site data is cleared. Nothing is uploaded — the file is saved straight to this device.'}
+            : `Your garden lives only in this browser. A backup file is the only way to move it to another device or bring it back after site data is cleared. Nothing is uploaded — the file is saved straight to this device${canShareBackup ? ', or handed to an app you choose' : ''}.`}
         </p>
+        {reminder && (
+          <p className="backup-reminder">
+            {reminder.text} A fresh copy keeps everything written since.
+          </p>
+        )}
         <div className="form-actions">
           <button
             className="secondary-button"
@@ -629,6 +693,15 @@ export function SettingsView({
           >
             {android ? 'Save a backup' : 'Download a backup'}
           </button>
+          {canShareBackup && (
+            <button
+              className="secondary-button"
+              disabled={persistence.readOnly}
+              onClick={() => void shareBackup()}
+            >
+              Share backup…
+            </button>
+          )}
           {!restoreStep ? (
             <button
               className="text-button"

@@ -26,6 +26,17 @@ describe('pages in the address bar', () => {
       view: 'shop',
       onPass: true,
     })
+    expect(routeFromHash(hashForRoute({ view: 'today', checkIn: true }))).toEqual({
+      view: 'today',
+      checkIn: true,
+    })
+  })
+
+  it('opens Today at its check-in for the home-screen shortcut', () => {
+    expect(hashForRoute({ view: 'today', checkIn: true })).toBe('#/today/check-in')
+    expect(routeFromHash('#/today/check-in/')).toEqual({ view: 'today', checkIn: true })
+    // Only Today has a check-in to open at.
+    expect(hashForRoute({ view: 'journal', checkIn: true })).toBe('#/journal')
   })
 
   it('keeps the garden at the plain address', () => {

@@ -310,6 +310,13 @@ export function useGardenState() {
           2,
         )
       },
+      /**
+       * A copy from `exportGarden` reached the gardener: saved, downloaded or
+       * shared. `madeAt` is when it was exported, so anything written while
+       * the save screen was open still counts as new.
+       */
+      recordBackup: (madeAt: Date) =>
+        update((current) => act.recordBackup(current, madeAt)),
     }
   }, [update, media, setState, setPersistence, readOnlyRef])
 

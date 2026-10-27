@@ -414,6 +414,21 @@ describe('the gardener and their companions', () => {
     expect(act.setRecapHours(empty, { opensHour: 21, graceEndsHour: 6 })).toBe(empty)
   })
 
+  it('remembers when a copy was kept, writing nothing for the same moment', () => {
+    const before = garden()
+    const madeAt = new Date('2026-03-14T09:30:00.000Z')
+    const kept = act.recordBackup(before, madeAt)
+    expect(kept.profile?.lastBackupAt).toBe('2026-03-14T09:30:00.000Z')
+    expect(before.profile).not.toHaveProperty('lastBackupAt')
+    expect(act.recordBackup(kept, new Date(madeAt))).toBe(kept)
+    const later = act.recordBackup(kept, new Date('2026-04-01T08:00:00.000Z'))
+    expect(later.profile?.lastBackupAt).toBe('2026-04-01T08:00:00.000Z')
+    // No gardener yet, or a clock reading that is no time at all.
+    const empty = garden({ profile: undefined })
+    expect(act.recordBackup(empty, madeAt)).toBe(empty)
+    expect(act.recordBackup(kept, new Date(Number.NaN))).toBe(kept)
+  })
+
   it('remembers release notes read, writing nothing the second time', () => {
     const read = act.markReleaseSeen(garden(), 'release-3-0')
     expect(read.profile?.lastSeenReleaseId).toBe('release-3-0')

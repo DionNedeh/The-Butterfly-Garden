@@ -1,8 +1,11 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PersistenceStatus } from '../hooks/useGardenState'
+import { recordBackup } from '../lib/gardenActions'
 import { createInitialState } from '../lib/progression'
+import type { AppState } from '../types'
 import { SettingsView } from './SettingsView'
 
 function renderSettings<Extra extends Record<string, unknown>>(
@@ -236,5 +239,186 @@ describe('SettingsView evening hours', () => {
     expect(screen.queryByRole('region', { name: 'Days and numbers' })).not.toBeInTheDocument()
     expect(screen.queryByText('Your rhythm')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('My evening starts at')).not.toBeInTheDocument()
+  })
+})
+
+describe('SettingsView backup habits', () => {
+  const DAY = 86_400_000
+
+  /** A garden started `days` ago, with a copy kept `backedUp` days ago if given. */
+  function gardenOf(days: number, backedUp?: number): AppState {
+    const seed = createInitialState('Tester', 'Test Garden', new Date(Date.now() - days * DAY))
+    return backedUp === undefined
+      ? seed
+      : recordBackup(seed, new Date(Date.now() - backedUp * DAY))
+  }
+
+  /** Settings over a garden that really changes when a backup is made. */
+  function StatefulSettings({ initial, onBackupMade }: {
+    initial: AppState
+    onBackupMade: (madeAt: Date) => void
+  }) {
+    const [state, setState] = useState(initial)
+    return (
+      <SettingsView
+        state={state}
+        persistence={{ readOnly: false }}
+        onUpdateProfile={vi.fn()}
+        onSelectAmbientTrack={vi.fn()}
+        onSelectBackdrop={vi.fn()}
+        onExportGarden={() => '{"format":"the-butterfly-garden"}'}
+        onBackupMade={(madeAt) => {
+          onBackupMade(madeAt)
+          setState((current) => recordBackup(current, madeAt))
+        }}
+        onImportGarden={vi.fn(() => Promise.resolve({ ok: true, message: 'Restored.' }))}
+        onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
+      />
+    )
+  }
+
+  function stubDownload() {
+    vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:garden'), revokeObjectURL: vi.fn() })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+  }
+
+  function stubShareSheet(
+    canShare: (data?: ShareData) => boolean,
+    share: (data?: ShareData) => Promise<void> = () => Promise.resolve(),
+  ) {
+    const sheet = { canShare: vi.fn(canShare), share: vi.fn(share) }
+    Object.defineProperty(navigator, 'canShare', { value: sheet.canShare, configurable: true })
+    Object.defineProperty(navigator, 'share', { value: sheet.share, configurable: true })
+    return sheet
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'canShare')
+    Reflect.deleteProperty(navigator, 'share')
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('says nothing about backups to a garden with a recent copy', () => {
+    renderSettings(undefined, { state: gardenOf(90, 3) })
+    expect(screen.queryByText(/your last copy/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not saved a copy/i)).not.toBeInTheDocument()
+  })
+
+  it('says nothing to a garden too new to need a copy yet', () => {
+    renderSettings()
+    expect(screen.queryByText(/not saved a copy/i)).not.toBeInTheDocument()
+  })
+
+  it('names the month of the last copy once it is a month old', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 27, 12))
+    const seed = createInitialState('Tester', 'Test Garden', new Date(2026, 0, 5))
+    renderSettings(undefined, { state: recordBackup(seed, new Date(2026, 2, 14, 9)) })
+    expect(
+      screen.getByText('Your last copy is from March. A fresh copy keeps everything written since.'),
+    ).toBeInTheDocument()
+  })
+
+  it('suggests a first copy, and lets it go once the download starts', async () => {
+    stubDownload()
+    const user = userEvent.setup()
+    const onBackupMade = vi.fn()
+    render(<StatefulSettings initial={gardenOf(45)} onBackupMade={onBackupMade} />)
+    expect(screen.getByText(/You have not saved a copy yet\./)).toBeInTheDocument()
+
+    const before = Date.now()
+    await user.click(screen.getByRole('button', { name: 'Download a backup' }))
+
+    expect(onBackupMade).toHaveBeenCalledOnce()
+    const [madeAt] = onBackupMade.mock.calls[0] as [Date]
+    expect(madeAt.getTime()).toBeGreaterThanOrEqual(before)
+    expect(screen.queryByText(/not saved a copy/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/backup started/i)).toBeInTheDocument()
+  })
+
+  it('does not count a download the browser would not start', async () => {
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => {
+        throw new Error('blocked')
+      }),
+    })
+    const user = userEvent.setup()
+    const { onBackupMade } = renderSettings(undefined, { onBackupMade: vi.fn() })
+    await user.click(screen.getByRole('button', { name: 'Download a backup' }))
+    expect(screen.getByText('This browser would not start the download.')).toBeInTheDocument()
+    expect(onBackupMade).not.toHaveBeenCalled()
+  })
+
+  it('keeps quiet about backups while the stored garden cannot be read', () => {
+    renderSettings({ readOnly: true, reason: 'malformed' }, { state: gardenOf(45) })
+    expect(screen.queryByText(/not saved a copy/i)).not.toBeInTheDocument()
+  })
+
+  it('offers no share button where the browser cannot share a file', () => {
+    renderSettings()
+    expect(screen.queryByRole('button', { name: /share backup/i })).not.toBeInTheDocument()
+
+    stubShareSheet(() => false)
+    renderSettings()
+    expect(screen.queryByRole('button', { name: /share backup/i })).not.toBeInTheDocument()
+  })
+
+  it('shares the backup as a file where the browser can, and counts it', async () => {
+    const sheet = stubShareSheet((data) => data?.files?.[0]?.type === 'application/json')
+    const user = userEvent.setup()
+    const onBackupMade = vi.fn()
+    render(<StatefulSettings initial={gardenOf(45)} onBackupMade={onBackupMade} />)
+    expect(screen.getByText(/or handed to an app you choose\./)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Share backup…' }))
+
+    const [shared] = sheet.share.mock.calls[0]
+    const file = shared?.files?.[0]
+    expect(file?.name).toMatch(/^butterfly-garden-\d{4}-\d{2}-\d{2}\.json$/)
+    expect(file?.type).toBe('application/json')
+    expect(await file?.text()).toBe('{"format":"the-butterfly-garden"}')
+    expect(onBackupMade).toHaveBeenCalledOnce()
+    expect(screen.getByText('Backup shared. Keep the file somewhere safe.')).toBeInTheDocument()
+    expect(screen.queryByText(/not saved a copy/i)).not.toBeInTheDocument()
+  })
+
+  it('takes a closed share sheet quietly, as nothing kept', async () => {
+    stubShareSheet(
+      () => true,
+      () => Promise.reject(new DOMException('Share canceled', 'AbortError')),
+    )
+    const user = userEvent.setup()
+    const onBackupMade = vi.fn()
+    render(<StatefulSettings initial={gardenOf(45)} onBackupMade={onBackupMade} />)
+    await user.click(screen.getByRole('button', { name: 'Share backup…' }))
+    expect(onBackupMade).not.toHaveBeenCalled()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByText(/You have not saved a copy yet\./)).toBeInTheDocument()
+  })
+
+  it('says so when the browser will not share the file after all', async () => {
+    stubShareSheet(
+      () => true,
+      () => Promise.reject(new DOMException('No gesture', 'NotAllowedError')),
+    )
+    const user = userEvent.setup()
+    const { onBackupMade } = renderSettings(undefined, { onBackupMade: vi.fn() })
+    await user.click(screen.getByRole('button', { name: 'Share backup…' }))
+    expect(
+      await screen.findByText('This browser would not share the file. Download it instead.'),
+    ).toBeInTheDocument()
+    expect(onBackupMade).not.toHaveBeenCalled()
+  })
+
+  it('shares nothing while the stored garden cannot be read', async () => {
+    const sheet = stubShareSheet(() => true)
+    const user = userEvent.setup()
+    renderSettings(undefined, { onExportGarden: vi.fn(() => undefined) })
+    await user.click(screen.getByRole('button', { name: 'Share backup…' }))
+    expect(screen.getByText(/saving a backup is paused/i)).toBeInTheDocument()
+    expect(sheet.share).not.toHaveBeenCalled()
   })
 })

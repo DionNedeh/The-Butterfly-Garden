@@ -219,4 +219,11 @@ describe('arriving at an address', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     await openGardenAt('Today')
     await waitFor(() => expect(window.location.hash).toBe('#/today'))
   })
+
+  it('opens the "Check in" shortcut on Today, at the weather question', async () => {
+    window.history.replaceState(null, '', '/#/today/check-in')
+    await openGardenAt('Today')
+    expect(screen.getByRole('heading', { name: 'What is your inner weather?' })).toHaveFocus()
+    expect(window.location.hash).toBe('#/today/check-in')
+  })
 })

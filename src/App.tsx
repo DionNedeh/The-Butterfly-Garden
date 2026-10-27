@@ -678,6 +678,7 @@ function App() {
               onOpenCare={() => setView('care')}
               recap={offeredRecap}
               moonlightCollected={recapCollected}
+              openAtCheckIn={route.checkIn}
               onOpenRecap={() => {
                 setRecapOpenedFor(recapTarget)
                 setView('recap')
@@ -737,6 +738,7 @@ function App() {
               onSelectAmbientTrack={garden.selectAmbientTrack}
               onSelectBackdrop={garden.selectBackdrop}
               onExportGarden={garden.exportGarden}
+              onBackupMade={garden.recordBackup}
               onImportGarden={garden.importGarden}
               onUndoRestore={garden.undoRestore}
               onDownloadSetAside={garden.quarantinedCopy}

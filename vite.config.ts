@@ -1,7 +1,12 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { pwaManifest } from './src/pwaManifest.ts'
+
+/** Where the PWA is served on GitHub Pages. */
+const WEB_BASE = '/The-Butterfly-Garden/'
 
 export default defineConfig(({ mode }) => {
   // The Android app (`--mode android`) is served by Capacitor from the root of
@@ -9,6 +14,8 @@ export default defineConfig(({ mode }) => {
   // through Google Play, so it has no service worker, no web manifest and no
   // precache -- the plugin is disabled but still answers its virtual modules.
   const android = mode === 'android'
+  /** Where this build is written, once Vite has worked it out. */
+  let outDir = ''
   const { version } = JSON.parse(
     readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
   ) as { version: string }
@@ -16,7 +23,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __APP_VERSION__: JSON.stringify(version),
     },
-    base: android ? '/' : '/The-Butterfly-Garden/',
+    base: android ? '/' : WEB_BASE,
     build: android ? { outDir: 'dist-android' } : {},
     // Scan only the application, not local review HTML or archived checkouts.
     optimizeDeps: {
@@ -24,6 +31,20 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      // The install-sheet screenshots belong to the web manifest, which the
+      // Android app does not have; Google Play has its own. Everything in
+      // public/ is copied into every build, so they are taken back out of
+      // the Android one rather than shipped unused inside the app.
+      android && {
+        name: 'android-without-web-screenshots',
+        apply: 'build',
+        configResolved(config) {
+          outDir = resolve(config.root, config.build.outDir)
+        },
+        closeBundle() {
+          rmSync(resolve(outDir, 'screenshots'), { recursive: true, force: true })
+        },
+      },
       VitePWA({
         disable: android,
         registerType: 'prompt',
@@ -33,35 +54,7 @@ export default defineConfig(({ mode }) => {
           'icons/apple-touch-icon.png',
           'icons/favicon-64.png',
         ],
-        manifest: {
-          name: 'The Butterfly Garden',
-          short_name: 'Butterfly Garden',
-          description: 'A private, gentle self-care garden that grows with you.',
-          theme_color: '#315c4b',
-          background_color: '#f8f2df',
-          display: 'standalone',
-          start_url: '/The-Butterfly-Garden/',
-          scope: '/The-Butterfly-Garden/',
-          icons: [
-            {
-              src: 'icons/icon-192.webp',
-              sizes: '192x192',
-              type: 'image/webp',
-            },
-            {
-              src: 'icons/icon-512.webp',
-              sizes: '512x512',
-              type: 'image/webp',
-              purpose: 'any maskable',
-            },
-            {
-              // PNG fallback for installers that will not take a WebP icon.
-              src: 'icons/apple-touch-icon.png',
-              sizes: '180x180',
-              type: 'image/png',
-            },
-          ],
-        },
+        manifest: pwaManifest(WEB_BASE),
         workbox: {
           globPatterns: ['**/*.{js,css,html,png,jpg,webp,svg,woff2}'],
           // Keep full optional scenes out of the install. Thumbnails are small
@@ -78,6 +71,8 @@ export default defineConfig(({ mode }) => {
             // basic latin is used, which the English interface never does. The
             // browser fetches them if a gardener types an accented character.
             '**/*-latin-ext-*.woff2',
+            // Only the install sheet shows these, and only before install.
+            '**/screenshots/**',
           ],
           navigateFallback: 'index.html',
           runtimeCaching: [

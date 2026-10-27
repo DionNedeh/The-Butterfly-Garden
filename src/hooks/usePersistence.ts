@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadDrafts, resetDrafts } from '../lib/drafts'
+import { recordBackup } from '../lib/gardenActions'
 import { progressGarden } from '../lib/progression'
 import { requestPersistentStorage } from '../lib/storage'
 import {
@@ -384,7 +385,12 @@ export function usePersistence(
           return { ok: false, message: 'That file is not a garden backup.' }
         }
         const inspection = inspectImportedState(parsed)
-        const imported = inspection.state
+        // The restored garden is exactly a file the gardener holds, so it
+        // counts as a copy kept now. This also replaces the time the file
+        // carries, which is from the copy before it (or hand-edited), and
+        // would otherwise say the wrong thing about copies on a new device.
+        const imported =
+          inspection.state && recordBackup(inspection.state, new Date())
         if (!imported) {
           return {
             ok: false,

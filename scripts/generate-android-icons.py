@@ -22,6 +22,12 @@ paper is not.
 Launchers older than Android 8 show ic_launcher.png as is, and expect it to
 have a shape of its own rather than fill its square, so it gets rounded
 corners and a small margin.
+
+The PWA's maskable icon (public/icons/icon-maskable-512.webp) is the same idea
+for an installed web app: the launcher may cut it to any shape, keeping at
+least the central circle 80% wide, so the artwork sits in the same central
+two-thirds on paper that runs to every edge. The manifest names it separately
+from icon-512.webp, which stays the "any" icon shown uncropped.
 """
 
 from pathlib import Path
@@ -31,6 +37,8 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'public' / 'icons' / 'icon-512.webp'
 RES = ROOT / 'android' / 'app' / 'src' / 'main' / 'res'
+MASKABLE = ROOT / 'public' / 'icons' / 'icon-maskable-512.webp'
+MASKABLE_SIZE = 512
 
 # The paper tone along the icon's opaque border (averaged from the source).
 PAPER = (0xFD, 0xF1, 0xCE)
@@ -84,8 +92,30 @@ def centred(layer: Image.Image, canvas: int, visible: int) -> Image.Image:
     return out
 
 
+def maskable(icon: Image.Image) -> Image.Image:
+    """The artwork in the central two-thirds, on paper to every edge.
+
+    The artwork's own paper is a shade off PAPER, so its edge is feathered
+    away: otherwise a faint square shows wherever the mask is wider than it.
+    """
+    visible = round(MASKABLE_SIZE * VISIBLE_DP / ADAPTIVE_DP)
+    feather = round(visible * 0.06)
+    edge = Image.new('L', (visible, visible), 0)
+    ImageDraw.Draw(edge).rectangle(
+        (feather, feather, visible - 1 - feather, visible - 1 - feather), fill=255
+    )
+    edge = edge.filter(ImageFilter.GaussianBlur(feather / 2))
+    art = fitted(icon, visible)
+    art.putalpha(Image.composite(art.getchannel('A'), edge, edge))
+    out = Image.new('RGBA', (MASKABLE_SIZE, MASKABLE_SIZE), PAPER + (255,))
+    offset = (MASKABLE_SIZE - visible) // 2
+    out.alpha_composite(art, (offset, offset))
+    return out.convert('RGB')
+
+
 def main() -> None:
     icon = Image.open(SOURCE).convert('RGBA')
+    maskable(icon).save(MASKABLE, quality=90, method=6)
     mono = silhouette(icon)
     for bucket, scale in DENSITIES.items():
         folder = RES / f'mipmap-{bucket}'
@@ -118,7 +148,7 @@ def main() -> None:
             folder / 'ic_launcher_monochrome.png', optimize=True
         )
 
-    print('Wrote launcher icons for', ', '.join(DENSITIES))
+    print('Wrote the maskable PWA icon and launcher icons for', ', '.join(DENSITIES))
 
 
 if __name__ == '__main__':

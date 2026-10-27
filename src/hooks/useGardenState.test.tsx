@@ -413,6 +413,27 @@ describe('backups the garden cannot trust', () => {
     })
     expect(result.current.state?.profile?.gardenName).toBe('Before')
   })
+
+  it('counts a restore as a copy kept now, whatever time the file carries', async () => {
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const before = Date.now()
+    const garden = createInitialState('Tester', 'Moved')
+    await act(async () => {
+      await result.current.importGarden(
+        JSON.stringify({
+          format: 'the-butterfly-garden',
+          exportedAt: '2026-03-14T09:30:00.000Z',
+          // From the copy before this one, or edited by hand: neither says
+          // anything about the copies this device has.
+          garden: { ...garden, profile: { ...garden.profile, lastBackupAt: '2099-01-01T00:00:00.000Z' } },
+        }),
+      )
+    })
+    const restoredAt = Date.parse(result.current.state!.profile!.lastBackupAt!)
+    expect(restoredAt).toBeGreaterThanOrEqual(before)
+    expect(restoredAt).toBeLessThanOrEqual(Date.now())
+  })
 })
 
 describe('an image save that never hears back', () => {
@@ -704,6 +725,18 @@ describe('every action, through the hook', () => {
     const file = JSON.parse(result.current.exportGarden()!) as { format: string; garden: { seeds: number } }
     expect(file.format).toBe('the-butterfly-garden')
     expect(file.garden.seeds).toBe(5)
+  })
+
+  it('remembers when a backup was kept, as of its export', async () => {
+    const { result } = await renderReady()
+    const madeAt = new Date('2026-10-27T08:00:00.000Z')
+    act(() => result.current.recordBackup(madeAt))
+    expect(result.current.state?.profile?.lastBackupAt).toBe(madeAt.toISOString())
+    // The time is in the garden, so the next backup file carries it along.
+    const file = JSON.parse(result.current.exportGarden()!) as {
+      garden: { profile: { lastBackupAt?: string } }
+    }
+    expect(file.garden.profile.lastBackupAt).toBe(madeAt.toISOString())
   })
 
   it('refuses an image save it cannot make, saying why', async () => {

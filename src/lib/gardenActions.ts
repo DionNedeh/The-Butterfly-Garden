@@ -555,3 +555,14 @@ export function updateProfile(
     },
   }
 }
+
+/**
+ * Remember that the gardener kept a copy of the garden as it was at `madeAt`:
+ * a backup saved, downloaded or shared, or a restore (see Profile.lastBackupAt).
+ */
+export function recordBackup(state: AppState, madeAt: Date): AppState {
+  if (!state.profile || Number.isNaN(madeAt.getTime())) return state
+  const lastBackupAt = madeAt.toISOString()
+  if (state.profile.lastBackupAt === lastBackupAt) return state
+  return { ...state, profile: { ...state.profile, lastBackupAt } }
+}

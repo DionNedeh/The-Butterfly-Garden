@@ -589,7 +589,25 @@ function checkProfile(
     ctx.repaired += 1
     delete profile.theme
   }
+  if (value.lastBackupAt !== undefined && !isTimestamp(value.lastBackupAt)) {
+    delete profile.lastBackupAt
+  }
   return profile
+}
+
+/**
+ * An ISO 8601 date and time that names a real moment, as `toISOString()`
+ * writes it. Anything else could not be compared with the clock, so it is
+ * dropped and the garden simply has no copy on record.
+ */
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
+
+function isTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    ISO_TIMESTAMP.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  )
 }
 
 function checkInventory(value: unknown, ctx: Context): Record<string, number> {

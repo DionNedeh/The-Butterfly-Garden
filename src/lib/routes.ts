@@ -33,6 +33,11 @@ export interface Route {
   view: AppView
   /** The shop opened on its Garden Pass tab: `#/shop/pass`. */
   onPass?: boolean
+  /**
+   * Today opened at its check-in question: `#/today/check-in`, where the
+   * installed app's "Check in" shortcut leads.
+   */
+  checkIn?: boolean
 }
 
 /**
@@ -42,6 +47,7 @@ export interface Route {
 export function routeFromHash(hash: string): Route | undefined {
   const path = hash.replace(/^#\/?/, '').replace(/\/+$/, '')
   if (path === 'shop/pass') return { view: 'shop', onPass: true }
+  if (path === 'today/check-in') return { view: 'today', checkIn: true }
   // The recap opens for a particular evening, chosen on Today; a reload or a
   // saved link cannot know which, so it lands on Today, where it is offered.
   if (path === 'recap') return { view: 'today' }
@@ -52,6 +58,7 @@ export function routeFromHash(hash: string): Route | undefined {
 /** The hash for a page: empty for the garden, so its address stays plain. */
 export function hashForRoute(route: Route): string {
   if (route.view === 'shop' && route.onPass) return '#/shop/pass'
+  if (route.view === 'today' && route.checkIn) return '#/today/check-in'
   const path = PATHS[route.view]
   return path ? `#/${path}` : ''
 }

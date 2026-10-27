@@ -253,6 +253,26 @@ describe('validating a garden', () => {
     expect(odd).not.toHaveProperty('recapGraceEndsHour')
   })
 
+  it('keeps the time of the last backup only when it is a real moment', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const lastBackupOf = (lastBackupAt: unknown) =>
+      validateGarden(garden({ profile: { ...base, lastBackupAt } })).state?.profile
+    expect(lastBackupOf('2026-03-14T09:30:00.000Z')?.lastBackupAt).toBe(
+      '2026-03-14T09:30:00.000Z',
+    )
+    expect(lastBackupOf('2026-03-14T09:30:00+01:00')?.lastBackupAt).toBe(
+      '2026-03-14T09:30:00+01:00',
+    )
+    // Wrong types, a date with no time, a time that is no time, and words.
+    for (const odd of [1773480600000, true, {}, '2026-03-14', '2026-13-45T99:99:00Z', 'last week', '']) {
+      const profile = lastBackupOf(odd)
+      expect(profile).not.toHaveProperty('lastBackupAt')
+      expect(profile?.gardenName).toBe('Test Garden')
+    }
+    // An older garden simply has none, and gains none.
+    expect(validateGarden(garden()).state?.profile).not.toHaveProperty('lastBackupAt')
+  })
+
   it('keeps every goal a recap’s notes became, through a save and a backup', () => {
     const recap = {
       id: 'recap',
