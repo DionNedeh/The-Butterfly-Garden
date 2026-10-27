@@ -19,7 +19,7 @@ import type { AppState, CustomBackdrop, Sighting } from '../types'
 import type { useMediaSaves } from './useMediaSaves'
 
 /** Tabs tell each other when the shared garden changed underneath them. */
-const SYNC_CHANNEL = 'butterfly-garden-sync'
+export const SYNC_CHANNEL = 'butterfly-garden-sync'
 
 /** What tabs say to each other on the sync channel. */
 type SyncMessage =
@@ -30,6 +30,11 @@ type SyncMessage =
   | { type: 'garden-cleared' }
   /** The deletion did not happen after all: read the garden again. */
   | { type: 'garden-clear-failed' }
+  /**
+   * The garden lock was turned on or off, or (`now`) locked. A tab with the
+   * garden open follows it here; one showing the lock screen, there.
+   */
+  | { type: 'garden-lock'; now?: boolean }
 
 /** Retry delays after storage could not be read, in milliseconds. */
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
@@ -191,6 +196,17 @@ export function usePersistence(
     channelRef.current = channel
     channel.onmessage = (event: MessageEvent<SyncMessage | undefined>) => {
       const message = event.data
+      if (message?.type === 'garden-lock') {
+        // Locked everywhere now, or the lock turned on or off: this tab
+        // follows, and components/LockGate shows the lock screen if this tab
+        // may no longer read the garden.
+        if (message.now) {
+          void import('../lib/gardenLockActions').then(({ lockGarden }) => lockGarden(false))
+        } else {
+          void repository.checkLock().catch(() => undefined)
+        }
+        return
+      }
       if (message?.type === 'garden-clearing') {
         pauseSaving('deleting')
         return

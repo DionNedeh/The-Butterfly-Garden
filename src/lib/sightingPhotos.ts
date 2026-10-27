@@ -35,10 +35,15 @@ export interface FileCopy {
   leftOut?: string
 }
 
-/** The Blobs anywhere inside a value, each once. */
+/**
+ * The Blobs anywhere inside a value, each once. Bytes (a locked garden's
+ * sealed parts) hold none and are not walked number by number.
+ */
 function collect(value: unknown, into: Set<Blob>): void {
   if (value instanceof Blob) {
     into.add(value)
+  } else if (ArrayBuffer.isView(value)) {
+    return
   } else if (Array.isArray(value)) {
     for (const item of value) collect(item, into)
   } else if (value && typeof value === 'object') {
@@ -56,6 +61,7 @@ function replace(
   texts: ReadonlyMap<Blob, PhotoAsText | PhotoLeftOut>,
 ): unknown {
   if (value instanceof Blob) return texts.get(value)
+  if (ArrayBuffer.isView(value)) return value
   if (Array.isArray(value)) {
     const items = value.map((item: unknown) => replace(item, texts))
     return items.some((item, index) => item !== value[index]) ? items : value

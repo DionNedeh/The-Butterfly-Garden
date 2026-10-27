@@ -461,3 +461,52 @@ test('the year’s postcard is saved through the app, and the back gesture retur
   await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
   expect(errors).toEqual([])
 })
+
+test('a locked garden opens to the lock screen, where the back gesture leaves the app', async ({
+  page,
+}) => {
+  test.slow()
+  const deriving = { timeout: 30_000 }
+  const passcode = 'heron over the river'
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const lockSection = page.getByRole('region', { name: 'The garden lock' })
+  await expect(lockSection.getByText(/software that already controls this phone/)).toBeVisible()
+  // No passkeys in the app's WebView.
+  await expect(lockSection.getByRole('button', { name: 'Add a passkey…' })).toHaveCount(0)
+  await lockSection.getByRole('button', { name: 'Lock my garden…' }).click()
+  const setup = page.getByRole('dialog', { name: 'Choose a passcode' })
+  await setup.getByLabel('Passcode', { exact: true }).fill(passcode)
+  await setup.getByLabel('The same passcode again').fill(passcode)
+  await setup.getByRole('button', { name: 'Next: your recovery code' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Save your recovery code' })
+  // The app saves the sheet through its own save screen, and prints nothing.
+  await expect(sheet.getByRole('button', { name: 'Save the sheet' })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Print the sheet' })).toHaveCount(0)
+  const words = await sheet.getByRole('listitem').allTextContents()
+  await sheet.getByRole('button', { name: 'I have kept the words' }).click()
+  const check = page.getByRole('dialog', { name: 'Check two words' })
+  for (const field of await check.getByRole('textbox', { name: /^Word \d+$/ }).all()) {
+    const label = (await field.evaluate((element) => element.closest('label')?.textContent)) ?? ''
+    await field.fill(words[Number(/\d+/.exec(label)?.[0]) - 1])
+  }
+  await check.getByRole('button', { name: 'Lock my garden' }).click()
+  await page.getByRole('dialog', { name: 'Your garden is locked' }).getByRole('button', { name: 'Done' }).click(deriving)
+
+  await lockSection.getByRole('button', { name: 'Lock now' }).click()
+  const resting = page.getByRole('heading', { level: 1, name: 'Your garden is resting' })
+  await expect(resting).toBeVisible()
+  expect(await seriousViolations(page, 'Android lock screen')).toEqual([])
+  // Back leaves the app from here; in a browser that is a no-op, and the
+  // lock screen is never stepped past.
+  await pressBack(page)
+  await expect(resting).toBeVisible()
+  await expect(mainNav(page)).toHaveCount(0)
+
+  await page.getByLabel('Passcode', { exact: true }).fill(passcode)
+  await page.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused(deriving)
+  expect(errors).toEqual([])
+})

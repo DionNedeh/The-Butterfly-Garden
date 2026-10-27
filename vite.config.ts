@@ -74,12 +74,14 @@ export default defineConfig(({ mode }) => {
           // both builds: it still loads with the app, but the entry stays
           // under its cap (check-budgets.mjs) however the rest of the graph
           // is split, and the web build no longer repeats what the chunks
-          // around it already hold.
+          // around it already hold. The garden lock's sealing
+          // (repository/sealedStores) is left out of it, so that only a
+          // garden with a lock ever downloads it.
           codeSplitting: {
             groups: [
               {
                 name: 'repository',
-                test: /[\\/]src[\\/]repository[\\/]|[\\/]node_modules[\\/]idb[\\/]/,
+                test: /[\\/]src[\\/]repository[\\/](?!sealedStores)|[\\/]node_modules[\\/]idb[\\/]/,
               },
             ],
           },

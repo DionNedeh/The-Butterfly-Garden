@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { FramedNotice } from './components/FramedNotice'
+import { LockGate } from './components/LockGate'
 import { SafeMode } from './components/SafeMode'
 import { isFramed } from './lib/hosting'
 import { isAndroidApp } from './lib/platform'
@@ -27,7 +28,10 @@ createRoot(document.getElementById('root')!).render(
       // The last line of defence: whatever fails to draw, the gardener lands
       // somewhere that can save a copy of their garden and put a backup back.
       <ErrorBoundary fallback={(error) => <SafeMode error={error} />}>
-        <App />
+        {/* A locked garden opens to the lock screen; without a lock, the app. */}
+        <LockGate>
+          <App />
+        </LockGate>
       </ErrorBoundary>
     )}
   </StrictMode>,
