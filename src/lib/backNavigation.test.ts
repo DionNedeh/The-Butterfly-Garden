@@ -75,6 +75,13 @@ describe('backAction', () => {
     expect(backAction('breathe', document, 'breathe')).toEqual({ kind: 'view', view: 'garden' })
   })
 
+  it('returns a year looked back on to the page that opened it, or else the Journal', () => {
+    expect(backAction('year', document, 'journal')).toEqual({ kind: 'view', view: 'journal' })
+    // Opened from a link or a reload, it goes back to the Journal, where it lives.
+    expect(backAction('year')).toEqual({ kind: 'view', view: 'journal' })
+    expect(backAction('year', document, 'year')).toEqual({ kind: 'view', view: 'journal' })
+  })
+
   it('returns any other page to the garden', () => {
     for (const view of ['care', 'today', 'journal', 'settings'] as const)
       expect(backAction(view)).toEqual({ kind: 'view', view: 'garden' })

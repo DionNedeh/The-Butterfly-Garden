@@ -24,6 +24,7 @@ const PATHS: Record<AppView, string> = {
   notices: 'notices',
   support: 'support',
   breathe: 'breathe',
+  year: 'year',
 }
 
 const VIEWS = new Map<string, AppView>(
@@ -91,6 +92,11 @@ export interface Route {
    */
   restore?: LinkPlace
   /**
+   * The year "Your garden's year" looks back on: `#/year/2025`. Without it,
+   * this year (`#/year`). The page offers only years it has something for.
+   */
+  year?: number
+  /**
    * The Journal opened on Marigold's newest letter, from the garden's card.
    * Not part of the address: a reload opens the Journal as usual, where the
    * letter is kept.
@@ -100,6 +106,9 @@ export interface Route {
 
 /** A Guide section's name in the address: lower case words and hyphens. */
 const GUIDE_SECTION = /^guide\/([a-z][a-z-]{0,39})$/
+
+/** A year looked back on, in the address: four digits. */
+const YEAR = /^year\/(\d{4})$/
 
 /**
  * The page a hash names, or undefined for one that names no page (an old
@@ -114,6 +123,8 @@ export function routeFromHash(hash: string): Route | undefined {
   if (path === 'recap') return { view: 'today' }
   const section = GUIDE_SECTION.exec(path)?.[1]
   if (section) return { view: 'guide', section }
+  const year = YEAR.exec(path)?.[1]
+  if (year) return { view: 'year', year: Number(year) }
   const view = VIEWS.get(path)
   return view ? { view } : undefined
 }
@@ -136,6 +147,7 @@ export function hashForRoute(route: Route): string {
   if (route.view === 'shop' && route.onPass) return '#/shop/pass'
   if (route.view === 'today' && route.checkIn) return '#/today/check-in'
   if (route.view === 'guide' && route.section) return `#/guide/${route.section}`
+  if (route.view === 'year' && route.year) return `#/year/${route.year}`
   const path = PATHS[route.view]
   return path ? `#/${path}` : ''
 }

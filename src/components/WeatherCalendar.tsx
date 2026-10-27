@@ -19,6 +19,7 @@ import {
   type CalendarMonth,
 } from '../lib/weatherCalendar'
 import type { MoodEntry } from '../types'
+import './weatherCalendar.css'
 
 export interface WeatherCalendarProps {
   /** Check-ins by local date, the index JournalView already keeps. */
@@ -322,14 +323,104 @@ export const WeatherCalendar = memo(function WeatherCalendar({
         </div>
       )}
 
-      <ul className="cal-legend" aria-label="Key">
-        {LEGEND.map((item) => (
-          <li key={item.name}>
-            <span className={`cal-swatch ${item.tileClass}`} aria-hidden="true" />
-            {item.name}
-          </li>
-        ))}
-      </ul>
+      <WeatherKey />
+    </section>
+  )
+})
+
+/** The key under a calendar, drawn the way the days are. */
+function WeatherKey() {
+  return (
+    <ul className="cal-legend" aria-label="Key">
+      {LEGEND.map((item) => (
+        <li key={item.name}>
+          <span className={`cal-swatch ${item.tileClass}`} aria-hidden="true" />
+          {item.name}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export interface YearCalendarProps {
+  year: number
+  /** Check-ins by local date. */
+  moodByDate: ReadonlyMap<string, MoodEntry>
+  /** Whether anything was written on a day. Keep it stable between renders. */
+  hasEntry: (localDate: string) => boolean
+  /** The current local date, so days still to come are drawn as such. */
+  today: string
+}
+
+/**
+ * One year in pixels, to look at rather than to move through: the page
+ * that looks back on a year ("Your garden's year") shows it whole. The same
+ * days, colours and key as the Journal's calendar, and as descriptive: each
+ * day says only the weather it was given. Nothing here is a button; the
+ * Journal's own calendar is where a day is opened.
+ */
+export const YearCalendar = memo(function YearCalendar({
+  year,
+  moodByDate,
+  hasEntry,
+  today,
+}: YearCalendarProps) {
+  const titleId = useId()
+  const months = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, index) => ({
+        monthIndex: index,
+        days: monthDates(year, index).map((date) => describeDay(date, moodByDate, hasEntry, today)),
+      })),
+    [year, moodByDate, hasEntry, today],
+  )
+  const latest = monthOf(today)
+  return (
+    <section className="card weather-calendar year-calendar" aria-labelledby={titleId}>
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Inner weather</p>
+          <h2 id={titleId}>The year’s weather</h2>
+        </div>
+      </div>
+      <p className="section-explainer">Each day takes the colour of the weather you gave it.</p>
+      <div className="cal-year">
+        {months.map(({ monthIndex, days }) => {
+          const name = monthLabel(year, monthIndex)
+          const written = days.some((day) => day.label !== undefined)
+          const future = compareMonths({ year, monthIndex }, latest) > 0
+          return (
+            <div className="cal-year-row" key={monthIndex}>
+              <span className="cal-year-month" aria-hidden="true">
+                {monthShortLabel(monthIndex)}
+              </span>
+              <ol
+                className="cal-year-days"
+                aria-label={written ? name : undefined}
+                aria-hidden={written ? undefined : true}
+              >
+                {days.map((day) => (
+                  <li key={day.date} aria-hidden={day.label === undefined ? true : undefined}>
+                    <span
+                      className={[
+                        'cal-pixel',
+                        day.tileClass,
+                        day.isToday ? 'cal-today' : '',
+                        day.isFuture ? 'cal-future' : '',
+                      ].join(' ')}
+                      role={day.label === undefined ? undefined : 'img'}
+                      aria-label={day.label}
+                    />
+                  </li>
+                ))}
+              </ol>
+              {/* Months still to come complete the year, and say nothing. */}
+              {!written && !future && <span className="sr-only">{name}: no entries</span>}
+            </div>
+          )
+        })}
+      </div>
+      <WeatherKey />
     </section>
   )
 })

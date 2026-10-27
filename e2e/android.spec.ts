@@ -394,3 +394,37 @@ test('a sighting is logged with a photo in the app, and the back gesture puts it
   await expect(log).toBeFocused()
   await expect(page.getByText(/Saved to your field book/)).toBeVisible()
 })
+
+test('the year’s postcard is saved through the app, and the back gesture returns to the Journal', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await goTo(page, 'Journal')
+  // A quiet link most of the year; a line of its own in December and January.
+  const link = page.getByRole('link', { name: /^(Your garden’s year|look back on your garden’s \d{4})$/ })
+  await link.click()
+  await expect(page.getByRole('heading', { level: 1, name: /^Your garden’s \d{4}$/ })).toBeFocused()
+
+  const postcard = page.getByRole('region', { name: 'A postcard of your garden' })
+  await postcard.getByRole('button', { name: 'Make a postcard' }).click()
+  await expect(postcard.getByRole('status')).toHaveText('Your postcard is ready.')
+  await expect(postcard.getByRole('img', { name: /^A postcard of Sunlit Sanctuary for \d{4}/ })).toBeVisible()
+  // The app has its own save screen and no share sheet of the browser's.
+  await expect(postcard.getByRole('button', { name: /^Share/ })).toHaveCount(0)
+  expect(await seriousViolations(page, 'Your garden’s year in the Android app')).toEqual([])
+  // A browser has no native side, so the app says the image could not be
+  // saved rather than claiming it was.
+  await postcard.getByRole('button', { name: 'Save image' }).click()
+  await expect(postcard.getByRole('status')).toHaveText(
+    'The postcard could not be saved there. Try choosing another place.',
+  )
+
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+  await expect(link).toBeFocused()
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+  expect(errors).toEqual([])
+})

@@ -52,6 +52,7 @@ import { Letters } from './journal/Letters'
 import { OnThisDayCard } from './journal/OnThisDayCard'
 import { StarToggle } from './journal/StarToggle'
 import { SeenInTheWild } from './sightings/SeenInTheWild'
+import { YearLink } from './year/YearLink'
 import type { StarredKind } from '../lib/letters'
 import './journal/journal.css'
 
@@ -75,6 +76,8 @@ export function JournalView({
   onReadLetter,
   onSetStarred,
   onChangeSightings,
+  onOpenYear,
+  returnedFromYear,
 }: {
   state: AppState
   onUpdateMood: (entry: MoodEntry) => void
@@ -95,6 +98,10 @@ export function JournalView({
   onSetStarred?: (kind: StarredKind, id: string, starred: boolean) => void
   /** Log, change and cross out sightings. Without it, the field book is not offered. */
   onChangeSightings?: ChangeSightings
+  /** Open "Your garden's year", at a year or this one. Without it, not offered. */
+  onOpenYear?: (year?: number) => void
+  /** Back from the year's page: focus returns to the link that opened it. */
+  returnedFromYear?: boolean
 }) {
   const [editingRecap, setEditingRecap] = useState<RecapEntry>()
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
@@ -226,6 +233,14 @@ export function JournalView({
           </h1>
           <p>
             Your words are kept as you wrote them, without scores or analysis.
+            {onOpenYear && (
+              <YearLink
+                state={state}
+                today={today}
+                onOpen={onOpenYear}
+                focusOnArrival={returnedFromYear}
+              />
+            )}
           </p>
         </div>
       </header>

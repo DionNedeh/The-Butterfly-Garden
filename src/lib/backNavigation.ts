@@ -15,7 +15,9 @@ export type BackAction =
  * was opened from another page back to it (the Moonlight recap to Today; the
  * privacy policy, the notices and the support page to Settings; the Guide,
  * opened by a "What does this do?" link, and breathing with a butterfly, to
- * the page `from` that opened them), then any other page back to the garden.
+ * the page `from` that opened them; a year looked back on to the page that
+ * opened it, or else the Journal, where it lives), then any other page back
+ * to the garden.
  * Only from the garden itself does it leave the app.
  */
 export function backAction(
@@ -33,6 +35,7 @@ export function backAction(
     return { kind: 'view', view: from }
   if (view === 'privacy' || view === 'notices' || view === 'support')
     return { kind: 'view', view: 'settings' }
+  if (view === 'year') return { kind: 'view', view: from && from !== view ? from : 'journal' }
   if (view && view !== 'garden') return { kind: 'view', view: 'garden' }
   return { kind: 'leave' }
 }

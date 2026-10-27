@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { canShareFile, shareTextFile } from './shareFile'
+import { canShareFile, shareFile, shareTextFile } from './shareFile'
 
 /** Give jsdom, which has no share sheet, the one a phone browser would have. */
 function stubShareSheet(
@@ -57,6 +57,22 @@ describe('sharing a file', () => {
     expect(file?.name).toBe('garden.json')
     expect(file?.type).toBe('application/json')
     expect(await file?.text()).toBe('{"a":1}')
+  })
+
+  it('hands the browser bytes, such as a postcard, as a named file', async () => {
+    const sheet = stubShareSheet(() => true)
+    const image = new Blob([new Uint8Array([255, 216, 255])], { type: 'image/jpeg' })
+    await expect(
+      shareFile('postcard.jpg', 'image/jpeg', image, 'Quiet Corner, 2026'),
+    ).resolves.toBe('shared')
+    const [shared] = sheet.share.mock.calls[0]
+    const file = shared?.files?.[0]
+    expect(shared?.title).toBe('Quiet Corner, 2026')
+    expect(file?.name).toBe('postcard.jpg')
+    expect(file?.type).toBe('image/jpeg')
+    expect([...new Uint8Array((await file?.arrayBuffer()) ?? new ArrayBuffer(0))]).toEqual([
+      255, 216, 255,
+    ])
   })
 
   it('treats a closed share sheet as a choice, not a failure', async () => {
