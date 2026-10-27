@@ -132,9 +132,10 @@ import { useDraft } from './lib/drafts'
 import { heardTrack, soundVolumeOf } from './lib/sound'
 import { isArrival, movedTo } from './lib/hosting'
 import {
-  returnFromGuide,
+  returnFrom,
   routeFromHash,
   urlForRoute,
+  type BreatheWay,
   type LinkPlace,
   type Route,
 } from './lib/routes'
@@ -146,10 +147,10 @@ function currentUrl(): string {
 }
 
 /**
- * Puts the gardener back where they pressed a "What does this do?" link, once
- * the page they return to is drawn. Rendered after the page, inside the same
- * Suspense, so it runs after the page's own first focus (Care's chip) and
- * never before the page is there.
+ * Puts the gardener back where they pressed a "What does this do?" link or a
+ * way into breathing, once the page they return to is drawn. Rendered after
+ * the page, inside the same Suspense, so it runs after the page's own first
+ * focus (Care's chip) and never before the page is there.
  */
 function PutBack({ place }: { place: LinkPlace }) {
   useEffect(() => putBackAt(place), [place])
@@ -337,7 +338,8 @@ function App() {
   // would expect: the open dialog first, then the recap to Today, then any
   // page to the garden, and only then out of the app. The handler is
   // registered once and reads the current page from a ref, with the page a
-  // "What does this do?" link left, which back returns the Guide to.
+  // "What does this do?" link or a way into breathing left, which back
+  // returns the Guide or breathing to.
   const routeRef = useRef(route)
   useEffect(() => {
     routeRef.current = route
@@ -350,9 +352,10 @@ function App() {
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
         else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
-          // Out of the Guide, back does what its Back button does: the same
-          // companion on Care, and the gardener where they were on the page.
-          const back = returnFromGuide(current)
+          // Out of the Guide or breathing, back does what its Back button
+          // does: the same companion on Care, and the gardener where they
+          // were on the page.
+          const back = returnFrom(current)
           const next = back?.view === action.view ? back : { view: action.view }
           // Android's back walks up a fixed ladder (lib/backNavigation), not
           // through history, so each step replaces the address.
@@ -545,8 +548,20 @@ function App() {
       from: activeView,
       fromPlace: { section, scrollY: window.scrollY, companionId },
     })
-  /** Breathing with a butterfly, remembering the page that offered it. */
-  const openBreathe = (from: AppView = activeView) => navigate({ view: 'breathe', from })
+  /**
+   * Breathing with a butterfly, remembering the page that offered it and
+   * where on it, as a Guide link does, so that leaving puts the gardener back
+   * at the way in they took. The recap is collected on the way in and is not
+   * there to come back to, so from it the way back is Today, at its top.
+   */
+  const openBreathe = (way: BreatheWay, goalId?: string) => {
+    const fromRecap = way === 'recap'
+    navigate({
+      view: 'breathe',
+      from: fromRecap ? 'today' : activeView,
+      fromPlace: { breathe: way, goalId, scrollY: fromRecap ? 0 : window.scrollY },
+    })
+  }
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -912,7 +927,7 @@ function App() {
               onClose={() => setView('today')}
               onFadeToNight={fadeToNight}
               onOpenGuide={openGuideAt}
-              onBreathe={() => openBreathe('today')}
+              onBreathe={() => openBreathe('recap')}
             />
           )}
           {activeView === 'guide' && (
@@ -926,7 +941,7 @@ function App() {
               section={route.section}
               returnTo={route.from}
               onReturn={() => {
-                const back = returnFromGuide(route)
+                const back = returnFrom(route)
                 if (back) navigate(back)
               }}
               onOpenSection={(section) => navigate({ ...route, section })}
@@ -944,7 +959,7 @@ function App() {
               onBack={() => setView(supportFrom)}
               backLabel={SUPPORT_BACK_LABELS[supportFrom] ?? 'Back to the garden'}
               state={state}
-              onBreathe={openBreathe}
+              onBreathe={() => openBreathe('support')}
             />
           )}
           {activeView === 'breathe' && (
@@ -953,7 +968,7 @@ function App() {
               // A session cannot be counted where nothing can be saved.
               onFinish={garden.persistence.readOnly ? undefined : garden.finishBreathing}
               from={route.from}
-              onBack={() => setView(route.from ?? 'garden')}
+              onBack={() => navigate(returnFrom(route) ?? { view: 'garden' })}
             />
           )}
           {activeView === 'journal' && (

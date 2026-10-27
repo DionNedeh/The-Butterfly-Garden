@@ -1346,7 +1346,8 @@ describe('breathing with a butterfly, from Today', () => {
       'Not now',
     ])
     await user.click(within(group).getByRole('button', { name: 'Breathe with Marigold' }))
-    expect(onOpenBreathe).toHaveBeenCalledOnce()
+    // Named, so that coming back finds the check-in it followed.
+    expect(onOpenBreathe).toHaveBeenCalledExactlyOnceWith('next-step')
     expect(screen.queryByRole('group', { name: /One small thing/ })).toBeNull()
   })
 
@@ -1369,7 +1370,8 @@ describe('breathing with a butterfly, from Today', () => {
     expect(links[0].closest('.goal-row')).toHaveAttribute('data-goal-id', 'b')
     expect(links[0]).toHaveAttribute('href', '#/breathe')
     await user.click(links[0])
-    expect(onOpenBreathe).toHaveBeenCalledOnce()
+    // Named by its goal, so that coming back finds this link again.
+    expect(onOpenBreathe).toHaveBeenCalledExactlyOnceWith('goal', 'b')
 
     cleanup()
     renderToday(

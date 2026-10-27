@@ -120,9 +120,10 @@ function animateWings(
  * the tone is queued a moment ahead. With reduced motion the wings stay
  * still and the count, and the tone if chosen, carry it.
  *
- * Stop is one tap, always on screen. Running a session to its end counts as
- * an act of care, once a day, through the usual Sunlight; stopping early
- * counts nothing and says nothing of it.
+ * Stop is one tap, beneath the count and never over it, and brought into
+ * view above the dock as a session starts. Running a session to its end
+ * counts as an act of care, once a day, through the usual Sunlight; stopping
+ * early counts nothing and says nothing of it.
  */
 export function BreathingView({
   state,
@@ -160,6 +161,7 @@ export function BreathingView({
   const [phase, setPhase] = useState<BreathPhase>()
   const [outcome, setOutcome] = useState<BreathOutcome>()
   const pacerBox = useRef<HTMLDivElement>(null)
+  const countBox = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const startButton = useRef<HTMLButtonElement>(null)
   const stopButton = useRef<HTMLButtonElement>(null)
@@ -264,9 +266,27 @@ export function BreathingView({
 
   // Arriving, focus is on the page's name; then on whatever replaced the
   // button just pressed, so it never falls to the page.
+  //
+  // A session starting moves the page as little as it can: Stop is brought
+  // clear of the dock (the page's scroll-padding, breathe.css), then the
+  // count out from under the header, each only if it is not already in view.
+  // The count goes last, so that where a screen cannot hold both it is the
+  // count, the only pacer with the wings still, that stays in view. Focus
+  // alone would centre Stop, which on a short screen can take the count up
+  // under the header.
   useEffect(() => {
-    if (status === 'running') stopButton.current?.focus()
-    else if (status === 'stopped') startButton.current?.focus()
+    if (status === 'running') {
+      stopButton.current?.focus({ preventScroll: true })
+      stopButton.current?.scrollIntoView({ block: 'nearest' })
+      const count = countBox.current
+      if (count) {
+        // Clear of the header as it is now: it grows with the text size and,
+        // in the Android app, with the status bar above it.
+        const header = document.querySelector('.app-header')?.getBoundingClientRect().height
+        if (header) count.style.scrollMarginTop = `${Math.ceil(header) + 8}px`
+        count.scrollIntoView({ block: 'nearest' })
+      }
+    } else if (status === 'stopped') startButton.current?.focus()
     else if (status === 'done') doneHeading.current?.focus()
     else heading.current?.focus()
   }, [status])
@@ -295,7 +315,7 @@ export function BreathingView({
   )
 
   return (
-    <div className={`view breathe-view${running ? ' breath-running' : ''}`}>
+    <div className="view breathe-view">
       <header className="page-header">
         <div>
           <p className="eyebrow">A calming exercise</p>
@@ -327,7 +347,7 @@ export function BreathingView({
               flapping={false}
             />
           </div>
-          <div className="breath-count-box">
+          <div ref={countBox} className="breath-count-box">
             {running && phase ? (
               // Seen, not read out each second: the step is read out below.
               <p className="breath-count" aria-hidden="true">

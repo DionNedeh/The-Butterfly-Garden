@@ -34,6 +34,7 @@ import { isBreathingGoal, pacerFor } from '../lib/breathing'
 import { nextStepsAfter, type NextStep } from '../lib/nextStep'
 import { counted } from '../lib/plural'
 import { promptAfter, promptById, promptForDay } from '../lib/prompts'
+import type { BreatheWay } from '../lib/routes'
 import type {
   AppState,
   CheckInDetails,
@@ -149,8 +150,11 @@ export function TodayView({
   openAtCheckIn?: boolean
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
-  /** Breathe with a butterfly: from the next step, and a breathing goal's row. */
-  onOpenBreathe?: () => void
+  /**
+   * Breathe with a butterfly: from the next step, and a breathing goal's row,
+   * named by its goal so that coming back finds the link again.
+   */
+  onOpenBreathe?: (way: Extract<BreatheWay, 'goal' | 'next-step'>, goalId?: string) => void
   /**
    * Grow a companion alongside a goal again: how Undo gives back the
    * companions that archiving or deleting the goal let go.
@@ -339,7 +343,7 @@ export function TodayView({
     } else if (step === 'visit-companion') {
       onOpenCare?.()
     } else if (step === 'breathe') {
-      onOpenBreathe?.()
+      onOpenBreathe?.('next-step')
     } else {
       // "Write one line" and "Try today's reflection" both start writing;
       // the field is described by the day's prompt.
@@ -511,7 +515,7 @@ export function TodayView({
         </label>
         <button
           ref={saveCheckIn}
-          className="primary-button"
+          className="primary-button check-in-save"
           disabled={mood === undefined}
           aria-describedby={mood === undefined ? 'mood-choose-hint' : undefined}
           onClick={() => {
@@ -645,7 +649,11 @@ export function TodayView({
                   setEditRequest((count) => count + 1)
                 }}
                 onArchive={() => archive(goal)}
-                onBreathe={onOpenBreathe && isBreathingGoal(goal) ? onOpenBreathe : undefined}
+                onBreathe={
+                  onOpenBreathe && isBreathingGoal(goal)
+                    ? () => onOpenBreathe('goal', goal.id)
+                    : undefined
+                }
               />
             )
           })}

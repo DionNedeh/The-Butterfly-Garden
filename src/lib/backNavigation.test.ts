@@ -150,3 +150,79 @@ describe('putBackAt', () => {
     expect(document.body).toHaveFocus()
   })
 })
+
+describe('putBackAt, back from breathing', () => {
+  afterEach(() => {
+    document.body.replaceChildren()
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * Today as breathing leaves it: two breathing goals, one of them done (its
+   * link gone, its ⋯ menu still there), and a check-in already saved.
+   */
+  function today() {
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1>Today</h1>
+        <button class="primary-button check-in-save">Update check-in</button>
+        <article class="goal-row" data-goal-id="a&quot;]">
+          <a class="breathe-link" href="#/breathe">Breathe now</a>
+          <button class="goal-menu-button">More for Take three slow breaths</button>
+        </article>
+        <article class="goal-row complete" data-goal-id="done">
+          <button class="goal-menu-button">More for Breathe slowly</button>
+        </article>
+      </main>`
+    return {
+      heading: document.querySelector('h1')!,
+      save: document.querySelector<HTMLElement>('.check-in-save')!,
+      link: document.querySelector<HTMLElement>('a.breathe-link')!,
+      doneMenu: document.querySelector<HTMLElement>('[data-goal-id="done"] .goal-menu-button')!,
+    }
+  }
+
+  it('focuses the "Breathe now" of the goal it was, found by the goal however it is named', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const { link } = today()
+    putBackAt({ breathe: 'goal', goalId: 'a"]', scrollY: 2315 })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2315, behavior: 'instant' })
+    expect(link).toHaveFocus()
+  })
+
+  it('falls back to the goal’s ⋯ menu once it is done, and to the heading once it is gone', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const { doneMenu, heading } = today()
+    putBackAt({ breathe: 'goal', goalId: 'done', scrollY: 600 })
+    expect(doneMenu).toHaveFocus()
+    putBackAt({ breathe: 'goal', goalId: 'deleted', scrollY: 600 })
+    expect(heading).toHaveFocus()
+  })
+
+  it('stands the check-in in for the step offered after it, which goes once taken', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const { save } = today()
+    putBackAt({ breathe: 'next-step', scrollY: 700 })
+    expect(save).toHaveFocus()
+  })
+
+  it('focuses Today’s heading back from the recap, collected on the way', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const { heading } = today()
+    putBackAt({ breathe: 'recap', scrollY: 0 })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'instant' })
+    expect(heading).toHaveFocus()
+  })
+
+  it('focuses the support page’s own link', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1>If you need support now</h1>
+        <p>If a quiet minute would help, you can
+          <a class="breathe-link" href="#/breathe">breathe with Marigold</a>.</p>
+      </main>`
+    putBackAt({ breathe: 'support', scrollY: 1400 })
+    expect(document.querySelector('a.breathe-link')).toHaveFocus()
+  })
+})

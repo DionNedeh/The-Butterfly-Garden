@@ -1,11 +1,13 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { seriousViolations } from './a11y'
 import { goTo } from './navigation'
 
 /*
- * Breathing with a butterfly (plan c.1): offered after a stormy check-in and
- * on the support page, a minute's session run on the page's own clock,
- * stopped early, and swept with axe at each stage.
+ * Breathing with a butterfly (plan c.1): offered after a stormy check-in, on
+ * a breathing goal and on the support page, a minute's session run on the
+ * page's own clock, stopped early, and swept with axe at each stage; the way
+ * back to the link that opened it; and where the count and Stop sit on a
+ * short screen.
  */
 
 const GARDEN = { level: 1, name: 'Sunlit Sanctuary' } as const
@@ -120,4 +122,135 @@ test('Stop is one tap and counts nothing, and Escape goes back to support', asyn
 
   await page.keyboard.press('Escape')
   await expect(page.getByRole('heading', { level: 1, name: 'If you need support now' })).toBeVisible()
+})
+
+/** The support page's way into breathing, from Settings. */
+async function breatheFromSupport(page: Page) {
+  await goTo(page, 'Settings')
+  await page.getByRole('button', { name: 'If you need support now' }).click()
+  await page.getByRole('link', { name: 'breathe with Marigold' }).click()
+  await expect(page.getByRole('heading', BREATHE)).toBeFocused()
+}
+
+async function box(locator: Locator) {
+  const found = await locator.boundingBox()
+  expect(found).not.toBeNull()
+  return found!
+}
+
+type Box = Awaited<ReturnType<typeof box>>
+
+function overlap(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+const scrollY = (page: Page) => page.evaluate(() => window.scrollY)
+
+test('back from a breathing goal puts focus on its "Breathe now", where it was', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Today')
+  for (const title of ['Water the fern', 'Stretch', 'Open a window', 'Take three slow breaths']) {
+    await page.getByLabel('Add a goal').fill(title)
+    await page.getByRole('button', { name: 'Add goal' }).click()
+  }
+  const link = page.getByRole('link', { name: 'Breathe now' })
+  await expect(link).toHaveCount(1)
+  await link.focus()
+  const before = await scrollY(page)
+
+  // By its Back button.
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', BREATHE)).toBeFocused()
+  await page.getByRole('button', { name: 'Back to Today' }).click()
+  await expect(link).toBeFocused()
+  expect(Math.abs((await scrollY(page)) - before)).toBeLessThanOrEqual(1)
+
+  // And by Escape.
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', BREATHE)).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(link).toBeFocused()
+  expect(Math.abs((await scrollY(page)) - before)).toBeLessThanOrEqual(1)
+})
+
+test('Start does not jump the page: the count stays in view below the header', async ({ page }) => {
+  // The count is the only pacer with the wings still. A phone on its side.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await enterGarden(page)
+  await breatheFromSupport(page)
+  await page.setViewportSize({ width: 844, height: 390 })
+
+  // Scrolled down until Start sits just above the dock, where a thumb
+  // presses it. Taking the choices away must not jump the page to its end.
+  const start = page.getByRole('button', { name: 'Start breathing' })
+  await start.evaluate((button) => {
+    const dock = document.querySelector('.bottom-nav')!.getBoundingClientRect()
+    window.scrollBy(0, button.getBoundingClientRect().bottom - (dock.top - 12))
+  })
+  await start.click()
+  const stop = page.getByRole('button', { name: 'Stop' })
+  await expect(stop).toBeFocused()
+  const count = await box(page.locator('.breath-count'))
+  const header = await box(page.locator('.app-header'))
+  const dock = await box(page.locator('.bottom-nav'))
+  expect(count.y).toBeGreaterThanOrEqual(header.y + header.height - 0.5)
+  expect(count.y + count.height).toBeLessThanOrEqual(dock.y + 0.5)
+  expect(overlap(await box(stop), count)).toBe(false)
+  // The page keeps still by itself, not only because Start's scroll put it
+  // back: anchoring is off on this page wherever a browser does it.
+  expect(
+    await page.evaluate(() =>
+      CSS.supports('overflow-anchor', 'none')
+        ? getComputedStyle(document.documentElement).overflowAnchor
+        : 'none',
+    ),
+  ).toBe('none')
+})
+
+test('at the largest text on a short screen, Stop never covers the count', async ({ page }) => {
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  await page.getByRole('group', { name: 'Text size' }).getByRole('radio', { name: /^Largest/ }).check()
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.textSize))
+    .toBe('largest')
+  await page.getByRole('button', { name: 'If you need support now' }).click()
+  await page.getByRole('link', { name: 'breathe with Marigold' }).click()
+  await expect(page.getByRole('heading', BREATHE)).toBeFocused()
+
+  const start = page.getByRole('button', { name: 'Start breathing' })
+  const stop = page.getByRole('button', { name: 'Stop' })
+  const count = page.locator('.breath-count')
+  for (const { roomForBoth, ...viewport } of [
+    { width: 1024, height: 600, roomForBoth: true },
+    { width: 844, height: 390, roomForBoth: true },
+    { width: 667, height: 375, roomForBoth: true },
+    // At this size the header and the dock leave less than the two need.
+    { width: 568, height: 320, roomForBoth: false },
+  ]) {
+    await page.setViewportSize(viewport)
+    // By keyboard from the top of the page, where Start begins behind the dock.
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await start.focus()
+    await page.keyboard.press('Enter')
+    await expect(stop).toBeFocused()
+    // The count, the pacer, is always in view between the header and the
+    // dock; where there is room, Stop is above the dock beneath it.
+    const header = await box(page.locator('.app-header'))
+    const dock = await box(page.locator('.bottom-nav'))
+    const countBox = await box(count)
+    expect(countBox.y).toBeGreaterThanOrEqual(header.y + header.height - 0.5)
+    expect(countBox.y + countBox.height).toBeLessThanOrEqual(dock.y + 0.5)
+    const stopBox = await box(stop)
+    if (roomForBoth) expect(stopBox.y + stopBox.height).toBeLessThanOrEqual(dock.y + 0.5)
+    // Wherever the page is scrolled while it runs, Stop is never over the count.
+    for (const top of [0, 120, 10_000]) {
+      await page.evaluate((y) => window.scrollTo(0, y), top)
+      expect(overlap(await box(stop), await box(count))).toBe(false)
+    }
+    await stop.click()
+    await expect(start).toBeFocused()
+  }
 })
