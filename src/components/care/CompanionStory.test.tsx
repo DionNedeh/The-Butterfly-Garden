@@ -145,6 +145,30 @@ describe('a companion’s story on the Care page', () => {
     expect(said().map((row) => row.split(':')[0])).not.toContain('Favourite care')
   })
 
+  it('remembers the goals it grew alongside, by the days each gave', async () => {
+    render(
+      <CompanionStory
+        creature={creature({
+          grownAlongside: [
+            { goalId: 'walk', title: 'Walk outside', dates: ['2026-06-02', '2026-06-03', '2026-06-05'] },
+            { goalId: 'water', title: 'Drink water', dates: ['2026-06-08'] },
+          ],
+        })}
+        profile={{ diarySince: at(2026, 5, 1) }}
+      />,
+    )
+    await openStory()
+    expect(said()).toContain('Grown alongside: Walk outside · 3 daysDrink water · 1 day')
+    const lines = Array.from(document.querySelectorAll('.story-line')).map((line) => line.textContent)
+    expect(lines).toEqual(['Walk outside · 3 days', 'Drink water · 1 day'])
+  })
+
+  it('says nothing of goals for a companion never grown alongside one', async () => {
+    render(<CompanionStory creature={creature()} profile={{ diarySince: at(2026, 5, 1) }} />)
+    await openStory()
+    expect(screen.queryByText('Grown alongside')).toBeNull()
+  })
+
   it('reads a welcome the garden could not date as having no day', async () => {
     render(
       <CompanionStory

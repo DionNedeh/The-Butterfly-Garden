@@ -27,7 +27,7 @@ import {
   type RecycledJar,
   type RecycleOutcome,
 } from '../lib/jars'
-import { performCare } from '../lib/lifecycle'
+import { adoptGoal, performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import type { ThemeChoice } from '../lib/theme'
 import * as looks from '../lib/outfitPresets'
@@ -359,6 +359,9 @@ export function useGardenState() {
         update((current) => act.selectCompanion(current, creatureId)),
       renameCreature: (creatureId: string, name: string) =>
         update((current) => act.renameCreature(current, creatureId, name)),
+      /** Grow a companion alongside one of the goals, or none (undefined). */
+      adoptGoal: (creatureId: string, goalId: string | undefined) =>
+        update((current) => adoptGoal(current, creatureId, goalId)),
       selectBackdrop: (backdropId: GardenBackdropId) => {
         const now = new Date()
         update((current) => act.selectBackdrop(current, backdropId, now))

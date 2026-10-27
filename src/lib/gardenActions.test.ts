@@ -141,6 +141,48 @@ describe('goals', () => {
   })
 })
 
+describe('a companion grown alongside a goal', () => {
+  /** The starter caterpillar, grown alongside the goal g1. */
+  function growing(overrides: Partial<AppState> = {}): AppState {
+    const base = garden({ goals: [goal(), goal({ id: 'g2', title: 'Second' })], ...overrides })
+    return { ...base, creatures: [{ ...base.creatures[0], adoptedGoalId: 'g1' }] }
+  }
+
+  it('is cared for the day its goal is completed, beside the goal’s Sunlight', () => {
+    const before = growing()
+    const done = act.completeGoal(before, 'g1', NOW)
+    expect(done.creatures[0].careDates.caterpillar).toEqual([TODAY])
+    expect(done.sunlight).toHaveLength(1)
+    // Another goal is only a goal.
+    const other = act.completeGoal(before, 'g2', NOW)
+    expect(other.creatures[0]).toBe(before.creatures[0])
+  })
+
+  it('keeps the day of care when the completion is undone, and gives no second', () => {
+    const done = act.completeGoal(growing(), 'g1', NOW)
+    const undone = act.uncompleteGoal(done, 'g1', TODAY)
+    expect(undone.creatures).toBe(done.creatures)
+    const again = act.completeGoal(undone, 'g1', NOW)
+    expect(again.creatures).toBe(done.creatures)
+    expect(again.creatures[0].grownAlongside?.[0].dates).toEqual([TODAY])
+  })
+
+  it('is let go, with nothing lost, when the goal is archived or deleted', () => {
+    const done = act.completeGoal(growing(), 'g1', NOW)
+    for (const after of [act.setGoalArchived(done, 'g1', true), act.deleteGoal(done, 'g1')]) {
+      const [sol] = after.creatures
+      expect(sol).not.toHaveProperty('adoptedGoalId')
+      expect(sol.careDates).toEqual(done.creatures[0].careDates)
+      expect(sol.grownAlongside).toEqual(done.creatures[0].grownAlongside)
+    }
+    // Restoring the goal later does not take the companion back unasked.
+    const archived = act.setGoalArchived(done, 'g1', true)
+    expect(act.setGoalArchived(archived, 'g1', false).creatures).toBe(archived.creatures)
+    // Archiving another goal lets no one go.
+    expect(act.setGoalArchived(done, 'g2', true).creatures).toBe(done.creatures)
+  })
+})
+
 describe('the journal', () => {
   it('writes today’s check-in once and rewrites it after', () => {
     const first = act.saveMood(garden(), 3, '  Calm  ', NOW)

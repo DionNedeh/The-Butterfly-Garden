@@ -3,7 +3,9 @@ import { createInitialState } from './progression'
 import {
   countCare,
   diaryBegun,
+  goalDayNoted,
   MAX_OUTFITS_WORN,
+  noteGoalDay,
   noteWorn,
   PRESET_NAME_LENGTH,
   presetName,
@@ -66,5 +68,29 @@ describe('a saved look’s name', () => {
       'a'.repeat(PRESET_NAME_LENGTH - 1),
     )
     expect(presetName('   ')).toBe('')
+  })
+})
+
+describe('the days a goal gave', () => {
+  const walk = { id: 'walk', title: 'Walk outside' }
+
+  it('notes a day under its goal, a new goal after the others', () => {
+    const first = noteGoalDay(undefined, walk, '2026-06-01')
+    expect(first).toEqual([{ goalId: 'walk', title: 'Walk outside', dates: ['2026-06-01'] }])
+    const second = noteGoalDay(first, { id: 'water', title: 'Drink water' }, '2026-06-02')
+    const third = noteGoalDay(second, { ...walk, title: 'Walk in the park' }, '2026-06-03')
+    expect(third).toEqual([
+      { goalId: 'walk', title: 'Walk in the park', dates: ['2026-06-01', '2026-06-03'] },
+      { goalId: 'water', title: 'Drink water', dates: ['2026-06-02'] },
+    ])
+    // A new record, never the one it was given.
+    expect(first).toEqual([{ goalId: 'walk', title: 'Walk outside', dates: ['2026-06-01'] }])
+  })
+
+  it('knows a day any goal has already given', () => {
+    const noted = noteGoalDay(noteGoalDay(undefined, walk, '2026-06-01'), { id: 'water', title: 'Water' }, '2026-06-02')
+    expect(goalDayNoted(noted, '2026-06-02')).toBe(true)
+    expect(goalDayNoted(noted, '2026-06-03')).toBe(false)
+    expect(goalDayNoted(undefined, '2026-06-01')).toBe(false)
   })
 })

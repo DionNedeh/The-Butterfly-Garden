@@ -8,6 +8,31 @@
   font-size: 0.85rem;
 }
 
+/* Growing a companion alongside a goal, under its care days: the choice on
+   one line where it fits, and what it means beneath. */
+.grow-alongside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.7rem;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+.grow-alongside select {
+  width: auto;
+  max-width: 100%;
+  font-weight: 400;
+}
+
+.grow-alongside-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
 /* Saved looks, under the wardrobe's slots. */
 .saved-looks {
   display: grid;
@@ -169,6 +194,11 @@
 .story-list dd {
   margin: 0;
   color: var(--forest-dark);
+}
+
+/* One goal a line, when a companion grew alongside more than one. */
+.story-line {
+  display: block;
 }
 
 .story-note {

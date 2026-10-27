@@ -2,8 +2,9 @@
    a garden is made. Imported by the components that use these rules, so
    they arrive with Today and onboarding rather than in the stylesheet every
    page waits for. Colours come from the theme's tokens, which the night
-   theme redefines; the one colour named outright is the night theme's own
-   border for an idea. Nothing here moves, so there is no motion to reduce. */
+   theme redefines; the colours named outright are tints with a night
+   counterpart of their own. Nothing here moves, so there is no motion to
+   reduce. */
 
 /* Today's add form: the ideas and the title across the top, then the
    two-minute version beside how often. */
@@ -69,6 +70,44 @@
 }
 .goal-ideas-more {
   min-height: 44px;
+}
+
+/* The companions a goal is grown alongside, named in a small badge at the
+   end of the row's quieter line. That line then keeps to one line, so the
+   compact row never grows: the names give way first, then the schedule,
+   each cut short with an ellipsis (the whole of both is still read out). */
+.goal-copy > small.with-companions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+.goal-schedule,
+.goal-companions {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.goal-schedule {
+  flex: 0 1 auto;
+}
+.goal-companions {
+  flex: 0 4 auto;
+  min-width: 3rem;
+  max-width: 11rem;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: rgba(49, 92, 75, 0.1);
+  padding: 0 0.45rem;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+.goal-companions svg {
+  margin-right: 0.2rem;
+  vertical-align: -0.1em;
+}
+.theme-night .goal-companions {
+  background: rgba(140, 201, 171, 0.16);
 }
 
 /* Onboarding: up to three starter goals, each with its two-minute version. */

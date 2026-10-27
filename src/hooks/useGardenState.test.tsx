@@ -760,6 +760,22 @@ describe('every action, through the hook', () => {
     expect(garden().profile?.activeCompanionId).toBe(sol.id)
   })
 
+  it('grows a companion alongside a goal, counting the goal as care until it is archived', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    const sol = garden().creatures[0]
+    act(() => result.current.adoptGoal(sol.id, 'g1'))
+    expect(garden().creatures[0].adoptedGoalId).toBe('g1')
+    act(() => result.current.completeGoal('g1'))
+    expect(garden().creatures[0].careDates[sol.stage]).toEqual([toLocalDate()])
+    expect(garden().creatures[0].grownAlongside).toEqual([
+      { goalId: 'g1', title: 'Walk', dates: [toLocalDate()] },
+    ])
+    act(() => result.current.setGoalArchived('g1', true))
+    expect(garden().creatures[0]).not.toHaveProperty('adoptedGoalId')
+    expect(garden().creatures[0].grownAlongside).toHaveLength(1)
+  })
+
   it('saves, wears, renames, deletes and puts back a look', async () => {
     const { result } = await renderReady()
     const garden = () => result.current.state!

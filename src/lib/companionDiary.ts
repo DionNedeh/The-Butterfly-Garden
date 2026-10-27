@@ -1,8 +1,9 @@
-import type { AppState, CreatureInstance } from '../types'
+import type { AppState, CreatureInstance, Goal, GrownAlongside } from '../types'
 
 /**
  * What the garden writes down about each companion as it happens: how often
- * each kind of care was given, and the outfits worn. Kept from the day the
+ * each kind of care was given, the outfits worn, and the days a goal it was
+ * grown alongside counted as its care. Kept from the day the
  * diary began (`Profile.diarySince`); what came before was never recorded, so
  * the story told from it (lib/companionStory) says so rather than guessing.
  *
@@ -40,6 +41,46 @@ export function noteWorn(
   )
   if (fresh.length === 0) return worn
   return [...known, ...fresh].slice(0, MAX_OUTFITS_WORN)
+}
+
+/**
+ * The most days one companion's diary lists as given by goals. More than the
+ * rules allow (a goal gives a day only while the companion grows, and each
+ * of its three growing stages takes three), so only a hand-edited garden
+ * ever reaches it.
+ */
+export const MAX_GOAL_DAYS = 30
+
+/** Whether a goal already counted as this companion's care on this day. */
+export function goalDayNoted(
+  grown: CreatureInstance['grownAlongside'],
+  localDate: string,
+): boolean {
+  return grown?.some((entry) => entry.dates.includes(localDate)) ?? false
+}
+
+/**
+ * The goals grown alongside, with this day noted under this goal: added
+ * once, and the goal's title taken as it is now, so a goal renamed along the
+ * way is told by its newest name.
+ */
+export function noteGoalDay(
+  grown: CreatureInstance['grownAlongside'],
+  goal: Pick<Goal, 'id' | 'title'>,
+  localDate: string,
+): GrownAlongside[] {
+  const entries = grown ?? []
+  const index = entries.findIndex((entry) => entry.goalId === goal.id)
+  if (index === -1) {
+    return [...entries, { goalId: goal.id, title: goal.title, dates: [localDate] }]
+  }
+  const noted = [...entries]
+  noted[index] = {
+    goalId: goal.id,
+    title: goal.title,
+    dates: [...entries[index].dates, localDate],
+  }
+  return noted
 }
 
 /**
