@@ -250,7 +250,9 @@ test('at the largest text on a short screen, Stop never covers the count', async
       await page.evaluate((y) => window.scrollTo(0, y), top)
       expect(overlap(await box(stop), await box(count))).toBe(false)
     }
-    await stop.click()
+    // By keyboard, as it started: focus is still on Stop wherever the page
+    // was scrolled, and a toast or the header may lie over it on the way.
+    await stop.press('Enter')
     await expect(start).toBeFocused()
   }
 })

@@ -26,6 +26,7 @@ import {
   type BreathSession,
 } from '../lib/breathPacer'
 import { openBreathTone, type BreathTone } from '../lib/breathTone'
+import { openView, startScroll } from '../lib/breathView'
 import { toLocalDate } from '../lib/date'
 import { useDraft } from '../lib/drafts'
 import { motionPreference } from '../lib/motion'
@@ -267,24 +268,23 @@ export function BreathingView({
   // Arriving, focus is on the page's name; then on whatever replaced the
   // button just pressed, so it never falls to the page.
   //
-  // A session starting moves the page as little as it can: Stop is brought
-  // clear of the dock (the page's scroll-padding, breathe.css), then the
-  // count out from under the header, each only if it is not already in view.
-  // The count goes last, so that where a screen cannot hold both it is the
-  // count, the only pacer with the wings still, that stays in view. Focus
-  // alone would centre Stop, which on a short screen can take the count up
-  // under the header.
+  // A session starting moves the page as little as it can (lib/breathView):
+  // Stop clear of the dock, then the count clear of the header, so that where
+  // a screen cannot hold both it is the count, the only pacer with the wings
+  // still, that stays in view. Focus alone would centre Stop, which on a
+  // short screen can take the count up under the header.
   useEffect(() => {
     if (status === 'running') {
-      stopButton.current?.focus({ preventScroll: true })
-      stopButton.current?.scrollIntoView({ block: 'nearest' })
+      const stop = stopButton.current
+      stop?.focus({ preventScroll: true })
       const count = countBox.current
-      if (count) {
-        // Clear of the header as it is now: it grows with the text size and,
-        // in the Android app, with the status bar above it.
-        const header = document.querySelector('.app-header')?.getBoundingClientRect().height
-        if (header) count.style.scrollMarginTop = `${Math.ceil(header) + 8}px`
-        count.scrollIntoView({ block: 'nearest' })
+      if (stop && count) {
+        const shift = startScroll(
+          stop.getBoundingClientRect(),
+          count.getBoundingClientRect(),
+          openView(),
+        )
+        if (shift) window.scrollBy({ top: shift, behavior: 'instant' })
       }
     } else if (status === 'stopped') startButton.current?.focus()
     else if (status === 'done') doneHeading.current?.focus()

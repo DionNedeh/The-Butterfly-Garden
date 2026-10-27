@@ -67,9 +67,6 @@ html:has(.breathe-view) {
 .breath-count-box {
   flex: 0 0 16rem;
   text-align: start;
-  /* Brought into view as a session starts, below the sticky header; the
-     session sets this from the header's own height. */
-  scroll-margin-top: 6rem;
 }
 
 /* On a short screen (a phone on its side) the count sits at the foot of the
