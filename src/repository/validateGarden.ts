@@ -1,12 +1,17 @@
 import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
+import { getCareAction } from '../data/careActions'
+import { getShopItem } from '../data/shopItems'
+import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, presetName } from '../lib/companionDiary'
 import { jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
-import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES } from '../lib/date'
-import type { AmbientTrackId, AppState, OutfitSlot } from '../types'
+import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } from '../lib/date'
+import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
+import { clampVolume } from '../lib/sound'
+import type { AmbientTrackId, AppState, OutfitPreset, OutfitSlot, PlantInstance } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
@@ -429,10 +434,10 @@ function checkPlant(raw: unknown, ctx: Context) {
     raw.growth >= 0 &&
     raw.growth <= 3
   if (typeof raw.id === 'string' && growthOk && typeof raw.plantedAt === 'string') {
-    return raw as unknown as AppState['plants'][number]
+    return withBloomCountChecked(raw as unknown as PlantInstance)
   }
   ctx.repaired += 1
-  return {
+  return withBloomCountChecked({
     ...raw,
     id: typeof raw.id === 'string' ? raw.id : createId(),
     growth:
@@ -440,7 +445,25 @@ function checkPlant(raw: unknown, ctx: Context) {
         ? Math.min(3, Math.max(0, Math.floor(raw.growth)))
         : 0,
     plantedAt: stamp(raw.plantedAt),
-  } as AppState['plants'][number]
+  } as PlantInstance)
+}
+
+/**
+ * A plant's count toward its next bloom (Keep giving) is kept only as whole
+ * days of care, from 1 to the days a bloom takes. A larger whole number, as
+ * a build with a longer wait might leave, reads as ready rather than losing
+ * the days counted; anything else is dropped, and the count starts again.
+ * Not counted as a repair: nothing the gardener made is changed.
+ */
+function withBloomCountChecked(plant: PlantInstance): PlantInstance {
+  const days: unknown = plant.careDaysSinceBloom
+  if (days === undefined) return plant
+  const whole = typeof days === 'number' && Number.isInteger(days) && days >= 1
+  if (whole && days <= REBLOOM_CARE_DAYS) return plant
+  const next = { ...plant }
+  if (whole) next.careDaysSinceBloom = REBLOOM_CARE_DAYS
+  else delete next.careDaysSinceBloom
+  return next
 }
 
 function checkSunlight(raw: unknown, ctx: Context) {
@@ -465,6 +488,7 @@ function checkSunlight(raw: unknown, ctx: Context) {
 
 const CREATURE_STAGES = new Set(['egg', 'caterpillar', 'chrysalis', 'butterfly'])
 const OUTFIT_SLOTS = new Set<OutfitSlot>(['headwear', 'accessory', 'aura'])
+const FLIGHT_PATTERN_IDS = new Set<string>(flightPatterns.map((pattern) => pattern.id))
 
 function checkCreature(raw: unknown, ctx: Context) {
   if (
@@ -537,7 +561,117 @@ function checkCreature(raw: unknown, ctx: Context) {
   // An open offer to name an egg is only ever stored as true. Anything else
   // is no offer, so a hand-edited value can never reach the Care page.
   if (raw.awaitingName !== true) delete creature.awaitingName
+  // A companion's own flight pattern is kept only when the catalogue knows
+  // it; without one it flies the garden's, which is no damage to report.
+  // Whether the garden still owns it is asked when the garden is drawn
+  // (flightPatternFor), so a choice is not lost while a pattern is unowned.
+  if (
+    typeof raw.flightPatternId !== 'string' ||
+    !FLIGHT_PATTERN_IDS.has(raw.flightPatternId)
+  )
+    delete creature.flightPatternId
+  // The companion's diary, kept only in the shapes it is written in, so a
+  // hand-edited value never reaches its story. A dropped note is not damage:
+  // the diary is a keepsake, and nothing is earned from it.
+  if (raw.hatchedAt !== undefined && !isTimestamp(raw.hatchedAt)) delete creature.hatchedAt
+  const careCounts = checkCareCounts(raw.careCounts)
+  if (careCounts) creature.careCounts = careCounts
+  else delete creature.careCounts
+  const outfitsWorn = checkOutfitsWorn(raw.outfitsWorn)
+  if (outfitsWorn) creature.outfitsWorn = outfitsWorn
+  else delete creature.outfitsWorn
   return creature
+}
+
+/** Counts of care actions this build knows, each a whole number above zero. */
+function checkCareCounts(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined
+  const counts: Record<string, number> = {}
+  for (const [actionId, count] of Object.entries(value)) {
+    if (getCareAction(actionId) && Number.isSafeInteger(count) && (count as number) > 0) {
+      counts[actionId] = count as number
+    }
+  }
+  return Object.keys(counts).length > 0 ? counts : undefined
+}
+
+/** Whether an id names a piece the closet could hold, in this slot if one is given. */
+function isCosmetic(itemId: unknown, slot?: string): itemId is string {
+  if (typeof itemId !== 'string') return false
+  const item = getShopItem(itemId)
+  if (item?.kind !== 'cosmetic') return false
+  return !slot || item.slot === slot
+}
+
+/** Known cosmetics, each once, in the order worn, no more than the diary keeps. */
+function checkOutfitsWorn(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const worn = value
+    .filter((itemId, index): itemId is string => isCosmetic(itemId) && value.indexOf(itemId) === index)
+    .slice(0, MAX_OUTFITS_WORN)
+  if (worn.length === 0) return undefined
+  return worn.length === value.length ? (value as string[]) : worn
+}
+
+/**
+ * A saved look's outfit: known slots, each holding a cosmetic made for that
+ * slot. Whether the gardener still owns it is asked when it is worn.
+ */
+function checkPresetOutfit(value: unknown): OutfitPreset['outfit'] {
+  const outfit: OutfitPreset['outfit'] = {}
+  if (!isRecord(value)) return outfit
+  for (const [slot, itemId] of Object.entries(value)) {
+    if (OUTFIT_SLOTS.has(slot as OutfitSlot) && isCosmetic(itemId, slot)) {
+      outfit[slot as OutfitSlot] = itemId
+    }
+  }
+  return outfit
+}
+
+/**
+ * Saved looks (lib/outfitPresets), kept in the profile: each with an id of
+ * its own, a name as the wardrobe keeps names, and at least one piece the
+ * catalogue knows; no more than the closet keeps. The very same list when
+ * nothing needed changing. Undefined when none are left, or there never were
+ * any: no looks are stored as no field, so an older garden stays exactly as
+ * it was.
+ */
+function checkOutfitPresets(value: unknown): OutfitPreset[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<string>()
+  let changed = false
+  const presets: OutfitPreset[] = []
+  for (const raw of value) {
+    if (!isRecord(raw) || typeof raw.id !== 'string' || !raw.id || seen.has(raw.id)) {
+      changed = true
+      continue
+    }
+    const outfit = checkPresetOutfit(raw.outfit)
+    const pieces = Object.keys(outfit).length
+    if (pieces === 0) {
+      changed = true
+      continue
+    }
+    seen.add(raw.id)
+    const name = (typeof raw.name === 'string' && presetName(raw.name)) || 'Saved look'
+    if (
+      name === raw.name &&
+      isRecord(raw.outfit) &&
+      Object.keys(raw.outfit).length === pieces &&
+      Object.keys(raw).length === 3
+    ) {
+      presets.push(raw as unknown as OutfitPreset)
+    } else {
+      changed = true
+      presets.push({ id: raw.id, name, outfit })
+    }
+  }
+  if (presets.length === 0) return undefined
+  if (presets.length > MAX_OUTFIT_PRESETS) {
+    changed = true
+    presets.length = MAX_OUTFIT_PRESETS
+  }
+  return changed ? presets : (value as OutfitPreset[])
 }
 
 /** Counts that can be earned again: whole, finite, never negative. */
@@ -645,6 +779,9 @@ function checkProfile(
   if (value.lastBackupAt !== undefined && !isTimestamp(value.lastBackupAt)) {
     delete profile.lastBackupAt
   }
+  if (value.diarySince !== undefined && !isTimestamp(value.diarySince)) {
+    delete profile.diarySince
+  }
   // Dropped, not repaired, when unknown: the hand-chosen theme is still there
   // underneath, and the usual text size is always readable.
   if (value.themeFollows !== undefined && !THEME_FOLLOWS.has(value.themeFollows as string)) {
@@ -653,6 +790,41 @@ function checkProfile(
   if (value.textSize !== undefined && !TEXT_SIZES.has(value.textSize as string)) {
     delete profile.textSize
   }
+  // The sound's choices. A volume out of range is brought into it, since what
+  // was meant is plain; anything that is not a number is dropped, and the
+  // usual volume plays. The two switches are stored only in their one
+  // non-default value, so any other is dropped and the default stands.
+  if (value.ambientVolume !== undefined) {
+    if (typeof value.ambientVolume === 'number' && Number.isFinite(value.ambientVolume)) {
+      profile.ambientVolume = clampVolume(value.ambientVolume)
+    } else {
+      delete profile.ambientVolume
+    }
+  }
+  if (value.soundFollowsTheme !== undefined && value.soundFollowsTheme !== true) {
+    delete profile.soundFollowsTheme
+  }
+  if (value.soundInBackground !== undefined && value.soundInBackground !== false) {
+    delete profile.soundInBackground
+  }
+  // Classic is the absence of a pace, so anything but Keep giving is Classic.
+  if (value.gardenPace !== undefined && value.gardenPace !== 'keep-giving') {
+    delete profile.gardenPace
+  }
+  // Visits are days that have happened: a date in the future could hold
+  // back a welcome, or show one, on the wrong day.
+  const today = toLocalDate()
+  for (const field of ['lastVisitOn', 'welcomeBackOn'] as const) {
+    const date = value[field]
+    if (date !== undefined && !(isLocalDate(date) && date <= today)) delete profile[field]
+  }
+  // Saved looks live here, in the profile, because every older build carries
+  // the profile through whole (see Profile.outfitPresets). A look dropped is
+  // not damage: it is only an arrangement of pieces, and nothing is lost
+  // from the closet with it.
+  const outfitPresets = checkOutfitPresets(value.outfitPresets)
+  if (outfitPresets) profile.outfitPresets = outfitPresets
+  else delete profile.outfitPresets
   return profile
 }
 

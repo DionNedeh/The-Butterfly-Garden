@@ -1,5 +1,6 @@
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { useEffect, useRef, useState } from 'react'
+import { ambientTrackDescriptions } from '../data/ambientTrackDescriptions'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import { previewBackup, type BackupPreview } from '../lib/backupPreview'
@@ -27,11 +28,14 @@ import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
-import type { AmbientTrackId, AppState, GardenBackdropId, TextSize } from '../types'
+import type { AmbientTrackId, AppState, GardenBackdropId, GardenPace, TextSize } from '../types'
 import { motionPreference, type MotionPreference } from '../lib/motion'
 import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
-import { releaseName } from '../data/releases'
+import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
+import { releaseName } from '../data/currentRelease'
+import { soundVolumeOf } from '../lib/sound'
+import { SoundSwitches, SoundVolume } from './SoundControls'
 import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
@@ -136,6 +140,25 @@ const TEXT_SIZE_CHOICES: ReadonlyArray<{
   },
 ]
 
+/** How the garden gives; Classic, the pace it has always had, stores nothing. */
+const PACE_CHOICES: ReadonlyArray<{
+  value: GardenPace | undefined
+  label: string
+  description: string
+}> = [
+  {
+    value: undefined,
+    label: 'Classic',
+    description:
+      'Each host plant can bring one egg, when it first blooms. Plant another to welcome more.',
+  },
+  {
+    value: 'keep-giving',
+    label: 'Keep giving',
+    description: `A host plant in full bloom blooms again after ${REBLOOM_CARE_DAYS} more days of care, and can bring another egg each time.`,
+  },
+]
+
 /** The theme choices, with what each does in words. */
 function themeChoices(
   android: boolean,
@@ -219,9 +242,15 @@ export function SettingsView({
   onSetRecapHours,
   onChooseTheme,
   onSetTextSize,
+  onSetGardenPace,
   fadeOutMinutes,
   fadeOutEndsAt,
   onChooseFadeOut,
+  heardTrackId,
+  onSetSoundVolume,
+  onHearSoundVolume,
+  onSetSoundFollowsTheme,
+  onSetSoundInBackground,
   onOpenGardenPass,
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
@@ -262,11 +291,21 @@ export function SettingsView({
   onChooseTheme?: (choice: ThemeChoice) => void
   /** A larger text size, or undefined for the usual one. */
   onSetTextSize?: (size: TextSize | undefined) => void
+  /** Keep giving, or Classic again (undefined). */
+  onSetGardenPace?: (pace: GardenPace | undefined) => void
   /** The soundscape's fade-out length for this visit, if one is chosen. */
   fadeOutMinutes?: FadeOutMinutes
   /** When the fade-out timer runs out, while it is running. */
   fadeOutEndsAt?: number
   onChooseFadeOut?: (minutes: FadeOutMinutes | undefined) => void
+  /** The soundscape that plays now, if night has brought the piano. */
+  heardTrackId?: AmbientTrackId
+  /** Store a volume, 0 to 100. */
+  onSetSoundVolume?: (volume: number) => void
+  /** Hear a volume while it is being chosen, before it is stored. */
+  onHearSoundVolume?: (volume: number) => void
+  onSetSoundFollowsTheme?: (on: boolean) => void
+  onSetSoundInBackground?: (on: boolean) => void
   onOpenGardenPass?: () => void
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
@@ -609,8 +648,10 @@ export function SettingsView({
         <fieldset className="sound-options">
           <legend className="sr-only">Sound option</legend>
           {ambientTracks.map((track) => {
-            const selected =
-              (profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID) === track.id
+            const chosen = profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID
+            const selected = chosen === track.id
+            // Night may have brought the piano in place of the chosen one.
+            const heard = (heardTrackId ?? chosen) === track.id
             return (
               <label
                 className={`sound-option ${selected ? 'selected' : ''}`}
@@ -625,19 +666,30 @@ export function SettingsView({
                 />
                 <span>
                   <strong>{track.name}</strong>
-                  <small>{track.description}</small>
+                  <small>{ambientTrackDescriptions[track.id]}</small>
                   <em>
-                    {selected
+                    {heard
                       ? profile?.ambientSound
                         ? 'Playing now'
-                        : 'Selected'
-                      : 'Select sound'}
+                        : selected
+                          ? 'Selected'
+                          : 'Plays at night'
+                      : selected
+                        ? 'Back with the sunlight'
+                        : 'Select sound'}
                   </em>
                 </span>
               </label>
             )
           })}
         </fieldset>
+        {onSetSoundVolume && (
+          <SoundVolume
+            volume={soundVolumeOf(profile)}
+            onHear={onHearSoundVolume}
+            onSet={onSetSoundVolume}
+          />
+        )}
         {onChooseFadeOut && (
           <div className="fade-out-setting">
             <label>
@@ -669,6 +721,12 @@ export function SettingsView({
             </p>
           </div>
         )}
+        <SoundSwitches
+          profile={profile}
+          android={android}
+          onSetFollowsTheme={onSetSoundFollowsTheme}
+          onSetInBackground={onSetSoundInBackground}
+        />
       </section>
 
       {(onSetDayCountsHidden || onSetRecapHours) && (
@@ -730,6 +788,35 @@ export function SettingsView({
               />
             </label>
           )}
+        </section>
+      )}
+
+      {onSetGardenPace && (
+        <section className="card" aria-labelledby="pace-settings-title">
+          <p className="eyebrow">How the garden gives</p>
+          <h2 id="pace-settings-title">Garden pace</h2>
+          <p className="section-explainer">
+            A day of care is a day you earn Sunlight. Changing the pace keeps
+            every plant, egg and day of care where it is.
+          </p>
+          <fieldset className="motion-options">
+            <legend className="sr-only">Garden pace</legend>
+            {PACE_CHOICES.map((choice) => (
+              <label className="toggle-row" key={choice.label}>
+                <span>
+                  <strong>{choice.label}</strong>
+                  <small>{choice.description}</small>
+                </span>
+                <input
+                  type="radio"
+                  name="garden-pace"
+                  value={choice.value ?? 'classic'}
+                  checked={(choice.value === 'keep-giving') === keepsGiving(profile)}
+                  onChange={() => onSetGardenPace(choice.value)}
+                />
+              </label>
+            ))}
+          </fieldset>
         </section>
       )}
 

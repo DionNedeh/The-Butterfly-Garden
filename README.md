@@ -41,7 +41,13 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   flight patterns
 - Host and nectar plants with visible growth across four stages
 - Egg, caterpillar, chrysalis and butterfly stages, advanced by days of care
-- Per-stage care activities, a bond meter, and a shared cosmetics wardrobe
+- Per-stage care activities, a bond meter that says what the next level
+  brings, a shared cosmetics wardrobe with saved looks, and each companion's
+  story
+- Butterflies spread across the sky, each able to fly its own pattern, and a
+  card to meet any of them with a tap
+- An optional "Keep giving" pace, where a plant in bloom blooms again, and a
+  small welcome back after a few days away
 - A searchable shop with outfit previews, coloured glass jars, and twelve flight
   patterns, which says plainly what each purchase did or why it did not
 - New eggs arrive with a name of their own, and can be given another
@@ -50,8 +56,9 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - Seven illustrated backdrops and up to three personal images with crop and zoom
 - The Garden Pass: a Google Play subscription in the Android app, and a free
   preview in the PWA (no payment is taken on the web)
-- Three soundscapes synthesised on device — no audio files are downloaded —
-  with an optional fade-out after 15, 30 or 60 minutes
+- Five soundscapes synthesised on device — no audio files are downloaded —
+  with a volume, an optional piano at night, a choice to pause in the
+  background, and an optional fade-out after 15, 30 or 60 minutes
 - "If you need support now": a short, dated list of crisis lines that hands
   off to the phone, reachable from Settings, the Guide and a stormy check-in
 - Backup and restore to a JSON file including your personal backdrop images

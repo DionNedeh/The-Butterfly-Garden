@@ -3,7 +3,7 @@ import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
 import './android.css'
-import { currentRelease, hasUnseenRelease, releaseName } from './data/releases'
+import { currentRelease, hasUnseenRelease, releaseName } from './data/currentRelease'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { BottomNav, PrimaryNav } from './components/Navigation'
@@ -69,6 +69,10 @@ const NoticesView = lazy(() =>
 const SupportView = lazy(() =>
   import('./components/SupportView').then((m) => ({ default: m.SupportView })),
 )
+// Only ever shown on the address the garden moved from, never in the app.
+const MovedBanner = lazy(() =>
+  import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
+)
 
 /** What the support page's own back button says, for the page that opened it. */
 const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
@@ -76,10 +80,7 @@ const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
   today: 'Back to Today',
   guide: 'Back to the Guide',
 }
-import {
-  ambientTrackName,
-  DEFAULT_AMBIENT_TRACK_ID,
-} from './data/ambientTracks'
+import { ambientTrackName } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
 import { useEffectiveTheme } from './hooks/useEffectiveTheme'
 import { useFadeOut, type FadeOutMinutes } from './hooks/useFadeOut'
@@ -110,9 +111,9 @@ import { motionClass, motionPreference } from './lib/motion'
 import { applyTextSize } from './lib/textSize'
 import { nextMorning, paintBrowserBars } from './lib/theme'
 import { useDraft } from './lib/drafts'
+import { heardTrack, soundVolumeOf } from './lib/sound'
 import { isArrival, movedTo } from './lib/hosting'
 import { routeFromHash, urlForRoute, type Route } from './lib/routes'
-import { MovedBanner } from './components/MovedBanner'
 import { Celebrations } from './components/Celebrations'
 
 function currentUrl(): string {
@@ -264,11 +265,6 @@ function App() {
   const [appActive, setAppActive] = useState(true)
   const { setAmbientSound } = garden
   const fadeOut = useFadeOut(useCallback(() => setAmbientSound(false), [setAmbientSound]))
-  useAmbientSound(
-    Boolean(garden.state?.profile?.ambientSound) && appActive,
-    garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
-    fadeOut.endsAt,
-  )
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
   const [splashDone, setSplashDone] = useState(false)
@@ -345,6 +341,16 @@ function App() {
   const theme = useEffectiveTheme(garden.state?.profile, nightUntil)
   const night = theme === 'night'
   const nightHeld = theme !== chosenTheme
+  // The soundscape follows the theme on screen when night brings the piano.
+  const soundProfile = garden.state?.profile
+  const heardTrackId = heardTrack(soundProfile, theme)
+  const ambient = useAmbientSound({
+    enabled: Boolean(soundProfile?.ambientSound) && appActive,
+    trackId: heardTrackId,
+    volume: soundVolumeOf(soundProfile),
+    fadeEndsAt: fadeOut.endsAt,
+    pauseWhenHidden: soundProfile?.soundInBackground === false,
+  })
   useEffect(() => {
     void setSystemBarsForTheme(night)
   }, [night])
@@ -433,7 +439,7 @@ function App() {
   // Unreachable after the check above; it narrows the type for what follows.
   if (!profile) return null
   const sunlight = sunlightForDate(state, today)
-  const activeTrackName = ambientTrackName(profile.ambientTrack)
+  const activeTrackName = ambientTrackName(heardTrackId)
   const recapCollected = recap.targetDate
     ? Boolean(moonlightForDate(state, recap.targetDate))
     : false
@@ -638,7 +644,9 @@ function App() {
       )}
 
       {newAddress && (
-        <MovedBanner target={newAddress} onExportGarden={garden.exportGarden} />
+        <Suspense fallback={null}>
+          <MovedBanner target={newAddress} onExportGarden={garden.exportGarden} />
+        </Suspense>
       )}
 
       <Celebrations />
@@ -731,8 +739,10 @@ function App() {
               onSelectCompanion={garden.selectCompanion}
               onRenameCreature={garden.renameCreature}
               onOpenCare={() => setView('care')}
+              onCareFor={(companionId) => navigate({ view: 'care', companionId })}
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
+              onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
             />
           )}
           {activeView === 'care' && (
@@ -742,8 +752,15 @@ function App() {
               onCare={garden.careForCreature}
               onEquip={garden.equipItem}
               onUnequip={garden.unequipSlot}
+              onSavePreset={garden.savePreset}
+              onWearPreset={garden.wearPreset}
+              onRenamePreset={garden.renamePreset}
+              onDeletePreset={garden.deletePreset}
+              onRestorePreset={garden.restorePreset}
               onRenameCreature={garden.renameCreature}
               onGoToShop={() => setView('shop')}
+              openOn={route.companionId}
+              onChooseFlight={garden.chooseCompanionFlight}
             />
           )}
           {activeView === 'shop' && (
@@ -876,11 +893,17 @@ function App() {
                 garden.chooseTheme(choice)
               }}
               onSetTextSize={garden.setTextSize}
+              onSetGardenPace={garden.setGardenPace}
               fadeOutMinutes={fadeOut.minutes}
               fadeOutEndsAt={fadeOut.endsAt}
               onChooseFadeOut={(minutes) =>
                 fadeOut.choose(minutes, Boolean(profile.ambientSound))
               }
+              heardTrackId={heardTrackId}
+              onSetSoundVolume={garden.setSoundVolume}
+              onHearSoundVolume={ambient.hearVolume}
+              onSetSoundFollowsTheme={garden.setSoundFollowsTheme}
+              onSetSoundInBackground={garden.setSoundInBackground}
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}

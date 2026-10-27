@@ -4,6 +4,7 @@ import { balanceFor, currencyLabel } from '../../lib/currency'
 import { canWearItem } from '../../lib/gardenPass'
 import { stageLabels } from '../../lib/lifecycle'
 import { isAndroidApp } from '../../lib/platform'
+import { listed } from '../../lib/plural'
 import { CreatureSprite } from '../sprites/CreatureSprite'
 import { Icon } from '../Icons'
 
@@ -16,12 +17,15 @@ export function ShopItemCard({
   onPurchase,
   onPreview,
   onWardrobe,
+  wornBy = [],
 }: {
   item: ShopItemDefinition
   state: AppState
   onPurchase: (id: string, quantity: number) => void
   onPreview: () => void
   onWardrobe: () => void
+  /** The companions wearing this piece now, by name (lib/wardrobe wearersByItem). */
+  wornBy?: readonly string[]
 }) {
   const [quantity, setQuantity] = useState(1)
   const owned = state.ownedItemIds.includes(item.id)
@@ -125,8 +129,13 @@ export function ShopItemCard({
             </button>
           )}
         </div>
-        {owned && (
+        {owned && wornBy.length === 0 && (
           <span className="owned-note">Owned · shared by all companions</span>
+        )}
+        {wornBy.length > 0 && (
+          <span className="owned-note">
+            {owned ? 'Owned · worn' : 'Worn'} by {listed(wornBy)}
+          </span>
         )}
       </div>
     </article>

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { AppState, CreatureInstance } from '../types'
 import { createEmptyState } from './progression'
+import { createInitialState } from './progression'
 import {
+  BOND_LEVEL_NECTAR,
+  BOND_LEVEL_STARDUST,
   BOND_PER_LEVEL,
   EMERGENCE_SEED_REWARD,
   EMERGENCE_STARDUST_REWARD,
+  nextBondMilestone,
   performCare,
   readyToAdvance,
   STAGE_CARE_DAYS,
@@ -164,6 +168,77 @@ describe('life cycle care', () => {
     expect(result.bondLevelsGained).toBe(1)
     expect(result.state.stardust).toBe(1)
     expect(result.state.nectar).toBeGreaterThan(state.nectar)
+  })
+})
+
+describe('the diary care writes', () => {
+  it('counts each act of care and records the day an egg hatched', () => {
+    let state = makeState()
+    for (const day of [1, 2, 3]) {
+      state = performCare(state, 'creature-1', 'egg-warm', new Date(2026, 5, day, 9)).state
+    }
+    state = performCare(state, 'creature-1', 'cat-play', new Date(2026, 5, 4, 9)).state
+    const pip = state.creatures[0]
+    expect(pip.careCounts).toEqual({ 'egg-warm': 3, 'cat-play': 1 })
+    expect(pip.hatchedAt).toBe(new Date(2026, 5, 3, 9).toISOString())
+  })
+
+  it('records a hatching only, never a later change, as hatched', () => {
+    let state = makeState({ creatures: [makeCreature({ stage: 'caterpillar' })] })
+    for (const day of [1, 2, 3]) {
+      state = performCare(state, 'creature-1', 'cat-play', new Date(2026, 5, day, 9)).state
+    }
+    expect(state.creatures[0].stage).toBe('chrysalis')
+    expect('hatchedAt' in state.creatures[0]).toBe(false)
+  })
+
+  it('begins the diary of an older garden with its first act of care, once', () => {
+    const made = createInitialState('Tester', 'Test Garden')
+    const older = makeState({
+      profile: { ...made.profile!, diarySince: undefined },
+      creatures: [makeCreature({ stage: 'butterfly' })],
+    })
+    const first = performCare(older, 'creature-1', 'but-groom', new Date(2026, 5, 10, 9)).state
+    expect(first.profile?.diarySince).toBe(new Date(2026, 5, 10, 9).toISOString())
+    const next = performCare(first, 'creature-1', 'but-fly', new Date(2026, 5, 12, 9)).state
+    expect(next.profile).toBe(first.profile)
+  })
+
+  it('earns exactly what it earned before the diary', () => {
+    // Counts never feed a reward: a companion with a long diary and one with
+    // none are paid the same for the same care.
+    const counted = makeCreature({
+      stage: 'butterfly',
+      bond: BOND_PER_LEVEL - 1,
+      careCounts: { 'but-groom': 500 },
+    })
+    const plain = makeCreature({ stage: 'butterfly', bond: BOND_PER_LEVEL - 1 })
+    const day = new Date(2026, 5, 10, 9)
+    const a = performCare(makeState({ creatures: [counted] }), 'creature-1', 'but-groom', day)
+    const b = performCare(makeState({ creatures: [plain] }), 'creature-1', 'but-groom', day)
+    expect([a.state.nectar, a.state.stardust, a.state.seeds, a.bondLevelsGained]).toEqual([
+      b.state.nectar,
+      b.state.stardust,
+      b.state.seeds,
+      b.bondLevelsGained,
+    ])
+  })
+})
+
+describe('the next bond level', () => {
+  it('says what is left to earn and what the level brings, from the rules', () => {
+    expect(nextBondMilestone(0)).toEqual({
+      level: 2,
+      bondToGo: BOND_PER_LEVEL,
+      stardust: BOND_LEVEL_STARDUST,
+      nectar: BOND_LEVEL_NECTAR,
+    })
+    expect(nextBondMilestone(BOND_PER_LEVEL + 3)).toMatchObject({
+      level: 3,
+      bondToGo: BOND_PER_LEVEL - 3,
+    })
+    // On the very point a level is reached, the whole next one lies ahead.
+    expect(nextBondMilestone(BOND_PER_LEVEL * 2).bondToGo).toBe(BOND_PER_LEVEL)
   })
 })
 

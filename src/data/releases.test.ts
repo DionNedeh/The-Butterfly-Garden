@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  currentRelease,
-  getRelease,
-  hasUnseenRelease,
-  releases,
-} from './releases'
+import { currentRelease, hasUnseenRelease } from './currentRelease'
+import { getRelease, releases } from './releases'
 
 describe('release notes', () => {
   it('gives every release a unique id and some content', () => {
@@ -22,8 +18,9 @@ describe('release notes', () => {
   })
 
   it('describes the release this build is', () => {
-    expect(currentRelease).toBe(releases[0])
-    expect(getRelease(currentRelease.id)).toBe(currentRelease)
+    // The shell's own note of the newest release must be the newest notes.
+    expect(releases[0]).toMatchObject(currentRelease)
+    expect(getRelease(currentRelease.id)).toBe(releases[0])
     expect(getRelease('release-from-the-future')).toBeUndefined()
   })
 
@@ -58,7 +55,7 @@ describe('release notes', () => {
 
 describe('speaking of a release', () => {
   it('names it by major and minor version', async () => {
-    const { releaseName, currentRelease } = await import('./releases')
+    const { releaseName, currentRelease } = await import('./currentRelease')
     expect(releaseName({ version: '3.0.0' })).toBe('3.0')
     expect(releaseName({ version: '3.12.4' })).toBe('3.12')
     expect(releaseName()).toBe(currentRelease.version.split('.').slice(0, 2).join('.'))

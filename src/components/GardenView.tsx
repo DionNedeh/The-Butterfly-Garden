@@ -1,5 +1,13 @@
 import { effectiveBackdropId } from '../lib/appearance'
-import { useEffect, useRef, useMemo, useState, type CSSProperties } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarColors } from '../data/jars'
@@ -10,6 +18,7 @@ import { JarSprite } from './sprites/JarSprite'
 import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
 import { activeCustomBackdrop } from '../lib/customBackdrops'
 import { hasGardenPassFeature } from '../lib/gardenPass'
+import { flightPatternFor } from '../lib/flightPatterns'
 import { CustomBackdropImage } from './CustomBackdropImage'
 import { isAndroidApp } from '../lib/platform'
 import { availableJars, jarForPlant } from '../lib/jars'
@@ -22,6 +31,7 @@ import {
 import type { AppState, OutfitSlot } from '../types'
 import {
   PLANT_CAPACITY,
+  plantBloomNote,
   plantEggNote,
   plantingBlocker,
   plantRemovalBlocker,
@@ -39,6 +49,12 @@ import { CreatureSprite } from './sprites/CreatureSprite'
 import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
+import { welcomeBackToday } from '../lib/visits'
+
+/** Only on a return after a few days away, so the first load carries none of it. */
+const WelcomeBack = lazy(() =>
+  import('./garden/WelcomeBack').then((m) => ({ default: m.WelcomeBack })),
+)
 
 /** Catalogs are static, so index them once at module load instead of scanning
  *  them inside every render loop. */
@@ -46,6 +62,12 @@ const plantsById = new Map(plants.map((plant) => [plant.id, plant]))
 const speciesById = new Map(species.map((item) => [item.id, item]))
 const jarColorsById = new Map<string, (typeof jarColors)[number]>(
   jarColors.map((color) => [color.id, color]),
+)
+/** Marigold flies with the companions but is the garden's guide, not one. */
+const GUIDE_ID = 'marigold-guide'
+/** Only asked for once a butterfly is tapped, so it is not in the first load. */
+const ButterflyCard = lazy(() =>
+  import('./ButterflyCard').then((m) => ({ default: m.ButterflyCard })),
 )
 /** Built once; constructing an Intl formatter per render is not free. */
 const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
@@ -82,8 +104,10 @@ export function GardenView({
   onSelectCompanion,
   onRenameCreature,
   onOpenCare,
+  onCareFor,
   seedFocus,
   onOpenGuide,
+  onPutAwayWelcomeBack,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
@@ -93,8 +117,12 @@ export function GardenView({
   onSelectCompanion: (creatureId: string) => void
   onRenameCreature: (creatureId: string, name: string) => void
   onOpenCare: () => void
+  /** Opens Care with one companion chosen, from its card in the scene. */
+  onCareFor?: (creatureId: string) => void
   seedFocus?: string
   onOpenGuide?: () => void
+  /** Put away the welcome back after a few days away (lib/visits). */
+  onPutAwayWelcomeBack?: () => void
 }) {
   const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
   const seedTray = useRef<HTMLElement>(null)
@@ -126,19 +154,26 @@ export function GardenView({
   const active = emerged.find(
     (creature) => creature.id === state.profile?.activeCompanionId,
   )
+  const selectedPattern =
+    flightPatterns.find(
+      (pattern) => pattern.id === state.selectedFlightPatternId,
+    ) ?? flightPatterns[0]
   const allGardenButterflies = [
     {
-      id: 'marigold-guide',
+      id: GUIDE_ID,
       speciesId: 'monarch',
       label: 'Marigold, your monarch garden guide',
       // Marigold is the garden's guide, not a companion, so she wears nothing.
       outfit: undefined as Partial<Record<OutfitSlot, string>> | undefined,
+      pattern: selectedPattern.id,
     },
     ...emerged.map((creature) => ({
       id: creature.id,
       speciesId: creature.speciesId,
       label: `${creature.name}, ${speciesById.get(creature.speciesId)?.commonName ?? 'butterfly'}`,
       outfit: outfitByCreature.get(creature.id),
+      // Its own pattern while the garden owns it, otherwise the garden's.
+      pattern: flightPatternFor(state, creature),
     })),
   ]
   // Keep the scene smooth on modest devices: at most 12 butterflies fly at
@@ -150,7 +185,7 @@ export function GardenView({
   if (allGardenButterflies.length > MAX_VISIBLE_FLYERS) {
     const always = allGardenButterflies.filter(
       (butterfly) =>
-        butterfly.id === 'marigold-guide' ||
+        butterfly.id === GUIDE_ID ||
         butterfly.id === state.profile?.activeCompanionId,
     )
     const rest = allGardenButterflies.filter(
@@ -164,6 +199,37 @@ export function GardenView({
         (_, index) => rest[(offset + index) % rest.length],
       ),
     ]
+  }
+  // How many share the sky. In calm motion only the first few fly and the
+  // others settle, so the flyers spread out as if they were alone.
+  const aloft =
+    motion === 'calm'
+      ? Math.min(CALM_AIRBORNE, gardenButterflies.length)
+      : gardenButterflies.length
+  /**
+   * The butterfly whose card is open, by id, and which opening this is. A
+   * dialog's close event comes a moment after it closes, by which time the
+   * browser has already handed focus back to the butterfly; a key pressed in
+   * that moment opens the card again, and the late event must not close the
+   * new one. So each opening has a number, and a close ends only its own.
+   */
+  const [meeting, setMeeting] = useState<{ id: string; opening: number }>()
+  const openings = useRef(0)
+  const meet = (id: string) => {
+    openings.current += 1
+    setMeeting({ id, opening: openings.current })
+  }
+  const meetingCreature = emerged.find((creature) => creature.id === meeting?.id)
+  const flightSpace = useRef<HTMLDivElement>(null)
+  // The card has closed, however it was closed: focus goes back to the
+  // butterfly it was about, rather than falling to the page.
+  const closeCard = (closed: { id: string; opening: number }) => {
+    if (openings.current !== closed.opening) return
+    setMeeting((current) => (current?.opening === closed.opening ? undefined : current))
+    const flyer = Array.from(
+      flightSpace.current?.querySelectorAll<HTMLElement>('[data-flyer]') ?? [],
+    ).find((element) => element.dataset.flyer === closed.id)
+    flyer?.querySelector<HTMLElement>('[role="button"]')?.focus()
   }
   const observationChoices = observations.filter(
     (item) => item.speciesId === 'all' || item.speciesId === active?.speciesId,
@@ -183,6 +249,9 @@ export function GardenView({
     : undefined
   const eggNote = selectedPlant
     ? plantEggNote(state, selectedPlant, MAX_PLANT_GROWTH)
+    : undefined
+  const bloomNote = selectedPlant
+    ? plantBloomNote(state, selectedPlant, MAX_PLANT_GROWTH)
     : undefined
   const visiblePlants = state.plants.slice(0, PLANT_CAPACITY)
   const visiblePlantIds = new Set(visiblePlants.map((plant) => plant.id))
@@ -234,10 +303,6 @@ export function GardenView({
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
   }, [state.jarPlacements, state.jars, state.plants])
-  const selectedPattern =
-    flightPatterns.find(
-      (pattern) => pattern.id === state.selectedFlightPatternId,
-    ) ?? flightPatterns[0]
   const customBackdrop = activeCustomBackdrop(
     state,
     hasGardenPassFeature('custom-backdrops'),
@@ -274,6 +339,10 @@ export function GardenView({
 
   const gardenFull = state.plants.length >= PLANT_CAPACITY
   const plantBlocker = plantingBlocker(state, PLANT_SEED_COST)
+  const gardenTitle = useRef<HTMLHeadingElement>(null)
+  const today = toLocalDate()
+  const welcomeBack =
+    onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
 
   return (
     <div className="view garden-view">
@@ -298,7 +367,7 @@ export function GardenView({
         <div className="garden-heading">
           <p className="eyebrow">Your living sanctuary</p>
           {/* Focusable by script only: the recap's fade to night lands here. */}
-          <h1 id="garden-title" tabIndex={-1}>
+          <h1 id="garden-title" tabIndex={-1} ref={gardenTitle}>
             {state.profile?.gardenName}
           </h1>
           <p className="garden-observation">
@@ -309,13 +378,16 @@ export function GardenView({
         <div
           className="garden-flight-space"
           aria-label="Butterflies flying in the garden"
+          ref={flightSpace}
         >
           {gardenButterflies.map((butterfly, index) => (
             <FlyingButterfly
               key={butterfly.id}
               id={butterfly.id}
-              pattern={selectedPattern.id}
+              pattern={butterfly.pattern}
               index={index}
+              aloft={aloft}
+              onMeet={() => meet(butterfly.id)}
               speciesId={butterfly.speciesId}
               label={butterfly.label}
               outfit={butterfly.outfit}
@@ -387,6 +459,39 @@ export function GardenView({
           })}
         </div>
       </section>
+      {/* Outside the scene, so nothing styled for the scene reaches the card. */}
+      {meeting && (meeting.id === GUIDE_ID || meetingCreature) && (
+        <Suspense fallback={null}>
+          <ButterflyCard
+            key={meeting.opening}
+            creature={meetingCreature}
+            outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
+            onCareFor={
+              meetingCreature && onCareFor
+                ? () => onCareFor(meetingCreature.id)
+                : undefined
+            }
+            onClose={() => closeCard(meeting)}
+          />
+        </Suspense>
+      )}
+
+      {/* Always here, so the welcome is heard, politely, as it arrives. */}
+      <div className="welcome-back-region" role="status">
+        {welcomeBack && (
+          <Suspense fallback={null}>
+            <WelcomeBack
+              garden={state}
+              returnedOn={today}
+              onPutAway={() => {
+                // The card leaves with its button; focus goes to the garden's name.
+                gardenTitle.current?.focus()
+                onPutAwayWelcomeBack()
+              }}
+            />
+          </Suspense>
+        )}
+      </div>
 
       {sceneUnavailable && (
         <p role="status">
@@ -536,6 +641,12 @@ export function GardenView({
                 <div>
                   <dt>Eggs</dt>
                   <dd>{eggNote}</dd>
+                </div>
+              )}
+              {bloomNote && (
+                <div>
+                  <dt>Next bloom</dt>
+                  <dd>{bloomNote}</dd>
                 </div>
               )}
               <div>

@@ -155,6 +155,21 @@ function fullGarden(): AppState {
       },
     ],
     stardust: 3,
+    // A companion's diary and a saved look, so a backup is shown to carry
+    // both (they live in the creatures collection and the profile).
+    profile: {
+      ...seed.profile!,
+      outfitPresets: [{ id: 'look-1', name: 'Sunday best', outfit: { headwear: 'sprout-cap' } }],
+    },
+    creatures: [
+      {
+        ...seed.creatures[0],
+        hatchedAt: '2026-09-03T09:00:00.000Z',
+        careCounts: { 'cat-play': 2 },
+        outfitsWorn: ['sprout-cap'],
+      },
+    ],
+    ownedItemIds: ['sprout-cap'],
   }
 }
 
@@ -207,6 +222,72 @@ describe('garden repository', () => {
       status: 'loaded',
       state: { version: 6, seeds: 4 },
     })
+  })
+
+  it('keeps saved looks and a companion’s diary through a save and a load', async () => {
+    const seed = createInitialState('Dresser', 'Closet Garden')
+    const looks = [{ id: 'look-1', name: 'Sunday best', outfit: { accessory: 'silk-bow' } }]
+    const state: AppState = {
+      ...seed,
+      profile: { ...seed.profile!, outfitPresets: looks },
+      creatures: [{ ...seed.creatures[0], careCounts: { 'cat-play': 3 }, outfitsWorn: ['silk-bow'] }],
+    }
+    await gardenRepository.save(state)
+    const loaded = await gardenRepository.load()
+    expect(loaded.state.profile?.outfitPresets).toEqual(looks)
+    expect(loaded.state.creatures[0]).toMatchObject({
+      careCounts: { 'cat-play': 3 },
+      outfitsWorn: ['silk-bow'],
+    })
+    expect(loaded.state.profile?.diarySince).toBe(seed.profile?.diarySince)
+  })
+
+  it('keeps saved looks through a save by the build before them', async () => {
+    // That build writes the meta record field by field, so it would drop any
+    // field beside these it did not know. The profile it writes whole, which
+    // is why the looks are kept inside it.
+    const olderMetaFields = [
+      'version',
+      'profile',
+      'seeds',
+      'nectar',
+      'stardust',
+      'inventory',
+      'ownedItemIds',
+      'ownedFlightPatternIds',
+      'selectedFlightPatternId',
+      'revision',
+    ]
+    const seed = createInitialState('Dresser', 'Closet Garden')
+    const looks = [{ id: 'look-1', name: 'Sunday best', outfit: { accessory: 'silk-bow' } }]
+    await gardenRepository.save({ ...seed, profile: { ...seed.profile!, outfitPresets: looks } })
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      const older = Object.fromEntries(olderMetaFields.map((field) => [field, meta[field]]))
+      await db.put('meta', { ...older, nectar: 9 }, 'current')
+    } finally {
+      db.close()
+    }
+    const loaded = await gardenRepository.load()
+    expect(loaded.state.nectar).toBe(9)
+    expect(loaded.state.profile?.outfitPresets).toEqual(looks)
+  })
+
+  it('stores no saved looks at all for a garden that has none', async () => {
+    await gardenRepository.save(createInitialState('Plain', 'Plain Garden'))
+    const db = await openDB('butterfly-garden')
+    try {
+      const meta = (await db.get('meta', 'current')) as Record<string, unknown>
+      // Neither beside the profile, where an older build would drop it, nor
+      // in it as an empty list.
+      expect(meta).not.toHaveProperty('outfitPresets')
+      expect(meta.profile).not.toHaveProperty('outfitPresets')
+    } finally {
+      db.close()
+    }
+    const loaded = await gardenRepository.load()
+    expect(loaded.state.profile).not.toHaveProperty('outfitPresets')
   })
 
   it('reports an untouched database as empty rather than loaded', async () => {
@@ -849,6 +930,13 @@ describe('garden repository', () => {
       expect(
         changedParts(before, { ...before, nectar: before.nectar + 1 }),
       ).toEqual(['meta'])
+    })
+
+    it('writes the meta record when a look is saved, and nothing else', () => {
+      const before = maturedGarden()
+      const look = { id: 'look-1', name: 'Sunday best', outfit: { aura: 'sparkle-aura' } }
+      const after = { ...before, profile: { ...before.profile!, outfitPresets: [look] } }
+      expect(changedParts(before, after)).toEqual(['meta'])
     })
   })
 })

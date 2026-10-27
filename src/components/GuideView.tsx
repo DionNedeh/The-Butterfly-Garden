@@ -3,6 +3,7 @@ import type { AppState } from '../types'
 import { SpeciesDirectory } from './SpeciesDirectory'
 import { STAGE_CARE_DAYS } from '../lib/lifecycle'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
+import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import {
   DAILY_SEED_REWARD,
   DAILY_SUNLIGHT_CAP,
@@ -51,6 +52,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
         `Each seed plants one flower, shrub, or tree (${PLANT_SEED_COST} seed per plant, up to ${PLANT_CAPACITY} spaces in the scene). Host plants shelter particular butterfly species; nectar plants feed everyone. Shared host plants prefer a species you have not welcomed yet.`,
         'Plants grow one stage per Sunlight — seed, sprout, budding, full bloom — with each Sunlight tending the plant you chose on Today, or else the earliest one that can still grow. When a host plant reaches full bloom, look closely: a butterfly egg appears on its leaves, and a new companion begins. It arrives with a name no other companion has, and the Care page offers you the chance to choose another. There is no need to answer: if you do nothing, it keeps the name it came with.',
         'Missed days simply pause growth; nothing ever wilts. You can remove a plant from its field-guide panel (no seed refund), but a plant sheltering an egg, caterpillar, or chrysalis is protected until its butterfly emerges.',
+        `What a plant does after its first bloom is your choice, in Settings under Garden pace. Classic, the garden’s usual pace, brings one egg from each host plant; plant another to welcome more. Keep giving lets a host plant in full bloom bloom again after ${REBLOOM_CARE_DAYS} more days of care (any day you earn Sunlight), with another egg each time, chosen the same way as the first. If every butterfly it hosts is still growing up here, it waits, ready, until one emerges.`,
       ],
     },
     {
@@ -122,7 +124,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       eyebrow: 'Life in the scene',
       title: 'Companions in the garden',
       paragraphs: [
-        'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly for a little burst of hearts; on the Care page, every stage answers the same way, egg to butterfly.',
+        'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly in the garden to meet it: its card says who it is, has a Pet button for a little burst of hearts, and opens Care for a companion. On the Care page, a tap on any stage, egg to butterfly, gives the hearts straight away.',
         'Choose one butterfly as your active companion from its card in the Garden, and rename any companion whenever you like from its card or the Care page.',
       ],
     },
@@ -165,7 +167,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       eyebrow: 'Set the mood',
       title: 'Your garden soundscape',
       paragraphs: [
-        'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, or an original classical-style piano loop in Settings. Everything is generated on your device, works offline, and can be toggled off at any time.',
+        'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, soft rain, dawn birdsong, or an original classical-style piano loop in Settings, and how loud it plays. Night can bring the piano, if you like. Everything is generated on your device, works offline, and can be toggled off at any time.',
       ],
     },
     {

@@ -57,6 +57,7 @@ interface GardenRecord {
     createdAt: string
     selectedBackdropId?: string
     unlockedBackdropIds?: string[]
+    lastVisitOn?: string
   }
   nectar: number
   stardust: number
@@ -67,11 +68,16 @@ interface GardenRecord {
     plantedAt: string
   }>
   creatures: Array<{
+    id?: string
+    name?: string
     stage?: string
     sourcePlantId?: string
     emergeAt?: string
     awaitingName?: boolean
+    outfit?: Record<string, string>
   }>
+  ownedFlightPatternIds?: string[]
+  ownedItemIds?: string[]
 }
 
 /**
@@ -256,17 +262,19 @@ test('onboards, completes care, and writes a private journal entry', async ({
     page.getByRole('heading', { name: 'Willowlight Garden' }),
   ).toBeVisible()
   const marigold = page.getByRole('button', {
-    name: /pet marigold, your monarch garden guide/i,
+    name: /meet marigold, your monarch garden guide/i,
   })
   await marigold.focus()
   // Butterflies never stop flying, so Playwright's stability check can never
   // pass here; the click still lands on the element's live position.
   await marigold.click({ force: true })
-  await expect(
-    page.getByText(
-      /marigold, your monarch garden guide enjoyed that gentle hello/i,
-    ),
-  ).toBeVisible()
+  // A tap introduces her; a hello is the card's own button.
+  const card = page.getByRole('dialog', { name: 'Marigold' })
+  await card.getByRole('button', { name: 'Pet Marigold' }).click()
+  await expect(card.getByText('Marigold enjoyed that gentle hello.')).toBeVisible()
+  await card.getByRole('button', { name: 'Close' }).click()
+  await expect(card).toHaveCount(0)
+  await expect(marigold).toBeFocused()
   await goTo(page, 'Today')
   await page.getByRole('button', { name: /bright/i }).click()
   await page.getByLabel('A note, if you want').fill('A little more spacious.')
@@ -578,6 +586,75 @@ test.describe('an earlier day', () => {
   })
 })
 
+/** A local calendar date some days back, by this machine's clock, which the browser shares. */
+function localDateDaysAgo(days: number): string {
+  const now = new Date()
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 12)
+  return [day.getFullYear(), day.getMonth() + 1, day.getDate()]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0'))
+    .join('-')
+}
+
+test('a garden that keeps giving, and a small welcome back after a few days away', async ({
+  page,
+}) => {
+  // Two accessibility sweeps and a reload.
+  test.slow()
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const pace = page.getByRole('group', { name: 'Garden pace' })
+  await expect(pace.getByRole('radio', { name: /^Classic/ })).toBeChecked()
+  await pace.getByRole('radio', { name: /^Keep giving/ }).check()
+  await expect(pace.getByRole('radio', { name: /^Keep giving/ })).toBeChecked()
+  expect(await seriousViolations(page, 'Settings, garden pace')).toEqual([])
+
+  // The starter milkweed in full bloom, and the last visit five days back.
+  await editGardenRecord(page, (state) => {
+    state.plants[0].growth = 3
+    state.profile.lastVisitOn = localDateDaysAgo(5)
+  })
+  await page.reload()
+  await goTo(page, 'Garden')
+  const welcome = page.getByRole('group', { name: 'Welcome back' })
+  await expect(welcome).toBeVisible()
+  // It never says how long.
+  await expect(welcome).not.toHaveText(/\b(\d+|days?|weeks?|missed|lost)\b/i)
+  await page.getByRole('button', { name: /^Milkweed 1/ }).click()
+  await expect(page.getByText('Blooms again in 7 more days of care.')).toBeVisible()
+  expect(await seriousViolations(page, 'Garden, welcome back')).toEqual([])
+
+  await welcome.getByRole('button', { name: 'Put away' }).click()
+  await expect(welcome).toHaveCount(0)
+  await expect(page.locator('#garden-title')).toBeFocused()
+
+  // Put away for good: what is stored says so...
+  const storedProfile = () =>
+    page.evaluate(
+      () =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const request = indexedDB.open('butterfly-garden')
+          request.onerror = () => reject(request.error)
+          request.onsuccess = () => {
+            const db = request.result
+            const get = db.transaction('meta', 'readonly').objectStore('meta').get('current')
+            get.onsuccess = () => {
+              db.close()
+              resolve((get.result as { profile: Record<string, unknown> }).profile)
+            }
+            get.onerror = () => reject(get.error)
+          }
+        }),
+    )
+  await expect.poll(async () => (await storedProfile()).welcomeBackOn).toBeUndefined()
+  expect((await storedProfile()).lastVisitOn).toBe(localDateDaysAgo(0))
+  // ...and a reload the same day does not bring it back, once the card's own
+  // code would have had time to load (it is fetched only on such a day).
+  await reloadAfterSave(page)
+  await expect(page.locator('#garden-title')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await expect(page.getByRole('group', { name: 'Welcome back' })).toHaveCount(0)
+})
+
 test('supports plant selection and permanent local reset confirmation', async ({
   page,
 }) => {
@@ -693,6 +770,43 @@ test('follows the device, and the switch in the header stops following', async (
     'content',
     '#f7f3e8',
   )
+})
+
+test('shapes the sound: a volume kept across a reload, and night bringing the piano', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const volume = page.getByRole('slider', { name: 'Volume' })
+  await expect(volume).toHaveValue('50')
+  // Each key press is a step of its own, stored as it is taken.
+  await volume.focus()
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await expect(volume).toHaveValue('48')
+  await expect(page.locator('.sound-volume-value')).toHaveText('48')
+  // The whole height of the slider can be pressed. Its laid-out height, not
+  // its box on screen: the card's entrance animation scales it a little for
+  // its first moments, which a box measured then would count.
+  expect(await volume.evaluate((slider) => (slider as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44)
+  expect(await seriousViolations(page, 'Settings, the sound card')).toEqual([])
+
+  await page.getByRole('radio', { name: /^Soft Rain/ }).check()
+  await page.getByRole('checkbox', { name: /^Night brings the piano/ }).check()
+  await expect(page.getByRole('button', { name: 'Turn on Soft Rain' })).toBeVisible()
+  await page.getByRole('button', { name: 'Switch to night mode' }).click()
+  await expect(page.getByRole('button', { name: 'Turn on Piano Music' })).toBeVisible()
+  await expect(
+    page.getByRole('radio', { name: /^Soft Rain/ }).locator('xpath=ancestor::label'),
+  ).toContainText('Back with the sunlight')
+  expect(await seriousViolations(page, 'Settings, the sound card at night')).toEqual([])
+
+  await reloadAfterSave(page)
+  await expect(page.getByRole('slider', { name: 'Volume' })).toHaveValue('48')
+  await expect(page.getByRole('checkbox', { name: /^Night brings the piano/ })).toBeChecked()
+  await expect(
+    page.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+  ).toBeChecked()
 })
 
 test('sets a larger text size that the header and the dock make room for', async ({
@@ -1454,6 +1568,76 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   )
 })
 
+test('a look saved on one companion is worn by another, and their story kept', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // Sol, the starter caterpillar, in a cap the garden owns, and Fern, a
+    // butterfly with nothing on yet.
+    state.ownedItemIds = ['sprout-cap']
+    const sol = state.creatures[0]
+    sol.outfit = { headwear: 'sprout-cap' }
+    state.creatures.push({ ...sol, id: 'fern', name: 'Fern', stage: 'butterfly', outfit: {} })
+  })
+  await page.reload()
+  await goTo(page, 'Care')
+
+  // What the next bond level asks and brings, under the meter.
+  await expect(page.locator('.bond-next')).toContainText(
+    'Next bond level: 10 more bond points',
+  )
+
+  await page.getByRole('button', { name: 'Save this look' }).click()
+  await page.getByRole('textbox', { name: 'Name this look' }).fill('Little cap')
+  await page.getByRole('button', { name: 'Save look' }).click()
+  await expect(page.getByRole('heading', { name: 'Saved looks' })).toBeFocused()
+
+  // A companion's tab is named for its species first: "Monarch Fern Butterfly…".
+  await page.getByRole('tab', { name: /\bFern\b/ }).click()
+  await page.getByRole('button', { name: 'Wear Little cap' }).click()
+  await expect(page.locator('.look-status')).toHaveText('Fern is wearing Little cap.')
+
+  await page.getByText('Fern’s story').click()
+  const worn = page.locator('.story-list div', { hasText: 'Outfits worn' }).locator('dd')
+  await expect(worn).toHaveText('Sprout Cap')
+  expect(await seriousViolations(page, 'Care with saved looks and a story')).toEqual([])
+
+  // Kept: the look is still there after a reload, Fern's diary has the cap
+  // written down (not only worn now), and the shop knows who wears the cap
+  // and what fits whom.
+  await reloadAfterSave(page)
+  const fernsDiary = await page.evaluate(
+    () =>
+      new Promise<unknown>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const get = db.transaction('creatures', 'readonly').objectStore('creatures').get('current')
+          get.onsuccess = () => {
+            db.close()
+            const creatures = get.result as Array<{ id: string; outfitsWorn?: string[] }>
+            resolve(creatures.find((creature) => creature.id === 'fern')?.outfitsWorn)
+          }
+          get.onerror = () => reject(get.error)
+        }
+      }),
+  )
+  expect(fernsDiary).toEqual(['sprout-cap'])
+  await goTo(page, 'Care')
+  await expect(page.getByRole('button', { name: 'Wear Little cap' })).toBeVisible()
+  await goTo(page, 'Shop')
+  await page.getByRole('button', { name: 'Boutique', exact: true }).click()
+  await openShopFilters(page)
+  await page.getByRole('combobox', { name: /^Companion/ }).selectOption({ label: 'Fits Sol now' })
+  await closeShopFilters(page)
+  await expect(page.getByRole('heading', { name: 'Star Diadem' })).toHaveCount(0)
+  await expect(
+    page.locator('.boutique-card', { has: page.getByRole('heading', { name: 'Sprout Cap' }) }),
+  ).toContainText('Owned · worn by Sol and Fern')
+})
+
 test('boutique filters and try-on leave balances and outfits unchanged', async ({
   page,
 }) => {
@@ -1583,8 +1767,15 @@ test.describe('the garden in flight', () => {
     await marigold.hover({ force: true })
     await stillFlying('while hovered')
 
-    // A tap pets the butterfly and leaves focus on it; neither may stop flight.
+    // A tap opens the butterfly's card; closing it leaves focus on the
+    // butterfly. None of it may stop flight.
     await marigold.click({ force: true })
+    const card = page.getByRole('dialog', { name: 'Marigold' })
+    await expect(card).toBeVisible()
+    await stillFlying('with its card open')
+    await page.keyboard.press('Escape')
+    await expect(card).toHaveCount(0)
+    await expect(marigold).toBeFocused()
     await stillFlying('after a tap')
 
     await page.mouse.move(4, 4)
@@ -1598,6 +1789,54 @@ test.describe('the garden in flight', () => {
     await page.evaluate(() => window.scrollTo(0, 0))
     await expect.poll(async () => (await flightState()).paused).toBe(false)
   })
+})
+
+test('a butterfly in the garden opens a card, and Care gives it a flight of its own', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // The starter companion has emerged, and a second pattern is owned.
+    state.creatures[0].stage = 'butterfly'
+    state.ownedFlightPatternIds = ['gentle-drift', 'petal-hop']
+  })
+  await page.reload()
+  const sol = page.getByRole('button', { name: /^Meet Sol,/ })
+  await sol.focus()
+  await page.keyboard.press('Enter')
+  const card = page.getByRole('dialog', { name: 'Sol' })
+  await expect(card).toBeVisible()
+  await expect(card.getByText('Bond level 1')).toBeVisible()
+  expect(await seriousViolations(page, 'A butterfly\'s card')).toEqual([])
+  await card.getByRole('button', { name: 'Pet Sol' }).click()
+  await expect(card.getByText('Sol enjoyed that gentle hello.')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(card).toHaveCount(0)
+  await expect(sol).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await card.getByRole('button', { name: 'Care for Sol' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Care & nurture' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /Sol/ })).toBeFocused()
+  // By role: the navigation's Flight button carries the same name.
+  const flight = page.getByRole('combobox', { name: 'Flight', exact: true })
+  await expect(flight).toHaveValue('')
+  await flight.selectOption({ label: 'Petal Hop' })
+  expect(await seriousViolations(page, 'Care with a flight of its own')).toEqual([])
+
+  await reloadAfterSave(page)
+  await goTo(page, 'Garden')
+  await expect(page.locator('[data-flyer="marigold-guide"]')).toHaveAttribute(
+    'data-pattern',
+    'gentle-drift',
+  )
+  await expect(
+    page.locator('.flight-traveller', { has: page.getByRole('button', { name: /^Meet Sol,/ }) }),
+  ).toHaveAttribute('data-pattern', 'petal-hop')
+  await goTo(page, 'Flight')
+  await expect(
+    page.getByRole('button', { name: /Petal Hop/ }).getByText('Flown by Sol'),
+  ).toBeVisible()
 })
 
 test('a garden that cannot be read opens recovery, never onboarding', async ({

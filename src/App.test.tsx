@@ -1,7 +1,8 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { toLocalDate } from './lib/date'
 import { resetDrafts } from './lib/drafts'
 import { createInitialState } from './lib/progression'
 import { gardenRepository } from './repository/gardenRepository'
@@ -453,5 +454,168 @@ describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_
     expect(within(themes).getByRole('radio', { name: /^Follow evening/ })).toBeChecked()
     // No sound was playing, so no fade was started.
     expect(screen.getByLabelText('Fade out after')).toHaveValue('')
+  })
+})
+
+describe('the sound you can shape', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('lets night bring the piano as the theme turns, and the chosen soundscape return with the sunlight', async () => {
+    const setDark = stubDevice(false)
+    await openGarden(
+      storedWith({ ambientTrack: 'soft-rain', soundFollowsTheme: true, themeFollows: 'device' }),
+    )
+    expect(screen.getByRole('button', { name: 'Turn on Soft Rain' })).toBeInTheDocument()
+    setDark(true)
+    expect(screen.getByRole('button', { name: 'Turn on Piano Music' })).toBeInTheDocument()
+    setDark(false)
+    expect(screen.getByRole('button', { name: 'Turn on Soft Rain' })).toBeInTheDocument()
+  })
+
+  it('stores the volume and both switches from Settings', async () => {
+    const user = await openGarden()
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const lastProfile = () => save.mock.calls.at(-1)?.[0].profile
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    const slider = await screen.findByRole('slider', { name: 'Volume' }, { timeout: 3000 })
+
+    fireEvent.input(slider, { target: { value: '30' } })
+    fireEvent.change(slider)
+    await waitFor(() => expect(lastProfile()?.ambientVolume).toBe(30))
+    expect(slider).toHaveValue('30')
+
+    await user.click(screen.getByRole('checkbox', { name: /^Night brings the piano/ }))
+    await waitFor(() => expect(lastProfile()?.soundFollowsTheme).toBe(true))
+    await user.click(
+      screen.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+    )
+    await waitFor(() => expect(lastProfile()?.soundInBackground).toBe(false))
+  })
+})
+
+describe('meeting a butterfly, and a flight of its own', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  function twoCompanions(): AppState {
+    const seed = stored()
+    const flyer = (id: string, name: string) => ({
+      ...seed.creatures[0],
+      id,
+      name,
+      speciesId: 'monarch',
+      stage: 'butterfly' as const,
+    })
+    return {
+      ...seed,
+      ownedFlightPatternIds: ['gentle-drift', 'petal-hop'],
+      // Ash comes first on the Care page; the card asks for Sol.
+      creatures: [flyer('ash', 'Ash'), flyer('sol', 'Sol')],
+    }
+  }
+
+  it('opens Care on the companion from its card, and flies the pattern chosen there', async () => {
+    const user = await openGarden(twoCompanions())
+    await user.click(screen.getByRole('button', { name: 'Meet Sol, Monarch' }))
+    const card = await screen.findByRole('dialog', { name: 'Sol' }, { timeout: 3000 })
+    await user.click(within(card).getByRole('button', { name: 'Care for Sol' }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Care & nurture' }, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/care')
+    const tab = screen.getByRole('tab', { name: /Sol/ })
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(tab).toHaveFocus()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Flight' }), 'Petal Hop')
+    await user.click(primaryNav().getByRole('button', { name: 'Garden' }))
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
+    const pattern = (id: string) =>
+      document.querySelector<HTMLElement>(`[data-flyer="${id}"]`)?.dataset.pattern
+    expect(pattern('sol')).toBe('petal-hop')
+    expect(pattern('ash')).toBe('gentle-drift')
+    expect(pattern('marigold-guide')).toBe('gentle-drift')
+
+    // Care from the navigation opens as usual, on the first companion.
+    await user.click(primaryNav().getByRole('button', { name: 'Care' }))
+    expect(await screen.findByRole('tab', { name: /Ash/ }, { timeout: 3000 })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+})
+
+describe('coming back after a few days away', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  const daysAgo = (days: number) => {
+    const date = new Date()
+    date.setDate(date.getDate() - days)
+    return date
+  }
+
+  it('shows one small welcome in the garden, remembered as shown once put away', async () => {
+    const lastVisitOn = toLocalDate(daysAgo(5))
+    const user = await openGarden(storedWith({ lastVisitOn }))
+    // The spy openGarden set up, which spying again hands back.
+    const save = vi.spyOn(gardenRepository, 'save')
+    const card = await screen.findByRole('group', { name: 'Welcome back' }, { timeout: 3000 })
+    // It never says how long, and the visit was written down once.
+    expect(card).not.toHaveTextContent(/\b(\d+|days?|weeks?|missed|lost)\b/i)
+    await waitFor(() =>
+      expect(save).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          profile: expect.objectContaining({ lastVisitOn: toLocalDate(), welcomeBackOn: toLocalDate() }),
+        }),
+      ),
+    )
+    const nectar = screen.getByTitle(/Nectar balance/).textContent
+
+    await user.click(within(card).getByRole('button', { name: 'Put away' }))
+    expect(screen.queryByRole('group', { name: 'Welcome back' })).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: 'Quiet Corner' })).toHaveFocus()
+    await waitFor(() =>
+      expect(save.mock.lastCall?.[0].profile).not.toHaveProperty('welcomeBackOn'),
+    )
+    // It granted nothing.
+    expect(screen.getByTitle(/Nectar balance/).textContent).toBe(nectar)
+
+    // Elsewhere and back again, it stays away.
+    await user.click(primaryNav().getByRole('button', { name: 'Today' }))
+    await user.click(primaryNav().getByRole('button', { name: 'Garden' }))
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
+    expect(screen.queryByRole('group', { name: 'Welcome back' })).toBeNull()
+  })
+
+  it('has nothing to show after a day or two', async () => {
+    await openGarden(storedWith({ lastVisitOn: toLocalDate(daysAgo(2)) }))
+    await waitFor(() =>
+      expect(vi.spyOn(gardenRepository, 'save')).toHaveBeenCalledWith(
+        expect.objectContaining({
+          profile: expect.objectContaining({ lastVisitOn: toLocalDate() }),
+        }),
+      ),
+    )
+    expect(screen.queryByRole('group', { name: 'Welcome back' })).toBeNull()
+  })
+})
+
+describe('the garden pace', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  it('is chosen in Settings, and the plant panel then says when the next bloom comes', async () => {
+    const seed = stored()
+    const bloomed = { ...seed, plants: seed.plants.map((plant) => ({ ...plant, growth: 3 })) }
+    const user = await openGarden(bloomed)
+    await user.click(await screen.findByRole('button', { name: /^Milkweed 1/ }))
+    // Classic: a plant blooms once, so there is no next bloom to speak of.
+    expect(screen.queryByText('Next bloom')).toBeNull()
+
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    const pace = await screen.findByRole('group', { name: 'Garden pace' }, { timeout: 3000 })
+    await user.click(within(pace).getByRole('radio', { name: /^Keep giving/ }))
+    expect(within(pace).getByRole('radio', { name: /^Keep giving/ })).toBeChecked()
+
+    await user.click(primaryNav().getByRole('button', { name: 'Garden' }))
+    await user.click(await screen.findByRole('button', { name: /^Milkweed 1/ }))
+    expect(screen.getByText('Next bloom').nextElementSibling).toHaveTextContent(
+      'Blooms again in 7 more days of care.',
+    )
   })
 })

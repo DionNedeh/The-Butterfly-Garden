@@ -53,7 +53,17 @@ export type AppearanceTheme = 'sunlight' | 'night'
 export type ThemeFollows = 'device' | 'evening'
 /** A text size larger than the usual one (lib/textSize). */
 export type TextSize = 'larger' | 'largest'
-export type AmbientTrackId = 'garden-chimes' | 'garden' | 'piano-music'
+/**
+ * A garden pace other than Classic, the pace every garden has always had
+ * (lib/gardenPace). Classic is the absence of a choice, so it stores nothing.
+ */
+export type GardenPace = 'keep-giving'
+export type AmbientTrackId =
+  | 'garden-chimes'
+  | 'garden'
+  | 'piano-music'
+  | 'soft-rain'
+  | 'dawn-birdsong'
 export type FlightPatternId =
   | 'gentle-drift'
   | 'petal-hop'
@@ -116,6 +126,23 @@ export interface Profile {
   /** Soundscape played while ambient sound is enabled. */
   ambientTrack?: AmbientTrackId
   /**
+   * How loud the soundscape plays, a whole number from 0 to 100 (lib/sound).
+   * Optional: without it, 50, the level the garden has always played at.
+   */
+  ambientVolume?: number
+  /**
+   * Night brings the piano: while the theme on screen is night, Piano Music
+   * plays in place of `ambientTrack`, which returns with the sunlight.
+   * Optional, and only ever true.
+   */
+  soundFollowsTheme?: true
+  /**
+   * False pauses the sound while the page is hidden and picks it up again
+   * when it is seen. Optional, and only ever false: without it the sound keeps
+   * playing in the background, as it always has.
+   */
+  soundInBackground?: false
+  /**
    * The theme chosen by hand. While `themeFollows` is set it waits underneath,
    * so an older build, which follows nothing, still opens on this.
    */
@@ -175,6 +202,41 @@ export interface Profile {
    * would keep the reminder quiet on a new device.
    */
   lastBackupAt?: string
+  /**
+   * Keep giving: a host plant in full bloom blooms again after a few more
+   * days of care, with another egg (lib/gardenPace). Optional: without it the
+   * garden keeps its Classic pace, exactly as before there was a choice.
+   */
+  gardenPace?: GardenPace
+  /**
+   * The local date the garden was last opened, noted at most once a day
+   * (lib/visits). Optional: an older garden has no visit on record, and so
+   * nothing to welcome anyone back from.
+   */
+  lastVisitOn?: string
+  /**
+   * The local date of a return after a few days away, while the garden's
+   * small welcome-back reveal is still out. Putting it away clears it, and on
+   * any other day it means nothing. It grants nothing and changes nothing.
+   */
+  welcomeBackOn?: string
+  /**
+   * When the garden began keeping its companions' diaries (an ISO timestamp):
+   * the care each received and the outfits each wore. Set when a garden is
+   * made, or by the first thing written down in an older one. A companion
+   * welcomed before it has a story with gaps, and Care says so rather than
+   * guessing. Optional: an older garden has kept nothing yet.
+   */
+  diarySince?: string
+  /**
+   * Looks saved from the wardrobe, at most MAX_OUTFIT_PRESETS
+   * (lib/outfitPresets). Kept in the profile rather than beside it in the
+   * stored meta record: an older build writes that record field by field,
+   * and would drop a field it did not know, but it carries the profile
+   * through whole. Optional, and absent rather than empty when there are
+   * none, so an older garden or backup simply has none.
+   */
+  outfitPresets?: OutfitPreset[]
 }
 
 /** Image formats a garden image may be stored as. */
@@ -343,6 +405,13 @@ export interface PlantInstance {
   plantId: string
   growth: number
   plantedAt: string
+  /**
+   * Under Keep giving, the days of care this host plant has seen in full
+   * bloom since it last bloomed (lib/gardenPace), up to the number that
+   * opens its next bloom. Absent at the start of each count, and always
+   * under Classic, which never writes it.
+   */
+  careDaysSinceBloom?: number
 }
 
 export interface CreatureInstance {
@@ -372,6 +441,39 @@ export interface CreatureInstance {
    * one that hatches without an answer simply leaves the offer behind.
    */
   awaitingName?: boolean
+  /**
+   * A flight pattern of its own, chosen in Care; without one it flies the
+   * garden's. Read through flightPatternFor (lib/flightPatterns): a pattern
+   * the garden no longer owns is kept here but not flown, so it returns if
+   * the pattern is owned again.
+   */
+  flightPatternId?: FlightPatternId
+  /**
+   * When the egg became a caterpillar, beside `chrysalisStartedAt` and
+   * `emergedAt`. Recorded from the diary on; an older companion's hatching
+   * is read from its last egg care day instead (lib/companionStory).
+   */
+  hatchedAt?: string
+  /**
+   * How many times each care action was given (action id -> count), from
+   * the diary on. Only the companion's story reads it: no reward ever
+   * depends on it.
+   */
+  careCounts?: Record<string, number>
+  /**
+   * Cosmetics this companion has worn (item ids), each once, in the order
+   * first put on, from the diary on. At most MAX_OUTFITS_WORN.
+   */
+  outfitsWorn?: string[]
+}
+
+/** A look saved from a companion's outfit, to put on any companion later. */
+export interface OutfitPreset {
+  id: string
+  /** The gardener's name for it: trimmed, at most PRESET_NAME_LENGTH. */
+  name: string
+  /** Cosmetic item ids by slot, as a companion's `outfit` holds them. */
+  outfit: Partial<Record<OutfitSlot, string>>
 }
 
 export interface SunlightAward {

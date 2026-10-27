@@ -3,6 +3,7 @@ import { careActionsForStage } from '../data/careActions'
 import { getShopItem, outfitSlots, shopItems } from '../data/shopItems'
 import { canWearItem, hasGardenPassFeature } from '../lib/gardenPass'
 import { species } from '../data/content'
+import { currencyLabel } from '../lib/currency'
 import {
   actionDoneToday,
   bondLevel,
@@ -10,16 +11,25 @@ import {
   BOND_PER_LEVEL,
   careDaysCompleted,
   hasCaredToday,
+  nextBondMilestone,
   stageLabels,
   STAGE_CARE_DAYS,
   STAGE_ORDER,
 } from '../lib/lifecycle'
-import { visibleOutfits } from '../lib/wardrobe'
-import type { AppState, CreatureStage, OutfitSlot } from '../types'
+import { counted } from '../lib/plural'
+import { visibleOutfits, type WearLookResult } from '../lib/wardrobe'
+import type { AppState, CreatureStage, FlightPatternId, OutfitPreset, OutfitSlot } from '../types'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { PettableCreature } from './PettableCreature'
 import { Icon } from './Icons'
 import { NameArrival } from './NameArrival'
+import { CompanionFlight } from './CompanionFlight'
+import { CompanionStory } from './care/CompanionStory'
+import { OutfitLooks } from './care/OutfitLooks'
+import { UndoToast, type UndoOffer } from './UndoToast'
+// Only Care draws these, so they arrive with it rather than with the
+// stylesheet every page waits for.
+import './care/care.css'
 
 const stageDescriptions: Record<CreatureStage, string> = {
   egg: 'A tiny egg rests on its host leaf. Keep it warm and watched for three days of care and it will hatch.',
@@ -37,8 +47,15 @@ export function CareView({
   onCare,
   onEquip,
   onUnequip,
+  onSavePreset,
+  onWearPreset,
+  onRenamePreset,
+  onDeletePreset,
+  onRestorePreset,
   onRenameCreature,
   onGoToShop,
+  openOn,
+  onChooseFlight,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -46,8 +63,17 @@ export function CareView({
   onCare: (creatureId: string, actionId: string) => void
   onEquip: (creatureId: string, itemId: string) => void
   onUnequip: (creatureId: string, slot: OutfitSlot) => void
+  onSavePreset: (creatureId: string, name: string) => void
+  onWearPreset: (creatureId: string, presetId: string) => Omit<WearLookResult, 'state'>
+  onRenamePreset: (presetId: string, name: string) => void
+  onDeletePreset: (presetId: string) => void
+  onRestorePreset: (preset: OutfitPreset, index: number) => void
   onRenameCreature: (creatureId: string, name: string) => void
   onGoToShop: () => void
+  /** The companion to open on, as "Care for {name}" in the garden asks. */
+  openOn?: string
+  /** A companion's own flight pattern, or none for the garden's. */
+  onChooseFlight?: (creatureId: string, patternId: FlightPatternId | undefined) => void
 }) {
   const ordered = useMemo(
     () =>
@@ -72,17 +98,20 @@ export function CareView({
   const arrival = state.creatures.find(
     (creature) => creature.stage === 'egg' && creature.awaitingName,
   )
-  // The page opens on the egg being offered a name, so the portrait shows
-  // the companion the offer is about.
-  const [selectedId, setSelectedId] = useState<string | undefined>(arrival?.id)
+  // The page opens on the companion asked for, or else on the egg being
+  // offered a name, so the portrait shows the companion the offer is about.
+  const [selectedId, setSelectedId] = useState<string | undefined>(openOn ?? arrival?.id)
   const [nameDraft, setNameDraft] = useState<string>()
+  const [undoOffer, setUndoOffer] = useState<UndoOffer>()
   const selected =
     ordered.find((creature) => creature.id === selectedId) ?? ordered[0]
 
   // Answering the offer removes it. Focus goes to the named companion's chip,
   // which shows the name it now has, rather than falling to the page body.
+  // Opened for one companion, focus starts on its chip, where the garden's
+  // card handed over.
   const picker = useRef<HTMLDivElement>(null)
-  const focusChip = useRef<string>(undefined)
+  const focusChip = useRef<string | undefined>(openOn)
   useEffect(() => {
     const id = focusChip.current
     if (id === undefined) return
@@ -117,6 +146,7 @@ export function CareView({
   const outfit = outfitByCreature.get(selected.id)
   const level = bondLevel(selected.bond)
   const progress = bondProgress(selected.bond)
+  const milestone = nextBondMilestone(selected.bond)
   const isButterfly = selected.stage === 'butterfly'
 
   return (
@@ -288,7 +318,22 @@ export function CareView({
               <div className="bond-bar">
                 <span style={{ width: `${(progress / BOND_PER_LEVEL) * 100}%` }} />
               </div>
+              {/* What the next level asks and brings, from the same numbers
+                  care pays out by. Not hidden by Settings' "Show day
+                  counts", which is about the journal's days: bond is not
+                  days, and the meter above already shows it. */}
+              <p className="bond-next">
+                Next bond level: {counted(milestone.bondToGo, 'more bond point', 'more bond points')}{' '}
+                <span aria-hidden="true">→</span>
+                <span className="sr-only">for</span>{' '}
+                {milestone.stardust} {currencyLabel('stardust')}, {milestone.nectar}{' '}
+                {currencyLabel('nectar')}
+              </p>
             </div>
+
+            {isButterfly && onChooseFlight && (
+              <CompanionFlight state={state} creature={selected} onChoose={onChooseFlight} />
+            )}
           </div>
         </div>
       </section>
@@ -428,7 +473,19 @@ export function CareView({
             )
           })}
         </div>
+        <OutfitLooks
+          creature={selected}
+          presets={state.profile?.outfitPresets ?? []}
+          onSave={onSavePreset}
+          onWear={onWearPreset}
+          onRename={onRenamePreset}
+          onDelete={onDeletePreset}
+          onRestore={onRestorePreset}
+          onOfferUndo={setUndoOffer}
+        />
       </section>
+
+      <CompanionStory creature={selected} profile={state.profile} />
 
       {definition && (
         <section className="card species-fact-card">
@@ -437,6 +494,8 @@ export function CareView({
           <p>{definition.fact}</p>
         </section>
       )}
+      {/* The page's own child, so it is fixed to the screen (see OutfitLooks). */}
+      <UndoToast offer={undoOffer} onDone={() => setUndoOffer(undefined)} />
     </div>
   )
 }

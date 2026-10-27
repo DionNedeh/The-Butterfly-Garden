@@ -1,4 +1,5 @@
-import { freeWritingPrompt, reflectionPrompts } from '../data/content'
+import { freeWritingPrompt } from '../data/content'
+import { reflectionPrompts } from '../data/prompts'
 import type { ReflectionPrompt } from '../types'
 import { getDailyPromptIndex } from './date'
 

@@ -14,11 +14,18 @@ import type {
 import { toLocalDate } from './date'
 import { progressAppearance } from './appearance'
 import { DEFAULT_FLIGHT_PATTERN_ID } from './flightPatterns'
+import {
+  canBloomAgain,
+  careDaysCounted,
+  keepsGiving,
+  REBLOOM_CARE_DAYS,
+  withCountStartedAgain,
+} from './gardenPace'
 import { EMERGENCE_SEED_REWARD } from './lifecycle'
 import { PLANT_CAPACITY } from './plantManagement'
 import { selectDiscoveryCandidate } from './speciesAcquisition'
 import { createId } from './id'
-import { currentRelease } from '../data/releases'
+import { currentRelease } from '../data/currentRelease'
 
 export { EMERGENCE_SEED_REWARD }
 
@@ -85,6 +92,11 @@ export function createInitialState(
       selectedBackdropId: 'sunlit-meadow',
       unlockedBackdropIds: ['sunlit-meadow', 'cottage-bloom'],
       lastSeenReleaseId: currentRelease.id,
+      // Making the garden is its first visit (lib/visits).
+      lastVisitOn: toLocalDate(now),
+      // A new garden keeps its companions' diaries from the start, so every
+      // story it tells is whole (lib/companionStory).
+      diarySince: nowIso,
     },
     plants: [
       {
@@ -182,7 +194,7 @@ export function nameToOffer(
 }
 
 function discoverEgg(
-  state: AppState,
+  state: Pick<AppState, 'creatures'>,
   maturePlant: PlantInstance,
   now: Date,
 ): CreatureInstance | undefined {
@@ -315,6 +327,13 @@ export function awardSunlight(
     const discovered = discoverEgg(state, grownPlant, now)
     if (discovered) creatures = [...creatures, discovered]
   }
+  // Classic never comes this way, so its plants and eggs are exactly what
+  // they always were.
+  if (keepsGiving(state.profile)) {
+    const tended = tendPlantsInBloom(plants, creatures, growing, firstSunlightToday, now)
+    plants = tended.plants
+    creatures = tended.creatures
+  }
 
   return {
     ...state,
@@ -324,6 +343,47 @@ export function awardSunlight(
     nectar: state.nectar + NECTAR_PER_SUNLIGHT,
     seeds: state.seeds + (firstSunlightToday ? DAILY_SEED_REWARD : 0),
   }
+}
+
+/**
+ * Keep giving (lib/gardenPace): each host plant already in full bloom counts
+ * the day's first Sunlight as a day of care, and once it has counted enough
+ * it blooms again, with an egg chosen by the first bloom's own rule.
+ *
+ * A plant whose butterflies are all still growing up here has no egg to
+ * bring, so it waits, ready, rather than blooming empty: the first Sunlight
+ * after one of them emerges opens it. The plant that grew this very
+ * Sunlight was not yet in bloom, so it starts counting tomorrow. Plants and
+ * creatures that did not change keep their identity, so the save that
+ * follows writes only what did.
+ */
+function tendPlantsInBloom(
+  plants: PlantInstance[],
+  creatures: CreatureInstance[],
+  grownIndex: number,
+  newDay: boolean,
+  now: Date,
+): { plants: PlantInstance[]; creatures: CreatureInstance[] } {
+  let tendedPlants = plants
+  let withEggs = creatures
+  plants.forEach((plant, index) => {
+    if (index === grownIndex || !canBloomAgain(plant, MAX_PLANT_GROWTH)) return
+    const counted = careDaysCounted(plant)
+    const days = newDay ? Math.min(REBLOOM_CARE_DAYS, counted + 1) : counted
+    const egg =
+      days >= REBLOOM_CARE_DAYS ? discoverEgg({ creatures: withEggs }, plant, now) : undefined
+    let tended = plant
+    if (egg) {
+      withEggs = [...withEggs, egg]
+      tended = withCountStartedAgain(plant)
+    } else if (days > 0 && plant.careDaysSinceBloom !== days) {
+      tended = { ...plant, careDaysSinceBloom: days }
+    }
+    if (tended === plant) return
+    if (tendedPlants === plants) tendedPlants = [...plants]
+    tendedPlants[index] = tended
+  })
+  return { plants: tendedPlants, creatures: withEggs }
 }
 
 /** What the recap flow collected. Every answer is optional. */

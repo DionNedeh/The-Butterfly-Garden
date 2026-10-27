@@ -1,0 +1,184 @@
+/* The Care page's own pieces, loaded with it. Theme colours only (they turn
+   with .theme-night), and nothing here moves. */
+
+/* What the next bond level asks for and brings. */
+.bond-next {
+  margin: 0.1rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Saved looks, under the wardrobe's slots. */
+.saved-looks {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 1rem;
+}
+
+.saved-looks h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.saved-looks .subtle-copy {
+  margin: 0;
+}
+
+.saved-looks button {
+  min-height: 44px;
+}
+
+.look-save {
+  display: grid;
+  justify-items: start;
+  gap: 0.4rem;
+}
+
+.look-form {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 26rem;
+}
+
+.look-form label {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 700;
+  color: var(--forest-dark);
+}
+
+.look-form-actions,
+.look-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.look-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.look {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.6rem 0.8rem;
+}
+
+.look-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.look-name {
+  color: var(--forest-dark);
+  overflow-wrap: anywhere;
+}
+
+.look-copy small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.look-status {
+  margin: 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+/* While empty it keeps its place in the page, so a screen reader is already
+   listening when it first speaks; it only gives back the grid's gap. */
+.look-status:empty {
+  margin-top: -0.75rem;
+}
+
+/* A companion's story: folded like the Journal's field notes. */
+.companion-story > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.companion-story > summary::-webkit-details-marker {
+  display: none;
+}
+
+.companion-story > summary > span {
+  display: grid;
+}
+
+.companion-story > summary strong {
+  color: var(--forest-dark);
+  font-size: clamp(1.2rem, 2.6vw, 1.6rem);
+}
+
+/* Which way it folds: drawn, so it adds nothing to the summary's name, and
+   turned without a transition, so nothing moves. */
+.companion-story > summary::after {
+  content: '';
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.3rem;
+  border-right: 2px solid var(--forest);
+  border-bottom: 2px solid var(--forest);
+  transform: rotate(45deg);
+}
+
+.companion-story[open] > summary::after {
+  transform: rotate(-135deg);
+}
+
+.companion-story[open] > summary {
+  margin-bottom: 1rem;
+}
+
+.story-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.story-list > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr;
+  gap: 0.2rem 1rem;
+}
+
+.story-list dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.story-list dd {
+  margin: 0;
+  color: var(--forest-dark);
+}
+
+.story-note {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 480px) {
+  .story-list > div {
+    grid-template-columns: 1fr;
+  }
+}

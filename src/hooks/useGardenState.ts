@@ -8,7 +8,11 @@ import {
   selectCustomBackdrop as selectCustomBackdropIn,
 } from '../lib/customBackdrops'
 import { toLocalDate, type RecapHours } from '../lib/date'
-import { buyFlightPattern, selectFlightPattern } from '../lib/flightPatterns'
+import {
+  buyFlightPattern,
+  chooseCompanionFlight,
+  selectFlightPattern,
+} from '../lib/flightPatterns'
 import * as act from '../lib/gardenActions'
 import { gardenEvents } from '../lib/gardenEvents'
 import { hasGardenPassFeature } from '../lib/gardenPass'
@@ -16,12 +20,22 @@ import { buyJar, placeJar, removeJarPlacement } from '../lib/jars'
 import { performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import type { ThemeChoice } from '../lib/theme'
+import * as looks from '../lib/outfitPresets'
 import { removePlant } from '../lib/plantManagement'
 import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
+import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
 import { requestPersistentStorage } from '../lib/storage'
-import { buyShopItem, equipOutfitItem, unequipOutfitSlot } from '../lib/wardrobe'
+import { markQuietWrite } from '../lib/quietWrites'
+import { noteVisit, putAwayWelcomeBack } from '../lib/visits'
+import {
+  buyShopItem,
+  equipOutfitItem,
+  unequipOutfitSlot,
+  wearOutfitPreset,
+  type WearLookResult,
+} from '../lib/wardrobe'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
   AmbientTrackId,
@@ -31,11 +45,13 @@ import type {
   CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
+  GardenPace,
   Goal,
   GoalSchedule,
   JarColorId,
   MoodChoice,
   MoodEntry,
+  OutfitPreset,
   OutfitSlot,
   RecapEntry,
   ReflectionEntry,
@@ -99,6 +115,35 @@ export function useGardenState() {
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  // Remember the day the garden was opened (lib/visits): once it has loaded,
+  // and whenever the page comes back into view, which is how an app left in
+  // the background for days is opened again. A day already noted hands back
+  // the same garden, so this writes at most once a day and never loops.
+  // Straight through setState: a visit is not the gardener's doing to mark.
+  const hasGarden = Boolean(state?.profile)
+  useEffect(() => {
+    if (loading || !hasGarden) return
+    const visit = () => {
+      if (document.visibilityState !== 'visible' || readOnlyRef.current) return
+      const today = toLocalDate()
+      // Most of the time today is already noted; then not even a render.
+      if (stateRef.current?.profile?.lastVisitOn === today) return
+      setState((current) => {
+        if (!current) return current
+        const next = noteVisit(current, today)
+        // Nothing of the gardener's is in this write (lib/quietWrites).
+        return next === current ? current : markQuietWrite(next)
+      })
+    }
+    visit()
+    window.addEventListener('focus', visit)
+    document.addEventListener('visibilitychange', visit)
+    return () => {
+      window.removeEventListener('focus', visit)
+      document.removeEventListener('visibilitychange', visit)
+    }
+  }, [loading, hasGarden, setState, readOnlyRef])
 
   /**
    * Every action keeps a stable identity so memoized views (the month
@@ -230,15 +275,48 @@ export function useGardenState() {
         update((current) => performCare(current, creatureId, actionId).state),
       purchaseItem: (itemId: string, quantity = 1) =>
         purchase((current) => buyShopItem(current, itemId, quantity)),
-      equipItem: (creatureId: string, itemId: string) =>
-        update((current) => equipOutfitItem(current, creatureId, itemId)),
+      equipItem: (creatureId: string, itemId: string) => {
+        const now = new Date()
+        update((current) => equipOutfitItem(current, creatureId, itemId, undefined, now))
+      },
       unequipSlot: (creatureId: string, slot: OutfitSlot) =>
         update((current) => unequipOutfitSlot(current, creatureId, slot)),
+      /** Save a companion's outfit as a look; an empty name takes the one suggested. */
+      savePreset: (creatureId: string, name: string) =>
+        update((current) => looks.saveOutfitPreset(current, creatureId, name)),
+      /**
+       * Put a saved look on a companion, and say which pieces were left off.
+       * Worked out on the newest garden, as a purchase is, so what Care says
+       * is what the update applies.
+       */
+      wearPreset: (creatureId: string, presetId: string): Omit<WearLookResult, 'state'> => {
+        const now = new Date()
+        const newest = stateRef.current
+        if (!newest) return { worn: [], skipped: [] }
+        const { state: next, ...outcome } = wearOutfitPreset(newest, creatureId, presetId, undefined, now)
+        if (next !== newest) stateRef.current = next
+        update((current) =>
+          current === newest
+            ? next
+            : wearOutfitPreset(current, creatureId, presetId, undefined, now).state,
+        )
+        return outcome
+      },
+      renamePreset: (presetId: string, name: string) =>
+        update((current) => looks.renameOutfitPreset(current, presetId, name)),
+      deletePreset: (presetId: string) =>
+        update((current) => looks.deleteOutfitPreset(current, presetId)),
+      /** Put back a look just deleted, where it was: Undo. */
+      restorePreset: (preset: OutfitPreset, index: number) =>
+        update((current) => looks.restoreOutfitPreset(current, preset, index)),
       removePlant: (plantId: string) => update((current) => removePlant(current, plantId)),
       purchaseFlightPattern: (patternId: FlightPatternId) =>
         purchase((current) => buyFlightPattern(current, patternId)),
       selectFlightPattern: (patternId: FlightPatternId) =>
         update((current) => selectFlightPattern(current, patternId)),
+      /** One companion's own pattern; none lets it fly the garden's again. */
+      chooseCompanionFlight: (creatureId: string, patternId: FlightPatternId | undefined) =>
+        update((current) => chooseCompanionFlight(current, creatureId, patternId)),
       purchaseJar: (character: string, colorId: JarColorId) => {
         const now = new Date()
         return purchase((current) => buyJar(current, character, colorId, now))
@@ -322,6 +400,15 @@ export function useGardenState() {
         update((current) => act.setRecapHours(current, hours)),
       selectAmbientTrack: (ambientTrack: AmbientTrackId) =>
         update((current) => act.selectAmbientTrack(current, ambientTrack)),
+      /** How loud, 0 to 100 (lib/sound). */
+      setSoundVolume: (volume: number) =>
+        update((current) => setSoundVolume(current, volume)),
+      /** Night brings the piano, or not. */
+      setSoundFollowsTheme: (on: boolean) =>
+        update((current) => setSoundFollowsTheme(current, on)),
+      /** Keep playing in the background, or pause while hidden. */
+      setSoundInBackground: (on: boolean) =>
+        update((current) => setSoundInBackground(current, on)),
       /** The header's switch, from the theme `showing` (it may be followed). */
       toggleTheme: (showing?: AppearanceTheme) =>
         update((current) => act.toggleTheme(current, showing)),
@@ -329,6 +416,11 @@ export function useGardenState() {
         update((current) => act.chooseTheme(current, choice)),
       setTextSize: (size: TextSize | undefined) =>
         update((current) => act.setTextSize(current, size)),
+      /** Keep giving, or Classic again (undefined): see lib/gardenPace. */
+      setGardenPace: (pace: GardenPace | undefined) =>
+        update((current) => act.setGardenPace(current, pace)),
+      /** Put the garden's welcome-back reveal away (lib/visits). */
+      putAwayWelcomeBack: () => update(putAwayWelcomeBack),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**

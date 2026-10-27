@@ -93,28 +93,6 @@ export const releases: ReleaseNote[] = [
   },
 ]
 
-/** The release this build is describing. */
-export const currentRelease = releases[0]
-
-/** "3.0" from "3.0.0": how the app speaks of a release. */
-export function releaseName(release: Pick<ReleaseNote, 'version'> = currentRelease): string {
-  return release.version.split('.').slice(0, 2).join('.')
-}
-
-/**
- * Whether a gardener has release notes waiting.
- *
- * An unrecognised id counts as unseen. It usually means a backup from a newer
- * build, and hiding the current notes because of a value this build cannot
- * place would leave someone with no way to read them.
- */
-export function hasUnseenRelease(
-  lastSeenReleaseId: string | undefined,
-): boolean {
-  if (!lastSeenReleaseId) return true
-  return lastSeenReleaseId !== currentRelease.id
-}
-
 export function getRelease(id: string): ReleaseNote | undefined {
   return releases.find((release) => release.id === id)
 }
