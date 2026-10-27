@@ -3,7 +3,7 @@ import {
   gardenRepository,
   inspectImportedState,
 } from '../repository/gardenRepository'
-import { isSealedBackup, readBackupFile } from '../lib/backupFile'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { hasPictures } from '../lib/customBackdrops'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
@@ -40,11 +40,14 @@ export function SafeMode({ error }: { error: Error }) {
         return
       }
       setDownloaded(true)
+      // Under the lock the copy is sealed as the garden is stored, and is
+      // known by the lock's record in it: it can be restored, but only with
+      // the lock's own secrets (lib/lockedCopy).
       setNote(
-        `${
-          outcome === 'saved'
-            ? 'Saved. Keep this file: it holds everything this app had stored, and can be restored later.'
-            : 'Download started. Keep this file: it holds everything this app had stored, and can be restored later.'
+        `${outcome === 'saved' ? 'Saved.' : 'Download started.'} ${
+          sealedKind(copy.text)
+            ? 'This copy is sealed with your lock: it keeps everything, but it can only be opened by this app, with your passcode or recovery code.'
+            : 'Keep this file: it holds everything this app had stored, and can be restored later.'
         }${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
@@ -91,8 +94,9 @@ export function SafeMode({ error }: { error: Error }) {
       setNote(chosen.message)
       return
     }
-    // A protected backup asks for its passphrase, then restores as any other.
-    if (isSealedBackup(chosen.text)) setSealedChoice(chosen.text)
+    // A protected backup asks for its passphrase, and a locked garden's copy
+    // for its passcode or recovery code; then each restores as any other.
+    if (sealedKind(chosen.text)) setSealedChoice(chosen.text)
     else await restoreText(chosen.text)
   }
 
@@ -151,6 +155,7 @@ export function SafeMode({ error }: { error: Error }) {
         {sealedChoice !== undefined && (
           <ProtectedRestore
             text={sealedChoice}
+            next="replace"
             returnFocus={() => fileInput.current}
             onOpened={(plain) => {
               setSealedChoice(undefined)

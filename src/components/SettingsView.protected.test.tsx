@@ -1,11 +1,15 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { PersistenceStatus } from '../hooks/useGardenState'
-import { isSealedBackup } from '../lib/backupFile'
+import { sealedKind } from '../lib/backupFile'
 import { saveTextFile } from '../lib/download'
+import { turnLockOn } from '../lib/gardenLockActions'
 import { createInitialState } from '../lib/progression'
+import { newRecoveryCode } from '../lib/recoveryCode'
 import { sealBackup } from '../lib/sealedBackup'
+import { storedCopy } from '../lib/storedCopy'
+import { gardenRepository } from '../repository/gardenRepository'
 import { SettingsView } from './SettingsView'
 
 // The real lock, quick: the count is the tests' only change.
@@ -18,10 +22,23 @@ vi.mock('../lib/sealedBackup', async (original) => {
     ),
   }
 })
+vi.mock('../lib/sealing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/sealing')>()
+  return {
+    ...actual,
+    deriveKey: (secret: string, salt: Uint8Array) => actual.deriveKey(secret, salt, 1_000),
+  }
+})
 vi.mock('../lib/download', async (original) => ({
   ...(await original<typeof import('../lib/download')>()),
   saveTextFile: vi.fn(),
 }))
+
+// The prompt's code is fetched when a sealed file is chosen; fetched once
+// here, so no test's first wait is spent compiling it on a busy machine.
+beforeAll(async () => {
+  await import('./backup/SealedBackupPrompt')
+})
 
 const PASSPHRASE = 'quiet meadow lantern'
 const save = vi.mocked(saveTextFile)
@@ -126,7 +143,7 @@ describe('a protected backup in Settings', () => {
     expect(onExportGarden).toHaveBeenCalledOnce()
     const [fileName, , text] = save.mock.calls[0]
     expect(fileName).toMatch(/^butterfly-garden-protected-\d{4}-\d{2}-\d{2}\.json$/)
-    expect(isSealedBackup(text)).toBe(true)
+    expect(sealedKind(text)).toBe('backup')
     expect(onBackupMade).toHaveBeenCalledWith(expect.any(Date))
     expect(
       screen.getByText(
@@ -158,6 +175,8 @@ describe('restoring a protected backup in Settings', () => {
   it('asks for its passphrase, then shows the usual preview before anything is replaced', async () => {
     const { dialog, onImportGarden, user } = await chooseProtected()
     const field = screen.getByLabelText('Passphrase')
+    // Here alone a look comes first, so here alone it is promised.
+    expect(dialog).toHaveAccessibleDescription(/Nothing is replaced until you have seen what the backup holds\.$/)
 
     await user.type(field, 'not the passphrase')
     await user.click(screen.getByRole('button', { name: 'Open the backup' }))
@@ -201,6 +220,44 @@ describe('restoring a protected backup in Settings', () => {
     await user.type(await screen.findByLabelText('Passphrase'), PASSPHRASE)
     await user.click(screen.getByRole('button', { name: 'Open the backup' }))
     expect(await screen.findByText(/could not be restored\. It was written by a newer version/)).toBeInTheDocument()
+    expect(onImportGarden).not.toHaveBeenCalled()
+  })
+})
+
+describe('restoring safe mode’s copy of a locked garden in Settings', () => {
+  it('asks for the lock’s passcode, then shows the usual preview, saying how it opened', async () => {
+    await gardenRepository.save({
+      ...createInitialState('Robin', 'Quiet Corner'),
+      moods: [
+        {
+          id: 'mood-1',
+          localDate: '2026-10-21',
+          level: 4,
+          note: 'Kept safe',
+          createdAt: '2026-10-21T08:00:00.000Z',
+          updatedAt: '2026-10-21T08:00:00.000Z',
+        },
+      ],
+    })
+    await turnLockOn('kingfisher at dawn', newRecoveryCode())
+    const { text } = await storedCopy()
+    await gardenRepository.clear()
+
+    const { onImportGarden, user } = renderSettings()
+    await user.click(screen.getByRole('button', { name: 'Restore from a backup' }))
+    await user.upload(
+      screen.getByLabelText('Backup file'),
+      new File([text], 'butterfly-garden-everything-stored.json', { type: 'application/json' }),
+    )
+    const dialog = await screen.findByRole('dialog', { name: 'This copy is locked' })
+    expect(dialog).toHaveAccessibleDescription(/Nothing is replaced until you have seen what the copy holds\./)
+    await user.type(within(dialog).getByLabelText('Passcode'), 'kingfisher at dawn')
+    await user.click(within(dialog).getByRole('button', { name: 'Open the copy' }))
+    const preview = await screen.findByRole('heading', { name: 'This backup holds Quiet Corner' })
+    await waitFor(() => expect(preview).toHaveFocus())
+    expect(screen.getByText('A sealed copy of a locked garden, opened with its lock')).toBeInTheDocument()
+    expect(screen.queryByText('A protected backup, opened with its passphrase')).toBeNull()
+    expect(screen.getByText(/1 check-in/)).toBeInTheDocument()
     expect(onImportGarden).not.toHaveBeenCalled()
   })
 })

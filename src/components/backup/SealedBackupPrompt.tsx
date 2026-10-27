@@ -1,14 +1,28 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { sealedKind } from '../../lib/backupFile'
 import {
   openSealedBackup,
   readSealedBackup,
   type SealedProblem,
   type SealingStep,
 } from '../../lib/sealedBackup'
+import { LockedCopyPrompt } from './LockedCopyPrompt'
 import type { ProtectedRestoreProps } from './ProtectedRestore'
 import { useModal } from './useModal'
 import { useProblem } from './useProblem'
+import { whatFollows } from './whatFollows'
 import './backup.css'
+
+/**
+ * The secret a sealed file needs, asked for in a modal dialog before
+ * anything is restored: a protected backup's passphrase, or the passcode or
+ * recovery code of the garden a locked copy was made from (LockedCopyPrompt).
+ */
+export function SealedBackupPrompt(props: ProtectedRestoreProps) {
+  // Decided once: the file chosen does not change while it is asked about.
+  const [kind] = useState(() => sealedKind(props.text))
+  return kind === 'copy' ? <LockedCopyPrompt {...props} /> : <PassphrasePrompt {...props} />
+}
 
 /** Why a protected backup cannot be opened at all, before any passphrase. */
 const UNOPENABLE: Record<SealedProblem, string> = {
@@ -26,12 +40,13 @@ const UNOPENABLE: Record<SealedProblem, string> = {
  * tell, and a hint would help a guesser more than the gardener. Opening runs
  * the same slow derivation as saving, so it says that it is working. What
  * opens is the plain backup's text, which goes on to the usual restore.
- * Nothing is replaced here, whatever happens.
+ * Nothing is replaced here, whatever happens; what the screen does next is
+ * said as it does it (`whatFollows`).
  *
  * Escape and Android's back gesture put it away (through its cancel event;
  * see lib/backNavigation), except while it is opening the file.
  */
-export function SealedBackupPrompt({ text, onOpened, onClose, returnFocus }: ProtectedRestoreProps) {
+function PassphrasePrompt({ text, next, onOpened, onClose, returnFocus }: ProtectedRestoreProps) {
   const dialog = useRef<HTMLDialogElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const field = useRef<HTMLInputElement>(null)
@@ -90,7 +105,7 @@ export function SealedBackupPrompt({ text, onOpened, onClose, returnFocus }: Pro
       return
     }
     setPassphrase('')
-    if (shut()) onOpened(opened)
+    if (shut()) onOpened(opened, 'passphrase')
   }
 
   return (
@@ -112,8 +127,7 @@ export function SealedBackupPrompt({ text, onOpened, onClose, returnFocus }: Pro
           </h2>
           <p id={`${ids}-about`}>
             Enter the passphrase it was saved with. It is used only here, to
-            open the file, and is not kept. Nothing is replaced until you have
-            seen what the backup holds.
+            open the file, and is not kept. {whatFollows(next, 'backup')}
           </p>
           <label>
             Passphrase

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { seriousViolations } from './a11y'
 import { goTo } from './navigation'
@@ -221,4 +222,71 @@ test('a second tab follows the lock: locked there too, and opened on its own', a
   await page.getByRole('region', { name: 'The garden lock' }).getByRole('button', { name: 'Lock now' }).click()
   await expect(lockScreen(page)).toBeVisible()
   await expect(lockScreen(other)).toBeVisible()
+})
+
+test.describe('safe mode with the lock on', () => {
+  // Every request is the page's own, so a test can keep one from arriving.
+  test.use({ serviceWorkers: 'block' })
+
+  test('keeps a sealed copy that opens again with the passcode, so starting again loses nothing', async ({
+    page,
+  }) => {
+    test.slow()
+    await enterGarden(page)
+    await writeSomething(page)
+    await lockFromSettings(page)
+
+    // The lock screen's code cannot be fetched (offline, a stale cache): the
+    // locked garden falls back to safe mode.
+    const lockScreenCode = /\/assets\/LockScreen-[\w-]+\.js$/
+    await page.route(lockScreenCode, (route) => route.abort())
+    await page.reload()
+    await expect(page.getByRole('heading', { name: 'The garden hit a problem it could not draw' })).toBeVisible()
+
+    const downloading = page.waitForEvent('download')
+    await page.getByRole('button', { name: "Download what's stored" }).click()
+    const file = await downloading
+    expect(file.suggestedFilename()).toMatch(/^butterfly-garden-everything-stored-.*\.json$/)
+    const path = (await file.path())!
+    // Sealed as the garden is stored: none of the gardener's words in it.
+    expect(await readFile(path, 'utf8')).not.toContain(WORDS_OF_MINE)
+    await expect(
+      page.getByText(
+        /This copy is sealed with your lock: it keeps everything, but it can only be opened by this app, with your passcode or recovery code\./,
+      ),
+    ).toBeVisible()
+    expect(await seriousViolations(page, 'Safe mode, a locked garden copied')).toEqual([])
+
+    // Starting again deletes the garden, lock and all.
+    await page.unroute(lockScreenCode)
+    await page.getByRole('button', { name: 'Start a new garden instead…' }).click()
+    await expect(page.getByText('This deletes everything stored here and starts a new garden.')).toBeVisible()
+    await page.getByRole('button', { name: 'Delete and start again' }).click()
+
+    // At the welcome, the kept copy brings the garden back with its passcode.
+    await page.getByRole('button', { name: 'I have a backup' }).click()
+    await page.getByLabel('Choose a backup').setInputFiles(path)
+    const prompt = page.getByRole('dialog', { name: 'This copy is locked' })
+    await expect(prompt.getByRole('heading', { name: 'This copy is locked' })).toBeFocused()
+    await expect(prompt.getByText(/The garden comes back without its lock/)).toBeVisible()
+    expect(await seriousViolations(page, 'A locked copy, asking for its passcode')).toEqual([])
+
+    const passcode = prompt.getByLabel('Passcode', { exact: true })
+    await passcode.fill('kingfisher at the old mil')
+    await prompt.getByRole('button', { name: 'Open the copy' }).click()
+    await expect(prompt.getByRole('alert')).toHaveText(
+      'That passcode does not open this copy. It needs the passcode the garden had when the copy was made.',
+      DERIVING,
+    )
+    await expect(passcode).toBeFocused()
+    await passcode.fill(PASSCODE)
+    await prompt.getByRole('button', { name: 'Open the copy' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible(DERIVING)
+    await expect(prompt).toHaveCount(0)
+    // Everything came back, in the clear as the prompt said, with no lock to open.
+    expect(await everythingStored(page)).toContain(WORDS_OF_MINE)
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+    await expect(lockScreen(page)).toHaveCount(0)
+  })
 })

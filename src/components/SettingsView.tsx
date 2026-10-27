@@ -25,7 +25,7 @@ import {
 } from '../lib/storage'
 import { homeScreenAdvice } from '../lib/install'
 import { MAX_SIGHTING_PHOTOS, photosIn } from '../lib/customBackdrops'
-import { isSealedBackup, readBackupFile } from '../lib/backupFile'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
@@ -366,9 +366,12 @@ export function SettingsView({
   const [restoreStep, setRestoreStep] = useState(false)
   /** A chosen backup, read and described, waiting for the gardener's yes. */
   const [pendingRestore, setPendingRestore] = useState<
-    BackupPreview & { text: string; protected?: boolean }
+    BackupPreview & { text: string; openedWith?: 'passphrase' | 'lock' }
   >()
-  /** A protected backup chosen to restore, waiting for its passphrase. */
+  /**
+   * A protected backup chosen to restore, waiting for its passphrase, or a
+   * locked garden's copy, waiting for its passcode or recovery code.
+   */
   const [sealedChoice, setSealedChoice] = useState<string>()
   /** Making a protected backup: to save or download it, or to share it. */
   const [protecting, setProtecting] = useState<'save' | 'share'>()
@@ -563,18 +566,19 @@ export function SettingsView({
   }
 
   /** Describe a backup's text; nothing is replaced yet. */
-  const describeBackup = (text: string, sealed = false) => {
+  const describeBackup = (text: string, openedWith?: 'passphrase' | 'lock') => {
     const preview = previewBackup(text)
     if (!preview.ok) {
       setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
       return
     }
-    setPendingRestore({ ...preview, text, protected: sealed })
+    setPendingRestore({ ...preview, text, openedWith })
   }
 
   /**
    * Read and describe the chosen file; nothing is replaced yet. A protected
-   * backup asks for its passphrase first, then is described like any other.
+   * backup asks for its passphrase first, and a locked garden's copy for its
+   * passcode or recovery code; then each is described like any other.
    */
   const chooseBackup = async (file: File) => {
     setBackupNote(undefined)
@@ -584,7 +588,7 @@ export function SettingsView({
       setBackupNote(chosen.message)
       return
     }
-    if (isSealedBackup(chosen.text)) {
+    if (sealedKind(chosen.text)) {
       setSealedChoice(chosen.text)
       return
     }
@@ -594,7 +598,7 @@ export function SettingsView({
   // A preview reached through the passphrase prompt takes focus as the
   // prompt goes, so what the backup holds is what is read next.
   useEffect(() => {
-    if (pendingRestore?.protected) previewHeading.current?.focus()
+    if (pendingRestore?.openedWith) previewHeading.current?.focus()
   }, [pendingRestore])
 
   const confirmRestore = async () => {
@@ -1130,10 +1134,11 @@ export function SettingsView({
         {sealedChoice !== undefined && (
           <ProtectedRestore
             text={sealedChoice}
+            next="preview"
             returnFocus={() => fileInputRef.current}
-            onOpened={(plain) => {
+            onOpened={(plain, openedWith) => {
               setSealedChoice(undefined)
-              describeBackup(plain, true)
+              describeBackup(plain, openedWith)
             }}
             onClose={(note) => {
               setSealedChoice(undefined)
@@ -1169,7 +1174,12 @@ export function SettingsView({
                 : 'This backup holds a garden'}
             </h3>
             <ul>
-              {pendingRestore.protected && <li>A protected backup, opened with its passphrase</li>}
+              {pendingRestore.openedWith === 'passphrase' && (
+                <li>A protected backup, opened with its passphrase</li>
+              )}
+              {pendingRestore.openedWith === 'lock' && (
+                <li>A sealed copy of a locked garden, opened with its lock</li>
+              )}
               {pendingRestore.counts && (
                 <>
                   <li>

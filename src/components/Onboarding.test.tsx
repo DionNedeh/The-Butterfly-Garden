@@ -1,9 +1,28 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
-import { STARTER_COMPANION_NAME } from '../lib/progression'
+import { turnLockOn } from '../lib/gardenLockActions'
+import { createInitialState, STARTER_COMPANION_NAME } from '../lib/progression'
+import { newRecoveryCode } from '../lib/recoveryCode'
+import { storedCopy } from '../lib/storedCopy'
+import { gardenRepository, readImportedState } from '../repository/gardenRepository'
 import { MAX_STARTER_GOALS, Onboarding } from './Onboarding'
+
+// The real lock, quick: the count is the tests' only change.
+vi.mock('../lib/sealing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/sealing')>()
+  return {
+    ...actual,
+    deriveKey: (secret: string, salt: Uint8Array) => actual.deriveKey(secret, salt, 1_000),
+  }
+})
+
+// The prompt's code is fetched when a sealed file is chosen; fetched once
+// here, so no test's first wait is spent compiling it on a busy machine.
+beforeAll(async () => {
+  await import('./backup/SealedBackupPrompt')
+})
 
 /** From the welcome to the starter goals, with the garden's default name. */
 async function reachStarterGoals() {
@@ -210,6 +229,10 @@ describe('bringing a garden from a protected backup', () => {
       screen.getByLabelText('Choose a backup'),
       new File([(outcome as { text: string }).text], 'protected.json', { type: 'application/json' }),
     )
+    // Nothing is stored yet to be replaced, and no look at it comes first.
+    const dialog = await screen.findByRole('dialog', { name: 'This backup is protected' })
+    expect(dialog).toHaveAccessibleDescription(/Once it opens, the garden it holds is restored here straight away\.$/)
+    expect(dialog).not.toHaveAccessibleDescription(/Nothing is replaced until/)
     await user.type(await screen.findByLabelText('Passphrase'), 'quiet meadow lantern')
     await user.click(screen.getByRole('button', { name: 'Open the backup' }))
     await waitFor(() => expect(onRestore).toHaveBeenCalledWith('{"format":"the-butterfly-garden"}'))
@@ -229,5 +252,32 @@ describe('bringing a garden from a protected backup', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(onRestore).not.toHaveBeenCalled()
     await waitFor(() => expect(input).toHaveFocus())
+  })
+})
+
+describe('bringing a garden from safe mode’s copy of a locked garden', () => {
+  it('asks for the lock’s passcode, then brings the garden inside, saying the lock stays behind', async () => {
+    // A garden with the lock on, copied in safe mode, then deleted: this is where it comes back.
+    await gardenRepository.save(createInitialState('Robin', 'Quiet Corner'))
+    await turnLockOn('kingfisher at dawn', newRecoveryCode())
+    const { text } = await storedCopy()
+    await gardenRepository.clear()
+
+    const user = userEvent.setup()
+    const onRestore = vi.fn(() => Promise.resolve({ ok: true, message: 'Restored.' }))
+    render(<Onboarding onComplete={vi.fn()} onRestore={onRestore} arriving />)
+    await user.upload(
+      screen.getByLabelText('Choose a backup'),
+      new File([text], 'butterfly-garden-everything-stored.json', { type: 'application/json' }),
+    )
+    const dialog = await screen.findByRole('dialog', { name: 'This copy is locked' })
+    expect(dialog).toHaveAccessibleDescription(
+      /Once it opens, the garden it holds is restored here straight away\. The garden comes back without its lock; turn the lock on again in Settings if you want it\.$/,
+    )
+    await user.type(screen.getByLabelText('Passcode'), 'kingfisher at dawn')
+    await user.click(screen.getByRole('button', { name: 'Open the copy' }))
+    await waitFor(() => expect(onRestore).toHaveBeenCalledOnce())
+    const [plain] = onRestore.mock.calls[0] as unknown as [string]
+    expect(readImportedState(JSON.parse(plain))?.profile?.gardenName).toBe('Quiet Corner')
   })
 })
