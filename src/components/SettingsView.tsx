@@ -45,6 +45,8 @@ import { SoundSwitches, SoundVolume } from './SoundControls'
 import { GuideLink } from './GuideLink'
 import { RegionSetting } from './RegionSetting'
 import { ReminderSetting } from './ReminderSetting'
+import { LetterSetting } from './LetterSetting'
+import { letterQuotesOf, type LetterQuotes } from '../lib/letters'
 import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
@@ -268,6 +270,7 @@ export function SettingsView({
   onOpenGuide,
   onChooseNightBackdrop,
   onSetReminderTime,
+  onSetLetterQuotes,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -330,6 +333,8 @@ export function SettingsView({
   onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
   /** Remember the time of the daily visit just added to the calendar. */
   onSetReminderTime?: (time: string) => void
+  /** Whether Marigold's letters may quote starred lines, or never. */
+  onSetLetterQuotes?: (quotes: LetterQuotes) => void
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -824,6 +829,9 @@ export function SettingsView({
         eveningHour={recapHours.opensHour}
         onChooseTime={onSetReminderTime}
       />
+      {onSetLetterQuotes && (
+        <LetterSetting quotes={letterQuotesOf(profile)} onChoose={onSetLetterQuotes} />
+      )}
 
       {onSetGardenPace && (
         <section className="card" aria-labelledby="pace-settings-title">

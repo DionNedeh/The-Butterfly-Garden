@@ -587,6 +587,98 @@ test.describe('an earlier day', () => {
   })
 })
 
+/**
+ * Marigold's weekly letter. The zone and the instant are pinned: seven in the
+ * evening of Sunday 25 October in UTC, so the letter about the week ending
+ * that day has just arrived, and the run never crosses into the next week.
+ */
+test.describe('a letter from Marigold', () => {
+  test.use({ timezoneId: 'UTC' })
+
+  test('waits in the garden on Sunday evening, quotes only a starred line, and can quote nothing', async ({
+    page,
+  }) => {
+    // Three accessibility sweeps, a reload and four pages.
+    test.slow()
+    const now = new Date('2026-10-25T19:00:00.000Z')
+    await page.clock.setFixedTime(now)
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await goTo(page, 'Today')
+    await page.getByRole('button', { name: /bright/i }).click()
+    await page.getByLabel('A note, if you want').fill('The light on the river after work')
+    await page.getByRole('button', { name: /save check-in/i }).click()
+    // Planted ten days ago, so this is not its first Sunday.
+    await editGardenRecord(page, (state) => {
+      state.profile.createdAt = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString()
+    })
+    await page.reload()
+    await goTo(page, 'Garden')
+
+    const card = page.getByRole('region', { name: 'A letter from Marigold is waiting' })
+    await expect(card).toBeVisible()
+    expect(await seriousViolations(page, 'Garden, a letter waiting')).toEqual([])
+    await card.getByRole('button', { name: 'Read the letter' }).click()
+
+    const letter = page.getByRole('article', { name: /^The week of / })
+    await expect(letter.getByRole('heading')).toBeFocused()
+    await expect(letter.getByText(/^Dear .+,$/)).toBeVisible()
+    await expect(letter.getByText('This week you checked in once.')).toBeVisible()
+    // Never a line the gardener did not star.
+    await expect(letter.getByText('The light on the river after work')).toHaveCount(0)
+
+    // Starred in the journal, the line comes back in the letter.
+    const star = page.locator('#day-2026-10-25').getByRole('button', { name: 'Star this line' })
+    await expect(star).toHaveAttribute('aria-pressed', 'false')
+    await star.click()
+    await expect(star).toHaveAttribute('aria-pressed', 'true')
+    await expect(star).toBeFocused()
+    await expect(letter.getByText('The light on the river after work')).toBeVisible()
+    expect(await seriousViolations(page, 'Journal, a letter from Marigold')).toEqual([])
+
+    // Never quoting, chosen in Settings, quotes nothing, starred or not.
+    await goTo(page, 'Settings')
+    const quotes = page.getByRole('group', { name: 'Quote my words in letters' })
+    await expect(quotes.getByRole('radio', { name: /^Only lines I star/ })).toBeChecked()
+    await quotes.getByRole('radio', { name: /^Never/ }).check()
+    await expect(quotes.getByRole('radio', { name: /^Never/ })).toBeChecked()
+    expect(await seriousViolations(page, 'Settings, letters from Marigold')).toEqual([])
+    await goTo(page, 'Journal')
+    const letters = page.getByRole('region', { name: 'Letters from Marigold' })
+    await expect(letters.getByText('A letter each Sunday evening')).toBeVisible()
+    await letters.getByText('Letters from Marigold').click()
+    await expect(letter.getByText('This week you checked in once.')).toBeVisible()
+    await expect(letter.getByText('The light on the river after work')).toHaveCount(0)
+    await expect(
+      letters.getByText('Letters never quote your words, as you chose in Settings.'),
+    ).toBeVisible()
+
+    // Read, so the garden no longer says it is waiting, and the garden keeps
+    // only which letter that was.
+    await goTo(page, 'Garden')
+    await expect(page.locator('#garden-title')).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    await expect(card).toHaveCount(0)
+    const profile = await page.evaluate(
+      () =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const request = indexedDB.open('butterfly-garden')
+          request.onerror = () => reject(request.error)
+          request.onsuccess = () => {
+            const db = request.result
+            const get = db.transaction('meta', 'readonly').objectStore('meta').get('current')
+            get.onsuccess = () => {
+              db.close()
+              resolve((get.result as { profile: Record<string, unknown> }).profile)
+            }
+            get.onerror = () => reject(get.error)
+          }
+        }),
+    )
+    expect(profile).toMatchObject({ lastLetterRead: '2026-10-25', letterQuotes: 'never' })
+  })
+})
+
 /** A local calendar date some days back, by this machine's clock, which the browser shares. */
 function localDateDaysAgo(days: number): string {
   const now = new Date()

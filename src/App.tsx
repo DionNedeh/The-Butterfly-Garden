@@ -819,6 +819,8 @@ function App() {
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
               onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
+              onOpenLetter={() => navigate({ view: 'journal', letter: true })}
+              onReadLetter={garden.readLetter}
               theme={theme}
             />
           )}
@@ -965,6 +967,9 @@ function App() {
               onDeleteRecap={garden.deleteRecap}
               onAddEarlierMood={garden.addEarlierMood}
               onAddEarlierReflection={garden.addEarlierReflection}
+              openLetter={route.letter}
+              onReadLetter={garden.readLetter}
+              onSetStarred={garden.setStarred}
             />
           )}
           {activeView === 'settings' && (
@@ -1016,6 +1021,7 @@ function App() {
               onOpenGuide={openGuideAt}
               onChooseNightBackdrop={garden.chooseNightBackdrop}
               onSetReminderTime={garden.setReminderTime}
+              onSetLetterQuotes={garden.setLetterQuotes}
             />
           )}
           {route.restore && <PutBack place={route.restore} />}

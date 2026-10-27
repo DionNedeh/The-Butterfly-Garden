@@ -1,5 +1,6 @@
 /* A plant's jar panel. The rest of its look is in App.css, from before the
-   panel loaded on its own; this file arrives with it. */
+   panel loaded only once a plant is chosen (garden/PlantPanel.tsx); this
+   file arrives with it. */
 
 /* The fold of placed jars opens from a 44px target, like every control. Its
    own padding rather than flex, which would take away the fold's marker. */
