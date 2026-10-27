@@ -1,11 +1,13 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { contrastRatio } from '../../lib/contrast'
 import { addPasskey, lockGarden, turnLockOn, unlockGarden } from '../../lib/gardenLockActions'
 import { createInitialState } from '../../lib/progression'
 import { newRecoveryCode } from '../../lib/recoveryCode'
 import { randomBytes } from '../../lib/sealing'
 import { gardenRepository } from '../../repository/gardenRepository'
+import { applyStylesheets, paintOf } from '../../test/stylesheets'
 import { LockScreen } from './LockScreen'
 
 /** Quick key derivations: the count is the app's business, not these tests'. */
@@ -17,10 +19,19 @@ vi.mock('../../lib/sealing', async (importOriginal) => {
   }
 })
 
-/** Android's back gesture, as the lock screen registers for it. */
-const android = vi.hoisted(() => ({ back: undefined as (() => void) | undefined, left: 0 }))
+/** Android's back gesture, as the lock screen registers for it, and its system bars. */
+const android = vi.hoisted(() => ({
+  back: undefined as (() => void) | undefined,
+  left: 0,
+  /** Each style asked of the system bars: true for night's light icons. */
+  bars: [] as boolean[],
+}))
 vi.mock('../../lib/native', async (original) => ({
   ...(await original<typeof import('../../lib/native')>()),
+  setSystemBarsForTheme: (night: boolean) => {
+    android.bars.push(night)
+    return Promise.resolve()
+  },
   onBackButton: (handler: () => void) => {
     android.back = handler
     return () => {
@@ -59,8 +70,27 @@ async function lockedGarden() {
   return words
 }
 
+/** The device's own dark setting, which can be changed while the screen is up. */
+function deviceDark(dark: boolean): (dark: boolean) => void {
+  const device = { dark }
+  const listeners = new Set<() => void>()
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return query === '(prefers-color-scheme: dark)' && device.dark
+    },
+    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+  }))
+  return (next) => {
+    device.dark = next
+    act(() => listeners.forEach((listener) => listener()))
+  }
+}
+
 afterEach(async () => {
   cleanup()
+  vi.unstubAllGlobals()
+  android.bars = []
   passkeys.offered = false
   passkeys.answer = undefined
   await gardenRepository.clear().catch(() => undefined)
@@ -181,14 +211,40 @@ describe('the lock screen', { timeout: 30_000 }, () => {
 
   it('follows the device’s light or dark, since the garden’s own theme is sealed', async () => {
     await lockedGarden()
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: query === '(prefers-color-scheme: dark)',
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }))
+    deviceDark(true)
     render(<LockScreen />)
     expect(screen.getByRole('main')).toHaveClass('theme-night')
-    vi.unstubAllGlobals()
+  })
+
+  it('sets the Android app’s system bars for the device’s light or dark, as it changes', async () => {
+    await lockedGarden()
+    const turn = deviceDark(true)
+    render(<LockScreen />)
+    // Light icons over the dark screen.
+    expect(android.bars).toEqual([true])
+    turn(false)
+    expect(screen.getByRole('main')).not.toHaveClass('theme-night')
+    expect(android.bars).toEqual([true, false])
+  })
+
+  it('draws its delete button legibly by day and by night', async () => {
+    await lockedGarden()
+    const removeStylesheets = applyStylesheets('components/lock/lock.css')
+    try {
+      for (const dark of [false, true]) {
+        deviceDark(dark)
+        const user = userEvent.setup()
+        const { unmount } = render(<LockScreen />)
+        await user.click(screen.getByText('I can’t open my garden'))
+        await user.click(screen.getByRole('button', { name: 'Delete this garden…' }))
+        const { text, fill } = paintOf(screen.getByRole('button', { name: 'Delete it and start again' }))
+        // WCAG AA for its 16px, 800-weight words: 4.5:1.
+        expect({ dark, contrast: contrastRatio(text, fill) >= 4.5 }).toEqual({ dark, contrast: true })
+        unmount()
+      }
+    } finally {
+      removeStylesheets()
+    }
   })
 
   it('explains what to do when it cannot be opened, and deletes the garden only when asked twice', async () => {
@@ -197,10 +253,15 @@ describe('the lock screen', { timeout: 30_000 }, () => {
     render(<LockScreen />)
     await user.click(screen.getByText('I can’t open my garden'))
     expect(screen.getByText(/nobody can open this garden, not even the people who made the app/)).toBeVisible()
+    // Each button pressed here is taken away; focus goes to what replaces
+    // it, never to nothing: the safe choice first, then the way back in.
     await user.click(screen.getByRole('button', { name: 'Delete this garden…' }))
+    expect(screen.getByRole('button', { name: 'Keep it' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: 'Keep it' }))
+    expect(screen.getByRole('button', { name: 'Delete this garden…' })).toHaveFocus()
     expect(gardenRepository.lockState()).toBe('locked')
-    await user.click(screen.getByRole('button', { name: 'Delete this garden…' }))
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('button', { name: 'Keep it' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: 'Delete it and start again' }))
     await waitFor(() => expect(gardenRepository.lockState()).toBe('none'))
     expect((await gardenRepository.load()).status).toBe('empty')

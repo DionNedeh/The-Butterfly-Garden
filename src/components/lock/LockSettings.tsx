@@ -1,4 +1,13 @@
-import { lazy, Suspense, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  Fragment,
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useLockState } from '../../hooks/useLockState'
 import type { AutoLockMinutes, LockRecord } from '../../lib/gardenLock'
 import type { LockChangeKind } from './LockChange'
@@ -56,6 +65,10 @@ export function LockSettings() {
     offered: false,
   })
   const heading = useRef<HTMLHeadingElement>(null)
+  /** The button that opened the dialog, for focus to go back to. */
+  const opener = useRef<HTMLElement | null>(null)
+  const wasOpen = useRef(false)
+  const addPasskeyButton = useRef<HTMLButtonElement>(null)
   const autoLock = useAutoLock(on)
   const android = import.meta.env.VITE_PLATFORM === 'android'
 
@@ -67,7 +80,11 @@ export function LockSettings() {
     void Promise.all([import('../../lib/passkey'), actions()])
       .then(async ([{ passkeysOffered }, { passkeyOf }]) => {
         const [offered, stored] = await Promise.all([passkeysOffered(), passkeyOf()])
-        if (active) setPasskey({ offered, stored })
+        if (!active) return
+        // A passkey just added takes its button away; focus on it stays in
+        // the lock's section.
+        if (stored && document.activeElement === addPasskeyButton.current) heading.current?.focus()
+        setPasskey({ offered, stored })
       })
       .catch(() => undefined)
     return () => {
@@ -75,10 +92,29 @@ export function LockSettings() {
     }
   }, [on, open])
 
-  const close = () => {
-    setOpen(undefined)
-    heading.current?.focus()
+  const show = (kind: 'setup' | LockChangeKind, from: HTMLElement) => {
+    opener.current = from
+    setOpen(kind)
   }
+
+  const close = () => setOpen(undefined)
+
+  // Focus goes back once the dialog has gone, and not before: while it is
+  // open, as a modal, the rest of the page is inert and refuses focus, which
+  // would then fall to nothing as the dialog is taken away. Back to the
+  // button that opened it, or to the section's heading when the change took
+  // that button away (the lock turned on or off).
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true
+      return
+    }
+    if (!wasOpen.current) return
+    wasOpen.current = false
+    const back = opener.current
+    opener.current = null
+    ;(back?.isConnected ? back : heading.current)?.focus()
+  }, [open])
 
   const lockNow = async () => {
     setNote(undefined)
@@ -109,16 +145,28 @@ export function LockSettings() {
     }
   }
 
+  const smallPrint = android
+    ? 'The lock keeps what the garden stores on this phone sealed, so on a lost or shared phone your journal can’t be read without your passcode or recovery code. It can’t protect the garden while it is open, from someone using the phone then, or from software that already controls this phone. Backups you save are not locked.'
+    : `The lock keeps what the garden stores in this browser sealed, so on a shared, lost or borrowed device your journal can’t be read without ${
+        // A passkey is a third way in, behind the device's own unlock.
+        on && passkey.stored
+          ? 'your passcode, your recovery code or your passkey, and the passkey opens it for anyone who can unlock this device with its fingerprint, face or screen lock'
+          : 'your passcode or recovery code'
+      }. It can’t protect the garden while it is open, from someone using the device then, or from other code running at the same web address as the garden. Backups you download are not locked.`
+
   return (
     <section className="lock-settings" aria-labelledby={`${ids}-title`}>
       <h3 id={`${ids}-title`} ref={heading} tabIndex={-1}>
         The garden lock
       </h3>
+      {/* Keyed apart, so no button of one is reused as a button of the other:
+          focus handed back to the button that opened a dialog must not land on
+          another one (Lock now) that took its place. */}
       {on ? (
-        <>
+        <Fragment key="on">
           <p>
             The lock is on: everything the garden keeps here is sealed, and it opens with
-            your passcode. It is open in this tab now.
+            your passcode. It is open {android ? 'on this phone' : 'in this tab'} now.
           </p>
           <div className="form-actions">
             <button className="secondary-button" type="button" onClick={() => void lockNow()}>
@@ -141,14 +189,14 @@ export function LockSettings() {
             </label>
           )}
           <div className="form-actions">
-            <button className="text-button" type="button" onClick={() => setOpen('passcode')}>
+            <button className="text-button" type="button" onClick={(event) => show('passcode', event.currentTarget)}>
               Change my passcode…
             </button>
-            <button className="text-button" type="button" onClick={() => setOpen('recovery')}>
+            <button className="text-button" type="button" onClick={(event) => show('recovery', event.currentTarget)}>
               Make a new recovery code…
             </button>
             {passkey.offered && !passkey.stored && (
-              <button className="text-button" type="button" onClick={() => setOpen('passkey')}>
+              <button ref={addPasskeyButton} className="text-button" type="button" onClick={(event) => show('passkey', event.currentTarget)}>
                 Add a passkey…
               </button>
             )}
@@ -157,34 +205,30 @@ export function LockSettings() {
                 Remove the passkey
               </button>
             )}
-            <button className="text-button danger-text" type="button" onClick={() => setOpen('off')}>
+            <button className="text-button danger-text" type="button" onClick={(event) => show('off', event.currentTarget)}>
               Turn the lock off…
             </button>
           </div>
-        </>
+        </Fragment>
       ) : (
-        <>
+        <Fragment key="off">
           <p>
             Lock your journal on this device. With the lock on, everything the garden keeps
             here is sealed, and it opens only with your passcode.
           </p>
           <div className="form-actions">
-            <button className="secondary-button" type="button" onClick={() => setOpen('setup')}>
+            <button className="secondary-button" type="button" onClick={(event) => show('setup', event.currentTarget)}>
               Lock my garden…
             </button>
           </div>
-        </>
+        </Fragment>
       )}
       {note && (
         <p className="settings-note" role="status">
           {note}
         </p>
       )}
-      <p className="lock-small-print">
-        {android
-          ? 'The lock keeps what the garden stores on this phone sealed, so on a lost or shared phone your journal can’t be read without your passcode or recovery code. It can’t protect the garden while it is open, from someone using the phone then, or from software that already controls this phone. Backups you save are not locked.'
-          : 'The lock keeps what the garden stores in this browser sealed, so on a shared, lost or borrowed device your journal can’t be read without your passcode or recovery code. It can’t protect the garden while it is open, from someone using the device then, or from other code running at the same web address as the garden. Backups you download are not locked.'}
-      </p>
+      <p className="lock-small-print">{smallPrint}</p>
       {open && (
         <Suspense fallback={null}>
           {open === 'setup' ? <LockSetup onClose={close} /> : <LockChange kind={open} onClose={close} />}

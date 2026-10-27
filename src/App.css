@@ -1938,6 +1938,11 @@
   background-image: linear-gradient(160deg, #07131f, #10283a 58%, #13263a);
 }
 
+/* White on night's light --danger would be 2.3:1; a deeper red keeps it 5.3:1. */
+.theme-night .danger-button {
+  background: #b4483f;
+}
+
 .theme-night .app-header,
 .theme-night .bottom-nav {
   border-color: rgba(176, 207, 194, 0.2);

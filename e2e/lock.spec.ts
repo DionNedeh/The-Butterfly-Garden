@@ -68,6 +68,29 @@ function everythingStored(page: Page) {
   )
 }
 
+/**
+ * The WCAG contrast of an element's words against its own fill, as the
+ * browser draws them (axe cannot tell the lock card's fill, and reports its
+ * buttons as incomplete rather than failing them).
+ */
+function contrastOf(locator: Locator) {
+  return locator.evaluate((element) => {
+    const look = getComputedStyle(element)
+    const luminance = (colour: string) => {
+      const [r, g, b] = (colour.match(/[\d.]+/g) ?? []).slice(0, 3).map((value) => {
+        const channel = Number(value) / 255
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const [lighter, darker] = [luminance(look.color), luminance(look.backgroundColor)].sort((a, b) => b - a)
+    return (lighter + 0.05) / (darker + 0.05)
+  })
+}
+
+/** WCAG AA for the buttons' 16px, 800-weight words. */
+const READABLE = 4.5
+
 /** The two words a confirmation asks for, typed from the words shown. */
 async function confirmTwoWords(dialog: Locator, words: string[]) {
   const fields = dialog.getByRole('textbox', { name: /^Word \d+$/ })
@@ -84,9 +107,16 @@ async function lockFromSettings(page: Page): Promise<string[]> {
   await goTo(page, 'Settings')
   const lockSection = page.getByRole('region', { name: 'The garden lock' })
   await expect(lockSection.getByText(/other code running at the same web address/)).toBeVisible()
-  await lockSection.getByRole('button', { name: 'Lock my garden…' }).click()
+  const opener = lockSection.getByRole('button', { name: 'Lock my garden…' })
+  await opener.click()
 
   const dialog = page.getByRole('dialog', { name: 'Choose a passcode' })
+  await expect(dialog.getByRole('heading', { name: 'Choose a passcode' })).toBeFocused()
+  // Left at once, it is gone, with focus back on the button that opened it.
+  await dialog.getByRole('button', { name: 'Not now' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(opener).toBeFocused()
+  await opener.click()
   await expect(dialog.getByRole('heading', { name: 'Choose a passcode' })).toBeFocused()
   await expect(dialog.getByText(/nobody can open your garden: not you, not anyone else, and not the people who made this app/)).toBeVisible()
   await dialog.getByLabel('Passcode', { exact: true }).fill(PASSCODE)
@@ -112,7 +142,10 @@ async function lockFromSettings(page: Page): Promise<string[]> {
   await check.getByRole('button', { name: 'Lock my garden' }).click()
   const done = page.getByRole('dialog', { name: 'Your garden is locked' })
   await expect(done).toBeVisible(DERIVING)
+  await expect(done.getByText(/It stays open in this tab until you lock it/)).toBeVisible()
   await done.getByRole('button', { name: 'Done' }).click()
+  await expect(done).toHaveCount(0)
+  // Its button went with the lock turned on: focus is on the section, never on nothing.
   await expect(lockSection.getByRole('heading', { name: 'The garden lock' })).toBeFocused()
   return words
 }
@@ -148,6 +181,17 @@ test('a garden is locked, opened by passcode and by recovery code, and unlocked 
   await page.emulateMedia({ colorScheme: 'dark' })
   await expect(page.getByRole('main')).toHaveClass(/theme-night/)
   expect(await seriousViolations(page, 'Lock screen by night')).toEqual([])
+  // Asking to delete, and thinking better of it: focus goes to what takes
+  // the pressed button's place each time, and the delete button reads clearly.
+  await page.getByText('I can’t open my garden').click()
+  await page.getByRole('button', { name: 'Delete this garden…' }).click()
+  const keep = page.getByRole('button', { name: 'Keep it' })
+  await expect(keep).toBeFocused()
+  expect(await contrastOf(page.getByRole('button', { name: 'Delete it and start again' }))).toBeGreaterThanOrEqual(READABLE)
+  expect(await seriousViolations(page, 'Lock screen by night, asked to delete')).toEqual([])
+  await keep.press('Enter')
+  await expect(page.getByRole('button', { name: 'Delete this garden…' })).toBeFocused()
+  await page.getByText('I can’t open my garden').click()
   await page.emulateMedia({ colorScheme: 'light' })
 
   await passcode.fill('kingfisher at the old mil')
@@ -185,16 +229,21 @@ test('a garden is locked, opened by passcode and by recovery code, and unlocked 
   expect(await seriousViolations(page, 'Change my passcode, at night')).toEqual([])
   await change.getByRole('button', { name: 'Cancel' }).click()
   await expect(change).toHaveCount(0)
+  await expect(lockSection.getByRole('button', { name: 'Change my passcode…' })).toBeFocused()
 
   // Off again, everything opened back up, and the garden opens on a reload.
   await lockSection.getByRole('button', { name: 'Turn the lock off…' }).click()
   const off = page.getByRole('dialog', { name: 'Turn the lock off' })
+  const turnOff = off.getByRole('button', { name: 'Turn the lock off' })
+  expect(await contrastOf(turnOff)).toBeGreaterThanOrEqual(READABLE)
   await off.getByLabel('Your passcode').fill(PASSCODE)
-  await off.getByRole('button', { name: 'Turn the lock off' }).click()
+  await turnOff.click()
   const offDone = page.getByRole('dialog', { name: 'The lock is off' })
   await expect(offDone).toBeVisible(DERIVING)
   await offDone.getByRole('button', { name: 'Done' }).click()
+  await expect(offDone).toHaveCount(0)
   await expect(lockSection.getByRole('button', { name: 'Lock my garden…' })).toBeVisible()
+  await expect(lockSection.getByRole('heading', { name: 'The garden lock' })).toBeFocused()
   expect(await everythingStored(page)).toContain(WORDS_OF_MINE)
   await page.reload()
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
