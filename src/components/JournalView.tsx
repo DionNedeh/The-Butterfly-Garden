@@ -451,6 +451,7 @@ export function JournalView({
                               <strong>{moodName(moodChoiceOf(mood))}</strong>
                               {mood.writtenLater && (
                                 <small className="written-later">Written later</small>
+                              )}
                               {moodDetails && (
                                 <p>
                                   <small>{moodDetails}</small>

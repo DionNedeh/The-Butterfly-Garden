@@ -451,8 +451,8 @@ describe('checkInsCsv', () => {
       }),
     )
     expect(csv.split('\r\n').slice(1, -1)).toEqual([
-      '"2026-01-02","Rainy","Felt calm after the walk.","anxious, tired","low"',
-      '"2026-01-01","Bright","Felt calm after the walk.","proud",""',
+      '"2026-01-02","Rainy","Felt calm after the walk.","anxious, tired","low",""',
+      '"2026-01-01","Bright","Felt calm after the walk.","proud","",""',
     ])
   })
 

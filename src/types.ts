@@ -267,6 +267,7 @@ export interface MoodEntry {
   feelings?: string[]
   /** How much energy the day had, when the gardener said. Absent means not answered. */
   energy?: EnergyLevel
+  /**
    * Written afterwards for this earlier day, from the Journal. It earns no
    * Sunlight and is not a cared-for day: the care happened on the day it was
    * written. Only ever stored as true; optional, so an older garden reads as
