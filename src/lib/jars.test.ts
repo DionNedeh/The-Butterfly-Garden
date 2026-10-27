@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { AppState } from '../types'
 import { createEmptyState } from './progression'
-import { JAR_CAPACITY, JAR_PRICE } from '../data/jars'
+import {
+  JAR_ACCENTED,
+  JAR_CAPACITY,
+  JAR_LETTERS,
+  JAR_MARK_NAMES,
+  JAR_MARKS,
+  JAR_NUMBERS,
+  JAR_PRICE,
+} from '../data/jars'
 import {
   availableJars,
   buyJar,
   JAR_RECYCLE_NECTAR,
+  jarName,
+  jarSpokenName,
   normalizeJarCharacter,
   placeJar,
   purchaseJar,
@@ -99,6 +109,30 @@ describe('jar shop and placement', () => {
     expect(placeJar(state, 'missing-jar', 'plant-1')).toBe(state)
     expect(placeJar(state, 'jar-a', 'missing-plant')).toBe(state)
     expect(removeJarPlacement(state, 'missing-plant')).toBe(state)
+  })
+})
+
+describe('naming a jar', () => {
+  it('shows a jar by its colour and its character', () => {
+    expect(jarName('yellow', 'Ñ')).toBe('Yellow Ñ jar')
+    expect(jarName('blue', '!')).toBe('Blue ! jar')
+    expect(jarName('tartan', 'A')).toBe('Custom A jar')
+  })
+
+  it('says a mark by its name, so no two marks sound alike', () => {
+    expect(jarSpokenName('blue', '!')).toBe('Blue exclamation mark jar')
+    expect(jarSpokenName('blue', '?')).toBe('Blue question mark jar')
+    expect(jarSpokenName('green', '.')).toBe('Green dot jar')
+    const said = [...JAR_MARKS].map((mark) => jarSpokenName('blue', mark))
+    expect(new Set(said).size).toBe(JAR_MARKS.length)
+    // Nothing a screen reader might pass over is left in what it says.
+    for (const words of said) expect(words).not.toMatch(/[!?&+.*]/)
+    expect(Object.keys(JAR_MARK_NAMES).sort()).toEqual([...JAR_MARKS].sort())
+  })
+
+  it('says letters, numbers and accented capitals as they are shown', () => {
+    for (const character of [...JAR_LETTERS, ...JAR_NUMBERS, ...JAR_ACCENTED])
+      expect(jarSpokenName('pink', character)).toBe(jarName('pink', character))
   })
 })
 

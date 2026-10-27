@@ -116,6 +116,36 @@ describe('a plant’s jar panel', () => {
     expect(screen.getByText('Blue A on Milkweed')).toBeInTheDocument()
   })
 
+  it('tells a "!" jar from a "?" jar in every name it gives them', async () => {
+    const { user } = renderPanel(
+      garden({
+        jars: [jar('x1', '!'), jar('q1', '?'), jar('q2', '?')],
+        jarPlacements: [
+          { jarId: 'x1', plantId: 'milkweed-1' },
+          { jarId: 'q2', plantId: 'aster-1' },
+        ],
+      }),
+    )
+    // The jar on this plant: its glyph shown, its name said.
+    const here = screen.getByText('Placed on this plant spot.').previousElementSibling as HTMLElement
+    expect(here).toHaveTextContent('Blue !exclamation mark jar')
+    expect(within(here).getByText('!')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(here).getByText('exclamation mark')).toHaveClass('sr-only')
+    expect(
+      available().getByRole('button', { name: 'Place Blue question mark jar on Milkweed' }),
+    ).toBeInTheDocument()
+    expect(
+      available().getByRole('button', { name: 'Move from Aster Blue question mark jar on Milkweed' }),
+    ).toBeInTheDocument()
+    await user.click(screen.getByText('Placed jars (2)'))
+    const placed = screen.getAllByRole('listitem')
+    expect(placed.map((item) => item.textContent)).toEqual([
+      '!Blue !exclamation mark on Milkweed',
+      '?Blue ?question mark on Aster',
+    ])
+    expect(within(placed[1]).getByText('question mark')).toHaveClass('sr-only')
+  })
+
   it('says when there is nothing to place, and why', () => {
     renderPanel(garden())
     expect(

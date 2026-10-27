@@ -8,7 +8,9 @@ import { reloadForUpdate, reloadOtherTabs } from '../lib/appUpdate'
  * reloads anyway. The new version normally takes over in a moment; a tab the
  * service worker was not looking after (opened with a hard reload, say) never
  * hears that it did, and would otherwise sit on the old version with a button
- * that seemed to do nothing.
+ * that seemed to do nothing. Hearing it does call this off. The other tabs
+ * it tells by then may have moved to the new version already; the message
+ * names the build it leaves, and they stay put (lib/appUpdate).
  */
 const UPDATE_FALLBACK_MS = 4000
 
@@ -41,8 +43,10 @@ export function UpdatePrompt() {
     onRegisteredSW: (_url, found) => setRegistration(found),
     // The new version has taken over this tab. Every tab hears this from its
     // own service worker; the one whose button asked for it also tells the
-    // others, for any the service worker was not looking after.
+    // others, for any the service worker was not looking after, and no
+    // longer needs its fallback, which would tell them a second time.
     onNeedReload: () => {
+      window.clearTimeout(fallback.current)
       if (applying.current) reloadOtherTabs()
       void reloadForUpdate()
     },

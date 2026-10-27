@@ -10,7 +10,6 @@ import {
 } from 'react'
 import { observations, plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
-import { jarColors } from '../data/jars'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
 import { distinctSpeciesRaised } from '../lib/speciesAcquisition'
 import { FlyingButterfly } from './FlyingButterfly'
@@ -21,7 +20,7 @@ import { hasGardenPassFeature } from '../lib/gardenPass'
 import { flightPatternFor } from '../lib/flightPatterns'
 import { CustomBackdropImage } from './CustomBackdropImage'
 import { isAndroidApp } from '../lib/platform'
-import { jarForPlant } from '../lib/jars'
+import { jarForPlant, jarSpokenName } from '../lib/jars'
 import {
   DAILY_SEED_REWARD,
   EMERGENCE_SEED_REWARD,
@@ -69,9 +68,6 @@ const JarManager = lazy(() =>
  *  them inside every render loop. */
 const plantsById = new Map(plants.map((plant) => [plant.id, plant]))
 const speciesById = new Map(species.map((item) => [item.id, item]))
-const jarColorsById = new Map<string, (typeof jarColors)[number]>(
-  jarColors.map((color) => [color.id, color]),
-)
 /** Marigold flies with the companions but is the garden's guide, not one. */
 const GUIDE_ID = 'marigold-guide'
 /** Only asked for once a butterfly is tapped, so it is not in the first load. */
@@ -374,13 +370,11 @@ export function GardenView({
           {visiblePlants.map((plant, index) => {
             const definition = plantsById.get(plant.plantId)
             const placedJar = jarForPlant(state, plant.id)
-            const placedJarColor = placedJar
-              ? jarColorsById.get(placedJar.colorId)
-              : undefined
-            const jarLabel =
-              placedJar && placedJarColor
-                ? ` with ${placedJarColor.label} ${placedJar.character} jar`
-                : ''
+            // Said, not shown: a mark by its name (lib/jars), so plants with
+            // a "!" jar and a "?" jar do not sound alike.
+            const jarLabel = placedJar
+              ? ` with ${jarSpokenName(placedJar.colorId, placedJar.character)}`
+              : ''
             return (
               <button
                 type="button"

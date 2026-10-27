@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react'
+import { Spoken } from '../Spoken'
 
 /** How long a purchase's outcome stays on screen. */
 export const PURCHASE_TOAST_MS = 6000
 
 export interface PurchaseNote {
   text: string
+  /** The same words as a screen reader should say them, where they differ: a jar's mark. */
+  spoken?: string
   /** New for every purchase, so the same words twice are still heard twice. */
   key: number
 }
@@ -31,7 +34,7 @@ export function PurchaseToast({ note, onDone }: { note?: PurchaseNote; onDone: (
     <div className="undo-region purchase-toast-region" role="status" aria-live="polite">
       {note && (
         <p className="undo-toast purchase-toast" key={note.key}>
-          {note.text}
+          <Spoken text={note.text} spoken={note.spoken} />
         </p>
       )}
     </div>

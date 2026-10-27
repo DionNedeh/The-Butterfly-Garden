@@ -50,9 +50,3 @@ export function stackJars(
     jarColors.findIndex((color) => color.id === stack.colorId)
   return [...stacks.values()].sort((a, b) => rank(a) - rank(b))
 }
-
-/** "Blue A jar": how the shop and the garden name a jar. */
-export function jarName(colorId: string, character: string): string {
-  const color = jarColors.find((entry) => entry.id === colorId)
-  return `${color?.label ?? 'Custom'} ${character} jar`
-}

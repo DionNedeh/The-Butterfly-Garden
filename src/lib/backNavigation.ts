@@ -1,4 +1,5 @@
 import type { AppView } from '../types'
+import { hashForRoute, type LinkPlace } from './routes'
 
 /** What Android's back gesture should do, given where the gardener is. */
 export type BackAction =
@@ -51,4 +52,24 @@ export function requestDismiss(element: HTMLElement): void {
 export function requestDialogClose(dialog: HTMLDialogElement): void {
   const proceed = dialog.dispatchEvent(new Event('cancel', { cancelable: true }))
   if (proceed) dialog.close()
+}
+
+/**
+ * Put the gardener back where they pressed a "What does this do?" link, once
+ * its page is drawn again: scrolled as it was, with focus on that link, so
+ * the Back button that took them there (gone with the Guide) leaves focus
+ * somewhere. If the link has gone since (a region cleared in another tab),
+ * focus goes to the page's heading, never to the page itself.
+ */
+export function putBackAt(place: LinkPlace, root: ParentNode = document): void {
+  window.scrollTo({ top: place.scrollY, behavior: 'instant' })
+  const link = root.querySelector<HTMLElement>(
+    `a.guide-link[href="${hashForRoute({ view: 'guide', section: place.section })}"]`,
+  )
+  const target = link ?? root.querySelector<HTMLElement>('#main-content h1')
+  if (!target) return
+  if (target !== link && !target.hasAttribute('tabindex')) target.tabIndex = -1
+  // Not kept from scrolling: should the page have grown or shrunk since, the
+  // link is brought into view rather than focused out of sight.
+  target.focus()
 }

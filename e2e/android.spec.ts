@@ -180,6 +180,10 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await expect(page.getByRole('heading', { name: 'Bond levels', level: 2 })).toBeFocused()
   await pressBack(page)
   await expect(currentPage(page)).toHaveText('Care')
+  // As the Guide's own Back button does: focus on the link pressed.
+  await expect(
+    page.getByRole('link', { name: /^What does this do\? Bond levels/ }),
+  ).toBeFocused()
   await pressBack(page)
   await expect(currentPage(page)).toHaveText('Garden')
 

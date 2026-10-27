@@ -281,6 +281,15 @@ describe('opened for one companion, and a flight of its own', () => {
     expect(screen.getByLabelText('Name for Briar')).toBeInTheDocument()
   })
 
+  it('names the companion shown when its bond meter’s link is pressed', async () => {
+    const user = userEvent.setup()
+    const onOpenGuide = vi.fn()
+    renderCare(gardenOfButterflies(), { onOpenGuide })
+    await user.click(screen.getByRole('tab', { name: /Clove/ }))
+    await user.click(screen.getByRole('link', { name: /^What does this do\? Bond levels/ }))
+    expect(onOpenGuide).toHaveBeenCalledExactlyOnceWith('bond', 'c')
+  })
+
   it('opens as usual, and leaves focus alone, when asked for nobody in particular', () => {
     renderCare(gardenOfButterflies())
     expect(screen.getByRole('tab', { name: /Aster/ })).toHaveAttribute('aria-selected', 'true')
@@ -442,9 +451,10 @@ describe('CareView field guide', () => {
   it('links the bond meter to what bond levels do', async () => {
     const user = userEvent.setup()
     const onOpenGuide = vi.fn()
-    renderCare(withBond(0), { onOpenGuide })
+    const state = withBond(0)
+    renderCare(state, { onOpenGuide })
     await user.click(screen.getByRole('link', { name: 'What does this do? Bond levels, in the Guide' }))
-    expect(onOpenGuide).toHaveBeenCalledWith('bond')
+    expect(onOpenGuide).toHaveBeenCalledWith('bond', state.creatures[0].id)
   })
 })
 

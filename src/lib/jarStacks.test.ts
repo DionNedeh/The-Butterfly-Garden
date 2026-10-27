@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { JarColorId, JarInstance } from '../types'
-import { jarName, stackJars, stackKey } from './jarStacks'
+import { stackJars, stackKey } from './jarStacks'
 
 const jar = (id: string, character: string, colorId: JarColorId = 'blue'): JarInstance => ({
   id,
@@ -50,9 +50,7 @@ describe('stacking the jar shelf', () => {
     expect(stackJars([], [])).toEqual([])
   })
 
-  it('names a jar and its stack', () => {
-    expect(jarName('yellow', 'Ñ')).toBe('Yellow Ñ jar')
-    expect(jarName('tartan', 'A')).toBe('Custom A jar')
+  it('names a stack', () => {
     expect(stackKey(jar('x', '&', 'green'))).toBe('green &')
   })
 })

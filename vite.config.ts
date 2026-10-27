@@ -1,5 +1,8 @@
-import { readFileSync, rmSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { loadEnv } from 'vite'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -7,6 +10,44 @@ import { pwaManifest } from './src/pwaManifest.ts'
 
 /** Where the PWA is served on GitHub Pages. */
 const WEB_BASE = '/The-Butterfly-Garden/'
+
+/**
+ * What the app is built from: its page, its code, what it ships as it is,
+ * its dependencies, and this file.
+ */
+const BUILD_INPUTS = ['index.html', 'src', 'public', 'package-lock.json', 'vite.config.ts']
+
+/**
+ * A name for this build, which the open tabs of an update compare to tell
+ * the build they are on from the one replacing it (src/lib/appUpdate).
+ *
+ * The version will not do: a deploy without a bump keeps it. Nor will the
+ * time of building: every push to main deploys, and a commit that touches
+ * only the docs or the tests would then build different files and offer
+ * every gardener an update with nothing in it. A digest of what the app is
+ * built from, and of the mode and settings it is built with, changes when
+ * the app does and only then. Tests are left out of it: they are never
+ * part of the app.
+ */
+function buildId(mode: string): string {
+  const root = fileURLToPath(new URL('.', import.meta.url))
+  const hash = createHash('sha256')
+  const settings = Object.entries(loadEnv(mode, root, 'VITE_')).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )
+  hash.update(JSON.stringify([mode, settings]))
+  const add = (path: string) => {
+    const name = relative(root, path).split(sep).join('/')
+    if (statSync(path).isDirectory()) {
+      if (name === 'src/test') return
+      for (const entry of readdirSync(path).sort()) add(join(path, entry))
+    } else if (!/\.test\.tsx?$/.test(name)) {
+      hash.update(`${name}\0`).update(readFileSync(path))
+    }
+  }
+  for (const input of BUILD_INPUTS) add(join(root, input))
+  return hash.digest('hex').slice(0, 16)
+}
 
 export default defineConfig(({ mode }) => {
   // The Android app (`--mode android`) is served by Capacitor from the root of
@@ -22,6 +63,7 @@ export default defineConfig(({ mode }) => {
   return {
     define: {
       __APP_VERSION__: JSON.stringify(version),
+      __BUILD_ID__: JSON.stringify(buildId(mode)),
     },
     base: android ? '/' : WEB_BASE,
     build: android

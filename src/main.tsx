@@ -13,6 +13,10 @@ import { isAndroidApp } from './lib/platform'
 // drawn beneath. The PWA's layout is left exactly as it was.
 if (isAndroidApp()) document.documentElement.classList.add('android-app')
 
+// Which build this page is (vite.config.ts), for anyone looking: a person in
+// the browser's tools, or a test speaking for another tab of the same build.
+document.documentElement.dataset.build = __BUILD_ID__
+
 // Framed by another page, the garden's storage is never opened: the frame
 // only offers a link to open the app in its own tab (see lib/hosting).
 createRoot(document.getElementById('root')!).render(

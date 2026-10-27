@@ -1,5 +1,11 @@
 import { useId } from 'react'
-import { JAR_ACCENTED, JAR_LETTERS, JAR_MARKS, JAR_NUMBERS } from '../../data/jars'
+import {
+  JAR_ACCENTED,
+  JAR_LETTERS,
+  JAR_MARK_NAMES,
+  JAR_MARKS,
+  JAR_NUMBERS,
+} from '../../data/jars'
 
 interface CharacterGroup {
   /** Short and space-free: part of an element id. */
@@ -16,19 +22,6 @@ const more: readonly CharacterGroup[] = [
   { key: 'accented', label: 'Accented letters', characters: [...JAR_ACCENTED] },
   { key: 'marks', label: 'Marks', characters: [...JAR_MARKS] },
 ]
-
-/**
- * The marks said by name as well. Read on its own, a lone "." or "*" may be
- * passed over in silence by a screen reader, leaving a button with no name.
- */
-const MARK_NAMES: Readonly<Record<string, string>> = {
-  '!': 'exclamation mark',
-  '?': 'question mark',
-  '&': 'ampersand',
-  '+': 'plus',
-  '.': 'dot',
-  '*': 'asterisk',
-}
 
 /**
  * Which character a new jar carries: letters and numbers first, as ever,
@@ -59,7 +52,9 @@ export function JarCharacterPicker({
             key={character}
             className={value === character ? 'selected' : ''}
             aria-pressed={value === character}
-            aria-label={MARK_NAMES[character] && `${character} ${MARK_NAMES[character]}`}
+            // A mark is said by name as well. Read on its own, a lone "." or
+            // "*" may be passed over in silence, leaving a button with no name.
+            aria-label={JAR_MARK_NAMES[character] && `${character} ${JAR_MARK_NAMES[character]}`}
             onClick={() => onChange(character)}
           >
             {character}
