@@ -669,6 +669,16 @@ describe('every action, through the hook', () => {
     expect(garden().recaps).toEqual([])
   })
 
+  it('counts a breathing session run to its end, once a day', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => result.current.finishBreathing())
+    expect(garden().sunlight.map((award) => award.source)).toEqual([`breath:${toLocalDate()}`])
+    const once = garden()
+    act(() => result.current.finishBreathing())
+    expect(garden()).toBe(once)
+  })
+
   it('writes for an earlier day, earning nothing and announcing nothing', async () => {
     const planted = createInitialState('Tester', 'Test Garden', new Date(Date.now() - 20 * 86_400_000))
     vi.spyOn(gardenRepository, 'load').mockResolvedValue({ status: 'loaded', state: planted })

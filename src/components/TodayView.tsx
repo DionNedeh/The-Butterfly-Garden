@@ -29,6 +29,7 @@ import {
   isEnergyLevel,
 } from '../lib/feelings'
 import { moodChoiceOf } from '../lib/mood'
+import { isBreathingGoal, pacerFor } from '../lib/breathing'
 import { nextStepsAfter, type NextStep } from '../lib/nextStep'
 import { counted } from '../lib/plural'
 import { promptAfter, promptById, promptForDay } from '../lib/prompts'
@@ -107,6 +108,7 @@ export function TodayView({
   onOpenRecap,
   openAtCheckIn = false,
   onOpenGuide,
+  onOpenBreathe,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -145,6 +147,8 @@ export function TodayView({
   openAtCheckIn?: boolean
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
+  /** Breathe with a butterfly: from the next step, and a breathing goal's row. */
+  onOpenBreathe?: () => void
 }) {
   const existingMood = state.moods.find((entry) => entry.localDate === today)
   const existingReflection = state.reflections.find(
@@ -304,6 +308,7 @@ export function TodayView({
           canMakeGentle: !gentle && onSetGentleDay !== undefined,
           canReflect: !existingReflection,
           canVisitCompanion: onOpenCare !== undefined,
+          canBreathe: onOpenBreathe !== undefined,
         })
       : []
   const putNextStepAway = () => setNextStepSeenFor(checkInMark)
@@ -315,6 +320,8 @@ export function TodayView({
       setGentle(true)
     } else if (step === 'visit-companion') {
       onOpenCare?.()
+    } else if (step === 'breathe') {
+      onOpenBreathe?.()
     } else {
       // "Write one line" and "Try today's reflection" both start writing;
       // the field is described by the day's prompt.
@@ -511,6 +518,7 @@ export function TodayView({
             <NextStepOffer
               checkIn={existingMood}
               steps={nextSteps}
+              breatheWith={pacerFor(state).name}
               onChoose={takeNextStep}
               onDismiss={() => {
                 // The offer goes; focus waits on the check-in it followed.
@@ -614,6 +622,7 @@ export function TodayView({
                   setEditRequest((count) => count + 1)
                 }}
                 onArchive={() => archive(goal)}
+                onBreathe={onOpenBreathe && isBreathingGoal(goal) ? onOpenBreathe : undefined}
               />
             )
           })}

@@ -36,6 +36,19 @@ describe('a day in words', () => {
     expect(describeDay(state, DAY)).toBe('You checked in, finished two goals and cared for Sol.')
   })
 
+  it('says when a breathing session was run to its end', () => {
+    const award = { id: 'b', localDate: DAY, source: `breath:${DAY}`, awardedAt: '' }
+    const state = garden({
+      moods: [{ id: 'm', localDate: DAY, level: 3, note: '', createdAt: '', updatedAt: '' }],
+      sunlight: [award],
+    })
+    expect(describeDay(state, DAY)).toBe('You checked in and took time to breathe.')
+    // Yesterday's breathing is not today's.
+    expect(describeDay(garden({ sunlight: [{ ...award, localDate: '2026-10-25', source: 'breath:2026-10-25' }] }), DAY)).toBe(
+      'You made it to the end of the day, and that counts.',
+    )
+  })
+
   it('names two companions, and counts more', () => {
     const two = garden({ creatures: [companion('Sol', [DAY]), companion('Pip', [DAY])] })
     expect(describeDay(two, DAY)).toBe('You cared for Sol and Pip.')

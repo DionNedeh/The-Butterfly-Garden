@@ -264,6 +264,11 @@ export function useGardenState() {
       },
       deleteReflection: (id: string) =>
         update((current) => act.deleteReflection(current, id)),
+      /** A breathing session run to its end: its Sunlight, once a day. */
+      finishBreathing: () => {
+        const now = new Date()
+        update((current) => act.finishBreathing(current, now))
+      },
       /** A check-in for a day that has passed, marked as written later; it earns nothing. */
       addEarlierMood: (localDate: string, choice: MoodChoice, note: string) => {
         const now = new Date()

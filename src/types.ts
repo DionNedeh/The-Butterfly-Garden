@@ -42,6 +42,8 @@ export type AppView =
   | 'notices'
   /** "If you need support now": from Settings, the Guide and Today. */
   | 'support'
+  /** Breathing with a butterfly: from Today, the recap and the support page. */
+  | 'breathe'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'

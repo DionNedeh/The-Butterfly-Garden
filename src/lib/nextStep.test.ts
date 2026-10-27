@@ -43,6 +43,21 @@ describe('the next step after a check-in', () => {
     ])
   })
 
+  it('offers a few slow breaths after heavy weather, where breathing can be opened', () => {
+    const breathing = { ...everything, canBreathe: true }
+    expect(nextStepsAfter({ level: 1 }, breathing)).toEqual([
+      'gentle-day',
+      'breathe',
+      'write-one-line',
+      'visit-companion',
+    ])
+    expect(nextStepsAfter({ level: 4, energy: 'low' }, { ...breathing, canMakeGentle: false })[0]).toBe(
+      'breathe',
+    )
+    // Never in place of the reflection after an ordinary day.
+    expect(nextStepsAfter({ level: 4 }, breathing)).toEqual(['reflection'])
+  })
+
   it('offers the day’s reflection after anything else, "not sure" included', () => {
     const others: CheckIn[] = [{ level: 3 }, { level: 5, energy: 'bright' }, { level: 3, unsure: true }]
     for (const checkIn of others) expect(nextStepsAfter(checkIn, everything)).toEqual(['reflection'])

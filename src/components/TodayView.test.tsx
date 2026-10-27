@@ -1270,3 +1270,74 @@ describe('TodayView and the Guide', () => {
   })
 })
 
+
+describe('breathing with a butterfly, from Today', () => {
+  afterEach(() => {
+    cleanup()
+    resetDrafts()
+  })
+
+  const breathing = { onSetGentleDay: vi.fn(), onOpenCare: vi.fn() }
+
+  it('is one of the steps after heavy weather, with whoever paces it', async () => {
+    const user = userEvent.setup()
+    const onOpenBreathe = vi.fn()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 1 })] }), {
+      ...breathing,
+      onOpenBreathe,
+    })
+    const group = screen.getByRole('group', { name: /One small thing/ })
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Make today a gentle day',
+      'Breathe with Marigold',
+      'Write one line',
+      'Visit your companion',
+      'Not now',
+    ])
+    await user.click(within(group).getByRole('button', { name: 'Breathe with Marigold' }))
+    expect(onOpenBreathe).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('group', { name: /One small thing/ })).toBeNull()
+  })
+
+  it('is not offered after an ordinary day', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 4 })] }), {
+      ...breathing,
+      onOpenBreathe: vi.fn(),
+    })
+    expect(screen.queryByRole('button', { name: /^Breathe with/ })).toBeNull()
+  })
+
+  it('is a small link on a "Take three slow breaths" goal, until it is done', async () => {
+    const user = userEvent.setup()
+    const onOpenBreathe = vi.fn()
+    const breaths = goal({ id: 'b', title: 'Take three slow breaths', schedule: 'daily' })
+    const water = goal({ id: 'w', title: 'Drink a glass of water', schedule: 'daily' })
+    renderToday(gardenWith({}, { goals: [breaths, water] }), { onOpenBreathe })
+    const links = screen.getAllByRole('link', { name: 'Breathe now' })
+    expect(links).toHaveLength(1)
+    expect(links[0].closest('.goal-row')).toHaveAttribute('data-goal-id', 'b')
+    expect(links[0]).toHaveAttribute('href', '#/breathe')
+    await user.click(links[0])
+    expect(onOpenBreathe).toHaveBeenCalledOnce()
+
+    cleanup()
+    renderToday(
+      gardenWith(
+        {},
+        {
+          goals: [breaths],
+          completions: [{ id: `b:${TODAY}`, goalId: 'b', localDate: TODAY, completedAt: '' }],
+        },
+      ),
+      { onOpenBreathe },
+    )
+    expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+  })
+
+  it('offers nothing where breathing cannot be opened', () => {
+    renderToday(
+      gardenWith({}, { goals: [goal({ id: 'b', title: 'Take three slow breaths', schedule: 'daily' })] }),
+    )
+    expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+  })
+})

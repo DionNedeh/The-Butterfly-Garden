@@ -68,6 +68,9 @@ const NoticesView = lazy(() =>
 const SupportView = lazy(() =>
   import('./components/SupportView').then((m) => ({ default: m.SupportView })),
 )
+const BreathingView = lazy(() =>
+  import('./components/BreathingView').then((m) => ({ default: m.BreathingView })),
+)
 // Only ever shown on the address the garden moved from, never in the app.
 const MovedBanner = lazy(() =>
   import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
@@ -507,6 +510,8 @@ function App() {
   /** The Guide at one of its sections, remembering the page to return to. */
   const openGuideAt = (section: string) =>
     navigate({ view: 'guide', section, from: activeView })
+  /** Breathing with a butterfly, remembering the page that offered it. */
+  const openBreathe = (from: AppView = activeView) => navigate({ view: 'breathe', from })
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -850,6 +855,7 @@ function App() {
               moonlightCollected={recapCollected}
               openAtCheckIn={route.checkIn}
               onOpenGuide={openGuideAt}
+              onOpenBreathe={openBreathe}
               onOpenRecap={() => {
                 setRecapOpenedFor(recapTarget)
                 setView('recap')
@@ -867,6 +873,7 @@ function App() {
               onClose={() => setView('today')}
               onFadeToNight={fadeToNight}
               onOpenGuide={openGuideAt}
+              onBreathe={() => openBreathe('today')}
             />
           )}
           {activeView === 'guide' && (
@@ -894,6 +901,17 @@ function App() {
             <SupportView
               onBack={() => setView(supportFrom)}
               backLabel={SUPPORT_BACK_LABELS[supportFrom] ?? 'Back to the garden'}
+              state={state}
+              onBreathe={openBreathe}
+            />
+          )}
+          {activeView === 'breathe' && (
+            <BreathingView
+              state={state}
+              // A session cannot be counted where nothing can be saved.
+              onFinish={garden.persistence.readOnly ? undefined : garden.finishBreathing}
+              from={route.from}
+              onBack={() => setView(route.from ?? 'garden')}
             />
           )}
           {activeView === 'journal' && (

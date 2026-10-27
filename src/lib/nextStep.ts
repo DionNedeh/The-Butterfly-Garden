@@ -1,7 +1,12 @@
 import type { MoodEntry } from '../types'
 
 /** What the quiet offer under a saved check-in can suggest. */
-export type NextStep = 'gentle-day' | 'write-one-line' | 'visit-companion' | 'reflection'
+export type NextStep =
+  | 'gentle-day'
+  | 'breathe'
+  | 'write-one-line'
+  | 'visit-companion'
+  | 'reflection'
 
 /**
  * Whether a check-in asks for the softer suggestions: Stormy or Rainy
@@ -20,15 +25,18 @@ export interface NextStepContext {
   canReflect: boolean
   /** The Care page, where caring for a companion costs nothing, is reachable. */
   canVisitCompanion: boolean
+  /** Breathing with a butterfly can be opened from here. */
+  canBreathe?: boolean
 }
 
 /**
  * The steps to offer after a check-in, in the order they are shown.
  *
- * After heavy weather or a low-energy day: a gentle day, one line of writing,
- * a visit to a companion. After anything else, "not sure" included: today's
- * reflection. Empty when everything it would suggest is done or out of
- * reach, and then nothing is offered at all.
+ * After heavy weather or a low-energy day: a gentle day, a few slow breaths
+ * with a butterfly, one line of writing, a visit to a companion. After
+ * anything else, "not sure" included: today's reflection. Empty when
+ * everything it would suggest is done or out of reach, and then nothing is
+ * offered at all.
  */
 export function nextStepsAfter(
   entry: Pick<MoodEntry, 'level' | 'unsure' | 'energy'>,
@@ -37,6 +45,7 @@ export function nextStepsAfter(
   if (!isHeavyCheckIn(entry)) return context.canReflect ? ['reflection'] : []
   const steps: NextStep[] = []
   if (context.canMakeGentle) steps.push('gentle-day')
+  if (context.canBreathe) steps.push('breathe')
   if (context.canReflect) steps.push('write-one-line')
   if (context.canVisitCompanion) steps.push('visit-companion')
   return steps
