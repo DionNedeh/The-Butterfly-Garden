@@ -48,6 +48,8 @@ import { RegionSetting } from './RegionSetting'
 import { ReminderSetting } from './ReminderSetting'
 import { LetterSetting } from './LetterSetting'
 import { ComfortLink } from './ComfortLink'
+import { LockSettings } from './lock/LockSettings'
+import { useLockState } from '../hooks/useLockState'
 import { letterQuotesOf, type LetterQuotes } from '../lib/letters'
 import './settings.css'
 
@@ -383,6 +385,8 @@ export function SettingsView({
   // check, which keeps the Android-only cards and Play calls out of the PWA.
   const android = import.meta.env.VITE_PLATFORM === 'android'
   const pass = usePassStatus()
+  // A backup is the garden in the clear, lock or no lock: said beside the button.
+  const locked = useLockState() === 'unlocked'
   const [passNote, setPassNote] = useState<string>()
   useEffect(() => {
     let active = true
@@ -996,6 +1000,11 @@ export function SettingsView({
             </button>
           )}
         </div>
+        {locked && (
+          <p className="settings-note">
+            This copy is not locked; keep it somewhere private, or use a protected backup.
+          </p>
+        )}
         {restoreStep && (
           <div className="delete-confirmation" role="alert">
             <strong>
@@ -1252,6 +1261,7 @@ export function SettingsView({
             </p>
           </>
         )}
+        <LockSettings />
       </section>
 
       <section className="card about-card" aria-labelledby="about-title">

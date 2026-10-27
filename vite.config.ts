@@ -66,26 +66,26 @@ export default defineConfig(({ mode }) => {
       __BUILD_ID__: JSON.stringify(buildId(mode)),
     },
     base: android ? '/' : WEB_BASE,
-    build: android
-      ? {
-          outDir: 'dist-android',
-          rolldownOptions: {
-            output: {
-              // The garden's storage in a chunk of its own beside the entry,
-              // as the web build already splits it: it still loads with the
-              // app, but the entry stays under its cap (check-budgets.mjs).
-              codeSplitting: {
-                groups: [
-                  {
-                    name: 'repository',
-                    test: /[\\/]src[\\/]repository[\\/]|[\\/]node_modules[\\/]idb[\\/]/,
-                  },
-                ],
+    build: {
+      ...(android ? { outDir: 'dist-android' } : {}),
+      rolldownOptions: {
+        output: {
+          // The garden's storage in a chunk of its own beside the entry: it
+          // still loads with the app, but the entry stays under its cap
+          // (check-budgets.mjs) however the rest of the graph is split. The
+          // garden lock's sealing (repository/sealedStores) is left out of
+          // it, so that only a garden with a lock ever downloads it.
+          codeSplitting: {
+            groups: [
+              {
+                name: 'repository',
+                test: /[\\/]src[\\/]repository[\\/](?!sealedStores)|[\\/]node_modules[\\/]idb[\\/]/,
               },
-            },
+            ],
           },
-        }
-      : {},
+        },
+      },
+    },
     // Scan only the application, not local review HTML or archived checkouts.
     optimizeDeps: {
       entries: ['index.html'],
