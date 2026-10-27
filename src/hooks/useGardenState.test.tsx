@@ -784,6 +784,46 @@ describe('every action, through the hook', () => {
     expect(garden().profile?.outfitPresets).toEqual([renamed])
   })
 
+  it('recycles a jar for half its Nectar, and Undo puts it back while that Nectar is there', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => {
+      result.current.purchaseJar('É', 'pink')
+    })
+    const jar = garden().jars[0]
+    const nectar = garden().nectar
+    let recycled: ReturnType<typeof result.current.recycleJar> | undefined
+    act(() => {
+      recycled = result.current.recycleJar(jar.id)
+    })
+    expect(recycled).toEqual({ kind: 'recycled', recycled: { jar, index: 0, nectar: 3 } })
+    expect(garden().jars).toEqual([])
+    expect(garden().nectar).toBe(nectar + 3)
+    // A second press in the same moment is told the jar has gone already.
+    act(() => {
+      expect(result.current.recycleJar(jar.id)).toEqual({ kind: 'missing' })
+    })
+
+    if (recycled?.kind !== 'recycled') throw new Error('Expected a recycle')
+    const undo = recycled.recycled
+    act(() => {
+      expect(result.current.restoreJar(undo)).toEqual({ kind: 'restored' })
+    })
+    expect(garden().jars).toEqual([jar])
+    expect(garden().nectar).toBe(nectar)
+    act(() => {
+      expect(result.current.restoreJar(undo)).toEqual({ kind: 'back' })
+    })
+  })
+
+  it('recycles nothing, and puts nothing back, before the garden has loaded', () => {
+    vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useGardenState())
+    expect(result.current.recycleJar('jar')).toEqual({ kind: 'missing' })
+    const jar = { id: 'jar', character: 'A', colorId: 'blue' as const, purchasedAt: '' }
+    expect(result.current.restoreJar({ jar, index: 0, nectar: 3 })).toEqual({ kind: 'back' })
+  })
+
   it('wears nothing before the garden has loaded', () => {
     vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
     const { result } = renderHook(() => useGardenState())

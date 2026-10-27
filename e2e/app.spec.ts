@@ -1018,6 +1018,61 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   await expect(page.getByText(/This plant spot is empty/i)).toBeVisible()
 })
 
+test('stacks alike jars, recycles one for half its Nectar, and Undo takes it back', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    state.nectar = 18
+  })
+  await page.reload()
+  await goTo(page, 'Shop')
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Jars', exact: true })
+    .click()
+
+  // An accented capital, from the fold beneath the letters and numbers.
+  await page.getByText('Accents and marks').click()
+  await page.getByRole('button', { name: 'É', exact: true }).click()
+  await page.getByRole('button', { name: 'Buy Blue É jar' }).click()
+  await page.getByRole('button', { name: 'Buy Blue É jar' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('6')
+
+  // Two alike jars are one row on the shelf.
+  const shelf = page.getByRole('region', { name: 'Your jars' })
+  await expect(shelf.getByRole('listitem')).toHaveCount(1)
+  await expect(shelf.getByRole('listitem')).toContainText('Blue É ×2')
+
+  const recycle = shelf.getByRole('button', {
+    name: 'Recycle for 3 Nectar: one Blue É jar',
+  })
+  await recycle.click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('9')
+  await expect(shelf.getByRole('listitem')).not.toContainText('×2')
+  await expect(recycle).toBeFocused()
+  await expect(page.getByText('Blue É jar recycled, for 3 Nectar.')).toBeVisible()
+  expect(await seriousViolations(page, 'the jar shelf, with Undo')).toEqual([])
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('6')
+  await expect(shelf.getByRole('listitem')).toContainText('Blue É ×2')
+  await expect(recycle).toBeFocused()
+
+  // In the garden the two are one choice, which places one of them.
+  await goTo(page, 'Garden')
+  await page.getByRole('button', { name: /View Milkweed/i }).click()
+  await page
+    .getByRole('button', { name: 'Place Blue É jar on Milkweed, 2 on the shelf' })
+    .click()
+  await expect(
+    page.getByRole('button', { name: /View Milkweed.*Blue É jar/i }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Place Blue É jar on Milkweed', exact: true }),
+  ).toBeFocused()
+})
+
 test('shows plant details, protects active hosts, and frees a full garden space', async ({
   page,
 }) => {

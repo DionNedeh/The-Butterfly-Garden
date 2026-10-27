@@ -190,8 +190,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       short: 'Letter jars',
       title: 'Letter jars',
       paragraphs: [
-        "Letter and number jars are decorative keepsakes for your plant spots: uppercase A–Z and 0–9 in eight colors, one reusable jar per purchase. Place, move, or return them from a plant's detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.",
-        'Removing a plant returns its jar safely to inventory. Like all shop purchases, jars are local, permanent, and non-refundable.',
+        "Letter and number jars are decorative keepsakes for your plant spots: A–Z, 0–9, accented capitals such as É and Ñ, and a few marks (! ? & + . *), in eight colors, one reusable jar per purchase. Place, move, or return them from a plant's detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.",
+        'Removing a plant returns its jar safely to inventory. In the Shop, alike jars share a row on your shelf, and a jar that is not on a plant can be recycled for half its Nectar, with a few seconds to undo. Like all shop purchases, jars stay on this device.',
       ],
     },
     {

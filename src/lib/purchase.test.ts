@@ -173,7 +173,7 @@ describe('buying a jar', () => {
 
   it('refuses a letter or colour the shop does not make', () => {
     const state = garden({ nectar: 100 })
-    expect(buyJar(state, '*', 'blue', now).outcome).toEqual({ kind: 'unavailable', reason: 'unknown' })
+    expect(buyJar(state, '~', 'blue', now).outcome).toEqual({ kind: 'unavailable', reason: 'unknown' })
     expect(buyJar(state, 'A', 'tartan' as 'blue', now).state).toBe(state)
   })
 })
