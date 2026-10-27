@@ -31,7 +31,8 @@
 .sound-volume input[type='range'] {
   flex: 1;
   min-width: 0;
-  height: 2.75rem;
+  /* Never under 44px, whatever rounding the root size meets. */
+  height: max(44px, 2.75rem);
   margin: 0;
   border: 0;
   border-radius: 0;

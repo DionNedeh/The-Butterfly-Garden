@@ -1569,7 +1569,8 @@ test('a look saved on one companion is worn by another, and their story kept', a
   await page.getByRole('button', { name: 'Save look' }).click()
   await expect(page.getByRole('heading', { name: 'Saved looks' })).toBeFocused()
 
-  await page.getByRole('tab', { name: /^Fern/ }).click()
+  // A companion's tab is named for its species first: "Monarch Fern Butterfly…".
+  await page.getByRole('tab', { name: /\bFern\b/ }).click()
   await page.getByRole('button', { name: 'Wear Little cap' }).click()
   await expect(page.locator('.look-status')).toHaveText('Fern is wearing Little cap.')
 
