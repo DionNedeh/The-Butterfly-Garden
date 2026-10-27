@@ -57,6 +57,7 @@ interface GardenRecord {
     createdAt: string
     selectedBackdropId?: string
     unlockedBackdropIds?: string[]
+    lastVisitOn?: string
   }
   nectar: number
   stardust: number
@@ -582,6 +583,44 @@ test('an entry for an earlier day is kept with its day, marked, and earns nothin
     await expect(card).toHaveCount(0)
     await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeFocused()
   }
+})
+
+test('a garden that keeps giving, and a small welcome back after a few days away', async ({
+  page,
+}) => {
+  // Two accessibility sweeps and a reload.
+  test.slow()
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const pace = page.getByRole('group', { name: 'Garden pace' })
+  await expect(pace.getByRole('radio', { name: /^Classic/ })).toBeChecked()
+  await pace.getByRole('radio', { name: /^Keep giving/ }).check()
+  await expect(pace.getByRole('radio', { name: /^Keep giving/ })).toBeChecked()
+  expect(await seriousViolations(page, 'Settings, garden pace')).toEqual([])
+
+  // The starter milkweed in full bloom, and the last visit five days back.
+  await editGardenRecord(page, (state) => {
+    state.plants[0].growth = 3
+    state.profile.lastVisitOn = localDateDaysAgo(5)
+  })
+  await page.reload()
+  await goTo(page, 'Garden')
+  const welcome = page.getByRole('group', { name: 'Welcome back' })
+  await expect(welcome).toBeVisible()
+  // It never says how long.
+  await expect(welcome).not.toHaveText(/\b(\d+|days?|weeks?|missed|lost)\b/i)
+  await page.getByRole('button', { name: /^Milkweed 1/ }).click()
+  await expect(page.getByText('Blooms again in 7 more days of care.')).toBeVisible()
+  expect(await seriousViolations(page, 'Garden, welcome back')).toEqual([])
+
+  await welcome.getByRole('button', { name: 'Put away' }).click()
+  await expect(welcome).toHaveCount(0)
+  await expect(page.locator('#garden-title')).toBeFocused()
+
+  // Put away for good: a reload the same day does not bring it back.
+  await reloadAfterSave(page)
+  await expect(page.locator('#garden-title')).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Welcome back' })).toHaveCount(0)
 })
 
 test('supports plant selection and permanent local reset confirmation', async ({

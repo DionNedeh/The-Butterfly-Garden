@@ -499,3 +499,34 @@ describe('SettingsView backup habits', () => {
     expect(sheet.share).not.toHaveBeenCalled()
   })
 })
+
+describe('Settings: garden pace', () => {
+  it('offers Classic and Keep giving, starting at Classic, and chooses at once', async () => {
+    const user = userEvent.setup()
+    const { onSetGardenPace } = renderSettings(undefined, { onSetGardenPace: vi.fn() })
+    const group = screen.getByRole('group', { name: 'Garden pace' })
+    expect(within(group).getAllByRole('radio')).toHaveLength(2)
+    expect(within(group).getByRole('radio', { name: /^Classic/ })).toBeChecked()
+    await user.click(within(group).getByRole('radio', { name: /^Keep giving/ }))
+    expect(onSetGardenPace).toHaveBeenLastCalledWith('keep-giving')
+  })
+
+  it('shows Keep giving as chosen, and Classic stores nothing', async () => {
+    const user = userEvent.setup()
+    const seed = createInitialState('Tester', 'Test Garden')
+    const { onSetGardenPace } = renderSettings(undefined, {
+      onSetGardenPace: vi.fn(),
+      state: { ...seed, profile: { ...seed.profile!, gardenPace: 'keep-giving' } },
+    })
+    const group = screen.getByRole('group', { name: 'Garden pace' })
+    expect(within(group).getByRole('radio', { name: /^Keep giving/ })).toBeChecked()
+    expect(within(group).getByText(/blooms again after 7 more days of care/)).toBeInTheDocument()
+    await user.click(within(group).getByRole('radio', { name: /^Classic/ }))
+    expect(onSetGardenPace).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('has no pace card where it cannot be changed', () => {
+    renderSettings()
+    expect(screen.queryByRole('group', { name: 'Garden pace' })).not.toBeInTheDocument()
+  })
+})

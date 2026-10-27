@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState } from '../lib/progression'
-import { formatJournalDate, isGoalDue, isLocalDate } from '../lib/date'
+import { formatJournalDate, isGoalDue, isLocalDate, toLocalDate } from '../lib/date'
+import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { validateGarden } from './validateGarden'
 
 function garden(overrides: Record<string, unknown> = {}) {
@@ -466,5 +467,72 @@ describe('validating a garden', () => {
     const result = validateGarden(garden({ version: 99 }))
     expect(result.state).toBeUndefined()
     expect(result.refused).toMatch(/newer version/)
+  })
+})
+
+describe('the garden pace and its plants', () => {
+  const plant = (careDaysSinceBloom: unknown) => ({
+    id: 'p1',
+    plantId: 'milkweed',
+    growth: 3,
+    plantedAt: '2026-06-01T00:00:00.000Z',
+    careDaysSinceBloom,
+  })
+
+  it('keeps Keep giving, and reads anything else as Classic', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    const kept = validateGarden(garden({ profile: { ...seed.profile, gardenPace: 'keep-giving' } }))
+    expect(kept.state?.profile?.gardenPace).toBe('keep-giving')
+    for (const gardenPace of ['classic', 'fast', 1, true, null]) {
+      const result = validateGarden(garden({ profile: { ...seed.profile, gardenPace } }))
+      expect(result.state?.profile).not.toHaveProperty('gardenPace')
+      expect(result.repaired).toBe(0)
+    }
+  })
+
+  it("keeps a plant's days of care toward its next bloom as whole days, at most a bloom's worth", () => {
+    const stored = garden({ plants: [plant(4)] })
+    const result = validateGarden(stored)
+    // Same identity, so a well-formed count costs no extra write.
+    expect(result.state?.plants).toBe(stored.plants)
+    expect(validateGarden(garden({ plants: [plant(REBLOOM_CARE_DAYS)] })).state?.plants[0]
+      .careDaysSinceBloom).toBe(REBLOOM_CARE_DAYS)
+    // A longer count, as a build with a longer wait might leave, reads as ready.
+    expect(validateGarden(garden({ plants: [plant(40)] })).state?.plants[0].careDaysSinceBloom).toBe(
+      REBLOOM_CARE_DAYS,
+    )
+    for (const odd of [0, -2, 2.5, '3', null, Number.NaN, {}]) {
+      const checked = validateGarden(garden({ plants: [plant(odd)] }))
+      const [kept] = checked.state!.plants
+      expect(kept).not.toHaveProperty('careDaysSinceBloom')
+      expect(kept.growth).toBe(3)
+      expect(checked.repaired).toBe(0)
+    }
+    // A plant that needed repair keeps a good count too.
+    const repaired = validateGarden(garden({ plants: [{ ...plant(2), id: 7 }] }))
+    expect(repaired.state?.plants[0].careDaysSinceBloom).toBe(2)
+  })
+})
+
+describe('the days the garden was visited', () => {
+  const seed = createInitialState('Tester', 'Test Garden')
+  const withVisits = (visits: Record<string, unknown>) =>
+    validateGarden(garden({ profile: { ...seed.profile, ...visits } })).state!.profile!
+
+  it('keeps real days that have already happened', () => {
+    const today = toLocalDate()
+    expect(withVisits({ lastVisitOn: '2026-01-04', welcomeBackOn: today })).toMatchObject({
+      lastVisitOn: '2026-01-04',
+      welcomeBackOn: today,
+    })
+  })
+
+  it('drops anything that is not a real day, or is a day still to come', () => {
+    const tomorrow = toLocalDate(new Date(Date.now() + 86_400_000))
+    for (const value of ['2026-02-30', 'yesterday', 20260101, null, tomorrow, '99999-01-01']) {
+      const profile = withVisits({ lastVisitOn: value, welcomeBackOn: value })
+      expect(profile).not.toHaveProperty('lastVisitOn')
+      expect(profile).not.toHaveProperty('welcomeBackOn')
+    }
   })
 })

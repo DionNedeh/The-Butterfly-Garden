@@ -21,6 +21,7 @@ import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { requestPersistentStorage } from '../lib/storage'
+import { noteVisit, putAwayWelcomeBack } from '../lib/visits'
 import { buyShopItem, equipOutfitItem, unequipOutfitSlot } from '../lib/wardrobe'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
@@ -31,6 +32,7 @@ import type {
   CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
+  GardenPace,
   Goal,
   GoalSchedule,
   JarColorId,
@@ -99,6 +101,30 @@ export function useGardenState() {
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  // Remember the day the garden was opened (lib/visits): once it has loaded,
+  // and whenever the page comes back into view, which is how an app left in
+  // the background for days is opened again. A day already noted hands back
+  // the same garden, so this writes at most once a day and never loops.
+  // Straight through setState: a visit is not the gardener's doing to mark.
+  const hasGarden = Boolean(state?.profile)
+  useEffect(() => {
+    if (loading || !hasGarden) return
+    const visit = () => {
+      if (document.visibilityState !== 'visible' || readOnlyRef.current) return
+      const today = toLocalDate()
+      // Most of the time today is already noted; then not even a render.
+      if (stateRef.current?.profile?.lastVisitOn === today) return
+      setState((current) => (current ? noteVisit(current, today) : current))
+    }
+    visit()
+    window.addEventListener('focus', visit)
+    document.addEventListener('visibilitychange', visit)
+    return () => {
+      window.removeEventListener('focus', visit)
+      document.removeEventListener('visibilitychange', visit)
+    }
+  }, [loading, hasGarden, setState, readOnlyRef])
 
   /**
    * Every action keeps a stable identity so memoized views (the month
@@ -329,6 +355,11 @@ export function useGardenState() {
         update((current) => act.chooseTheme(current, choice)),
       setTextSize: (size: TextSize | undefined) =>
         update((current) => act.setTextSize(current, size)),
+      /** Keep giving, or Classic again (undefined): see lib/gardenPace. */
+      setGardenPace: (pace: GardenPace | undefined) =>
+        update((current) => act.setGardenPace(current, pace)),
+      /** Put the garden's welcome-back reveal away (lib/visits). */
+      putAwayWelcomeBack: () => update(putAwayWelcomeBack),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**

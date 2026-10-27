@@ -715,6 +715,7 @@ function App() {
               onOpenCare={() => setView('care')}
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
+              onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
             />
           )}
           {activeView === 'care' && (
@@ -855,6 +856,7 @@ function App() {
               onSetRecapHours={garden.setRecapHours}
               onChooseTheme={garden.chooseTheme}
               onSetTextSize={garden.setTextSize}
+              onSetGardenPace={garden.setGardenPace}
               fadeOutMinutes={fadeOut.minutes}
               fadeOutEndsAt={fadeOut.endsAt}
               onChooseFadeOut={(minutes) =>

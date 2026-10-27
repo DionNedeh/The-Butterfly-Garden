@@ -4,6 +4,7 @@ import type {
   AppState,
   CheckInDetails,
   GardenBackdropId,
+  GardenPace,
   Goal,
   GoalSchedule,
   MoodChoice,
@@ -645,6 +646,20 @@ export function toggleTheme(state: AppState, showing?: AppearanceTheme): AppStat
   if (!state.profile) return state
   const current = showing ?? state.profile.theme
   return chooseTheme(state, current === 'night' ? 'sunlight' : 'night')
+}
+
+/**
+ * Keep giving, or Classic again (undefined). Classic stores nothing, so a
+ * garden that goes back to it is exactly as it was before there was a
+ * choice. Each blooming plant's count is kept either way: Classic only
+ * pauses it, so coming back to Keep giving loses no days of care.
+ */
+export function setGardenPace(state: AppState, pace: GardenPace | undefined): AppState {
+  if (!state.profile || state.profile.gardenPace === pace) return state
+  const profile = { ...state.profile }
+  if (pace === 'keep-giving') profile.gardenPace = pace
+  else delete profile.gardenPace
+  return { ...state, profile }
 }
 
 /** Text larger than usual, or the usual size again (undefined). */

@@ -1242,3 +1242,101 @@ describe('saving one of the gardener’s images', () => {
     expect(result.current.state?.profile?.gardenName).toBe('Second Garden')
   })
 })
+
+describe('the day the garden was opened', () => {
+  function lastVisited(daysAgo: number) {
+    const seed = createInitialState('Tester', 'Test Garden')
+    const lastVisitOn = toLocalDate(new Date(Date.now() - daysAgo * 86_400_000))
+    return { ...seed, profile: { ...seed.profile!, lastVisitOn } }
+  }
+
+  it('is noted once, in one write, with a welcome after a few days away', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(4),
+    })
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
+    const heard: string[] = []
+    const stop = onAnnouncement((events) => heard.push(...events.map((event) => event.kind)))
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.state?.profile?.lastVisitOn).toBe(toLocalDate()))
+    expect(result.current.state?.profile?.welcomeBackOn).toBe(toLocalDate())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+
+    // Coming back into view the same day writes nothing more, and never loops.
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(save).toHaveBeenCalledTimes(1)
+    // A visit is not a moment to celebrate.
+    expect(heard).toEqual([])
+    stop()
+
+    act(() => result.current.putAwayWelcomeBack())
+    expect(result.current.state?.profile).not.toHaveProperty('welcomeBackOn')
+    expect(result.current.state?.profile?.lastVisitOn).toBe(toLocalDate())
+  })
+
+  it('writes nothing for a garden already visited today', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(0),
+    })
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(save).not.toHaveBeenCalled()
+    expect(result.current.state?.profile).not.toHaveProperty('welcomeBackOn')
+  })
+
+  it('is noted when an app left open comes back into view on a later day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    try {
+      vi.setSystemTime(new Date(2026, 9, 20, 9))
+      vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+        status: 'loaded',
+        state: createInitialState('Tester', 'Test Garden'),
+      })
+      vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+      const { result } = renderHook(() => useGardenState())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.state?.profile?.lastVisitOn).toBe('2026-10-20')
+
+      // Days later, in the background: nobody is looking, so nothing is noted.
+      vi.setSystemTime(new Date(2026, 9, 24, 8))
+      const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(result.current.state?.profile?.lastVisitOn).toBe('2026-10-20')
+
+      visibility.mockReturnValue('visible')
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(result.current.state?.profile).toMatchObject({
+        lastVisitOn: '2026-10-24',
+        welcomeBackOn: '2026-10-24',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('chooses the garden pace', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(0),
+    })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() => result.current.setGardenPace('keep-giving'))
+    expect(result.current.state?.profile?.gardenPace).toBe('keep-giving')
+    act(() => result.current.setGardenPace(undefined))
+    expect(result.current.state?.profile).not.toHaveProperty('gardenPace')
+  })
+})

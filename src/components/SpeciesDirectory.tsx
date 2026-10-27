@@ -9,6 +9,7 @@ import type { AppState } from '../types'
 import { ButterflySprite } from './sprites/ButterflySprite'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
+import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 
 export function SpeciesDirectory({
   state,
@@ -126,9 +127,11 @@ export function SpeciesDirectory({
         </p>
         <p>
           Your starter Monarch, {STARTER_COMPANION_NAME}, already counts as
-          discovered, so Milkweed can next welcome Queen. A mature plant does
-          not retry or keep producing eggs: plant another host for a new
-          opportunity. With all {PLANT_CAPACITY} spaces full, wait until a host's companion emerges before
+          discovered, so Milkweed can next welcome Queen.{' '}
+          {keepsGiving(state.profile)
+            ? `With Keep giving, a mature host blooms again after ${REBLOOM_CARE_DAYS} more days of care and can reveal another egg, chosen the same way.`
+            : 'A mature plant does not retry or keep producing eggs: plant another host for a new opportunity.'}{' '}
+          With all {PLANT_CAPACITY} spaces full, wait until a host's companion emerges before
           removing that plant. Nectar plants add flowers, but do not reveal
           eggs.
         </p>

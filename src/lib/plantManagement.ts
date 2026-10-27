@@ -1,5 +1,7 @@
 import { plants as plantCatalog, species as speciesCatalog } from '../data/content'
 import type { AppState, PlantInstance } from '../types'
+import { canBloomAgain, careDaysCounted, keepsGiving, REBLOOM_CARE_DAYS } from './gardenPace'
+import { counted } from './plural'
 import { nextSpeciesForPlant } from './speciesAcquisition'
 
 export const PLANT_CAPACITY = 8
@@ -24,19 +26,26 @@ export function plantingBlocker(
  * What a host plant's bloom means for eggs, said plainly. Undefined for a
  * nectar plant, and wherever the garden cannot know for sure.
  *
- * A host plant reveals an egg once, when it first blooms, and only for a
+ * A host plant reveals an egg when it first blooms, and only for a
  * butterfly not already growing up in the garden (selectDiscoveryCandidate).
- * A bloom that brought nothing used to say nothing at all.
+ * Under Keep giving it blooms again, and it is the latest bloom that is
+ * spoken of; plantBloomNote says when the next one comes. A bloom that
+ * brought nothing used to say nothing at all.
  */
 export function plantEggNote(
-  state: Pick<AppState, 'creatures'>,
+  state: Pick<AppState, 'creatures' | 'profile'>,
   plant: PlantInstance,
   maxGrowth: number,
 ): string | undefined {
   const definition = plantCatalog.find((entry) => entry.id === plant.plantId)
   if (!definition || definition.speciesIds.length === 0) return undefined
-  const brought = state.creatures.find((creature) => creature.sourcePlantId === plant.id)
-  if (brought) return `This bloom brought ${brought.name}'s egg.`
+  const brought = state.creatures.filter((creature) => creature.sourcePlantId === plant.id)
+  const latest = brought.at(-1)
+  if (latest) {
+    return brought.length > 1
+      ? `Its latest bloom brought ${latest.name}'s egg.`
+      : `This bloom brought ${latest.name}'s egg.`
+  }
   if (plant.growth < maxGrowth) {
     const next = nextSpeciesForPlant(state, plant.plantId)
     const name = speciesCatalog.find((entry) => entry.id === next)?.commonName
@@ -47,7 +56,30 @@ export function plantEggNote(
   // A companion from before plants were remembered (all but the starter, who
   // came with the garden) could have come from this plant, so say nothing.
   if (state.creatures.slice(1).some((creature) => !creature.sourcePlantId)) return undefined
-  return `It bloomed while every butterfly it hosts was growing up here, so it brought no egg. Plant another ${definition.name} once one of them emerges.`
+  const noEgg = 'It bloomed while every butterfly it hosts was growing up here, so it brought no egg.'
+  // Under Keep giving it blooms again by itself: no need to plant another.
+  return keepsGiving(state.profile)
+    ? noEgg
+    : `${noEgg} Plant another ${definition.name} once one of them emerges.`
+}
+
+/**
+ * Under Keep giving, how close a host plant in full bloom is to blooming
+ * again: "Blooms again in 3 more days of care." Undefined under Classic,
+ * where a plant blooms once, and for any plant not in bloom or not a host.
+ */
+export function plantBloomNote(
+  state: Pick<AppState, 'creatures' | 'profile'>,
+  plant: PlantInstance,
+  maxGrowth: number,
+): string | undefined {
+  if (!keepsGiving(state.profile) || !canBloomAgain(plant, maxGrowth)) return undefined
+  const left = REBLOOM_CARE_DAYS - careDaysCounted(plant)
+  if (left > 0) return `Blooms again in ${counted(left, 'more day', 'more days')} of care.`
+  // Ready, and waiting only for an egg it can bring.
+  return nextSpeciesForPlant(state, plant.plantId)
+    ? 'Ready to bloom again with your next Sunlight.'
+    : 'Ready to bloom again once a butterfly it hosts has emerged.'
 }
 
 export function plantRemovalBlocker(

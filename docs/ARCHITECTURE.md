@@ -62,6 +62,8 @@ tells other tabs which parts it wrote.
 | Moving the PWA to another address | `lib/hosting.ts`, `docs/moving-the-garden.md` |
 | The installed PWA: icons, shortcuts, screenshots | `pwaManifest.ts`; `scripts/pwa-assets.mjs` renders the shortcut icons and screenshots |
 | Moments worth saying aloud | `lib/gardenEvents.ts` → `lib/announcer.ts` → `Celebrations` |
+| The garden pace: Classic, or Keep giving (a host in bloom blooms again) | `lib/gardenPace.ts` (the rule), `awardSunlight` in `lib/progression.ts` (the bloom), `lib/plantManagement.ts` (what the plant's panel says) |
+| The last visit, and a small welcome back after a few days away | `lib/visits.ts` (noted at most once a day by `useGardenState`), `lib/welcomeBack.ts` (the line), `components/garden/WelcomeBack.tsx` (loaded only on such a day) |
 | Motion preferences and animation | `lib/motion.ts`, `hooks/useFlightMotion.ts`, `components/sprites/` |
 | The theme, chosen or followed (device, evening), and text size | `lib/theme.ts` (the rule), `hooks/useEffectiveTheme.ts` (when it turns), `lib/textSize.ts`; the shell applies them in `App.tsx` |
 
