@@ -3,7 +3,7 @@ import { flightPatterns } from '../data/flightPatterns'
 import { getCareAction } from '../data/careActions'
 import { getShopItem } from '../data/shopItems'
 import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, presetName } from '../lib/companionDiary'
-import { jarCharacters, jarColors } from '../data/jars'
+import { JAR_LETTERS, JAR_NUMBERS, jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import { isValidBrightness, isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
@@ -16,7 +16,25 @@ import type { AmbientTrackId, AppState, OutfitPreset, OutfitSlot, PlantInstance 
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
-export const CURRENT_STATE_VERSION = 6
+export const CURRENT_STATE_VERSION = 7
+
+/** The jars a version 6 build keeps: it drops any other, silently. */
+const VERSION_6_JAR_CHARACTERS = new Set<string>([...JAR_LETTERS, ...JAR_NUMBERS])
+
+/**
+ * The version a garden is stored and exported at.
+ *
+ * Version 7 holds nothing new but a jar's accented letter or mark. A build
+ * that knows only version 6 reads a garden at 6 as its own, and would keep
+ * every jar but those, silently, with their placements and the Nectar they
+ * cost; a garden at 7 it sets aside untouched, as the work of a newer
+ * version, and a backup at 7 it refuses. So a garden is written at 7 only
+ * once it holds such a jar. Every other garden stays at 6, and an older app
+ * can still read it and its backups.
+ */
+export function storedVersionOf(state: Pick<AppState, 'jars'>): AppState['version'] {
+  return state.jars.some((jar) => !VERSION_6_JAR_CHARACTERS.has(jar.character)) ? 7 : 6
+}
 
 /**
  * Every state version this build can read: all of them up to the current one.
@@ -1028,7 +1046,7 @@ export function validateGarden(value: unknown): GardenValidation {
 
   const state: AppState = {
     ...(candidate as unknown as AppState),
-    version: 6,
+    version: storedVersionOf({ jars }),
     profile: checkProfile(candidate.profile, ctx),
     goals,
     completions,

@@ -71,7 +71,7 @@ describe('two tabs on one garden', () => {
 
     const db = await openDB(name)
     const meta = (await db.get('meta', 'current')) as Record<string, unknown>
-    await db.put('meta', { ...meta, version: 7 }, 'current')
+    await db.put('meta', { ...meta, version: 8 }, 'current')
     db.close()
 
     const adopted = await tab.adopt(['meta'])
@@ -81,7 +81,7 @@ describe('two tabs on one garden', () => {
     )
 
     const check = await openDB(name)
-    expect(await check.get('meta', 'current')).toMatchObject({ version: 7 })
+    expect(await check.get('meta', 'current')).toMatchObject({ version: 8 })
     check.close()
   })
 

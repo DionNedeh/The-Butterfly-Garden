@@ -520,7 +520,8 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  version: 6
+  /** 6, or 7 once the garden holds a jar a version 6 build would drop (storedVersionOf). */
+  version: 6 | 7
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]

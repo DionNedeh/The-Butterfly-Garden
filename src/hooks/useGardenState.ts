@@ -47,6 +47,7 @@ import {
   type WearLookResult,
 } from '../lib/wardrobe'
 import { gardenRepository } from '../repository/gardenRepository'
+import { storedVersionOf } from '../repository/validateGarden'
 import type {
   AmbientTrackId,
   AppearanceTheme,
@@ -471,7 +472,10 @@ export function useGardenState() {
             format: 'the-butterfly-garden',
             exportedAt: new Date().toISOString(),
             appVersion: __APP_VERSION__,
-            garden: stateRef.current,
+            // At the version an older app can tell apart (storedVersionOf).
+            garden: stateRef.current
+              ? { ...stateRef.current, version: storedVersionOf(stateRef.current) }
+              : stateRef.current,
           },
           null,
           2,
