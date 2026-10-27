@@ -38,6 +38,7 @@ describe('a companion’s story', () => {
       daysCaredFor: 0,
       favourite: undefined,
       outfitsWorn: [],
+      grownAlongside: [],
       diary: { kind: 'whole' },
     })
   })
@@ -133,6 +134,23 @@ describe('a companion’s story', () => {
       diary,
     )
     expect(story.outfitsWorn).toEqual(['Silk Bow', 'Sprout Cap'])
+  })
+
+  it('tells the goals it grew alongside, by the days each gave', () => {
+    const story = companionStory(
+      creature({
+        stage: 'butterfly',
+        grownAlongside: [
+          { goalId: 'walk', title: 'Walk outside', dates: ['2026-06-02', '2026-06-03'] },
+          { goalId: 'gone', title: 'A goal since deleted', dates: ['2026-06-05'] },
+        ],
+      }),
+      diary,
+    )
+    expect(story.grownAlongside).toEqual([
+      { title: 'Walk outside', days: 2 },
+      { title: 'A goal since deleted', days: 1 },
+    ])
   })
 
   it('says when a companion is older than the diary', () => {

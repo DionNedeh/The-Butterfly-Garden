@@ -6,8 +6,8 @@ import { careDatesForStage, STAGE_CARE_DAYS, STAGE_ORDER } from './lifecycle'
 
 /**
  * A companion's story, told from what the garden kept: the days each stage
- * began, how many days it was cared for, the care given most, and the
- * outfits worn. Nothing is guessed. A day that was never recorded is read
+ * began, how many days it was cared for, the care given most, the outfits
+ * worn, and the goals it was grown alongside. Nothing is guessed. A day that was never recorded is read
  * only where the rules leave no doubt about it, and otherwise left out, and
  * a companion older than the diary is said to be (`diary`).
  */
@@ -24,6 +24,11 @@ export interface CompanionStory {
   favourite?: { name: string; count: number }
   /** Names of the outfits it has worn, first worn first. */
   outfitsWorn: string[]
+  /**
+   * The goals it was grown alongside, by the title each had when it last
+   * counted, and the days each counted as its care, first goal first.
+   */
+  grownAlongside: { title: string; days: number }[]
   /**
    * Whether its story is whole: it arrived once the diary was kept, the diary
    * began after it arrived (on that local date), or the garden has not begun
@@ -113,6 +118,10 @@ export function companionStory(
     daysCaredFor: days.size,
     favourite: favouriteCare(creature),
     outfitsWorn,
+    grownAlongside: (creature.grownAlongside ?? []).map((entry) => ({
+      title: entry.title,
+      days: entry.dates.length,
+    })),
     diary,
   }
 }

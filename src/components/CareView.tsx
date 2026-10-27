@@ -17,6 +17,7 @@ import {
   STAGE_ORDER,
 } from '../lib/lifecycle'
 import { counted } from '../lib/plural'
+import { goalsToGrowAlongside } from '../lib/growAlongside'
 import { visibleOutfits, type WearLookResult } from '../lib/wardrobe'
 import type { AppState, CreatureStage, FlightPatternId, OutfitPreset, OutfitSlot } from '../types'
 import { CreatureSprite } from './sprites/CreatureSprite'
@@ -25,6 +26,7 @@ import { Icon } from './Icons'
 import { NameArrival } from './NameArrival'
 import { CompanionFlight } from './CompanionFlight'
 import { CompanionStory } from './care/CompanionStory'
+import { GrowAlongside } from './care/GrowAlongside'
 import { OutfitLooks } from './care/OutfitLooks'
 import { UndoToast, type UndoOffer } from './UndoToast'
 import { FieldFacts } from './FieldFacts'
@@ -59,6 +61,7 @@ export function CareView({
   openOn,
   onChooseFlight,
   onOpenGuide,
+  onAdoptGoal,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -79,6 +82,8 @@ export function CareView({
   onChooseFlight?: (creatureId: string, patternId: FlightPatternId | undefined) => void
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
+  /** Grow a companion alongside one of the goals, or none (undefined). */
+  onAdoptGoal?: (creatureId: string, goalId: string | undefined) => void
 }) {
   const ordered = useMemo(
     () =>
@@ -172,6 +177,8 @@ export function CareView({
           key={arrival.id}
           arrival={arrival}
           creatures={state.creatures}
+          goals={onAdoptGoal ? goalsToGrowAlongside(state, today) : []}
+          onGrowAlongside={(goalId) => onAdoptGoal?.(arrival.id, goalId)}
           onName={(name) => {
             focusChip.current = arrival.id
             setSelectedId(arrival.id)
@@ -309,6 +316,18 @@ export function CareView({
                 <span>Days of butterfly care:</span>
                 <strong>{careDaysCompleted(selected)}</strong>
               </div>
+            )}
+
+            {/* An egg being offered a name is offered its goal there, so
+                the page asks once. */}
+            {!isButterfly && onAdoptGoal && selected.id !== arrival?.id && (
+              <GrowAlongside
+                key={selected.id}
+                state={state}
+                today={today}
+                creature={selected}
+                onAdopt={onAdoptGoal}
+              />
             )}
 
             <div className="bond-meter" aria-label={`Bond level ${level}`}>

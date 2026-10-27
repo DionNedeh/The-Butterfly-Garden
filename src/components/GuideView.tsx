@@ -81,6 +81,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       paragraphs: [
         `Every companion passes through four stages: egg, caterpillar, chrysalis, butterfly. Each stage before butterfly needs ${STAGE_CARE_DAYS} days of care to advance — and the days never need to be consecutive. Care on Monday, rest all week, care twice more later: that counts.`,
         'Any one care activity on a day marks that day as cared-for. The Care page shows dots for each stage: fill all three and your companion transforms, with a little celebration of Nectar (and Stardust and seeds when a butterfly emerges).',
+        'An egg, caterpillar or chrysalis can also grow alongside one of your goals: choose it when a new egg arrives, or on its Care page. Each day you complete that goal on Today counts as a day of care, just as an activity would, and a day cared for both ways counts once. Bond still comes from the activities themselves. When it emerges, its story remembers the goal it grew alongside; archiving or deleting the goal simply leaves it to the care menu, with nothing lost.',
         'Butterflies never stop needing you. Their care days keep counting forever and every activity deepens your bond.',
       ],
     },

@@ -75,6 +75,7 @@ interface GardenRecord {
     emergeAt?: string
     awaitingName?: boolean
     outfit?: Record<string, string>
+    careDates?: Record<string, string[]>
   }>
   ownedFlightPatternIds?: string[]
   ownedItemIds?: string[]
@@ -1145,6 +1146,85 @@ test('a new egg is offered a name of its own on the Care page', async ({ page })
   await goTo(page, 'Care')
   await expect(page.getByText('Pip').first()).toBeVisible()
   await expect(page.getByRole('region', { name: /Would you like to name/ })).toHaveCount(0)
+})
+
+test('a companion grown alongside a goal is cared for when the goal is done, and remembers it', async ({
+  page,
+}) => {
+  // Care, Today and Care again, with three accessibility sweeps and a reload.
+  test.slow()
+  await enterGarden(page)
+  await goTo(page, 'Today')
+  for (const title of ['Walk outside', 'Drink water']) {
+    await page.getByLabel('Add a goal').fill(title)
+    await page.getByRole('button', { name: 'Add goal' }).click()
+  }
+  await editGardenRecord(page, (state) => {
+    // Sol, the starter caterpillar, two days of care from its chrysalis.
+    state.creatures[0].careDates = { caterpillar: ['2026-01-01', '2026-01-02'] }
+  })
+  await page.reload()
+
+  await goTo(page, 'Care')
+  const choice = page.getByRole('combobox', { name: 'Grow alongside a goal' })
+  await choice.selectOption({ label: 'Walk outside' })
+  await expect(
+    page.getByText('Each day you complete Walk outside on Today counts as a day of care for Sol.'),
+  ).toBeVisible()
+  expect(await seriousViolations(page, 'Care with a goal to grow alongside')).toEqual([])
+
+  // Today names Sol quietly on the goal's row, which stays as compact as
+  // its neighbour's.
+  await goTo(page, 'Today')
+  const walk = page.locator('[data-goal-id]', { hasText: 'Walk outside' })
+  const water = page.locator('[data-goal-id]', { hasText: 'Drink water' })
+  await expect(walk.locator('.goal-companions')).toHaveText(/growing alongside Sol$/)
+  await expect(water.locator('.goal-companions')).toHaveCount(0)
+  const heights = await Promise.all(
+    [walk, water].map((row) => row.evaluate((element) => element.getBoundingClientRect().height)),
+  )
+  expect(Math.abs(heights[0] - heights[1])).toBeLessThanOrEqual(1)
+  expect(await seriousViolations(page, 'Today with a goal growing a companion')).toEqual([])
+
+  // Done today: Sol's third day of care, and a chrysalis, celebrated. The
+  // same Sunlight brings the milkweed into bloom, with an egg.
+  await page.getByRole('button', { name: 'Care for Walk outside' }).click()
+  await expect(page.locator('.celebration-toast')).toContainText('Sol wrapped up into a chrysalis.')
+
+  // The new egg can grow alongside a goal of its own, chosen with its name.
+  await goTo(page, 'Care')
+  const arrival = page.getByRole('region', { name: /Would you like to name your .* egg\?/ })
+  await arrival
+    .getByRole('combobox', { name: 'Grow alongside a goal' })
+    .selectOption({ label: 'Drink water' })
+  expect(await seriousViolations(page, 'Care with a new arrival and goals')).toEqual([])
+  await arrival.getByRole('button', { name: /^Keep / }).click()
+  await expect(arrival).toHaveCount(0)
+  await expect(page.getByText(/^Each day you complete Drink water on Today/)).toBeVisible()
+
+  await page.getByRole('tab', { name: /\bSol\b/ }).click()
+  await expect(page.getByRole('tab', { name: /\bSol\b/ })).toContainText('Chrysalis · 0/3')
+  await expect(
+    page.getByText('Each day you complete Walk outside on Today counts as a day of care for Sol.'),
+  ).toBeVisible()
+  await page.getByText('Sol’s story').click()
+  const grown = page.locator('.story-list div', { hasText: 'Grown alongside' }).locator('dd')
+  await expect(grown).toHaveText('Walk outside · 1 day')
+
+  // Archived, the goal lets Sol go back to the care menu; the story stays.
+  await goTo(page, 'Today')
+  await expect(water.locator('.goal-companions')).toHaveCount(1)
+  await page.getByRole('button', { name: 'More for Walk outside' }).click()
+  await page
+    .getByRole('group', { name: 'Walk outside options' })
+    .getByRole('button', { name: 'Archive' })
+    .click()
+  await reloadAfterSave(page)
+  await goTo(page, 'Care')
+  await page.getByRole('tab', { name: /\bSol\b/ }).click()
+  await expect(choice).toHaveValue('')
+  await page.getByText('Sol’s story').click()
+  await expect(grown).toHaveText('Walk outside · 1 day')
 })
 
 test('persists emergence and selects the new butterfly as companion', async ({

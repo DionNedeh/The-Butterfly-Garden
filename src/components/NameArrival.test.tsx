@@ -75,3 +75,78 @@ describe('NameArrival', () => {
     expect(screen.getByRole('button', { name: 'Keep Sol' })).toBeInTheDocument()
   })
 })
+
+describe('growing the new arrival alongside a goal', () => {
+  const goals = [
+    { id: 'walk', title: 'Walk outside' },
+    { id: 'water', title: 'Drink water' },
+  ]
+
+  function renderWithGoals() {
+    const onName = vi.fn()
+    const onGrowAlongside = vi.fn()
+    render(
+      <NameArrival
+        arrival={egg}
+        creatures={[starter, egg]}
+        goals={goals}
+        onName={onName}
+        onGrowAlongside={onGrowAlongside}
+      />,
+    )
+    return {
+      onName,
+      onGrowAlongside,
+      choice: screen.getByRole('combobox', { name: 'Grow alongside a goal' }),
+    }
+  }
+
+  it('offers the goals, not now chosen until the gardener chooses', () => {
+    const { choice } = renderWithGoals()
+    expect(choice).toHaveValue('')
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Not now',
+      'Walk outside',
+      'Drink water',
+    ])
+    expect(choice).toHaveAccessibleDescription(
+      'Each day you complete it on Today counts as a day of care, beside the care menu.',
+    )
+  })
+
+  it('takes the goal chosen with the name, saved or kept', async () => {
+    const user = userEvent.setup()
+    const { onName, onGrowAlongside, choice } = renderWithGoals()
+    await user.selectOptions(choice, 'Drink water')
+    // Choosing alone answers nothing: the name goes with it.
+    expect(onGrowAlongside).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Keep Clover' }))
+    expect(onGrowAlongside).toHaveBeenCalledWith('water')
+    expect(onName).toHaveBeenCalledWith('Clover')
+
+    await user.selectOptions(choice, 'Walk outside')
+    await user.click(screen.getByRole('button', { name: 'Save name' }))
+    expect(onGrowAlongside).toHaveBeenLastCalledWith('walk')
+  })
+
+  it('leaves the egg to the care menu when not now', async () => {
+    const user = userEvent.setup()
+    const { onName, onGrowAlongside } = renderWithGoals()
+    await user.click(screen.getByRole('button', { name: 'Save name' }))
+    expect(onName).toHaveBeenCalledWith('Clover')
+    expect(onGrowAlongside).not.toHaveBeenCalled()
+  })
+
+  it('offers nothing of goals when there are none', () => {
+    render(
+      <NameArrival
+        arrival={egg}
+        creatures={[starter, egg]}
+        goals={[]}
+        onName={vi.fn()}
+        onGrowAlongside={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('combobox')).toBeNull()
+  })
+})

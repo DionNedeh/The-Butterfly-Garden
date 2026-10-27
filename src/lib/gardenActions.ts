@@ -27,6 +27,7 @@ import {
 import { checkInDetails } from './feelings'
 import { earlierDayProblem } from './earlierDay'
 import { createId } from './id'
+import { careFromGoal, releaseGoal } from './lifecycle'
 import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
 import type { ThemeChoice } from './theme'
@@ -95,18 +96,24 @@ export function updateGoal(state: AppState, goal: Goal): AppState {
   }
 }
 
-/** Retire a goal without discarding the days it was completed. */
+/**
+ * Retire a goal without discarding the days it was completed. A companion
+ * grown alongside it is let go, back to the care menu alone, keeping every
+ * day the goal gave (lib/lifecycle releaseGoal); restoring the goal later
+ * does not take it back without being asked.
+ */
 export function setGoalArchived(
   state: AppState,
   goalId: string,
   archived: boolean,
 ): AppState {
-  return {
+  const next = {
     ...state,
     goals: state.goals.map((goal) =>
       goal.id === goalId ? { ...goal, archived } : goal,
     ),
   }
+  return archived ? releaseGoal(next, goalId) : next
 }
 
 export function planGoal(
@@ -182,13 +189,19 @@ export function wakeGoal(state: AppState, goalId: string): AppState {
   }
 }
 
-/** A goal and every day it was completed. */
+/**
+ * A goal and every day it was completed. A companion grown alongside it is
+ * let go, as archiving does; its diary keeps the goal's name and days.
+ */
 export function deleteGoal(state: AppState, goalId: string): AppState {
-  return {
-    ...state,
-    goals: state.goals.filter((goal) => goal.id !== goalId),
-    completions: state.completions.filter((completion) => completion.goalId !== goalId),
-  }
+  return releaseGoal(
+    {
+      ...state,
+      goals: state.goals.filter((goal) => goal.id !== goalId),
+      completions: state.completions.filter((completion) => completion.goalId !== goalId),
+    },
+    goalId,
+  )
 }
 
 /**
@@ -223,6 +236,11 @@ export function restoreGoal(
  * The completion goes; any Sunlight it earned stays, the way deleting a
  * check-in never takes its Sunlight back. Completing it again earns nothing
  * more, because each completion's Sunlight is awarded once.
+ *
+ * A day of care it gave a companion grown alongside it stays too, for the
+ * same reason: the care day is the companion's now, and taking it back could
+ * undo a hatching already celebrated. Completing again gives no second day,
+ * since the companion's diary has this one (careFromGoal).
  */
 export function uncompleteGoal(
   state: AppState,
@@ -237,7 +255,10 @@ export function uncompleteGoal(
   }
 }
 
-/** Mark a goal done for the day, once, and earn its Sunlight. */
+/**
+ * Mark a goal done for the day, once, and earn its Sunlight. A companion
+ * grown alongside the goal counts the day as a day of care (careFromGoal).
+ */
 export function completeGoal(state: AppState, goalId: string, now: Date): AppState {
   const localDate = toLocalDate(now)
   const id = `${goalId}:${localDate}`
@@ -249,7 +270,7 @@ export function completeGoal(state: AppState, goalId: string, now: Date): AppSta
       { id, goalId, localDate, completedAt: now.toISOString() },
     ],
   }
-  return awardSunlight(completed, `goal:${id}`, now)
+  return careFromGoal(awardSunlight(completed, `goal:${id}`, now), goalId, now)
 }
 
 /**

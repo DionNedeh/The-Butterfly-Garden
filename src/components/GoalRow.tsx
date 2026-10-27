@@ -7,7 +7,10 @@ import {
   isLocalDate,
   LATEST_LOCAL_DATE,
 } from '../lib/date'
+import { listed } from '../lib/plural'
 import type { Goal } from '../types'
+import { Icon } from './Icons'
+import './goals/goals.css'
 
 /** The snooze lengths offered before "pick a date". */
 const SNOOZE_CHOICES: ReadonlyArray<[label: string, days: number]> = [
@@ -37,6 +40,9 @@ function scheduleLabel(goal: Goal): string {
  * the full goal beneath it in quieter text. Caring for it is caring for the
  * goal. On other days the row stays one line: the two-minute version lives
  * in the editor.
+ *
+ * A goal that companions are grown alongside names them in a small badge at
+ * the end of its quieter line, which keeps to that line (goals.css).
  */
 export function GoalRow({
   goal,
@@ -44,6 +50,7 @@ export function GoalRow({
   complete,
   skipped,
   gentle = false,
+  companions = [],
   onComplete,
   onSkip,
   onSnooze,
@@ -56,6 +63,8 @@ export function GoalRow({
   skipped: boolean
   /** Today is a gentle day: show the two-minute version, if there is one. */
   gentle?: boolean
+  /** The names of the companions grown alongside this goal (plan c.3). */
+  companions?: readonly string[]
   onComplete: () => void
   onSkip: () => void
   onSnooze: (days: number) => void
@@ -130,10 +139,24 @@ export function GoalRow({
       </button>
       <div className="goal-copy">
         <strong>{shownTitle}</strong>
-        <small>
-          {tiny ? goal.title : scheduleLabel(goal)}
-          {skipped && ' · skipped today'}
-        </small>
+        {companions.length > 0 ? (
+          <small className="with-companions">
+            <span className="goal-schedule">
+              {tiny ? goal.title : scheduleLabel(goal)}
+              {skipped && ' · skipped today'}
+            </span>
+            <span className="goal-companions">
+              <Icon name="leaf" size={12} />
+              <span className="sr-only">, growing alongside </span>
+              {listed(companions)}
+            </span>
+          </small>
+        ) : (
+          <small>
+            {tiny ? goal.title : scheduleLabel(goal)}
+            {skipped && ' · skipped today'}
+          </small>
+        )}
       </div>
       <div
         className="goal-menu"

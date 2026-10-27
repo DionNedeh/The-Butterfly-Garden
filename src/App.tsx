@@ -799,6 +799,7 @@ function App() {
               openOn={route.companionId}
               onChooseFlight={garden.chooseCompanionFlight}
               onOpenGuide={openGuideAt}
+              onAdoptGoal={garden.adoptGoal}
             />
           )}
           {activeView === 'shop' && (
@@ -846,6 +847,7 @@ function App() {
               onSetGentleDay={garden.setGentleDay}
               onChooseNextPlant={garden.chooseNextPlant}
               onOpenCare={() => setView('care')}
+              onAdoptGoal={garden.adoptGoal}
               recap={offeredRecap}
               moonlightCollected={recapCollected}
               openAtCheckIn={route.checkIn}

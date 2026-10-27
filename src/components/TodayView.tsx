@@ -22,6 +22,7 @@ import {
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
 import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
+import { companionsByGoal } from '../lib/growAlongside'
 import {
   checkInDetails,
   feelingsFromDraft,
@@ -107,6 +108,7 @@ export function TodayView({
   onOpenRecap,
   openAtCheckIn = false,
   onOpenGuide,
+  onAdoptGoal,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -145,6 +147,11 @@ export function TodayView({
   openAtCheckIn?: boolean
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
+  /**
+   * Grow a companion alongside a goal again: how Undo gives back the
+   * companions that archiving or deleting the goal let go.
+   */
+  onAdoptGoal?: (creatureId: string, goalId: string) => void
 }) {
   const existingMood = state.moods.find((entry) => entry.localDate === today)
   const existingReflection = state.reflections.find(
@@ -245,6 +252,17 @@ export function TodayView({
     () => state.goals.filter((goal) => goal.archived),
     [state.goals],
   )
+  // The companions each goal is growing, named quietly on its row.
+  const growing = useMemo(() => companionsByGoal(state.creatures), [state.creatures])
+  // Archiving or deleting a goal lets its companions go; Undo brings them
+  // back together, so these are kept with the offer.
+  const growingWith = (goalId: string) =>
+    state.creatures
+      .filter((creature) => creature.adoptedGoalId === goalId)
+      .map((creature) => creature.id)
+  const regrow = (creatureIds: readonly string[], goalId: string) => {
+    for (const creatureId of creatureIds) onAdoptGoal?.(creatureId, goalId)
+  }
   // Snoozed goals count: an idea already among them is not new to anyone.
   const activeGoalTitles = useMemo(
     () => state.goals.filter((goal) => !goal.archived).map((goal) => goal.title),
@@ -325,11 +343,15 @@ export function TodayView({
     pendingFocus.current = goalId
   }
   const archive = (goal: Goal) => {
+    const companions = growingWith(goal.id)
     focusAfterRedraw()
     onSetGoalArchived(goal.id, true)
     setUndoOffer({
       message: `${goal.title} archived.`,
-      undo: () => onSetGoalArchived(goal.id, false),
+      undo: () => {
+        onSetGoalArchived(goal.id, false)
+        regrow(companions, goal.id)
+      },
     })
   }
 
@@ -586,6 +608,7 @@ export function TodayView({
                 complete={complete}
                 skipped={skipped}
                 gentle={gentle}
+                companions={growing.get(goal.id)}
                 onComplete={() => {
                   onCompleteGoal(goal.id)
                   setUndoOffer({
@@ -695,12 +718,16 @@ export function TodayView({
               const completions = state.completions.filter(
                 (completion) => completion.goalId === editing.id,
               )
+              const companions = growingWith(editing.id)
               focusAfterRedraw()
               onDeleteGoal(editing.id)
               setEditingId(undefined)
               setUndoOffer({
                 message: `${editing.title} deleted.`,
-                undo: () => onRestoreGoal(editing, index, completions),
+                undo: () => {
+                  onRestoreGoal(editing, index, completions)
+                  regrow(companions, editing.id)
+                },
               })
             }}
             onCancel={() => {
