@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
@@ -6,6 +6,7 @@ import { saveTextFile } from '../lib/download'
 import { verifyGardenImages } from '../lib/imageImport'
 import { createInitialState } from '../lib/progression'
 import { reloadApp } from '../lib/reload'
+import { sealBackup } from '../lib/sealedBackup'
 import { gardenRepository } from '../repository/gardenRepository'
 import { ArrayBufferFileReader, unreadablePhoto } from '../test/fileReader'
 import type { AppState } from '../types'
@@ -219,5 +220,60 @@ describe('restoring from safe mode', () => {
     replace.mockRejectedValueOnce(new Error(''))
     await user.upload(restoreInput(), backupFile(createInitialState('Robin', 'Full')))
     expect(await screen.findByText('That file is not a garden backup.')).toBeInTheDocument()
+  })
+})
+
+describe('restoring a protected backup from safe mode', () => {
+  const PASSPHRASE = 'quiet meadow lantern'
+
+  async function protectedBackup(garden: unknown) {
+    const plain = await backupFile(garden).text()
+    const outcome = await sealBackup(plain, PASSPHRASE, { iterations: 1_000 })
+    return new File([(outcome as { text: string }).text], 'protected.json', { type: 'application/json' })
+  }
+
+  it('asks for its passphrase, then puts the garden inside back as any backup', async () => {
+    const replace = vi.spyOn(gardenRepository, 'replace').mockResolvedValue([])
+    const user = renderSafeMode()
+    await user.upload(restoreInput(), await protectedBackup(createInitialState('Robin', 'Locked Away')))
+    const dialog = await screen.findByRole('dialog', { name: 'This backup is protected' })
+
+    await user.type(within(dialog).getByLabelText('Passphrase'), 'the wrong words')
+    await user.click(within(dialog).getByRole('button', { name: 'Open the backup' }))
+    expect(await within(dialog).findByText(/does not open this backup/)).toBeInTheDocument()
+    expect(replace).not.toHaveBeenCalled()
+
+    await user.clear(within(dialog).getByLabelText('Passphrase'))
+    await user.type(within(dialog).getByLabelText('Passphrase'), PASSPHRASE)
+    await user.click(within(dialog).getByRole('button', { name: 'Open the backup' }))
+    await waitFor(() => expect(replace).toHaveBeenCalledOnce())
+    const [restored, options] = replace.mock.calls[0]
+    expect(restored.profile?.gardenName).toBe('Locked Away')
+    expect(options).toEqual({ snapshot: true })
+    expect(reloadApp).toHaveBeenCalledOnce()
+  })
+
+  it('replaces nothing when the prompt is put away', async () => {
+    const replace = vi.spyOn(gardenRepository, 'replace').mockResolvedValue([])
+    const user = renderSafeMode()
+    await user.upload(restoreInput(), await protectedBackup(createInitialState('Robin', 'Locked Away')))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(replace).not.toHaveBeenCalled()
+    expect(reloadApp).not.toHaveBeenCalled()
+  })
+
+  it('refuses what opens but is not a garden, in plain words', async () => {
+    const replace = vi.spyOn(gardenRepository, 'replace').mockResolvedValue([])
+    const user = renderSafeMode()
+    const outcome = await sealBackup('not a backup', PASSPHRASE, { iterations: 1_000 })
+    await user.upload(
+      restoreInput(),
+      new File([(outcome as { text: string }).text], 'odd.json', { type: 'application/json' }),
+    )
+    await user.type(await screen.findByLabelText('Passphrase'), PASSPHRASE)
+    await user.click(screen.getByRole('button', { name: 'Open the backup' }))
+    expect(await screen.findByText('That file is not a garden backup.')).toBeInTheDocument()
+    expect(replace).not.toHaveBeenCalled()
   })
 })

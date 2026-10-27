@@ -1,5 +1,5 @@
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ambientTrackDescriptions } from '../data/ambientTrackDescriptions'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
@@ -25,7 +25,7 @@ import {
 } from '../lib/storage'
 import { homeScreenAdvice } from '../lib/install'
 import { MAX_SIGHTING_PHOTOS, photosIn } from '../lib/customBackdrops'
-import { readBackupFile } from '../lib/backupFile'
+import { isSealedBackup, readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
@@ -52,7 +52,14 @@ import { ComfortLink } from './ComfortLink'
 import { LockSettings } from './lock/LockSettings'
 import { useLockState } from '../hooks/useLockState'
 import { letterQuotesOf, type LetterQuotes } from '../lib/letters'
+import { ProtectedRestore } from './backup/ProtectedRestore'
 import './settings.css'
+
+// Making a protected backup loads its dialog, and the code that locks the
+// file, only when it is asked for.
+const ProtectedBackupDialog = lazy(() =>
+  import('./backup/ProtectedBackupDialog').then((m) => ({ default: m.ProtectedBackupDialog })),
+)
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
 function passSummary(status: PassStatus): string {
@@ -359,8 +366,13 @@ export function SettingsView({
   const [restoreStep, setRestoreStep] = useState(false)
   /** A chosen backup, read and described, waiting for the gardener's yes. */
   const [pendingRestore, setPendingRestore] = useState<
-    BackupPreview & { text: string }
+    BackupPreview & { text: string; protected?: boolean }
   >()
+  /** A protected backup chosen to restore, waiting for its passphrase. */
+  const [sealedChoice, setSealedChoice] = useState<string>()
+  /** Making a protected backup: to save or download it, or to share it. */
+  const [protecting, setProtecting] = useState<'save' | 'share'>()
+  const previewHeading = useRef<HTMLHeadingElement>(null)
   const [restoring, setRestoring] = useState(false)
   /**
    * While a backup is being made: a field book full of photos takes a moment
@@ -550,7 +562,20 @@ export function SettingsView({
     }
   }
 
-  /** Read and describe the chosen file; nothing is replaced yet. */
+  /** Describe a backup's text; nothing is replaced yet. */
+  const describeBackup = (text: string, sealed = false) => {
+    const preview = previewBackup(text)
+    if (!preview.ok) {
+      setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
+      return
+    }
+    setPendingRestore({ ...preview, text, protected: sealed })
+  }
+
+  /**
+   * Read and describe the chosen file; nothing is replaced yet. A protected
+   * backup asks for its passphrase first, then is described like any other.
+   */
   const chooseBackup = async (file: File) => {
     setBackupNote(undefined)
     setPendingRestore(undefined)
@@ -559,14 +584,18 @@ export function SettingsView({
       setBackupNote(chosen.message)
       return
     }
-    const { text } = chosen
-    const preview = previewBackup(text)
-    if (!preview.ok) {
-      setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
+    if (isSealedBackup(chosen.text)) {
+      setSealedChoice(chosen.text)
       return
     }
-    setPendingRestore({ ...preview, text })
+    describeBackup(chosen.text)
   }
+
+  // A preview reached through the passphrase prompt takes focus as the
+  // prompt goes, so what the backup holds is what is read next.
+  useEffect(() => {
+    if (pendingRestore?.protected) previewHeading.current?.focus()
+  }, [pendingRestore])
 
   const confirmRestore = async () => {
     if (!pendingRestore) return
@@ -1031,6 +1060,28 @@ export function SettingsView({
               Share backup…
             </button>
           )}
+          <button
+            className="secondary-button"
+            disabled={persistence.readOnly}
+            onClick={() => {
+              setBackupNote(undefined)
+              setProtecting('save')
+            }}
+          >
+            {android ? 'Save a protected backup…' : 'Download a protected backup…'}
+          </button>
+          {canShareBackup && (
+            <button
+              className="secondary-button"
+              disabled={persistence.readOnly}
+              onClick={() => {
+                setBackupNote(undefined)
+                setProtecting('share')
+              }}
+            >
+              Share protected backup…
+            </button>
+          )}
           {!restoreStep ? (
             <button
               className="text-button"
@@ -1058,6 +1109,38 @@ export function SettingsView({
             This copy is not locked; keep it somewhere private, or use a protected backup.
           </p>
         )}
+        <p className="subtle-copy">
+          A protected backup needs a passphrase to open, so nobody can read your
+          garden from the file without it.
+        </p>
+        {protecting && (
+          <Suspense fallback={null}>
+            <ProtectedBackupDialog
+              share={protecting === 'share'}
+              onExportGarden={onExportGarden}
+              onClose={(result) => {
+                setProtecting(undefined)
+                if (!result) return
+                backupMade(result.madeAt)
+                setBackupNote(result.note)
+              }}
+            />
+          </Suspense>
+        )}
+        {sealedChoice !== undefined && (
+          <ProtectedRestore
+            text={sealedChoice}
+            returnFocus={() => fileInputRef.current}
+            onOpened={(plain) => {
+              setSealedChoice(undefined)
+              describeBackup(plain, true)
+            }}
+            onClose={(note) => {
+              setSealedChoice(undefined)
+              if (note) setBackupNote(note)
+            }}
+          />
+        )}
         {restoreStep && (
           <div className="delete-confirmation" role="alert">
             <strong>
@@ -1080,12 +1163,13 @@ export function SettingsView({
         )}
         {pendingRestore && (
           <div className="restore-preview" aria-labelledby="restore-preview-title">
-            <h3 id="restore-preview-title">
+            <h3 id="restore-preview-title" ref={previewHeading} tabIndex={-1}>
               {pendingRestore.gardenName
                 ? `This backup holds ${pendingRestore.gardenName}`
                 : 'This backup holds a garden'}
             </h3>
             <ul>
+              {pendingRestore.protected && <li>A protected backup, opened with its passphrase</li>}
               {pendingRestore.counts && (
                 <>
                   <li>

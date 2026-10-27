@@ -508,5 +508,50 @@ test('a locked garden opens to the lock screen, where the back gesture leaves th
   await page.getByLabel('Passcode', { exact: true }).fill(passcode)
   await page.getByRole('button', { name: 'Open my garden' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused(deriving)
+})
+
+test('a protected backup goes to the app’s own save screen, and says honestly when it could not be saved', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  let downloads = 0
+  page.on('download', () => (downloads += 1))
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  // The app's own words, and no share sheet: its save screen reaches every app.
+  await expect(page.getByRole('button', { name: /^Download a protected backup/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Share protected backup/ })).toHaveCount(0)
+  const make = page.getByRole('button', { name: 'Save a protected backup…' })
+  await make.click()
+  const dialog = page.getByRole('dialog', { name: 'Save a protected backup' })
+  await expect(dialog.getByRole('heading', { name: 'Save a protected backup' })).toBeFocused()
+
+  // Back puts it away, with focus where it began.
+  await pressBack(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(make).toBeFocused()
+
+  await make.click()
+  await dialog.getByLabel('Passphrase', { exact: true }).fill('quiet meadow lantern')
+  await dialog.getByLabel('Passphrase again').fill('quiet meadow lantern')
+  await dialog.getByRole('button', { name: 'Lock the backup' }).click()
+  const save = dialog.getByRole('button', { name: 'Save protected backup' })
+  await expect(save).toBeFocused({ timeout: 15_000 })
+  expect(await seriousViolations(page, 'Android protected backup, ready to save')).toEqual([])
+
+  // A browser has no native side, so the app says the file could not be
+  // saved rather than claiming it was, and keeps it for another try.
+  await save.click()
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'The protected backup could not be saved there. Try choosing another place.',
+  )
+  await expect(dialog).toBeVisible()
+  await expect(page.getByText(/^Protected backup saved/)).toHaveCount(0)
+  expect(downloads).toBe(0)
+
+  await pressBack(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(make).toBeFocused()
   expect(errors).toEqual([])
 })
