@@ -213,14 +213,15 @@ describe('meeting a butterfly in the garden', () => {
     gardenWithSol()
     const flyer = screen.getByRole('button', { name: 'Meet Sol, Monarch' })
     await user.click(flyer)
-    const first = await screen.findByRole('dialog', { name: 'Sol' })
+    await screen.findByRole('dialog', { name: 'Sol' })
+    const first = document.querySelector('dialog')!
     // As a browser does: the dialog closes at once and hands focus back, but
     // its close event comes a moment later.
     first.close = function (this: HTMLDialogElement) {
       this.removeAttribute('open')
       setTimeout(() => this.dispatchEvent(new Event('close')), 0)
     }
-    ;(first as HTMLDialogElement).close()
+    first.close()
     // Pressed in that moment, before the event has come.
     act(() => {
       fireEvent.click(flyer)
