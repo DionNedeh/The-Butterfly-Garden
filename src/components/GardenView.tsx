@@ -206,18 +206,29 @@ export function GardenView({
     motion === 'calm'
       ? Math.min(CALM_AIRBORNE, gardenButterflies.length)
       : gardenButterflies.length
-  /** The butterfly whose card is open, by id. */
-  const [meeting, setMeeting] = useState<string>()
-  const meetingCreature = emerged.find((creature) => creature.id === meeting)
+  /**
+   * The butterfly whose card is open, by id, and which opening this is. A
+   * dialog's close event comes a moment after it closes, by which time the
+   * browser has already handed focus back to the butterfly; a key pressed in
+   * that moment opens the card again, and the late event must not close the
+   * new one. So each opening has a number, and a close ends only its own.
+   */
+  const [meeting, setMeeting] = useState<{ id: string; opening: number }>()
+  const openings = useRef(0)
+  const meet = (id: string) => {
+    openings.current += 1
+    setMeeting({ id, opening: openings.current })
+  }
+  const meetingCreature = emerged.find((creature) => creature.id === meeting?.id)
   const flightSpace = useRef<HTMLDivElement>(null)
   // The card has closed, however it was closed: focus goes back to the
   // butterfly it was about, rather than falling to the page.
-  const closeCard = () => {
-    const id = meeting
-    setMeeting(undefined)
+  const closeCard = (closed: { id: string; opening: number }) => {
+    if (openings.current !== closed.opening) return
+    setMeeting((current) => (current?.opening === closed.opening ? undefined : current))
     const flyer = Array.from(
       flightSpace.current?.querySelectorAll<HTMLElement>('[data-flyer]') ?? [],
-    ).find((element) => element.dataset.flyer === id)
+    ).find((element) => element.dataset.flyer === closed.id)
     flyer?.querySelector<HTMLElement>('[role="button"]')?.focus()
   }
   const observationChoices = observations.filter(
@@ -376,7 +387,7 @@ export function GardenView({
               pattern={butterfly.pattern}
               index={index}
               aloft={aloft}
-              onMeet={() => setMeeting(butterfly.id)}
+              onMeet={() => meet(butterfly.id)}
               speciesId={butterfly.speciesId}
               label={butterfly.label}
               outfit={butterfly.outfit}
@@ -449,9 +460,10 @@ export function GardenView({
         </div>
       </section>
       {/* Outside the scene, so nothing styled for the scene reaches the card. */}
-      {(meeting === GUIDE_ID || meetingCreature) && (
+      {meeting && (meeting.id === GUIDE_ID || meetingCreature) && (
         <Suspense fallback={null}>
           <ButterflyCard
+            key={meeting.opening}
             creature={meetingCreature}
             outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
             onCareFor={
@@ -459,7 +471,7 @@ export function GardenView({
                 ? () => onCareFor(meetingCreature.id)
                 : undefined
             }
-            onClose={closeCard}
+            onClose={() => closeCard(meeting)}
           />
         </Suspense>
       )}
