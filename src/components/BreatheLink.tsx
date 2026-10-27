@@ -7,8 +7,9 @@ import './breathe/breatheLink.css'
  * breathing goal on Today, and the support page.
  *
  * A real link to the page, like GuideLink, but an ordinary click goes
- * through `onOpen`, which remembers the page it came from so the breathing
- * page, and Android's back gesture, can return there.
+ * through `onOpen`, which remembers the page it came from and where on it,
+ * so the breathing page, and Android's back gesture, can return to this
+ * link.
  */
 export function BreatheLink({ children, onOpen }: { children: string; onOpen: () => void }) {
   const open = (event: MouseEvent<HTMLAnchorElement>) => {

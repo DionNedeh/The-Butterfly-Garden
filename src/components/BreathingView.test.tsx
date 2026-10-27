@@ -19,6 +19,9 @@ interface FakeAnimation {
 
 let animations: FakeAnimation[] = []
 
+/** What was brought into view, in order: jsdom has no scrolling of its own. */
+let scrolledTo: Array<{ element: Element; options: ScrollIntoViewOptions | boolean | undefined }> = []
+
 function garden(profile: Partial<Profile> = {}, overrides: Partial<AppState> = {}): AppState {
   const state = createInitialState('Robin', 'Breath', NOW)
   return { ...state, profile: { ...state.profile!, ...profile }, ...overrides }
@@ -68,6 +71,13 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
   vi.setSystemTime(NOW)
   animations = []
+  scrolledTo = []
+  Element.prototype.scrollIntoView = vi.fn(function (
+    this: Element,
+    options?: ScrollIntoViewOptions | boolean,
+  ) {
+    scrolledTo.push({ element: this, options })
+  })
   // jsdom has no Web Animations; this one remembers what it was asked.
   Element.prototype.animate = vi.fn(function (
     keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
@@ -90,6 +100,8 @@ afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
   Reflect.deleteProperty(Element.prototype, 'animate')
+  Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+  vi.restoreAllMocks()
   Reflect.deleteProperty(document, 'visibilityState')
 })
 
@@ -132,6 +144,25 @@ describe('breathing with a butterfly', () => {
     expect(count()).toBe('Out… 6')
     wait(1000)
     expect(count()).toBe('In… 1')
+  })
+
+  it('brings the count, then Stop, into view as it starts, and no further', () => {
+    renderView()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    start()
+    const stop = screen.getByRole('button', { name: 'Stop' })
+    // Focus alone would centre Stop, which can take the count up under the
+    // header; it is only moved as far as each needs, the count first.
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    expect(stop).toHaveFocus()
+    expect(scrolledTo).toEqual([
+      { element: document.querySelector('.breath-count-box'), options: { block: 'nearest' } },
+      { element: stop, options: { block: 'nearest' } },
+    ])
+    // Nothing more is moved while it runs, or when it stops.
+    wait(5000)
+    fireEvent.click(stop)
+    expect(scrolledTo).toHaveLength(2)
   })
 
   it('moves both wings on one Web Animations timeline, a transform only', () => {
