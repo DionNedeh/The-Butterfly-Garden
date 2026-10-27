@@ -180,6 +180,28 @@ describe('validating a garden', () => {
       expect(creature.outfit).toEqual({ headwear: 'flower-crown' })
       expect(creature.bond).toBe(0)
     })
+
+    it('keeps an open offer to name an egg only when it is stored as true', () => {
+      const egg = {
+        ...createInitialState('Tester', 'Test Garden').creatures[0],
+        stage: 'egg',
+      }
+      const result = validateGarden(
+        garden({
+          creatures: [
+            { ...egg, id: 'open', awaitingName: true },
+            { ...egg, id: 'answered', awaitingName: false },
+            { ...egg, id: 'odd', awaitingName: 'yes' },
+            { ...egg, id: 'older' },
+          ],
+        }),
+      )
+      const [open, ...rest] = result.state!.creatures
+      expect(open.awaitingName).toBe(true)
+      for (const creature of rest) expect(creature).not.toHaveProperty('awaitingName')
+      // A dropped offer is not damage worth telling the gardener about.
+      expect(result.repaired).toBe(0)
+    })
   })
 
   it('keeps calm motion only as a true or false choice', () => {

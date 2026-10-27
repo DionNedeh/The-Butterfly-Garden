@@ -468,7 +468,7 @@ function checkCreature(raw: unknown, ctx: Context) {
       : 0
   const optionalStamp = (value: unknown) =>
     typeof value === 'string' ? value : undefined
-  return {
+  const creature = {
     ...(raw as unknown as AppState['creatures'][number]),
     stage,
     name: asText(raw.name, ctx, 'Little one'),
@@ -483,6 +483,10 @@ function checkCreature(raw: unknown, ctx: Context) {
     emergedAt: optionalStamp(raw.emergedAt),
     sourcePlantId: optionalStamp(raw.sourcePlantId),
   }
+  // An open offer to name an egg is only ever stored as true. Anything else
+  // is no offer, so a hand-edited value can never reach the Care page.
+  if (raw.awaitingName !== true) delete creature.awaitingName
+  return creature
 }
 
 /** Counts that can be earned again: whole, finite, never negative. */

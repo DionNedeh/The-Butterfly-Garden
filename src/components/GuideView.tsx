@@ -49,7 +49,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       title: 'Seeds, plants, and butterfly eggs',
       paragraphs: [
         `Each seed plants one flower, shrub, or tree (${PLANT_SEED_COST} seed per plant, up to ${PLANT_CAPACITY} spaces in the scene). Host plants shelter particular butterfly species; nectar plants feed everyone. Shared host plants prefer a species you have not welcomed yet.`,
-        'Plants grow one stage per Sunlight — seed, sprout, budding, full bloom — with each Sunlight tending the plant you chose on Today, or else the earliest one that can still grow. When a host plant reaches full bloom, look closely: a butterfly egg appears on its leaves, and a new companion begins.',
+        'Plants grow one stage per Sunlight — seed, sprout, budding, full bloom — with each Sunlight tending the plant you chose on Today, or else the earliest one that can still grow. When a host plant reaches full bloom, look closely: a butterfly egg appears on its leaves, and a new companion begins. It arrives with a name no other companion has, and the Care page offers you the chance to choose another. There is no need to answer: if you do nothing, it keeps the name it came with.',
         'Missed days simply pause growth; nothing ever wilts. You can remove a plant from its field-guide panel (no seed refund), but a plant sheltering an egg, caterpillar, or chrysalis is protected until its butterfly emerges.',
       ],
     },

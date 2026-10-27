@@ -290,6 +290,31 @@ describe('the gardener and their companions', () => {
     expect(act.renameCreature(before, id, '   ')).toBe(before)
   })
 
+  it('leaves the garden as it was when a rename changes nothing', () => {
+    const before = garden()
+    const [starter] = before.creatures
+    expect(act.renameCreature(before, starter.id, ` ${starter.name} `)).toBe(before)
+    expect(act.renameCreature(before, 'nobody', 'Pip')).toBe(before)
+  })
+
+  it('answers the offer to name a new egg, whether named or kept', () => {
+    const base = garden()
+    const egg = { ...base.creatures[0], id: 'egg', name: 'Clover', stage: 'egg' as const, awaitingName: true }
+    const before = garden({ creatures: [base.creatures[0], egg] })
+
+    const named = act.renameCreature(before, 'egg', 'Pip')
+    expect(named.creatures[1]).toEqual({ ...egg, name: 'Pip', awaitingName: undefined })
+    expect(named.creatures[1]).not.toHaveProperty('awaitingName')
+    // The other companion is the very same object, so nothing else is saved.
+    expect(named.creatures[0]).toBe(before.creatures[0])
+
+    const kept = act.renameCreature(before, 'egg', 'Clover')
+    expect(kept).not.toBe(before)
+    expect(kept.creatures[1].name).toBe('Clover')
+    expect(kept.creatures[1]).not.toHaveProperty('awaitingName')
+    expect(before.creatures[1].awaitingName).toBe(true)
+  })
+
   it('chooses a companion, a track, a theme and sound', () => {
     const before = garden()
     expect(act.selectCompanion(before, 'c9').profile?.activeCompanionId).toBe('c9')

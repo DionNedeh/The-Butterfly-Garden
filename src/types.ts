@@ -305,6 +305,12 @@ export interface CreatureInstance {
   emergeAt?: string
   emergedAt?: string
   sourcePlantId?: string
+  /**
+   * Set on an egg the garden has just found, until the gardener names it or
+   * keeps the name it came with. Read only while the creature is an egg, so
+   * one that hatches without an answer simply leaves the offer behind.
+   */
+  awaitingName?: boolean
 }
 
 export interface SunlightAward {

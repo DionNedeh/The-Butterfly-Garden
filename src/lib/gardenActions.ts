@@ -404,15 +404,23 @@ export function selectCompanion(state: AppState, creatureId: string): AppState {
   return { ...state, profile: { ...state.profile, activeCompanionId: creatureId } }
 }
 
+/**
+ * Name a companion. Naming also answers the offer a new egg arrives with,
+ * even when the name chosen is the one it already had: keeping the default
+ * is an answer too, and the offer should not be made again.
+ */
 export function renameCreature(state: AppState, creatureId: string, name: string): AppState {
   const trimmed = name.trim()
-  if (!trimmed) return state
-  return {
-    ...state,
-    creatures: state.creatures.map((creature) =>
-      creature.id === creatureId ? { ...creature, name: trimmed } : creature,
-    ),
+  const index = state.creatures.findIndex((creature) => creature.id === creatureId)
+  const creature = index === -1 ? undefined : state.creatures[index]
+  if (!trimmed || !creature || (creature.name === trimmed && !creature.awaitingName)) {
+    return state
   }
+  const named = { ...creature, name: trimmed }
+  delete named.awaitingName
+  const creatures = [...state.creatures]
+  creatures[index] = named
+  return { ...state, creatures }
 }
 
 export function selectBackdrop(

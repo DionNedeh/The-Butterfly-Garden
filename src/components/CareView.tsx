@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { careActionsForStage } from '../data/careActions'
 import { getShopItem, outfitSlots, shopItems } from '../data/shopItems'
 import { canWearItem, hasGardenPassFeature } from '../lib/gardenPass'
@@ -19,6 +19,7 @@ import type { AppState, CreatureStage, OutfitSlot } from '../types'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { PettableCreature } from './PettableCreature'
 import { Icon } from './Icons'
+import { NameArrival } from './NameArrival'
 
 const stageDescriptions: Record<CreatureStage, string> = {
   egg: 'A tiny egg rests on its host leaf. Keep it warm and watched for three days of care and it will hatch.',
@@ -66,10 +67,31 @@ export function CareView({
     () => visibleOutfits(state.creatures, passCosmetics),
     [state.creatures, passCosmetics],
   )
-  const [selectedId, setSelectedId] = useState<string>()
+  // The first egg still waiting for a name, oldest first. Only eggs: one that
+  // hatched before the gardener answered keeps its name and is not asked.
+  const arrival = state.creatures.find(
+    (creature) => creature.stage === 'egg' && creature.awaitingName,
+  )
+  // The page opens on the egg being offered a name, so the portrait shows
+  // the companion the offer is about.
+  const [selectedId, setSelectedId] = useState<string | undefined>(arrival?.id)
   const [nameDraft, setNameDraft] = useState<string>()
   const selected =
     ordered.find((creature) => creature.id === selectedId) ?? ordered[0]
+
+  // Answering the offer removes it. Focus goes to the named companion's chip,
+  // which shows the name it now has, rather than falling to the page body.
+  const picker = useRef<HTMLDivElement>(null)
+  const focusChip = useRef<string>(undefined)
+  useEffect(() => {
+    const id = focusChip.current
+    if (id === undefined) return
+    focusChip.current = undefined
+    const chips = picker.current?.querySelectorAll<HTMLElement>('[data-creature-id]') ?? []
+    Array.from(chips)
+      .find((chip) => chip.dataset.creatureId === id)
+      ?.focus()
+  })
 
   if (!selected) {
     return (
@@ -110,7 +132,26 @@ export function CareView({
         </div>
       </header>
 
-      <div className="creature-picker" role="tablist" aria-label="Your companions">
+      {arrival && (
+        <NameArrival
+          key={arrival.id}
+          arrival={arrival}
+          creatures={state.creatures}
+          onName={(name) => {
+            focusChip.current = arrival.id
+            setSelectedId(arrival.id)
+            setNameDraft(undefined)
+            onRenameCreature(arrival.id, name)
+          }}
+        />
+      )}
+
+      <div
+        className="creature-picker"
+        role="tablist"
+        aria-label="Your companions"
+        ref={picker}
+      >
         {ordered.map((creature) => {
           const isSelected = creature.id === selected.id
           return (
@@ -118,6 +159,7 @@ export function CareView({
               key={creature.id}
               role="tab"
               aria-selected={isSelected}
+              data-creature-id={creature.id}
               className={`creature-chip ${isSelected ? 'selected' : ''}`}
               onClick={() => {
                 setSelectedId(creature.id)
