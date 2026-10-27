@@ -90,6 +90,33 @@ describe('the photos in a backup', () => {
     await expect(verifySightingPhotos([garbage])).rejects.toThrow(/could not be read/)
   })
 
+  it('are refused, before anything is decoded, when the header claims a picture larger than this app makes', async () => {
+    const decode = vi.fn()
+    vi.stubGlobal('createImageBitmap', decode)
+    // A lossless WebP's header: a few dozen bytes that claim 16383 by 16383,
+    // a gigabyte once decoded.
+    const bomb = new Uint8Array(32)
+    bomb.set([82, 73, 70, 70, 24, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 76, 12, 0, 0, 0, 0x2f, 0xfe, 0xbf, 0xff, 0x0f])
+    for (const bytes of [bomb, png(16383, 16383), png(SIGHTING_PHOTO_MAX_EDGE + 1, 10), png(0, 10)]) {
+      const photo = new Blob([bytes], { type: bytes === bomb ? 'image/webp' : 'image/png' })
+      await expect(verifySightingPhotos([photo])).rejects.toThrow(/could not be read, so nothing was replaced/)
+    }
+    expect(decode).not.toHaveBeenCalled()
+    // As large as the app makes is fine.
+    stubDecode(SIGHTING_PHOTO_MAX_EDGE, 768)
+    await expect(
+      verifySightingPhotos([new Blob([png(SIGHTING_PHOTO_MAX_EDGE, 768)], { type: 'image/png' })]),
+    ).resolves.toBeUndefined()
+  })
+
+  it('are refused when the picture drawn is not the size its header says', async () => {
+    const close = stubDecode(20, 20)
+    await expect(verifySightingPhotos([new Blob([png(10, 10)], { type: 'image/png' })])).rejects.toThrow(
+      /could not be read/,
+    )
+    expect(close).toHaveBeenCalledOnce()
+  })
+
   it('are refused when the browser cannot draw one', async () => {
     vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('decode failed')))
     const sound = new Blob([png(10, 10)], { type: 'image/png' })

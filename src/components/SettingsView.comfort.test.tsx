@@ -13,7 +13,7 @@ function renderSettings(state: AppState, onOpenComfort?: () => void) {
       onUpdateProfile={vi.fn()}
       onSelectAmbientTrack={vi.fn()}
       onSelectBackdrop={vi.fn()}
-      onExportGarden={vi.fn(() => '{}')}
+      onExportGarden={vi.fn(() => ({ text: '{}' }))}
       onImportGarden={vi.fn(() => Promise.resolve({ ok: true, message: '' }))}
       onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
       onOpenSupport={vi.fn()}

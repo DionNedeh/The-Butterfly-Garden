@@ -75,18 +75,42 @@ describe('a garden’s field book', () => {
     expect(result.repaired).toBe(5)
   })
 
-  it('drops one dated after tomorrow, or on no real day, and keeps tomorrow’s for a traveller', () => {
+  it('keeps one dated ahead of this device’s clock, as a check-in is kept, and drops one on no real day', () => {
+    // A clock set back (a phone flat for a while) must not lose what was
+    // seen since: only a sighting being written down is held to today.
+    const ahead = [
+      sighting({ id: 'tomorrow', date: '2026-10-28' }),
+      sighting({ id: 'later', date: '2026-10-29', photo: photo() }),
+      sighting({ id: 'far', date: '3026-01-01' }),
+    ]
     const result = validateGarden(
       garden([
-        sighting({ id: 'tomorrow', date: '2026-10-28' }),
-        sighting({ id: 'later', date: '2026-10-29' }),
-        sighting({ id: 'far', date: '3026-01-01' }),
+        ...ahead,
         sighting({ id: 'nonsense', date: '2026-02-30' }),
         sighting({ id: 'missing', date: undefined }),
       ]),
     )
-    expect(result.state?.sightings.map((item) => item.id)).toEqual(['tomorrow'])
-    expect(result.repaired).toBe(4)
+    expect(result.state?.sightings).toEqual(ahead)
+    expect(result.state?.sightings[1].photo).toBe(ahead[1].photo)
+    expect(result.repaired).toBe(2)
+  })
+
+  it('keeps a sighting whose photo a file left out as unreadable, without it, and counts it', () => {
+    const result = validateGarden(
+      garden([
+        sighting({ id: 'a', photo: { mimeType: 'image/webp', unreadable: true } }),
+        sighting({ id: 'b', photo: photo() }),
+      ]),
+    )
+    const [a, b] = result.state!.sightings
+    expect(a).toEqual(sighting({ id: 'a' }))
+    expect(a).not.toHaveProperty('photo')
+    expect(b.photo).toBeInstanceOf(Blob)
+    expect(result.repaired).toBe(1)
+    // Only that mark: a photo that says nothing of itself is still damage.
+    expect(validateGarden(garden([sighting({ photo: { unreadable: 'yes' } })])).refused).toBe(
+      'One of its photos is damaged.',
+    )
   })
 
   it('repairs a missing or repeated id and a missing time, keeping the sighting', () => {

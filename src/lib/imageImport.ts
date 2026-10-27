@@ -186,6 +186,13 @@ function encode(
   )
 }
 
+
+/** What processing makes: the stored picture, without its name or framing. */
+type BackdropPixels = Pick<
+  CustomBackdrop,
+  'mimeType' | 'width' | 'height' | 'byteLength' | 'imageData'
+>
+
 function base64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -198,12 +205,6 @@ function base64(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob)
   })
 }
-
-/** What processing makes: the stored picture, without its name or framing. */
-type BackdropPixels = Pick<
-  CustomBackdrop,
-  'mimeType' | 'width' | 'height' | 'byteLength' | 'imageData'
->
 
 /**
  * The canvas transform that turns a picture by quarter turns to the right
@@ -344,11 +345,15 @@ export async function prepareSightingPhoto(file: File): Promise<Blob> {
   return blob
 }
 
-/** Bytes of a stored image, from its base64. */
+/**
+ * Bytes of a stored image, from its base64: by a plain loop, many times
+ * quicker than Uint8Array.from with a mapping function.
+ */
 function storedBytes(record: Pick<CustomBackdrop, 'imageData'>): Uint8Array<ArrayBuffer> {
-  return Uint8Array.from(atob(record.imageData), (character) =>
-    character.charCodeAt(0),
-  )
+  const binary = atob(record.imageData)
+  const bytes = new Uint8Array(binary.length)
+  for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at)
+  return bytes
 }
 
 export async function prepareBackdrop(
@@ -418,18 +423,27 @@ export async function verifyBackdropImages(
 
 /**
  * The photos in a backup, checked before anything is replaced, as its
- * personal images are: each must be the image its type says, and one this
- * browser can draw.
+ * personal images are: each must be the image its type says, no larger
+ * than a photo this app makes, and one this browser can draw at that size.
+ *
+ * The size is read from the header before anything is decoded: a file of a
+ * few kilobytes can claim hundreds of megapixels, and decoding it would ask
+ * a phone for more memory than it has.
  */
 export async function verifySightingPhotos(photos: readonly Blob[]): Promise<void> {
   for (const photo of photos) {
     let readable = false
     try {
-      const header = imageHeader(new Uint8Array(await photo.arrayBuffer()))
-      if (header.mime === photo.type) {
+      const { mime, width, height } = imageHeader(new Uint8Array(await photo.arrayBuffer()))
+      if (
+        mime === photo.type &&
+        checkDecodedSize(width, height).ok &&
+        Math.max(width, height) <= SIGHTING_PHOTO_MAX_EDGE
+      ) {
         const bitmap = await createImageBitmap(photo)
+        // A header that tells the truth about the size, too.
+        readable = bitmap.width === width && bitmap.height === height
         bitmap.close()
-        readable = true
       }
     } catch {
       readable = false

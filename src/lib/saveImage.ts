@@ -20,19 +20,6 @@ interface GardenImageFiles {
   }): Promise<{ saved: boolean }>
 }
 
-/** A slice of bytes per conversion, so a large image cannot overflow the call stack. */
-const BASE64_SLICE = 0x8000
-
-/** Base64 of a blob's bytes. */
-export async function base64Of(blob: Blob): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer())
-  let binary = ''
-  for (let start = 0; start < bytes.length; start += BASE64_SLICE) {
-    binary += String.fromCharCode(...bytes.subarray(start, start + BASE64_SLICE))
-  }
-  return btoa(binary)
-}
-
 /**
  * Save an image as a file: `saved` or `cancelled` from Android's save
  * screen, `started` for a browser download. Throws when the save fails
@@ -41,6 +28,8 @@ export async function base64Of(blob: Blob): Promise<string> {
 export async function saveImageFile(fileName: string, blob: Blob): Promise<SaveOutcome> {
   if (import.meta.env.VITE_PLATFORM === 'android') {
     const { plugin } = await inAppPlugin<GardenImageFiles>('GardenFiles')
+    // The browser's own encoder, which the field book's photos use too.
+    const { base64Of } = await import('./sightingPhotos')
     const { saved } = await plugin.saveBinaryDocument({
       fileName,
       mimeType: blob.type,

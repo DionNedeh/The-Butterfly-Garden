@@ -16,7 +16,7 @@ function renderSettings<Extra extends Record<string, unknown>>(
     onUpdateProfile: vi.fn(),
     onSelectAmbientTrack: vi.fn(),
     onSelectBackdrop: vi.fn(),
-    onExportGarden: vi.fn(() => '{"format":"the-butterfly-garden"}'),
+    onExportGarden: vi.fn(() => ({ text: '{"format":"the-butterfly-garden"}' })),
     onImportGarden: vi.fn(() => Promise.resolve({ ok: true, message: 'Restored.' })),
     onDeleteAll: vi.fn(() => Promise.resolve({ ok: true })),
     ...overrides,
@@ -262,7 +262,7 @@ describe('SettingsView sound', () => {
         onUpdateProfile={vi.fn()}
         onSelectAmbientTrack={vi.fn()}
         onSelectBackdrop={vi.fn()}
-        onExportGarden={vi.fn(() => '{}')}
+        onExportGarden={vi.fn(() => ({ text: '{}' }))}
         onImportGarden={vi.fn(() => Promise.resolve({ ok: true, message: 'Restored.' }))}
         onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
         {...handlers}
@@ -462,7 +462,7 @@ describe('SettingsView backup habits', () => {
         onUpdateProfile={vi.fn()}
         onSelectAmbientTrack={vi.fn()}
         onSelectBackdrop={vi.fn()}
-        onExportGarden={() => '{"format":"the-butterfly-garden"}'}
+        onExportGarden={() => ({ text: '{"format":"the-butterfly-garden"}' })}
         onBackupMade={(madeAt) => {
           onBackupMade(madeAt)
           setState((current) => recordBackup(current, madeAt))
@@ -681,7 +681,7 @@ describe('SettingsView region', () => {
         onUpdateProfile={vi.fn()}
         onSelectAmbientTrack={vi.fn()}
         onSelectBackdrop={vi.fn()}
-        onExportGarden={vi.fn(() => '{}')}
+        onExportGarden={vi.fn(() => ({ text: '{}' }))}
         onImportGarden={vi.fn(() => Promise.resolve({ ok: true, message: '' }))}
         onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
         onSetRegion={onSetRegion}

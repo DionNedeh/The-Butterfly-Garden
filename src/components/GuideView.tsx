@@ -29,7 +29,12 @@ import { hashForRoute } from '../lib/routes'
 import { counted } from '../lib/plural'
 import { regionGuideWords } from '../lib/regionGuide'
 import { hasEveryWord, normaliseForSearch, searchWords } from '../lib/searchText'
-import { fieldBookActions, seenInTheWild, type ChangeSightings } from '../lib/sightings'
+import {
+  fieldBookActions,
+  PHOTO_NOT_KEPT,
+  seenInTheWild,
+  type ChangeSightings,
+} from '../lib/sightings'
 import { useLocalDate } from '../hooks/useLocalDate'
 // Only the Guide draws these, so they arrive with it.
 import './guide/guide.css'
@@ -302,6 +307,8 @@ export function GuideView({
   // button that did, which takes focus back when the form closes.
   const [logging, setLogging] = useState<SightingSubject>()
   const loggedFrom = useRef<HTMLElement | null>(null)
+  /** Whether the photo of the sighting just logged was stored, while that is not yet known. */
+  const photoSaved = useRef<Promise<boolean>>(undefined)
   const [logged, setLogged] = useState('')
   // Rebuilt only when the gardener's evening moves, not on every garden change.
   const sections = useMemo(
@@ -451,11 +458,22 @@ export function GuideView({
             region={region}
             today={today}
             subject={logging}
-            onSave={(input) => fieldBookActions(onChangeSightings).log(input) !== undefined}
+            onSave={(input) => {
+              const actions = fieldBookActions(onChangeSightings)
+              if (actions.log(input) === undefined) return false
+              // With a photo, "saved" waits for the photo to be stored.
+              photoSaved.current = input.photo && actions.photoSaved(input.photo)
+              return true
+            }}
             onClose={(saved) => {
               setLogging(undefined)
               loggedFrom.current?.focus()
-              if (saved) setLogged('Saved to your field book, in the Journal’s field notes.')
+              if (!saved) return
+              const words = 'Saved to your field book, in the Journal’s field notes.'
+              const waiting = photoSaved.current
+              photoSaved.current = undefined
+              if (!waiting) setLogged(words)
+              else void waiting.then((kept) => setLogged(kept ? words : PHOTO_NOT_KEPT))
             }}
           />
         </Suspense>

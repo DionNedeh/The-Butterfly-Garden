@@ -3,6 +3,7 @@ import { formatDayInWords } from '../../lib/fieldNotes'
 import {
   fieldBookActions,
   newestFirst,
+  PHOTO_NOT_KEPT,
   subjectName,
   type ChangeSightings,
   type SightingInput,
@@ -69,13 +70,24 @@ export default function FieldBook({
     setForm({ editing })
   }
 
+  /**
+   * Say a change is saved: at once, or, when it brought a new photo, once
+   * the photo is stored, which a full device can refuse.
+   */
+  const sayWhenSaved = (words: string, photo?: Blob) => {
+    setStatus(photo ? '' : words)
+    if (photo) void actions.photoSaved(photo).then((kept) => setStatus(kept ? words : PHOTO_NOT_KEPT))
+  }
+
   const save = (input: SightingInput, editing?: Sighting): boolean => {
+    const newPhoto = input.photo !== editing?.photo ? input.photo : undefined
     if (editing) {
       const changed = actions.edit(editing.id, input)
       // Nothing changed is still a sighting kept as the gardener wants it.
       if (changed || state.sightings.some((item) => item.id === editing.id)) {
         focusSighting(editing.id)
-        setStatus(changed ? 'Your changes are saved.' : 'Nothing needed changing.')
+        if (changed) sayWhenSaved('Your changes are saved.', newPhoto)
+        else setStatus('Nothing needed changing.')
         return true
       }
       return false
@@ -83,7 +95,7 @@ export default function FieldBook({
     const id = actions.log(input)
     if (!id) return false
     focusSighting(id)
-    setStatus('Saved to your field book.')
+    sayWhenSaved('Saved to your field book.', newPhoto)
     return true
   }
 

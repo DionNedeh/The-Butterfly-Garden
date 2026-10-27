@@ -1,16 +1,23 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { formatDayInWords } from '../lib/fieldNotes'
 import { toLocalDate } from '../lib/date'
+import { prepareSightingPhoto } from '../lib/imageImport'
 import { createInitialState } from '../lib/progression'
-import type { ChangeSightings } from '../lib/sightings'
+import { PHOTO_NOT_KEPT, type ChangeSightings } from '../lib/sightings'
 import type { AppState, RegionId, Sighting } from '../types'
+import { LAZY_PAGE_MS } from '../test/lazyPage'
 import { GuideView } from './GuideView'
 
 /** A lazily loaded form or page may take a while on a loaded machine. */
-const LAZY = { timeout: 8000 }
+const LAZY = { timeout: LAZY_PAGE_MS }
+/** Room for that wait and what comes around it, as the whole-app tests have. */
+const LAZY_TEST = { timeout: 20_000 }
+
+// A photo as the form makes one, without a canvas to draw it on.
+vi.mock('../lib/imageImport', () => ({ prepareSightingPhoto: vi.fn() }))
 
 function Harness({ sightings, region }: { sightings: Sighting[]; region?: RegionId }) {
   const start = createInitialState('Tester', 'Wild Garden')
@@ -31,7 +38,7 @@ function speciesCard(name: string) {
   return screen.getByRole('heading', { level: 3, name }).closest('article')!
 }
 
-describe('logging a sighting from the Guide', () => {
+describe('logging a sighting from the Guide', LAZY_TEST, () => {
   it('stamps a butterfly and a host plant seen in the wild', () => {
     render(
       <Harness
@@ -91,5 +98,51 @@ describe('logging a sighting from the Guide', () => {
       'href',
       'https://www.butterflies.org.au/',
     )
+  })
+})
+
+describe('logging a sighting with a photo from the Guide', LAZY_TEST, () => {
+  const photo = new Blob([new Uint8Array([1])], { type: 'image/webp' })
+
+  /** The Guide, in a garden that answers for each new photo as `stored` says. */
+  function PhotoHarness({ stored }: { stored: () => Promise<{ ok: boolean }> }) {
+    const initial = createInitialState('Tester', 'Wild Garden')
+    const garden = useRef(initial)
+    const [state, setState] = useState(initial)
+    const change = useMemo(() => {
+      const changeSightings: ChangeSightings = (recipe) => {
+        garden.current = { ...garden.current, sightings: recipe(garden.current.sightings, new Date()) }
+        setState(garden.current)
+        return true
+      }
+      changeSightings.photoSaved = stored
+      return changeSightings
+    }, [stored])
+    return <GuideView state={state} onShowSeed={vi.fn()} onChangeSightings={change} />
+  }
+
+  async function logWithPhoto(stored: () => Promise<{ ok: boolean }>) {
+    vi.mocked(prepareSightingPhoto).mockResolvedValue(photo)
+    render(<PhotoHarness stored={stored} />)
+    const user = userEvent.setup()
+    await user.click(within(speciesCard('Monarch')).getByRole('button', { name: 'Log a sighting of Monarch' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Log a sighting' }, LAZY)
+    await user.upload(within(dialog).getByLabelText('Add a photo, if you like'), new File(['x'], 'a.jpg', { type: 'image/jpeg' }))
+    await within(dialog).findByRole('img', { name: 'Your photo for this sighting' })
+    await user.click(within(dialog).getByRole('button', { name: 'Save sighting' }))
+  }
+
+  it('says it is saved once the photo is stored', async () => {
+    let answer: (result: { ok: boolean }) => void = () => undefined
+    await logWithPhoto(() => new Promise((resolve) => (answer = resolve)))
+    expect(screen.queryByText(/Saved to your field book/)).toBeNull()
+    answer({ ok: true })
+    expect(await screen.findByText('Saved to your field book, in the Journal’s field notes.')).toBeInTheDocument()
+  })
+
+  it('says the photo was not kept when it would not go in', async () => {
+    await logWithPhoto(() => Promise.resolve({ ok: false }))
+    expect(await screen.findByText(PHOTO_NOT_KEPT)).toBeInTheDocument()
+    expect(screen.queryByText(/Saved to your field book/)).toBeNull()
   })
 })

@@ -17,6 +17,7 @@ import { onAnnouncement } from '../lib/announcer'
 import { toLocalDate } from '../lib/date'
 import { createEmptyState, createInitialState } from '../lib/progression'
 import type { PurchaseOutcome } from '../lib/purchase'
+import { ArrayBufferFileReader, unreadablePhoto } from '../test/fileReader'
 import { useGardenState } from './useGardenState'
 
 /** A minimal harness that exposes the hook's state through the DOM. */
@@ -472,7 +473,7 @@ describe('saved looks in a backup', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.state?.profile?.outfitPresets).toEqual(looks)
 
-    const file = (await result.current.exportGarden())!
+    const file = (await result.current.exportGarden())!.text
     const { garden } = JSON.parse(file) as { garden: Record<string, unknown> & { profile: object } }
     // Inside the profile, which an older build restoring this file carries
     // through whole, and not beside it, where that build would drop it.
@@ -915,7 +916,7 @@ describe('every action, through the hook', () => {
 
   it('exports the garden it holds as a backup file', async () => {
     const { result } = await renderReady()
-    const file = JSON.parse((await result.current.exportGarden())!) as { format: string; garden: { seeds: number } }
+    const file = JSON.parse((await result.current.exportGarden())!.text) as { format: string; garden: { seeds: number } }
     expect(file.format).toBe('the-butterfly-garden')
     expect(file.garden.seeds).toBe(5)
   })
@@ -926,7 +927,7 @@ describe('every action, through the hook', () => {
     act(() => result.current.recordBackup(madeAt))
     expect(result.current.state?.profile?.lastBackupAt).toBe(madeAt.toISOString())
     // The time is in the garden, so the next backup file carries it along.
-    const file = JSON.parse((await result.current.exportGarden())!) as {
+    const file = JSON.parse((await result.current.exportGarden())!.text) as {
       garden: { profile: { lastBackupAt?: string } }
     }
     expect(file.garden.profile.lastBackupAt).toBe(madeAt.toISOString())
@@ -966,7 +967,7 @@ describe('the way back from a garden that could not be read', () => {
     expect(await result.current.countQuarantined()).toBe(0)
 
     quarantined.mockResolvedValue([setAside])
-    const copy = JSON.parse((await result.current.quarantinedCopy())!) as Record<string, unknown>
+    const copy = JSON.parse((await result.current.quarantinedCopy())!.text) as Record<string, unknown>
     expect(copy).toMatchObject({
       format: 'the-butterfly-garden-set-aside',
       reason: 'malformed',
@@ -978,6 +979,27 @@ describe('the way back from a garden that could not be read', () => {
     const clear = vi.spyOn(gardenRepository, 'clearQuarantine').mockResolvedValue()
     await result.current.discardQuarantine()
     expect(clear).toHaveBeenCalledOnce()
+  })
+
+  it('writes the set-aside copy whole when one of its photos cannot be read, and says so', async () => {
+    vi.stubGlobal('FileReader', ArrayBufferFileReader)
+    const { result } = await renderWithheld()
+    const sound = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' })
+    vi.spyOn(gardenRepository, 'quarantined').mockResolvedValue([
+      { ...setAside, raw: { profile: { name: 'Robin' }, sightings: [{ photo: unreadablePhoto() }, { photo: sound }] } },
+    ])
+    const copy = (await result.current.quarantinedCopy())!
+    expect(copy.leftOut).toBe(
+      'One photo in the field book could not be read on this device, so the file keeps its sighting without it.',
+    )
+    expect((JSON.parse(copy.text) as { garden: unknown }).garden).toEqual({
+      profile: { name: 'Robin' },
+      sightings: [
+        { photo: { mimeType: 'image/webp', unreadable: true } },
+        { photo: { mimeType: 'image/webp', imageData: 'AQID' } },
+      ],
+    })
+    vi.unstubAllGlobals()
   })
 
   it('starts a new garden only once the old one is set aside', async () => {

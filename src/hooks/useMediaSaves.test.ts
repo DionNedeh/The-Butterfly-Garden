@@ -42,6 +42,25 @@ describe('image saves waiting on a write', () => {
     expect(await saved).toEqual({ ok: true })
   })
 
+  it('waits for a sighting’s photo as for an image, by the very Blob a sighting carries', async () => {
+    const { result } = renderHook(() => useMediaSaves())
+    const photo = new Blob([new Uint8Array([1])], { type: 'image/webp' })
+    const garden = createInitialState('Tester', 'Garden')
+    const withPhoto = {
+      ...garden,
+      sightings: [{ id: 's', date: '2026-10-20', kind: 'butterfly' as const, speciesId: 'monarch', photo, createdAt: '' }],
+    }
+    const failing = result.current.waitFor(photo, () => undefined)
+    result.current.settleWritten(garden)
+    expect(result.current.waiting()).toBe(true)
+    expect(result.current.failWritten(withPhoto, 'Storage is full')).toEqual([photo])
+    expect(await failing).toEqual({ ok: false, message: 'Storage is full' })
+
+    const saved = result.current.waitFor(photo, () => undefined)
+    result.current.settleWritten(withPhoto)
+    expect(await saved).toEqual({ ok: true })
+  })
+
   it('answers whatever is still waiting when it goes away', async () => {
     const { result, unmount } = renderHook(() => useMediaSaves())
     const saved = result.current.waitFor(record('left'), () => undefined)

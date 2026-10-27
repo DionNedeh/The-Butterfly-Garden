@@ -32,7 +32,7 @@ describe('carrying a garden to its new address', () => {
   it('saves the garden first, then offers the new address', async () => {
     const user = userEvent.setup()
     saveTextFile.mockResolvedValue('saved')
-    const exportGarden = vi.fn(() => '{"format":"the-butterfly-garden"}')
+    const exportGarden = vi.fn(() => ({ text: '{"format":"the-butterfly-garden"}' }))
     render(<MovedBanner target={target} onExportGarden={exportGarden} />)
 
     expect(screen.queryByRole('link')).toBeNull()
@@ -50,7 +50,7 @@ describe('carrying a garden to its new address', () => {
   it('does not send anyone on before their backup exists', async () => {
     const user = userEvent.setup()
     saveTextFile.mockResolvedValue('cancelled')
-    render(<MovedBanner target={target} onExportGarden={() => '{}'} />)
+    render(<MovedBanner target={target} onExportGarden={() => ({ text: '{}' })} />)
     await user.click(screen.getByRole('button', { name: 'Save my garden to a file' }))
     expect(screen.getByText(/nothing was saved/i)).toBeInTheDocument()
     expect(screen.queryByRole('link')).toBeNull()
@@ -62,6 +62,26 @@ describe('carrying a garden to its new address', () => {
     await user.click(screen.getByRole('button', { name: 'Save my garden to a file' }))
     expect(saveTextFile).not.toHaveBeenCalled()
     expect(screen.getByText(/cannot be saved just now/i)).toBeInTheDocument()
+  })
+
+  it('says so when making the file fails, rather than doing nothing', async () => {
+    const user = userEvent.setup()
+    const exportGarden = vi.fn(() => Promise.reject(new DOMException('gone', 'NotReadableError')))
+    render(<MovedBanner target={target} onExportGarden={exportGarden} />)
+    await user.click(screen.getByRole('button', { name: 'Save my garden to a file' }))
+    expect(await screen.findByText(/could not be put into a file just now/i)).toBeInTheDocument()
+    expect(saveTextFile).not.toHaveBeenCalled()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('says which photos the file had to leave out', async () => {
+    const user = userEvent.setup()
+    saveTextFile.mockResolvedValue('saved')
+    const leftOut = 'One photo in the field book could not be read on this device, so the file keeps its sighting without it.'
+    render(<MovedBanner target={target} onExportGarden={() => Promise.resolve({ text: '{}', leftOut })} />)
+    await user.click(screen.getByRole('button', { name: 'Save my garden to a file' }))
+    expect(await screen.findByText(leftOut)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open garden.example.org' })).toBeInTheDocument()
   })
 })
 

@@ -41,9 +41,19 @@ export interface RemovedSighting {
  * changeSightings): `change` maps the sightings to new ones, as of `now`,
  * or hands back the same list to change nothing. True when the garden took it.
  */
-export type ChangeSightings = (
-  change: (sightings: Sighting[], now: Date) => Sighting[],
-) => boolean
+export interface ChangeSightings {
+  (change: (sightings: Sighting[], now: Date) => Sighting[]): boolean
+  /**
+   * Once a photo the last change brought is stored: ok, or not, when it
+   * would not go in, and the garden has taken it back out (usePersistence),
+   * so the rest of the garden still saves. Where it is missing (a stand-in
+   * garden), a change is taken as kept as soon as it is made.
+   */
+  photoSaved?: (photo: Blob) => Promise<{ ok: boolean; message?: string }>
+}
+
+/** What the field book says of a new photo that could not be stored. */
+export const PHOTO_NOT_KEPT = 'The photo could not be stored on this device, so it was not kept.'
 
 /** What the Journal and the Guide can do with the field book. */
 export interface FieldBookActions {
@@ -53,6 +63,8 @@ export interface FieldBookActions {
   /** Cross one out: what Undo needs, or undefined when it was not there. */
   remove: (id: string) => RemovedSighting | undefined
   restore: (removed: RemovedSighting) => boolean
+  /** Whether a new photo just logged or added reached storage (ChangeSightings). */
+  photoSaved: (photo: Blob) => Promise<boolean>
 }
 
 const SPECIES_NAMES = new Map(species.map((item) => [item.id, item.commonName]))
@@ -195,6 +207,7 @@ export function fieldBookActions(change: ChangeSightings): FieldBookActions {
       return crossedOut ? removed : undefined
     },
     restore: (removed) => change((sightings) => restoreSighting(sightings, removed)),
+    photoSaved: async (photo) => (await change.photoSaved?.(photo))?.ok ?? true,
   }
 }
 

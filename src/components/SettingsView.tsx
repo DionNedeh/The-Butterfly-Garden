@@ -15,6 +15,7 @@ import {
 } from '../lib/date'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { canShareFile, shareTextFile } from '../lib/shareFile'
+import type { FileCopy } from '../lib/sightingPhotos'
 import { isAndroidApp } from '../lib/platform'
 import {
   formatBytes,
@@ -286,10 +287,10 @@ export function SettingsView({
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
   /**
    * The backup's text, at once or once its photos are read (a sighting's
-   * photo is a Blob). Undefined while the garden is read-only: see
-   * useGardenState.
+   * photo is a Blob), with a word on any photo that could not be read.
+   * Undefined while the garden is read-only: see useGardenState.
    */
-  onExportGarden: () => string | undefined | Promise<string | undefined>
+  onExportGarden: () => FileCopy | undefined | Promise<FileCopy | undefined>
   /** A backup reached the gardener; `madeAt` is when it was exported. */
   onBackupMade?: (madeAt: Date) => void
   /** When the backup reminder is judged; the app passes noon of the day. */
@@ -299,7 +300,7 @@ export function SettingsView({
     snapshotId: string,
   ) => Promise<{ ok: boolean; message: string }>
   /** The newest set-aside copy of an unreadable garden, as file text. */
-  onDownloadSetAside?: () => Promise<string | undefined>
+  onDownloadSetAside?: () => Promise<FileCopy | undefined>
   onDiscardSetAside?: () => Promise<void>
   /** How many set-aside copies are kept, to decide whether to mention them. */
   onCountSetAside?: () => Promise<number>
@@ -359,6 +360,12 @@ export function SettingsView({
     BackupPreview & { text: string }
   >()
   const [restoring, setRestoring] = useState(false)
+  /**
+   * While a backup is being made: a field book full of photos takes a moment
+   * to write out, and a second tap meanwhile would only start a second one.
+   */
+  const [preparing, setPreparing] = useState(false)
+  const preparingRef = useRef(false)
   /** The undo offer the gardener dismissed, so it is not shown again. */
   const [undoDismissed, setUndoDismissed] = useState<string>()
   const [setAsideCount, setSetAsideCount] = useState(0)
@@ -403,14 +410,29 @@ export function SettingsView({
     onBackupMade?.(madeAt)
   }
 
-  /** The backup file's text, or undefined (and why) while it cannot be made. */
-  const exportBackup = async () => {
-    const text = await onExportGarden()
-    if (text === undefined)
-      setBackupNote(
-        'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
-      )
-    return text
+  /**
+   * The backup file, or undefined (and why) while it cannot be made. Making
+   * it can fail (its photos are read from storage), and that is said too,
+   * never left as a tap that did nothing.
+   */
+  const exportBackup = async (): Promise<FileCopy | undefined> => {
+    preparingRef.current = true
+    setPreparing(true)
+    if (fieldBookPhotos.count > 0) setBackupNote('Getting your backup ready, photos and all…')
+    try {
+      const copy = await onExportGarden()
+      if (copy === undefined)
+        setBackupNote(
+          'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
+        )
+      return copy
+    } catch {
+      setBackupNote('Your backup could not be made just now, so nothing was saved. Please try again.')
+      return undefined
+    } finally {
+      preparingRef.current = false
+      setPreparing(false)
+    }
   }
 
   /**
@@ -422,26 +444,33 @@ export function SettingsView({
    * trusting a backup that was never written.
    */
   const saveBackup = async () => {
+    if (preparingRef.current) return
     setBackupNote(undefined)
     const madeAt = new Date()
-    const text = await exportBackup()
-    if (text === undefined) return
+    const copy = await exportBackup()
+    if (copy) await saveCopy(copy, madeAt)
+  }
+
+  /** Save a backup already made, and say how it went. */
+  const saveCopy = async (copy: FileCopy, madeAt: Date, started = 'Backup started.') => {
     try {
       const outcome = await saveTextFile(
         datedFileName(''),
         'application/json',
-        text,
+        copy.text,
       )
       // A started download counts: the browser will not say whether it
       // finished, and asking again every visit would be the wrong answer to
       // that. Backing out of Android's save screen does not.
       if (outcome !== 'cancelled') backupMade(madeAt)
       setBackupNote(
-        outcome === 'saved'
-          ? 'Backup saved. Keep the file somewhere safe.'
-          : outcome === 'cancelled'
-            ? 'No backup was saved.'
-            : 'Backup started. Check your downloads and keep the file somewhere safe.',
+        outcome === 'cancelled'
+          ? 'No backup was saved.'
+          : `${
+              outcome === 'saved'
+                ? 'Backup saved. Keep the file somewhere safe.'
+                : `${started} Check your downloads and keep the file somewhere safe.`
+            }${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
       setBackupNote(
@@ -454,21 +483,37 @@ export function SettingsView({
 
   /** Hand the backup to an app the gardener picks: Files, a drive, a message. */
   const shareBackup = async () => {
+    if (preparingRef.current) return
     setBackupNote(undefined)
     const madeAt = new Date()
-    const text = await exportBackup()
-    if (text === undefined) return
+    const copy = await exportBackup()
+    if (!copy) return
+    // A browser shares only close after a tap: a few seconds. Writing out a
+    // field book full of photos can take longer on a slow phone, and then
+    // the share would be refused; the file is downloaded instead, and said
+    // so. (Not every browser can tell, and those are left to try.)
+    const activation = (navigator as { userActivation?: UserActivation }).userActivation
+    if (activation?.isActive === false) {
+      await saveCopy(
+        copy,
+        madeAt,
+        'Getting your backup ready took a while, so it was downloaded rather than shared.',
+      )
+      return
+    }
     try {
       const outcome = await shareTextFile(
         datedFileName(''),
         'application/json',
-        text,
+        copy.text,
         'The Butterfly Garden backup',
       )
       // Closing the share sheet is a choice, not a failure: nothing to say.
       if (outcome === 'cancelled') return
       backupMade(madeAt)
-      setBackupNote('Backup shared. Keep the file somewhere safe.')
+      setBackupNote(
+        `Backup shared. Keep the file somewhere safe.${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
+      )
     } catch {
       setBackupNote('This browser would not share the file. Download it instead.')
     }
@@ -477,20 +522,20 @@ export function SettingsView({
   const saveSetAside = async () => {
     setBackupNote(undefined)
     try {
-      const text = await onDownloadSetAside?.()
-      if (!text) {
+      const copy = await onDownloadSetAside?.()
+      if (!copy) {
         setBackupNote('There is no set-aside copy to download.')
         return
       }
       const outcome = await saveTextFile(
         datedFileName('set-aside-copy'),
         'application/json',
-        text,
+        copy.text,
       )
       setBackupNote(
         outcome === 'cancelled'
           ? 'No copy was saved.'
-          : 'Keep that file safe: it is the garden exactly as it was stored.',
+          : `Keep that file safe: it is the garden exactly as it was stored.${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
       setBackupNote('The set-aside copy could not be saved there.')
@@ -958,9 +1003,12 @@ export function SettingsView({
           </p>
         )}
         <div className="form-actions">
+          {/* Held, not disabled, while a backup is made: a disabled button
+              would drop the focus of the one just pressed. */}
           <button
             className="secondary-button"
             disabled={persistence.readOnly}
+            aria-disabled={preparing || undefined}
             onClick={() => void saveBackup()}
           >
             {android ? 'Save a backup' : 'Download a backup'}
@@ -969,6 +1017,7 @@ export function SettingsView({
             <button
               className="secondary-button"
               disabled={persistence.readOnly}
+              aria-disabled={preparing || undefined}
               onClick={() => void shareBackup()}
             >
               Share backup…

@@ -5,6 +5,7 @@ import type { PersistenceStatus } from '../hooks/useGardenState'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
 import { saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
+import type { FileCopy } from '../lib/sightingPhotos'
 import { RecoveryScreen } from './RecoveryScreen'
 
 vi.mock('../lib/download', async (original) => ({
@@ -20,8 +21,8 @@ function renderRecovery(reason: PersistenceStatus['reason'] = 'malformed') {
     onRestore: vi.fn((text: string) =>
       Promise.resolve({ ok: true, message: `Restored ${text.length} characters.` }),
     ),
-    onDownloadSetAside: vi.fn<() => Promise<string | undefined>>(() =>
-      Promise.resolve('{"garden":{}}'),
+    onDownloadSetAside: vi.fn<() => Promise<FileCopy | undefined>>(() =>
+      Promise.resolve({ text: '{"garden":{}}' }),
     ),
     onStartFresh: vi.fn<() => Promise<{ ok: boolean; message?: string }>>(() =>
       Promise.resolve({ ok: true }),
@@ -81,6 +82,15 @@ describe('keeping the set-aside copy', () => {
     save.mockResolvedValueOnce('cancelled')
     await user.click(screen.getByRole('button', { name: 'Download the set-aside copy' }))
     expect(note()).toHaveTextContent('Nothing was saved.')
+  })
+
+  it('says which photos the copy had to leave out', async () => {
+    const { onDownloadSetAside, user } = renderRecovery()
+    const leftOut = '2 photos in the field book could not be read on this device, so the file keeps their sightings without them.'
+    onDownloadSetAside.mockResolvedValueOnce({ text: '{}', leftOut })
+    save.mockResolvedValueOnce('started')
+    await user.click(screen.getByRole('button', { name: 'Download the set-aside copy' }))
+    expect(note()).toHaveTextContent(`Keep that file safe: it is the garden exactly as it was stored. ${leftOut}`)
   })
 
   it('says when there is no copy yet, or it could not be saved', async () => {
