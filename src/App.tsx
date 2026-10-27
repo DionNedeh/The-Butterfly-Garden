@@ -737,6 +737,7 @@ function App() {
               onCareFor={(companionId) => navigate({ view: 'care', companionId })}
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
+              onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
             />
           )}
           {activeView === 'care' && (
@@ -882,6 +883,7 @@ function App() {
                 garden.chooseTheme(choice)
               }}
               onSetTextSize={garden.setTextSize}
+              onSetGardenPace={garden.setGardenPace}
               fadeOutMinutes={fadeOut.minutes}
               fadeOutEndsAt={fadeOut.endsAt}
               onChooseFadeOut={(minutes) =>

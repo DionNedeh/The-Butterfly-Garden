@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { species } from '../data/content'
 import { backAction, requestDialogClose } from '../lib/backNavigation'
+import { toLocalDate } from '../lib/date'
+import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { CALM_AIRBORNE } from '../lib/motion'
 import { createInitialState } from '../lib/progression'
 import type { AppState, CreatureInstance } from '../types'
@@ -33,6 +35,7 @@ function renderGarden(overrides: Partial<AppState> = {}) {
     onRenameCreature: vi.fn(),
     onOpenCare: vi.fn(),
     onCareFor: vi.fn(),
+    onPutAwayWelcomeBack: vi.fn(),
   }
   const state: AppState = {
     ...createInitialState('Tester', 'Test Garden'),
@@ -345,5 +348,62 @@ describe('saying why', () => {
     })
     await userEvent.setup().click(screen.getByRole('button', { name: /Milkweed 1/ }))
     expect(screen.getByText("This bloom brought Pip's egg.")).toBeInTheDocument()
+  })
+})
+
+describe('Keep giving, on the plant panel', () => {
+  const mature = {
+    id: 'host-1',
+    plantId: 'milkweed',
+    growth: 3,
+    plantedAt: '2026-10-01T10:00:00.000Z',
+    careDaysSinceBloom: REBLOOM_CARE_DAYS - 3,
+  }
+
+  it('says how close the next bloom is', async () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    renderGarden({
+      plants: [mature],
+      profile: { ...seed.profile!, gardenPace: 'keep-giving' },
+    })
+    await userEvent.setup().click(screen.getByRole('button', { name: /Milkweed 1/ }))
+    const row = screen.getByText('Next bloom').closest('div')!
+    expect(within(row).getByText('Blooms again in 3 more days of care.')).toBeInTheDocument()
+  })
+
+  it('says nothing of blooming again under Classic', async () => {
+    renderGarden({ plants: [mature] })
+    await userEvent.setup().click(screen.getByRole('button', { name: /Milkweed 1/ }))
+    expect(screen.queryByText('Next bloom')).toBeNull()
+    expect(screen.queryByText(/Blooms again/)).toBeNull()
+  })
+})
+
+describe('the welcome back', () => {
+  function returnedToday() {
+    const seed = createInitialState('Tester', 'Test Garden')
+    return { ...seed.profile!, welcomeBackOn: toLocalDate() }
+  }
+
+  it('shows one line in a polite region, and puts it away without losing focus', async () => {
+    const user = userEvent.setup()
+    const { handlers } = renderGarden({ profile: returnedToday() })
+    const card = await screen.findByRole('group', { name: 'Welcome back' })
+    // Inside a live region that was there before the card, so it is heard.
+    expect(card.closest('[role="status"]')).toHaveClass('welcome-back-region')
+    expect(within(card).getByText(/Sol|Marigold|milkweed|aster/)).toBeInTheDocument()
+
+    await user.click(within(card).getByRole('button', { name: 'Put away' }))
+    expect(handlers.onPutAwayWelcomeBack).toHaveBeenCalledTimes(1)
+    // The card goes with its button, so focus moves to the garden's name.
+    expect(screen.getByRole('heading', { level: 1, name: 'Test Garden' })).toHaveFocus()
+  })
+
+  it('is not there on an ordinary day, or on a later one', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    renderGarden()
+    expect(screen.queryByRole('group', { name: 'Welcome back' })).toBeNull()
+    renderGarden({ profile: { ...seed.profile!, welcomeBackOn: '2026-01-02' } })
+    expect(screen.queryByRole('group', { name: 'Welcome back' })).toBeNull()
   })
 })

@@ -31,6 +31,7 @@ import {
 import type { AppState, OutfitSlot } from '../types'
 import {
   PLANT_CAPACITY,
+  plantBloomNote,
   plantEggNote,
   plantingBlocker,
   plantRemovalBlocker,
@@ -48,6 +49,12 @@ import { CreatureSprite } from './sprites/CreatureSprite'
 import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
+import { welcomeBackToday } from '../lib/visits'
+
+/** Only on a return after a few days away, so the first load carries none of it. */
+const WelcomeBack = lazy(() =>
+  import('./garden/WelcomeBack').then((m) => ({ default: m.WelcomeBack })),
+)
 
 /** Catalogs are static, so index them once at module load instead of scanning
  *  them inside every render loop. */
@@ -100,6 +107,7 @@ export function GardenView({
   onCareFor,
   seedFocus,
   onOpenGuide,
+  onPutAwayWelcomeBack,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
@@ -113,6 +121,8 @@ export function GardenView({
   onCareFor?: (creatureId: string) => void
   seedFocus?: string
   onOpenGuide?: () => void
+  /** Put away the welcome back after a few days away (lib/visits). */
+  onPutAwayWelcomeBack?: () => void
 }) {
   const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
   const seedTray = useRef<HTMLElement>(null)
@@ -229,6 +239,9 @@ export function GardenView({
   const eggNote = selectedPlant
     ? plantEggNote(state, selectedPlant, MAX_PLANT_GROWTH)
     : undefined
+  const bloomNote = selectedPlant
+    ? plantBloomNote(state, selectedPlant, MAX_PLANT_GROWTH)
+    : undefined
   const visiblePlants = state.plants.slice(0, PLANT_CAPACITY)
   const visiblePlantIds = new Set(visiblePlants.map((plant) => plant.id))
   const selectedPlantIsVisible = selectedPlant
@@ -315,6 +328,10 @@ export function GardenView({
 
   const gardenFull = state.plants.length >= PLANT_CAPACITY
   const plantBlocker = plantingBlocker(state, PLANT_SEED_COST)
+  const gardenTitle = useRef<HTMLHeadingElement>(null)
+  const today = toLocalDate()
+  const welcomeBack =
+    onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
 
   return (
     <div className="view garden-view">
@@ -339,7 +356,7 @@ export function GardenView({
         <div className="garden-heading">
           <p className="eyebrow">Your living sanctuary</p>
           {/* Focusable by script only: the recap's fade to night lands here. */}
-          <h1 id="garden-title" tabIndex={-1}>
+          <h1 id="garden-title" tabIndex={-1} ref={gardenTitle}>
             {state.profile?.gardenName}
           </h1>
           <p className="garden-observation">
@@ -446,6 +463,23 @@ export function GardenView({
           />
         </Suspense>
       )}
+
+      {/* Always here, so the welcome is heard, politely, as it arrives. */}
+      <div className="welcome-back-region" role="status">
+        {welcomeBack && (
+          <Suspense fallback={null}>
+            <WelcomeBack
+              garden={state}
+              returnedOn={today}
+              onPutAway={() => {
+                // The card leaves with its button; focus goes to the garden's name.
+                gardenTitle.current?.focus()
+                onPutAwayWelcomeBack()
+              }}
+            />
+          </Suspense>
+        )}
+      </div>
 
       {sceneUnavailable && (
         <p role="status">
@@ -595,6 +629,12 @@ export function GardenView({
                 <div>
                   <dt>Eggs</dt>
                   <dd>{eggNote}</dd>
+                </div>
+              )}
+              {bloomNote && (
+                <div>
+                  <dt>Next bloom</dt>
+                  <dd>{bloomNote}</dd>
                 </div>
               )}
               <div>

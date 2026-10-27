@@ -53,6 +53,11 @@ export type AppearanceTheme = 'sunlight' | 'night'
 export type ThemeFollows = 'device' | 'evening'
 /** A text size larger than the usual one (lib/textSize). */
 export type TextSize = 'larger' | 'largest'
+/**
+ * A garden pace other than Classic, the pace every garden has always had
+ * (lib/gardenPace). Classic is the absence of a choice, so it stores nothing.
+ */
+export type GardenPace = 'keep-giving'
 export type AmbientTrackId =
   | 'garden-chimes'
   | 'garden'
@@ -197,6 +202,24 @@ export interface Profile {
    * would keep the reminder quiet on a new device.
    */
   lastBackupAt?: string
+  /**
+   * Keep giving: a host plant in full bloom blooms again after a few more
+   * days of care, with another egg (lib/gardenPace). Optional: without it the
+   * garden keeps its Classic pace, exactly as before there was a choice.
+   */
+  gardenPace?: GardenPace
+  /**
+   * The local date the garden was last opened, noted at most once a day
+   * (lib/visits). Optional: an older garden has no visit on record, and so
+   * nothing to welcome anyone back from.
+   */
+  lastVisitOn?: string
+  /**
+   * The local date of a return after a few days away, while the garden's
+   * small welcome-back reveal is still out. Putting it away clears it, and on
+   * any other day it means nothing. It grants nothing and changes nothing.
+   */
+  welcomeBackOn?: string
 }
 
 /** Image formats a garden image may be stored as. */
@@ -365,6 +388,13 @@ export interface PlantInstance {
   plantId: string
   growth: number
   plantedAt: string
+  /**
+   * Under Keep giving, the days of care this host plant has seen in full
+   * bloom since it last bloomed (lib/gardenPace), up to the number that
+   * opens its next bloom. Absent at the start of each count, and always
+   * under Classic, which never writes it.
+   */
+  careDaysSinceBloom?: number
 }
 
 export interface CreatureInstance {

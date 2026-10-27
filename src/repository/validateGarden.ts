@@ -5,9 +5,10 @@ import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
-import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES } from '../lib/date'
+import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } from '../lib/date'
+import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { clampVolume } from '../lib/sound'
-import type { AmbientTrackId, AppState, OutfitSlot } from '../types'
+import type { AmbientTrackId, AppState, OutfitSlot, PlantInstance } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
@@ -430,10 +431,10 @@ function checkPlant(raw: unknown, ctx: Context) {
     raw.growth >= 0 &&
     raw.growth <= 3
   if (typeof raw.id === 'string' && growthOk && typeof raw.plantedAt === 'string') {
-    return raw as unknown as AppState['plants'][number]
+    return withBloomCountChecked(raw as unknown as PlantInstance)
   }
   ctx.repaired += 1
-  return {
+  return withBloomCountChecked({
     ...raw,
     id: typeof raw.id === 'string' ? raw.id : createId(),
     growth:
@@ -441,7 +442,25 @@ function checkPlant(raw: unknown, ctx: Context) {
         ? Math.min(3, Math.max(0, Math.floor(raw.growth)))
         : 0,
     plantedAt: stamp(raw.plantedAt),
-  } as AppState['plants'][number]
+  } as PlantInstance)
+}
+
+/**
+ * A plant's count toward its next bloom (Keep giving) is kept only as whole
+ * days of care, from 1 to the days a bloom takes. A larger whole number, as
+ * a build with a longer wait might leave, reads as ready rather than losing
+ * the days counted; anything else is dropped, and the count starts again.
+ * Not counted as a repair: nothing the gardener made is changed.
+ */
+function withBloomCountChecked(plant: PlantInstance): PlantInstance {
+  const days: unknown = plant.careDaysSinceBloom
+  if (days === undefined) return plant
+  const whole = typeof days === 'number' && Number.isInteger(days) && days >= 1
+  if (whole && days <= REBLOOM_CARE_DAYS) return plant
+  const next = { ...plant }
+  if (whole) next.careDaysSinceBloom = REBLOOM_CARE_DAYS
+  else delete next.careDaysSinceBloom
+  return next
 }
 
 function checkSunlight(raw: unknown, ctx: Context) {
@@ -680,6 +699,17 @@ function checkProfile(
   }
   if (value.soundInBackground !== undefined && value.soundInBackground !== false) {
     delete profile.soundInBackground
+  }
+  // Classic is the absence of a pace, so anything but Keep giving is Classic.
+  if (value.gardenPace !== undefined && value.gardenPace !== 'keep-giving') {
+    delete profile.gardenPace
+  }
+  // Visits are days that have happened: a date in the future could hold
+  // back a welcome, or show one, on the wrong day.
+  const today = toLocalDate()
+  for (const field of ['lastVisitOn', 'welcomeBackOn'] as const) {
+    const date = value[field]
+    if (date !== undefined && !(isLocalDate(date) && date <= today)) delete profile[field]
   }
   return profile
 }
