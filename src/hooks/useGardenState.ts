@@ -8,18 +8,19 @@ import {
   selectCustomBackdrop as selectCustomBackdropIn,
 } from '../lib/customBackdrops'
 import { toLocalDate, type RecapHours } from '../lib/date'
-import { purchaseFlightPattern, selectFlightPattern } from '../lib/flightPatterns'
+import { buyFlightPattern, selectFlightPattern } from '../lib/flightPatterns'
 import * as act from '../lib/gardenActions'
 import { gardenEvents } from '../lib/gardenEvents'
 import { hasGardenPassFeature } from '../lib/gardenPass'
-import { placeJar, purchaseJar, removeJarPlacement } from '../lib/jars'
+import { buyJar, placeJar, removeJarPlacement } from '../lib/jars'
 import { performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import { removePlant } from '../lib/plantManagement'
 import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
+import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { requestPersistentStorage } from '../lib/storage'
-import { equipOutfitItem, purchaseShopItem, unequipOutfitSlot } from '../lib/wardrobe'
+import { buyShopItem, equipOutfitItem, unequipOutfitSlot } from '../lib/wardrobe'
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
   AmbientTrackId,
@@ -96,8 +97,26 @@ export function useGardenState() {
    * Every action keeps a stable identity so memoized views (the month
    * planner in particular) are not re-rendered by the app shell.
    */
-  const actions = useMemo(
-    () => ({
+  const actions = useMemo(() => {
+    /**
+     * Make a purchase and say how it went.
+     *
+     * The outcome is worked out on the newest garden, and that same result
+     * is what the update applies. The read-through moves on with it, so a
+     * second purchase made before React has drawn the first is told about
+     * the garden after the first, not the one before. Only if another tab's
+     * change lands in between does the purchase run again on the newer
+     * garden, which still refuses anything it cannot pay for.
+     */
+    const purchase = (buy: (current: AppState) => PurchaseResult): PurchaseOutcome => {
+      const newest = stateRef.current
+      if (!newest) return { kind: 'unavailable', reason: 'unknown' }
+      const result = buy(newest)
+      if (result.state !== newest) stateRef.current = result.state
+      update((current) => (current === newest ? result.state : buy(current).state))
+      return result.outcome
+    }
+    return {
       onboard: (name: string, gardenName: string) => {
         setState(createInitialState(name, gardenName))
         setPersistence((current) =>
@@ -173,19 +192,21 @@ export function useGardenState() {
       plant: (plantId: string) => update((current) => plantSeed(current, plantId)),
       careForCreature: (creatureId: string, actionId: string) =>
         update((current) => performCare(current, creatureId, actionId).state),
-      purchaseItem: (itemId: string) =>
-        update((current) => purchaseShopItem(current, itemId)),
+      purchaseItem: (itemId: string, quantity = 1) =>
+        purchase((current) => buyShopItem(current, itemId, quantity)),
       equipItem: (creatureId: string, itemId: string) =>
         update((current) => equipOutfitItem(current, creatureId, itemId)),
       unequipSlot: (creatureId: string, slot: OutfitSlot) =>
         update((current) => unequipOutfitSlot(current, creatureId, slot)),
       removePlant: (plantId: string) => update((current) => removePlant(current, plantId)),
       purchaseFlightPattern: (patternId: FlightPatternId) =>
-        update((current) => purchaseFlightPattern(current, patternId)),
+        purchase((current) => buyFlightPattern(current, patternId)),
       selectFlightPattern: (patternId: FlightPatternId) =>
         update((current) => selectFlightPattern(current, patternId)),
-      purchaseJar: (character: string, colorId: JarColorId) =>
-        update((current) => purchaseJar(current, character, colorId)),
+      purchaseJar: (character: string, colorId: JarColorId) => {
+        const now = new Date()
+        return purchase((current) => buyJar(current, character, colorId, now))
+      },
       placeJar: (jarId: string, plantId: string) =>
         update((current) => placeJar(current, jarId, plantId)),
       removeJarPlacement: (plantId: string) =>
@@ -289,9 +310,8 @@ export function useGardenState() {
           2,
         )
       },
-    }),
-    [update, media, setState, setPersistence, readOnlyRef],
-  )
+    }
+  }, [update, media, setState, setPersistence, readOnlyRef])
 
   return { state, loading, persistence, ...lifecycle, ...actions }
 }

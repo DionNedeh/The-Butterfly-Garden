@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { AppState, ShopItemDefinition } from '../../types'
 import { balanceFor, currencyLabel } from '../../lib/currency'
 import { canWearItem } from '../../lib/gardenPass'
@@ -5,6 +6,9 @@ import { stageLabels } from '../../lib/lifecycle'
 import { isAndroidApp } from '../../lib/platform'
 import { CreatureSprite } from '../sprites/CreatureSprite'
 import { Icon } from '../Icons'
+
+/** How many of a supply can be bought in one go. */
+const SUPPLY_QUANTITIES = [1, 3, 5] as const
 
 export function ShopItemCard({
   item,
@@ -15,14 +19,18 @@ export function ShopItemCard({
 }: {
   item: ShopItemDefinition
   state: AppState
-  onPurchase: (id: string) => void
+  onPurchase: (id: string, quantity: number) => void
   onPreview: () => void
   onWardrobe: () => void
 }) {
+  const [quantity, setQuantity] = useState(1)
   const owned = state.ownedItemIds.includes(item.id)
   const allowed = canWearItem(state.ownedItemIds, item)
-  const affordable = balanceFor(state, item.currency) >= item.cost
   const supply = item.kind === 'supply'
+  // Priced exactly: five supplies cost five times one, and the button says
+  // so before anything is spent.
+  const price = item.cost * (supply ? quantity : 1)
+  const shortBy = price - balanceFor(state, item.currency)
   // In the Android app a Pass item is part of a real subscription, so it says
   // so rather than "unavailable". These cards only appear on the Garden Pass
   // tab, right beneath the Pass's own offers, so they need no button of
@@ -68,6 +76,19 @@ export function ShopItemCard({
             ? `In satchel: ${state.inventory[item.id] ?? 0}`
             : `Fits: ${item.stages?.map((stage) => stageLabels[stage]).join(', ')}`}
         </small>
+        {supply && (
+          <div className="quantity-choice" role="group" aria-label={`How many ${item.name}`}>
+            {SUPPLY_QUANTITIES.map((count) => (
+              <button
+                key={count}
+                aria-pressed={quantity === count}
+                onClick={() => setQuantity(count)}
+              >
+                ×{count}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="item-footer">
           <span className="pattern-cost">
             <Icon
@@ -78,7 +99,7 @@ export function ShopItemCard({
               ? 'With the Garden Pass'
               : item.premium
                 ? 'Included'
-                : `${item.cost} ${currencyLabel(item.currency)}`}
+                : `${price} ${currencyLabel(item.currency)}`}
           </span>
           {playPass && !allowed ? null : item.premium || owned ? (
             <button
@@ -91,14 +112,16 @@ export function ShopItemCard({
           ) : (
             <button
               className="primary-button compact"
-              disabled={!affordable}
-              onClick={() => onPurchase(item.id)}
+              aria-disabled={shortBy > 0 ? true : undefined}
+              onClick={() => onPurchase(item.id, supply ? quantity : 1)}
             >
-              {affordable
-                ? supply
-                  ? 'Buy one'
-                  : 'Buy'
-                : `Need ${item.cost - balanceFor(state, item.currency)} more`}
+              {shortBy > 0
+                ? `Need ${shortBy} more`
+                : !supply
+                  ? 'Buy'
+                  : quantity === 1
+                    ? 'Buy one'
+                    : `Buy ${quantity}`}
             </button>
           )}
         </div>

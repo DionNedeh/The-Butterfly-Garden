@@ -169,6 +169,33 @@ function mainNav(page: import('@playwright/test').Page) {
   return page.locator('nav[aria-label$="navigation" i]:visible').first()
 }
 
+/**
+ * The shop's search and filters. A wide screen shows them inline; a phone
+ * (600px or narrower, as in ShopView) keeps them in a sheet behind one
+ * Filter button, so there the sheet is opened first, and put away again
+ * before the collection beneath it is used.
+ */
+function onPhone(page: import('@playwright/test').Page) {
+  return (page.viewportSize()?.width ?? 1280) <= 600
+}
+
+async function openShopFilters(page: import('@playwright/test').Page) {
+  if (!onPhone(page)) return
+  await page.getByRole('button', { name: /^Filter\b/ }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Filter the collection' }),
+  ).toBeVisible()
+}
+
+async function closeShopFilters(page: import('@playwright/test').Page) {
+  if (!onPhone(page)) return
+  await page
+    .getByRole('dialog', { name: 'Filter the collection' })
+    .getByRole('button', { name: /^Show / })
+    .click()
+  await expect(page.getByRole('button', { name: /^Filter\b/ })).toBeFocused()
+}
+
 async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
@@ -1113,16 +1140,22 @@ test('boutique filters and try-on leave balances and outfits unchanged', async (
   await enterGarden(page)
   await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   await page.getByRole('button', { name: 'Boutique', exact: true }).click()
+  await openShopFilters(page)
   await page.getByRole('searchbox').fill('Daisy Bonnet')
+  await closeShopFilters(page)
   await expect(page.locator('.boutique-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('10')
+  await openShopFilters(page)
   await page.getByRole('button', { name: 'Clear filters' }).click()
   await page.getByRole('combobox', { name: /^Type/ }).selectOption('aura')
+  await closeShopFilters(page)
   await expect(page.locator('.boutique-card')).toHaveCount(7)
+  await openShopFilters(page)
   await page.getByRole('searchbox').fill('no such treasure')
+  await closeShopFilters(page)
   await expect(
     page.getByRole('heading', { name: 'Nothing in this little corner yet' }),
   ).toBeVisible()

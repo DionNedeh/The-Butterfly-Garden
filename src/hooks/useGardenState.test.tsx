@@ -15,6 +15,7 @@ import {
 } from '../repository/gardenRepository'
 import { onAnnouncement } from '../lib/announcer'
 import { createEmptyState, createInitialState } from '../lib/progression'
+import type { PurchaseOutcome } from '../lib/purchase'
 import { useGardenState } from './useGardenState'
 
 /** A minimal harness that exposes the hook's state through the DOM. */
@@ -596,17 +597,39 @@ describe('every action, through the hook', () => {
 
     const sol = garden().creatures[0]
     act(() => result.current.careForCreature(sol.id, 'feed'))
-    act(() => result.current.purchaseItem('flower-crown'))
+    let outcome: PurchaseOutcome | undefined
+    act(() => {
+      outcome = result.current.purchaseItem('flower-crown')
+    })
     expect(garden().ownedItemIds).toContain('flower-crown')
+    expect(outcome).toMatchObject({ kind: 'bought', quantity: 1 })
+    // Asked again, the hook says what the reducer refused, and why.
+    act(() => {
+      outcome = result.current.purchaseItem('flower-crown')
+    })
+    expect(outcome).toEqual({ kind: 'owned' })
+    act(() => {
+      outcome = result.current.purchaseItem('leaf-bundle', 5)
+    })
+    expect(garden().inventory['leaf-bundle']).toBe(
+      (createInitialState('Tester', 'Test Garden').inventory['leaf-bundle'] ?? 0) + 5,
+    )
+    expect(outcome).toMatchObject({ kind: 'bought', quantity: 5 })
     act(() => result.current.equipItem(sol.id, 'flower-crown'))
     act(() => result.current.unequipSlot(sol.id, 'headwear'))
     expect(garden().creatures[0].outfit.headwear).toBeUndefined()
 
-    act(() => result.current.purchaseFlightPattern('petal-hop'))
+    act(() => {
+      outcome = result.current.purchaseFlightPattern('petal-hop')
+    })
+    expect(outcome).toMatchObject({ kind: 'bought', spent: 9, currency: 'nectar' })
     act(() => result.current.selectFlightPattern('petal-hop'))
     expect(garden().selectedFlightPatternId).toBe('petal-hop')
 
-    act(() => result.current.purchaseJar('A', 'blue'))
+    act(() => {
+      outcome = result.current.purchaseJar('A', 'blue')
+    })
+    expect(outcome).toMatchObject({ kind: 'bought', spent: 6 })
     const jar = garden().jars[0]
     act(() => result.current.placeJar(jar.id, garden().plants[0].id))
     expect(garden().jarPlacements).toHaveLength(1)
@@ -617,6 +640,39 @@ describe('every action, through the hook', () => {
     act(() => result.current.selectCompanion(sol.id))
     expect(garden().creatures[0].name).toBe('Pip')
     expect(garden().profile?.activeCompanionId).toBe(sol.id)
+  })
+
+  it('refuses a purchase, and says so, when the balance cannot cover it', async () => {
+    const { result } = await renderReady()
+    const before = result.current.state
+    let outcome: PurchaseOutcome | undefined
+    act(() => {
+      // 300 Leaf Bundles at 2 Nectar are 600, and the garden holds 500: the
+      // whole lot is refused, not as many as the balance would stretch to.
+      outcome = result.current.purchaseItem('leaf-bundle', 300)
+    })
+    expect(outcome).toEqual({ kind: 'short', currency: 'nectar', needed: 100 })
+    expect(result.current.state).toBe(before)
+  })
+
+  it('tells a second purchase in the same moment about the first', async () => {
+    const { result } = await renderReady()
+    const outcomes: PurchaseOutcome[] = []
+    act(() => {
+      outcomes.push(result.current.purchaseItem('silk-bow'))
+      outcomes.push(result.current.purchaseItem('silk-bow'))
+    })
+    expect(outcomes.map((outcome) => outcome.kind)).toEqual(['bought', 'owned'])
+    expect(result.current.state?.ownedItemIds.filter((id) => id === 'silk-bow')).toHaveLength(1)
+  })
+
+  it('buys nothing before the garden has loaded', () => {
+    vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useGardenState())
+    expect(result.current.purchaseItem('leaf-bundle')).toEqual({
+      kind: 'unavailable',
+      reason: 'unknown',
+    })
   })
 
   it('changes the gardener’s settings and scenes', async () => {

@@ -114,10 +114,23 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await pressBack(page)
   await expect(currentPage(page)).toHaveText('Garden')
 
-  // An open dialog closes first, leaving its page where it was.
+  // An open dialog closes first, leaving its page where it was: on a phone
+  // the shop's filters are one, and focus goes back to the button that
+  // opened them.
   await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
   await page.getByRole('button', { name: 'Boutique', exact: true }).click()
-  await page.getByRole('searchbox').fill('Daisy Bonnet')
+  await page.getByRole('button', { name: /^Filter\b/ }).click()
+  await page
+    .getByRole('dialog', { name: 'Filter the collection' })
+    .getByRole('searchbox')
+    .fill('Daisy Bonnet')
+  await pressBack(page)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: 'Filter 1 active' }),
+  ).toBeFocused()
+  await expect(currentPage(page)).toHaveText('Shop')
+  await expect(page.locator('.boutique-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await pressBack(page)
