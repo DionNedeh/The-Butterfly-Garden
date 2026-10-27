@@ -30,6 +30,13 @@ describe('release notes', () => {
     expect(currentRelease.version).toBe(__APP_VERSION__)
   })
 
+  it('keeps the 3.3 notes as they went out', () => {
+    const three = getRelease('release-3-3')
+    expect(three?.version).toBe('3.3.0')
+    expect(three?.releasedOn).toBe('2026-10-27')
+    expect(three?.sections.flatMap((section) => section.items).join(' ')).not.toMatch(/passcode|passphrase/)
+  })
+
   it('keeps the 3.2 notes as they went out', () => {
     const three = getRelease('release-3-2')
     expect(three?.version).toBe('3.2.0')
