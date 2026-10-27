@@ -785,8 +785,10 @@ test('shapes the sound: a volume kept across a reload, and night bringing the pi
   await page.keyboard.press('ArrowLeft')
   await expect(volume).toHaveValue('48')
   await expect(page.locator('.sound-volume-value')).toHaveText('48')
-  // The whole height of the slider can be pressed.
-  expect((await volume.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+  // The whole height of the slider can be pressed. Its laid-out height, not
+  // its box on screen: the card's entrance animation scales it a little for
+  // its first moments, which a box measured then would count.
+  expect(await volume.evaluate((slider) => (slider as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44)
   expect(await seriousViolations(page, 'Settings, the sound card')).toEqual([])
 
   await page.getByRole('radio', { name: /^Soft Rain/ }).check()
