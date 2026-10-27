@@ -36,6 +36,7 @@ import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
+import { setReminderTime } from '../lib/reminderTime'
 import { requestPersistentStorage } from '../lib/storage'
 import { markQuietWrite } from '../lib/quietWrites'
 import { noteVisit, putAwayWelcomeBack } from '../lib/visits'
@@ -461,6 +462,9 @@ export function useGardenState() {
       /** Where the gardener gardens, for the Guide's native marks, or none. */
       setRegion: (region: RegionId | undefined) =>
         update((current) => act.setRegion(current, region)),
+      /** The time of the daily visit just added to the calendar (lib/reminderTime). */
+      setReminderTime: (time: string) =>
+        update((current) => setReminderTime(current, time)),
       /** Put the garden's welcome-back reveal away (lib/visits). */
       putAwayWelcomeBack: () => update(putAwayWelcomeBack),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>

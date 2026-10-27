@@ -104,6 +104,9 @@ export default defineConfig(({ mode }) => {
         },
         closeBundle() {
           rmSync(resolve(outDir, 'screenshots'), { recursive: true, force: true })
+          // The calendar files are linked only from the PWA on an iPhone or
+          // iPad; the app hands over a file it makes (lib/calendarReminder).
+          rmSync(resolve(outDir, 'reminders'), { recursive: true, force: true })
           // The launcher's maskable icon and the shortcut icons are read only
           // through the web manifest, which the app does not have.
           for (const file of [
@@ -151,8 +154,17 @@ export default defineConfig(({ mode }) => {
             '**/screenshots/**',
             '**/icons/icon-maskable-*',
             '**/icons/shortcut-*',
+            // The calendar files for common reminder times. The glob above
+            // does not match them; this says so, should it ever grow. iOS
+            // opens one best straight from the server, as text/calendar, and
+            // Settings links to one only while online (ReminderSetting).
+            '**/reminders/**',
           ],
           navigateFallback: 'index.html',
+          // A link to a calendar file is a navigation, which the fallback
+          // would otherwise answer with the app itself: the link would just
+          // reopen the garden. These go to the network as they are.
+          navigateFallbackDenylist: [/\/reminders\/[^/]+\.ics$/],
           runtimeCaching: [
             {
               urlPattern:

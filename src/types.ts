@@ -257,6 +257,13 @@ export interface Profile {
    * and planting tips. Optional: without it the Guide shows neither.
    */
   region?: RegionId
+  /**
+   * The time of day ("HH:MM", 24-hour) of the daily garden visit last added
+   * to the gardener's calendar (lib/reminderTime), so Settings offers it
+   * again. Optional: without it, Settings offers 8:00. The calendar does the
+   * reminding; nothing else about the reminder is kept.
+   */
+  reminderTime?: string
 }
 
 /** Image formats a garden image may be stored as. */

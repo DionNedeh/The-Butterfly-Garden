@@ -1015,6 +1015,7 @@ function App() {
               onSetRegion={garden.setRegion}
               onOpenGuide={openGuideAt}
               onChooseNightBackdrop={garden.chooseNightBackdrop}
+              onSetReminderTime={garden.setReminderTime}
             />
           )}
           {route.restore && <PutBack place={route.restore} />}

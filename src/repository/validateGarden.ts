@@ -17,6 +17,7 @@ import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } fr
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { clampVolume } from '../lib/sound'
 import { isRegionId } from '../lib/region'
+import { isReminderTime } from '../lib/reminderTime'
 import type {
   AmbientTrackId,
   AppState,
@@ -925,6 +926,11 @@ function checkProfile(
   // simply marks nothing, as it did before there was a choice.
   if (value.region !== undefined && !isRegionId(value.region)) {
     delete profile.region
+  }
+  // Only ever a suggestion for the time field, so anything that is not a
+  // time of day is dropped and Settings offers the morning's again.
+  if (value.reminderTime !== undefined && !isReminderTime(value.reminderTime)) {
+    delete profile.reminderTime
   }
   // Visits are days that have happened: a date in the future could hold
   // back a welcome, or show one, on the wrong day.
