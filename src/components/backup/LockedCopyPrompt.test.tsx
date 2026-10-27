@@ -114,7 +114,8 @@ describe('asking for a locked copy’s passcode', () => {
     }
     for (const next of ['preview', 'replace', 'arrive'] as const) {
       const { dialog } = await renderPrompt(COPY, next)
-      expect(dialog).toHaveAccessibleDescription(new RegExp(`not kept\\. ${said[next].replace(/[.?]/g, '\\$&')}$`))
+      const words = said[next].replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
+      expect(dialog).toHaveAccessibleDescription(new RegExp(`not kept\\. ${words}$`))
       cleanup()
       document.body.replaceChildren()
     }
