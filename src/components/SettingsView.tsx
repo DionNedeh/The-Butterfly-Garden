@@ -3,7 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import { previewBackup, type BackupPreview } from '../lib/backupPreview'
-import { formatJournalDate } from '../lib/date'
+import {
+  formatHour,
+  formatJournalDate,
+  RECAP_GRACE_CHOICES,
+  RECAP_OPENS_CHOICES,
+  recapHoursOf,
+  type RecapHours,
+} from '../lib/date'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { isAndroidApp } from '../lib/platform'
 import {
@@ -150,6 +157,7 @@ export function SettingsView({
   onOpenNotices,
   onOpenSupport,
   onSetDayCountsHidden,
+  onSetRecapHours,
   fadeOutMinutes,
   fadeOutEndsAt,
   onChooseFadeOut,
@@ -184,6 +192,7 @@ export function SettingsView({
   onOpenNotices?: () => void
   onOpenSupport?: () => void
   onSetDayCountsHidden?: (hidden: boolean) => void
+  onSetRecapHours?: (hours: RecapHours) => void
   /** The soundscape's fade-out length for this visit, if one is chosen. */
   fadeOutMinutes?: FadeOutMinutes
   /** When the fade-out timer runs out, while it is running. */
@@ -343,6 +352,7 @@ export function SettingsView({
       ? persistence.lastRestoreSnapshotId
       : undefined
   const profile = state.profile
+  const recapHours = recapHoursOf(profile)
   // Availability rather than earned unlocks: a Garden Pass scene is choosable
   // while access holds, and is never recorded as permanently earned.
   const nameNote = noteForName(name)
@@ -485,24 +495,65 @@ export function SettingsView({
         )}
       </section>
 
-      {onSetDayCountsHidden && (
+      {(onSetDayCountsHidden || onSetRecapHours) && (
         <section className="card" aria-labelledby="rhythm-settings-title">
           <p className="eyebrow">Your rhythm</p>
           <h2 id="rhythm-settings-title">Days and numbers</h2>
-          <label className="toggle-row">
-            <span>
-              <strong>Show day counts</strong>
-              <small>
-                How many days you cared for yourself, in the journal. Turn this
-                off to keep the journal free of numbers.
-              </small>
-            </span>
-            <input
-              type="checkbox"
-              checked={!profile?.hideDayCounts}
-              onChange={(event) => onSetDayCountsHidden(!event.target.checked)}
-            />
-          </label>
+          {onSetRecapHours && (
+            <div className="recap-hours">
+              <label>
+                My evening starts at
+                <select
+                  value={recapHours.opensHour}
+                  onChange={(event) =>
+                    onSetRecapHours({ ...recapHours, opensHour: Number(event.target.value) })
+                  }
+                >
+                  {RECAP_OPENS_CHOICES.map((hour) => (
+                    <option key={hour} value={hour}>
+                      {formatHour(hour)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                A late night lasts until
+                <select
+                  value={recapHours.graceEndsHour}
+                  onChange={(event) =>
+                    onSetRecapHours({ ...recapHours, graceEndsHour: Number(event.target.value) })
+                  }
+                >
+                  {RECAP_GRACE_CHOICES.map((hour) => (
+                    <option key={hour} value={hour}>
+                      {hour === 0 ? 'Midnight' : formatHour(hour)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="subtle-copy">
+                The Moonlight recap opens in your evening. Up past midnight, it
+                still offers the day before until your late night ends. For
+                shift work and night owls.
+              </p>
+            </div>
+          )}
+          {onSetDayCountsHidden && (
+            <label className="toggle-row">
+              <span>
+                <strong>Show day counts</strong>
+                <small>
+                  How many days you cared for yourself, in the journal. Turn this
+                  off to keep the journal free of numbers.
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={!profile?.hideDayCounts}
+                onChange={(event) => onSetDayCountsHidden(!event.target.checked)}
+              />
+            </label>
+          )}
         </section>
       )}
 

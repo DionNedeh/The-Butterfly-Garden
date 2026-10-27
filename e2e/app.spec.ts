@@ -253,7 +253,7 @@ test('onboards, completes care, and writes a private journal entry', async ({
 
   await page.getByLabel('Add a goal').fill('Drink some water')
   await page.getByRole('button', { name: 'Add goal' }).click()
-  await page.getByRole('button', { name: /complete drink some water/i }).click()
+  await page.getByRole('button', { name: /care for drink some water/i }).click()
   await page
     .locator('#daily-reflection')
     .fill('I noticed sunlight on the kitchen table.')
@@ -289,10 +289,10 @@ test('a check-in can be unsure, a tap can be undone, and support is a link away'
   // Marking a goal done by mistake can be taken back for a few seconds.
   await page.getByLabel('Add a goal').fill('Water the fern')
   await page.getByRole('button', { name: 'Add goal' }).click()
-  await page.getByRole('button', { name: /complete water the fern/i }).click()
+  await page.getByRole('button', { name: /care for water the fern/i }).click()
   await expect(page.getByText('Water the fern marked done.')).toBeVisible()
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
-  await expect(page.getByRole('button', { name: /complete water the fern/i })).toBeEnabled()
+  await expect(page.getByRole('button', { name: /care for water the fern/i })).toBeEnabled()
 
   // Support is reachable from Settings, and hands off to the phone.
   await mainNav(page).getByRole('button', { name: 'Settings', exact: true }).click()
@@ -302,6 +302,65 @@ test('a check-in can be unsure, a tap can be undone, and support is a link away'
   expect(await seriousViolations(page, 'Support')).toEqual([])
   await page.getByRole('button', { name: 'Back to Settings' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+})
+
+test('a goal row keeps everything behind its menu, and a gentle day asks for little', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  for (const title of ['Water the fern', 'Stretch', 'Open a window', 'Step outside']) {
+    await page.getByLabel('Add a goal').fill(title)
+    await page.getByRole('button', { name: 'Add goal' }).click()
+  }
+
+  // Each row is one line; everything else is behind its ⋯ menu. The menu of
+  // the first row is drawn over the rows below it, so its items take the
+  // click themselves (Playwright refuses a click another row would catch).
+  const more = page.getByRole('button', { name: 'More for Water the fern' })
+  await more.click()
+  const options = page.getByRole('group', { name: 'Water the fern options' })
+  await expect(options).toBeVisible()
+  expect(await seriousViolations(page, 'Today with a goal menu open')).toEqual([])
+  await options.getByRole('button', { name: 'Skip today' }).click()
+  await expect(more).toBeFocused()
+  await expect(page.getByText('Every day · skipped today')).toBeVisible()
+  // Skipping again is how a skip is undone.
+  await more.click()
+  await options.getByRole('button', { name: 'Bring back today' }).click()
+
+  // Editing changes more than the title, and hands focus back to the row.
+  await page.getByRole('button', { name: 'More for Stretch' }).click()
+  await page.getByRole('group', { name: 'Stretch options' }).getByRole('button', { name: 'Edit' }).click()
+  const title = page.getByRole('textbox', { name: /^Edit goal/ })
+  await expect(title).toBeFocused()
+  await title.fill('Stretch gently')
+  await page.getByRole('combobox', { name: /^Repeat/ }).selectOption('weekdays')
+  for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']) {
+    await page.getByRole('checkbox', { name: day }).uncheck()
+  }
+  await expect(page.getByRole('alert')).toHaveText(/never come round/)
+  await page.getByRole('combobox', { name: /^Repeat/ }).selectOption('daily')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'More for Stretch gently' })).toBeFocused()
+
+  // A gentle day: three goals, no counts, and it outlasts a reload.
+  await page.getByRole('checkbox', { name: /gentle day/i }).check()
+  await expect(page.getByText('Rest counts too.', { exact: false }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /^More for / })).toHaveCount(3)
+  await expect(page.getByRole('button', { name: 'Show the other 1 goal' })).toBeVisible()
+  expect(await seriousViolations(page, 'Today on a gentle day')).toEqual([])
+  await reloadAfterSave(page)
+  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: /gentle day/i })).toBeChecked()
+  await expect(page.getByRole('button', { name: /^More for / })).toHaveCount(3)
+
+  // Archiving from the row takes it away, and can be undone.
+  await page.getByRole('button', { name: 'More for Water the fern' }).click()
+  await page.getByRole('group', { name: 'Water the fern options' }).getByRole('button', { name: 'Archive' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Goals' })).toBeFocused()
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'More for Water the fern' })).toBeVisible()
 })
 
 test('supports plant selection and permanent local reset confirmation', async ({
@@ -423,7 +482,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await page.getByRole('button', { name: /save check-in/i }).click()
   await page.getByLabel('Add a goal').fill('Stretch')
   await page.getByRole('button', { name: 'Add goal' }).click()
-  await page.getByRole('button', { name: /complete stretch/i }).click()
+  await page.getByRole('button', { name: /care for stretch/i }).click()
   await page.locator('#daily-reflection').fill('A quiet moment.')
   await page.getByRole('button', { name: /keep this reflection/i }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('9')

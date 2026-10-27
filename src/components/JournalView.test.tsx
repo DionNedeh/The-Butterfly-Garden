@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createInitialState } from '../lib/progression'
-import type { AppState, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
+import type { AppState, Goal, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
 import { JournalView } from './JournalView'
 
 function mood(localDate: string, note: string): MoodEntry {
@@ -38,6 +38,19 @@ function recap(localDate: string, overrides: Partial<RecapEntry> = {}): RecapEnt
     createdAt: `${localDate}T22:00:00.000Z`,
     updatedAt: `${localDate}T22:00:00.000Z`,
     ...overrides,
+  }
+}
+
+/** A one-time goal, as planning a note for tomorrow makes one. */
+function goal(id: string, title: string): Goal {
+  return {
+    id,
+    title,
+    schedule: 'once',
+    weekdays: [],
+    createdDate: '2026-01-01',
+    archived: false,
+    scheduledDate: '2026-01-02',
   }
 }
 
@@ -216,6 +229,136 @@ describe('recaps in the journal', () => {
     expect(
       screen.getByText(/Became a goal: Book the appointment/),
     ).toBeInTheDocument()
+  })
+
+  it('lists each note for tomorrow when there were several', () => {
+    renderJournal({
+      ...base(),
+      recaps: [recap(DAY, { forTomorrow: 'Call the vet\nWater the fern\nRest' })],
+    })
+
+    expect(screen.getAllByText('For tomorrow')).toHaveLength(1)
+    const notes = within(screen.getByText('For tomorrow').parentElement as HTMLElement)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent)
+    expect(notes).toEqual(['Call the vet', 'Water the fern', 'Rest'])
+  })
+
+  it('leaves blank lines out of the notes for tomorrow', () => {
+    renderJournal({
+      ...base(),
+      recaps: [recap(DAY, { forTomorrow: 'Call the vet\n  \nRest' })],
+    })
+
+    const notes = within(screen.getByText('For tomorrow').parentElement as HTMLElement)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent)
+    expect(notes).toEqual(['Call the vet', 'Rest'])
+  })
+
+  it('shows a single note for tomorrow as a line, not a list', () => {
+    // A note left with an empty second line, from "Add another", is still one.
+    renderJournal({
+      ...base(),
+      recaps: [recap(DAY, { forTomorrow: 'Book the appointment\n' })],
+    })
+
+    expect(screen.getByText('For tomorrow')).toBeInTheDocument()
+    const note = screen.getByText('Book the appointment')
+    const entry = note.closest('article') as HTMLElement
+    expect(within(entry).queryByRole('list')).not.toBeInTheDocument()
+  })
+
+  it('names every note that became a goal', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [
+        ...state.goals,
+        goal('vet', 'Call the vet'),
+        goal('fern', 'Water the fern'),
+        goal('rest', 'Rest'),
+      ],
+      recaps: [
+        recap(DAY, {
+          forTomorrow: 'Call the vet\nWater the fern\nRest',
+          plannedGoalId: 'vet',
+          plannedGoalIds: ['vet', 'fern'],
+        }),
+      ],
+    })
+
+    expect(
+      screen.getByText('Became goals: Call the vet and Water the fern'),
+    ).toBeInTheDocument()
+  })
+
+  it('names three planned goals as a list', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [
+        ...state.goals,
+        goal('vet', 'Call the vet'),
+        goal('fern', 'Water the fern'),
+        goal('rest', 'Rest'),
+      ],
+      recaps: [recap(DAY, { plannedGoalIds: ['vet', 'fern', 'rest'] })],
+    })
+
+    expect(
+      screen.getByText('Became goals: Call the vet, Water the fern and Rest'),
+    ).toBeInTheDocument()
+  })
+
+  it('names one planned goal in the singular', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [...state.goals, goal('fern', 'Water the fern')],
+      recaps: [recap(DAY, { plannedGoalIds: ['fern'] })],
+    })
+
+    expect(screen.getByText('Became a goal: Water the fern')).toBeInTheDocument()
+  })
+
+  it('skips planned goals that have since been deleted', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [
+        ...state.goals,
+        goal('vet', 'Call the vet'),
+        goal('rest', 'Rest'),
+      ],
+      recaps: [
+        recap(DAY, { plannedGoalIds: ['gone', 'vet', 'also-gone', 'rest'] }),
+      ],
+    })
+
+    expect(screen.getByText('Became goals: Call the vet and Rest')).toBeInTheDocument()
+  })
+
+  it('names one goal in the singular when the others were deleted', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [...state.goals, goal('rest', 'Rest')],
+      recaps: [recap(DAY, { plannedGoalIds: ['gone', 'rest'] })],
+    })
+
+    expect(screen.getByText('Became a goal: Rest')).toBeInTheDocument()
+  })
+
+  it('says nothing of goals when every planned one was deleted', () => {
+    renderJournal({
+      ...base(),
+      recaps: [
+        recap(DAY, { plannedGoalId: 'gone', plannedGoalIds: ['gone', 'also-gone'] }),
+      ],
+    })
+
+    expect(screen.queryByText(/Became/)).not.toBeInTheDocument()
   })
 
   it('asks before deleting a recap, and does nothing until confirmed', async () => {

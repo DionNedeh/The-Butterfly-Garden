@@ -7,7 +7,7 @@ import {
   removeCustomBackdrop,
   selectCustomBackdrop as selectCustomBackdropIn,
 } from '../lib/customBackdrops'
-import { toLocalDate } from '../lib/date'
+import { toLocalDate, type RecapHours } from '../lib/date'
 import { purchaseFlightPattern, selectFlightPattern } from '../lib/flightPatterns'
 import * as act from '../lib/gardenActions'
 import { gardenEvents } from '../lib/gardenEvents'
@@ -160,7 +160,7 @@ export function useGardenState() {
         update((current) => act.deleteReflection(current, id)),
       collectMoonlight: (
         localDate: string,
-        draft: RecapDraft & { planForTomorrow?: boolean } = {},
+        draft: RecapDraft & { tomorrow?: readonly act.TomorrowNote[] } = {},
       ) => {
         const now = new Date()
         update((current) => act.collectMoonlight(current, localDate, draft, now))
@@ -253,8 +253,16 @@ export function useGardenState() {
       toggleAmbientSound: () => update(act.toggleAmbientSound),
       setAmbientSound: (on: boolean) =>
         update((current) => act.setAmbientSound(current, on)),
+      chooseNextPlant: (plantId: string | undefined) =>
+        update((current) => act.chooseNextPlant(current, plantId)),
+      setGentleDay: (gentle: boolean) => {
+        const today = toLocalDate()
+        update((current) => act.setGentleDay(current, gentle ? today : undefined))
+      },
       setDayCountsHidden: (hidden: boolean) =>
         update((current) => act.setDayCountsHidden(current, hidden)),
+      setRecapHours: (hours: RecapHours) =>
+        update((current) => act.setRecapHours(current, hours)),
       selectAmbientTrack: (ambientTrack: AmbientTrackId) =>
         update((current) => act.selectAmbientTrack(current, ambientTrack)),
       toggleTheme: () => update(act.toggleTheme),

@@ -8,15 +8,31 @@ import {
   sunlightForDate,
 } from '../lib/progression'
 import { describeDay } from '../lib/daySummary'
+import { TOMORROW_NOTE_LENGTH, TOMORROW_NOTES, type TomorrowNote } from '../lib/gardenActions'
 import type { AppState, MoodEntry } from '../types'
 import { Icon } from './Icons'
+
+/**
+ * The draft for tomorrow as notes, a line each. A draft left by an older
+ * build was one free text box with any number of lines; rather than drop
+ * what was written after the third, the rest is kept in the last note.
+ */
+function notesOf(draft: string): string[] {
+  const lines = draft.split('\n')
+  if (lines.length <= TOMORROW_NOTES) return lines
+  const kept = lines.filter((line) => line.trim())
+  return [
+    ...kept.slice(0, TOMORROW_NOTES - 1),
+    kept.slice(TOMORROW_NOTES - 1).join(' '),
+  ]
+}
 
 export interface RecapSubmission {
   level?: MoodEntry['level']
   wentWell: string
   settingDown: string
-  forTomorrow: string
-  planForTomorrow: boolean
+  /** Up to three notes for tomorrow, each of which can become a goal. */
+  tomorrow: TomorrowNote[]
 }
 
 /** Enough of a step to render its heading; the body is chosen per index. */
@@ -81,7 +97,22 @@ export function MoonlightRecap({
     `recap:${targetDate}:forTomorrow`,
     '',
   )
-  const [planForTomorrow, setPlanForTomorrow] = useState(false)
+  // The notes are one draft, a line each, so they survive a reload together.
+  const notes = notesOf(forTomorrow)
+  const [planned, setPlanned] = useState<boolean[]>([])
+  const notesRef = useRef<HTMLDivElement>(null)
+  // "Add another" hides once used, so the note it added takes its focus.
+  const focusNote = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (focusNote.current === undefined) return
+    notesRef.current?.querySelectorAll('input')[focusNote.current]?.focus()
+    focusNote.current = undefined
+  }, [notes.length])
+  const setNote = (index: number, text: string) => {
+    const next = [...notes]
+    next[index] = text.replace(/\n/g, ' ')
+    setForTomorrow(next.join('\n'))
+  }
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   // Each step replaces the last in place, so without this the reader is left
@@ -112,7 +143,7 @@ export function MoonlightRecap({
     if (step === 3) setSettingDown('')
     if (step === 4) {
       setForTomorrow('')
-      setPlanForTomorrow(false)
+      setPlanned([])
     }
     next()
   }
@@ -122,8 +153,11 @@ export function MoonlightRecap({
       level,
       wentWell,
       settingDown,
-      forTomorrow,
-      planForTomorrow: planForTomorrow && forTomorrow.trim().length > 0,
+      // A note emptied again after it was marked is not planned.
+      tomorrow: notes.map((text, index) => ({
+        text,
+        plan: planned[index] === true && text.trim() !== '',
+      })),
     })
     clearDraft(
       `recap:${targetDate}:wentWell`,
@@ -228,30 +262,52 @@ export function MoonlightRecap({
 
         {step === 4 && (
           <>
-            <textarea
-              className="recap-field"
-              aria-labelledby="recap-step-title"
-              value={forTomorrow}
-              onChange={(event) => setForTomorrow(event.target.value)}
-              placeholder="A note to yourself"
-              rows={3}
-              maxLength={280}
-            />
-            {forTomorrow.trim() && (
+            <div className="tomorrow-notes" ref={notesRef}>
+              {notes.map((note, index) => (
+                <div className="tomorrow-note" key={index}>
+                  <input
+                    className="recap-field"
+                    aria-label={`Note ${index + 1} for tomorrow`}
+                    value={note}
+                    onChange={(event) => setNote(index, event.target.value)}
+                    placeholder={index === 0 ? 'A note to yourself' : 'Another, if you like'}
+                    maxLength={TOMORROW_NOTE_LENGTH}
+                  />
+                  {note.trim() && (
+                    <button
+                      className={`recap-plan-toggle ${planned[index] ? 'selected' : ''}`}
+                      aria-pressed={planned[index] === true}
+                      // The visible words first, so a voice user can say what they see.
+                      aria-label={`${planned[index] ? 'Added' : 'Add'} to tomorrow’s goals: ${note.trim()}`}
+                      onClick={() =>
+                        setPlanned((current) => {
+                          const next = [...current]
+                          next[index] = !next[index]
+                          return next
+                        })
+                      }
+                    >
+                      <Icon name="today" size={18} />
+                      {planned[index] ? 'Added to tomorrow’s goals' : 'Add to tomorrow’s goals'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {notes.length < TOMORROW_NOTES && notes[notes.length - 1]?.trim() && (
               <button
-                className={`recap-plan-toggle ${planForTomorrow ? 'selected' : ''}`}
-                aria-pressed={planForTomorrow}
-                onClick={() => setPlanForTomorrow((value) => !value)}
+                className="text-button tomorrow-add"
+                onClick={() => {
+                  focusNote.current = notes.length
+                  setForTomorrow(`${notes.join('\n')}\n`)
+                }}
               >
-                <Icon name="today" size={18} />
-                {planForTomorrow
-                  ? 'Added to tomorrow’s goals'
-                  : 'Add to tomorrow’s goals'}
+                Add another
               </button>
             )}
-            {planForTomorrow && forTomorrow.trim() && (
+            {notes.some((note, index) => note.trim() && planned[index]) && (
               <p className="recap-helper">
-                It will be waiting on {formatWeekday(addDaysToLocalDate(targetDate, 1))}.
+                They will be waiting on {formatWeekday(addDaysToLocalDate(targetDate, 1))}.
               </p>
             )}
           </>

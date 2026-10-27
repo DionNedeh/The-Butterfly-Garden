@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { PersistenceStatus } from '../hooks/useGardenState'
@@ -162,5 +162,79 @@ describe('SettingsView rhythm, sound and support', () => {
     renderSettings(undefined, { onOpenSupport })
     await userEvent.setup().click(screen.getByRole('button', { name: 'If you need support now' }))
     expect(onOpenSupport).toHaveBeenCalledOnce()
+  })
+})
+
+describe('SettingsView evening hours', () => {
+  /** A garden whose gardener chose their own hours. */
+  function gardenWithHours(recapOpensHour: number, recapGraceEndsHour: number) {
+    const seed = createInitialState('Tester', 'Test Garden')
+    return { ...seed, profile: { ...seed.profile!, recapOpensHour, recapGraceEndsHour } }
+  }
+
+  it('starts the evening at 6pm and ends a late night at 4am until they are chosen', () => {
+    renderSettings(undefined, { onSetRecapHours: vi.fn() })
+    expect(screen.getByLabelText('My evening starts at')).toHaveValue('18')
+    expect(screen.getByLabelText('My evening starts at')).toHaveDisplayValue(/^6\sPM$/)
+    expect(screen.getByLabelText('A late night lasts until')).toHaveValue('4')
+    expect(screen.getByLabelText('A late night lasts until')).toHaveDisplayValue(/^4\sAM$/)
+  })
+
+  it('shows the hours the gardener chose', () => {
+    renderSettings(undefined, { onSetRecapHours: vi.fn(), state: gardenWithHours(21, 0) })
+    expect(screen.getByLabelText('My evening starts at')).toHaveValue('21')
+    expect(screen.getByLabelText('A late night lasts until')).toHaveDisplayValue('Midnight')
+  })
+
+  it('offers an evening from noon to 11pm, and a late night until midnight to 10am', () => {
+    renderSettings(undefined, { onSetRecapHours: vi.fn() })
+    const evenings = within(screen.getByLabelText('My evening starts at')).getAllByRole('option')
+    expect(evenings.map((option) => (option as HTMLOptionElement).value)).toEqual(
+      ['12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23'],
+    )
+    expect(evenings[0]).toHaveTextContent(/^12\sPM$/)
+    expect(evenings.at(-1)).toHaveTextContent(/^11\sPM$/)
+
+    const lateNights = within(screen.getByLabelText('A late night lasts until')).getAllByRole('option')
+    expect(lateNights.map((option) => (option as HTMLOptionElement).value)).toEqual(
+      ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+    )
+    expect(lateNights[0]).toHaveTextContent('Midnight')
+    expect(lateNights[1]).toHaveTextContent(/^1\sAM$/)
+    expect(lateNights.at(-1)).toHaveTextContent(/^10\sAM$/)
+  })
+
+  it('saves both hours when either one changes', async () => {
+    const user = userEvent.setup()
+    const { onSetRecapHours } = renderSettings(undefined, {
+      onSetRecapHours: vi.fn(),
+      state: gardenWithHours(21, 2),
+    })
+
+    await user.selectOptions(screen.getByLabelText('My evening starts at'), '20')
+    expect(onSetRecapHours).toHaveBeenLastCalledWith({ opensHour: 20, graceEndsHour: 2 })
+
+    await user.selectOptions(screen.getByLabelText('A late night lasts until'), '0')
+    expect(onSetRecapHours).toHaveBeenLastCalledWith({ opensHour: 21, graceEndsHour: 0 })
+    expect(onSetRecapHours).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the rhythm card to what can be set', () => {
+    renderSettings(undefined, { onSetRecapHours: vi.fn() })
+    expect(screen.getByRole('region', { name: 'Days and numbers' })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /show day counts/i })).not.toBeInTheDocument()
+  })
+
+  it('leaves the evening hours out when they cannot be changed', () => {
+    renderSettings(undefined, { onSetDayCountsHidden: vi.fn() })
+    expect(screen.getByRole('region', { name: 'Days and numbers' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('My evening starts at')).not.toBeInTheDocument()
+  })
+
+  it('has no rhythm card when there is nothing in it to set', () => {
+    renderSettings()
+    expect(screen.queryByRole('region', { name: 'Days and numbers' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Your rhythm')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('My evening starts at')).not.toBeInTheDocument()
   })
 })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AppState, Goal } from '../types'
 import * as act from './gardenActions'
-import { createInitialState } from './progression'
+import { createInitialState, MAX_PLANT_GROWTH } from './progression'
 
 const NOW = new Date(2026, 9, 26, 10)
 const TODAY = '2026-10-26'
@@ -171,6 +171,106 @@ describe('the evening recap', () => {
     expect(act.collectMoonlight(closed, '2026-10-25', {}, NOW)).toBe(closed)
   })
 
+  it('keeps tomorrow’s notes one per line, leaving out empty ones', () => {
+    const before = garden({ goals: [goal()] })
+    const closed = act.collectMoonlight(
+      before,
+      TODAY,
+      {
+        tomorrow: [
+          { text: '  Book it  ', plan: false },
+          { text: '   ', plan: true },
+          { text: 'Call Mum', plan: false },
+        ],
+      },
+      NOW,
+    )
+    expect(closed.recaps[0].forTomorrow).toBe('Book it\nCall Mum')
+    // Nothing was planned, so nothing is added to tomorrow, not even for the
+    // blank note that was marked.
+    expect(closed.goals).toEqual(before.goals)
+    expect(closed.recaps[0].plannedGoalId).toBeUndefined()
+    expect(closed.recaps[0].plannedGoalIds).toBeUndefined()
+  })
+
+  it('plans each marked note as a goal for the day after the one closed', () => {
+    const before = garden({ goals: [goal()] })
+    const closed = act.collectMoonlight(
+      before,
+      '2026-10-25',
+      {
+        tomorrow: [
+          { text: ' Book it ', plan: true },
+          { text: 'Stretch', plan: false },
+          { text: 'Call Mum', plan: true },
+        ],
+      },
+      new Date(2026, 9, 26, 1, 15),
+    )
+    const planned = closed.goals.slice(before.goals.length)
+    expect(closed.goals[0]).toBe(before.goals[0])
+    expect(planned).toHaveLength(2)
+    for (const [index, title] of ['Book it', 'Call Mum'].entries()) {
+      expect(planned[index]).toMatchObject({
+        title,
+        schedule: 'once',
+        weekdays: [],
+        createdDate: TODAY,
+        archived: false,
+        scheduledDate: '2026-10-26',
+      })
+    }
+    expect(closed.recaps[0]).toMatchObject({
+      forTomorrow: 'Book it\nStretch\nCall Mum',
+      plannedGoalId: planned[0].id,
+      plannedGoalIds: planned.map((item) => item.id),
+    })
+  })
+
+  it('takes no more than three notes for tomorrow', () => {
+    const notes = ['', 'One', 'Two', 'Three', 'Four'].map((text) => ({ text, plan: true }))
+    const closed = act.collectMoonlight(garden(), TODAY, { tomorrow: notes }, NOW)
+    expect(act.TOMORROW_NOTES).toBe(3)
+    // The empty note does not take one of the three places.
+    expect(closed.recaps[0].forTomorrow).toBe('One\nTwo\nThree')
+    expect(closed.goals.map((item) => item.title)).toEqual(['One', 'Two', 'Three'])
+    expect(closed.recaps[0].plannedGoalIds).toHaveLength(act.TOMORROW_NOTES)
+  })
+
+  it('keeps a note that becomes a goal to a goal title’s length', () => {
+    // A draft left by an older build is not held to the field's limit.
+    const long = 'a'.repeat(act.TOMORROW_NOTE_LENGTH + 50)
+    const closed = act.collectMoonlight(
+      garden(),
+      TODAY,
+      { tomorrow: [{ text: long, plan: true }] },
+      NOW,
+    )
+    expect(closed.goals[0].title).toHaveLength(act.TOMORROW_NOTE_LENGTH)
+    expect(closed.recaps[0].forTomorrow).toHaveLength(act.TOMORROW_NOTE_LENGTH)
+    expect(act.TOMORROW_TEXT_LENGTH).toBe(3 * act.TOMORROW_NOTE_LENGTH + 2)
+  })
+
+  it('still reads a single note from an older draft, planning it only when asked', () => {
+    const kept = act.collectMoonlight(garden(), TODAY, { forTomorrow: '  Rest  ' }, NOW)
+    expect(kept.recaps[0].forTomorrow).toBe('Rest')
+    expect(kept.goals).toEqual([])
+    expect(kept.recaps[0].plannedGoalIds).toBeUndefined()
+
+    const planned = act.collectMoonlight(
+      garden(),
+      TODAY,
+      { forTomorrow: 'Rest', planForTomorrow: true },
+      NOW,
+    )
+    const added = planned.goals.at(-1)
+    expect(added).toMatchObject({ title: 'Rest', scheduledDate: '2026-10-27' })
+    expect(planned.recaps[0]).toMatchObject({
+      plannedGoalId: added?.id,
+      plannedGoalIds: [added?.id],
+    })
+  })
+
   it('edits and deletes a recap without paying out again', () => {
     const closed = act.collectMoonlight(garden(), TODAY, { wentWell: 'Tea' }, NOW)
     const edited = act.updateRecap(closed, { ...closed.recaps[0], wentWell: 'Coffee' }, NOW)
@@ -233,6 +333,59 @@ describe('the gardener and their companions', () => {
     const empty = garden({ profile: undefined })
     expect(act.setDayCountsHidden(empty, true)).toBe(empty)
     expect(act.setAmbientSound(empty, true)).toBe(empty)
+  })
+
+  it('asks the next Sunlight to tend a chosen plant, and lets the choice go', () => {
+    const before = garden()
+    const id = before.plants[1].id
+    const chosen = act.chooseNextPlant(before, id)
+    expect(chosen.profile?.tendFirstPlantId).toBe(id)
+    expect(chosen.plants).toBe(before.plants)
+    expect(act.chooseNextPlant(chosen, id)).toBe(chosen)
+    const released = act.chooseNextPlant(chosen, undefined)
+    expect(released.profile?.tendFirstPlantId).toBeUndefined()
+    expect(act.chooseNextPlant(before, undefined)).toBe(before)
+    const empty = garden({ profile: undefined })
+    expect(act.chooseNextPlant(empty, id)).toBe(empty)
+  })
+
+  it('ignores a plant that is not in the garden, or is fully grown', () => {
+    const before = garden()
+    expect(act.chooseNextPlant(before, 'no-such-plant')).toBe(before)
+    const grown = {
+      ...before,
+      plants: before.plants.map((plant, index) =>
+        index === 1 ? { ...plant, growth: MAX_PLANT_GROWTH } : plant,
+      ),
+    }
+    expect(act.chooseNextPlant(grown, grown.plants[1].id)).toBe(grown)
+  })
+
+  it('makes a day gentle, and ordinary again', () => {
+    const before = garden()
+    const gentle = act.setGentleDay(before, TODAY)
+    expect(gentle.profile?.gentleDay).toBe(TODAY)
+    expect(act.setGentleDay(gentle, TODAY)).toBe(gentle)
+    const ordinary = act.setGentleDay(gentle, undefined)
+    expect(ordinary.profile?.gentleDay).toBeUndefined()
+    expect(act.setGentleDay(before, undefined)).toBe(before)
+    // Another day replaces a gentle day that has run out.
+    expect(act.setGentleDay(gentle, '2026-10-27').profile?.gentleDay).toBe('2026-10-27')
+    const empty = garden({ profile: undefined })
+    expect(act.setGentleDay(empty, TODAY)).toBe(empty)
+  })
+
+  it('moves the gardener’s evening, and only to hours on offer', () => {
+    const moved = act.setRecapHours(garden(), { opensHour: 21, graceEndsHour: 6 })
+    expect(moved.profile).toMatchObject({ recapOpensHour: 21, recapGraceEndsHour: 6 })
+    expect(act.setRecapHours(moved, { opensHour: 21, graceEndsHour: 6 })).toBe(moved)
+    // The defaults, chosen explicitly, change nothing that needs saving.
+    const fresh = garden()
+    expect(act.setRecapHours(fresh, { opensHour: 18, graceEndsHour: 4 })).toBe(fresh)
+    expect(act.setRecapHours(moved, { opensHour: 5, graceEndsHour: 6 })).toBe(moved)
+    expect(act.setRecapHours(moved, { opensHour: 21, graceEndsHour: 12 })).toBe(moved)
+    const empty = garden({ profile: undefined })
+    expect(act.setRecapHours(empty, { opensHour: 21, graceEndsHour: 6 })).toBe(empty)
   })
 
   it('remembers release notes read, writing nothing the second time', () => {

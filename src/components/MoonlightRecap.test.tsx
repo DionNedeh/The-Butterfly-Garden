@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resetDrafts, setDraft } from '../lib/drafts'
 import { createInitialState } from '../lib/progression'
 import type { AppState } from '../types'
 import { MoonlightRecap } from './MoonlightRecap'
@@ -14,7 +15,7 @@ function renderRecap(
 ) {
   const onCollect = vi.fn()
   const onClose = vi.fn()
-  render(
+  const { unmount } = render(
     <MoonlightRecap
       state={overrides.state ?? createInitialState('Tester', 'Test Garden')}
       targetDate={overrides.targetDate ?? TODAY}
@@ -23,7 +24,14 @@ function renderRecap(
       onClose={onClose}
     />,
   )
-  return { onCollect, onClose }
+  return { onCollect, onClose, unmount }
+}
+
+/** Walk to the notes for tomorrow, keeping whatever is already there. */
+async function continueToTomorrow() {
+  for (let step = 0; step < 4; step += 1) {
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  }
 }
 
 /** Walk to the final step without answering anything. */
@@ -35,6 +43,9 @@ async function skipToEnd() {
 }
 
 describe('the Moonlight recap', () => {
+  // Typed answers are kept as drafts in memory; none may reach the next test.
+  afterEach(() => resetDrafts())
+
   it('collects with every question skipped', async () => {
     // The reward is for closing the day, not for filling anything in.
     const { onCollect, onClose } = renderRecap()
@@ -47,8 +58,7 @@ describe('the Moonlight recap', () => {
       level: undefined,
       wentWell: '',
       settingDown: '',
-      forTomorrow: '',
-      planForTomorrow: false,
+      tomorrow: [{ text: '', plan: false }],
     })
     expect(onClose).toHaveBeenCalled()
   })
@@ -78,8 +88,7 @@ describe('the Moonlight recap', () => {
       level: 4,
       wentWell: 'Walked to the river.',
       settingDown: 'The unanswered email.',
-      forTomorrow: '',
-      planForTomorrow: false,
+      tomorrow: [{ text: '', plan: false }],
     })
   })
 
@@ -111,8 +120,7 @@ describe('the Moonlight recap', () => {
 
     expect(onCollect).toHaveBeenCalledWith(
       expect.objectContaining({
-        forTomorrow: 'Book the appointment',
-        planForTomorrow: true,
+        tomorrow: [{ text: 'Book the appointment', plan: true }],
       }),
     )
   })
@@ -138,7 +146,7 @@ describe('the Moonlight recap', () => {
     )
 
     expect(onCollect).toHaveBeenCalledWith(
-      expect.objectContaining({ planForTomorrow: false }),
+      expect.objectContaining({ tomorrow: [{ text: '', plan: false }] }),
     )
   })
 
@@ -162,8 +170,7 @@ describe('the Moonlight recap', () => {
       level: undefined,
       wentWell: '',
       settingDown: '',
-      forTomorrow: '',
-      planForTomorrow: false,
+      tomorrow: [{ text: '', plan: false }],
     })
   })
 
@@ -186,7 +193,7 @@ describe('the Moonlight recap', () => {
     )
 
     expect(onCollect).toHaveBeenCalledWith(
-      expect.objectContaining({ forTomorrow: '', planForTomorrow: false }),
+      expect.objectContaining({ tomorrow: [{ text: '', plan: false }] }),
     )
   })
 
@@ -230,5 +237,138 @@ describe('the Moonlight recap', () => {
 
     expect(onClose).toHaveBeenCalled()
     expect(onCollect).not.toHaveBeenCalled()
+  })
+
+  it('takes up to three notes for tomorrow, each planned on its own', async () => {
+    const { onCollect } = renderRecap()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    for (let step = 0; step < 3; step += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+    }
+    expect(screen.getByText('A reminder, not a promise.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add another' })).toBeNull()
+    await userEvent.type(screen.getByLabelText('Note 1 for tomorrow'), 'Call the vet')
+    await userEvent.click(screen.getByRole('button', { name: 'Add another' }))
+    await userEvent.type(screen.getByLabelText('Note 2 for tomorrow'), 'Water the fern')
+    await userEvent.click(screen.getByRole('button', { name: 'Add another' }))
+    await userEvent.type(screen.getByLabelText('Note 3 for tomorrow'), 'Rest')
+    // Three is the most it takes.
+    expect(screen.queryByRole('button', { name: 'Add another' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /Add to tomorrow’s goals: Water the fern/ }))
+    expect(screen.getByText(/They will be waiting on/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Collect Moonlight' }))
+    expect(onCollect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tomorrow: [
+          { text: 'Call the vet', plan: false },
+          { text: 'Water the fern', plan: true },
+          { text: 'Rest', plan: false },
+        ],
+      }),
+    )
+  })
+
+  it('brings back notes on separate lines as separate notes when it is opened again', async () => {
+    const first = renderRecap()
+    await continueToTomorrow()
+    await userEvent.type(screen.getByLabelText('Note 1 for tomorrow'), 'Call the vet')
+    await userEvent.click(screen.getByRole('button', { name: 'Add another' }))
+    await userEvent.type(screen.getByLabelText('Note 2 for tomorrow'), 'Water the fern')
+    first.unmount()
+
+    const { onCollect } = renderRecap()
+    await continueToTomorrow()
+    expect(screen.getByLabelText('Note 1 for tomorrow')).toHaveValue('Call the vet')
+    expect(screen.getByLabelText('Note 2 for tomorrow')).toHaveValue('Water the fern')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Collect Moonlight' }))
+    expect(onCollect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tomorrow: [
+          { text: 'Call the vet', plan: false },
+          { text: 'Water the fern', plan: false },
+        ],
+      }),
+    )
+  })
+
+  it('keeps every word of an older, longer draft in three notes', async () => {
+    // The previous build's single text box, blank lines and all.
+    setDraft(`recap:${TODAY}:forTomorrow`, 'One\n\nTwo\nThree\nFour')
+    renderRecap()
+    await continueToTomorrow()
+    expect(screen.getByLabelText('Note 1 for tomorrow')).toHaveValue('One')
+    expect(screen.getByLabelText('Note 2 for tomorrow')).toHaveValue('Two')
+    expect(screen.getByLabelText('Note 3 for tomorrow')).toHaveValue('Three Four')
+    expect(screen.queryByLabelText('Note 4 for tomorrow')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add another' })).toBeNull()
+  })
+
+  it('takes focus to the note it adds', async () => {
+    renderRecap()
+    await continueToTomorrow()
+    await userEvent.type(screen.getByLabelText('Note 1 for tomorrow'), 'Call the vet')
+    await userEvent.click(screen.getByRole('button', { name: 'Add another' }))
+    expect(screen.getByLabelText('Note 2 for tomorrow')).toHaveFocus()
+  })
+
+  it('un-plans a note when it is pressed a second time', async () => {
+    const { onCollect } = renderRecap()
+    await continueToTomorrow()
+    await userEvent.type(screen.getByLabelText('Note 1 for tomorrow'), 'Book the appointment')
+    const plan = screen.getByRole('button', {
+      name: 'Add to tomorrow’s goals: Book the appointment',
+    })
+    expect(plan).toHaveAttribute('aria-pressed', 'false')
+
+    await userEvent.click(plan)
+    expect(plan).toHaveAttribute('aria-pressed', 'true')
+    expect(plan).toHaveAccessibleName('Added to tomorrow’s goals: Book the appointment')
+    expect(screen.getByText(/They will be waiting on Wednesday/)).toBeInTheDocument()
+
+    await userEvent.click(plan)
+    expect(plan).toHaveAttribute('aria-pressed', 'false')
+    expect(plan).toHaveAccessibleName('Add to tomorrow’s goals: Book the appointment')
+    expect(screen.queryByText(/They will be waiting on/)).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Collect Moonlight' }))
+    expect(onCollect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tomorrow: [{ text: 'Book the appointment', plan: false }],
+      }),
+    )
+  })
+
+  it('clears every note and every plan when the notes are skipped', async () => {
+    const { onCollect } = renderRecap()
+    await continueToTomorrow()
+    await userEvent.type(screen.getByLabelText('Note 1 for tomorrow'), 'Call the vet')
+    await userEvent.click(screen.getByRole('button', { name: 'Add another' }))
+    await userEvent.type(screen.getByLabelText('Note 2 for tomorrow'), 'Water the fern')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Add to tomorrow’s goals: Call the vet' }),
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Add to tomorrow’s goals: Water the fern' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+
+    // Going back finds the step as it was before anything was written.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByLabelText('Note 1 for tomorrow')).toHaveValue('')
+    expect(screen.queryByLabelText('Note 2 for tomorrow')).toBeNull()
+    // Writing the same note again does not bring its old plan back with it.
+    await userEvent.type(screen.getByLabelText('Note 1 for tomorrow'), 'Call the vet')
+    expect(
+      screen.getByRole('button', { name: 'Add to tomorrow’s goals: Call the vet' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this one' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Collect Moonlight' }))
+
+    expect(onCollect).toHaveBeenCalledWith(
+      expect.objectContaining({ tomorrow: [{ text: '', plan: false }] }),
+    )
   })
 })

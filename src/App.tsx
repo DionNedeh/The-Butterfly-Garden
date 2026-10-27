@@ -87,7 +87,7 @@ import { useRecapWindow } from './hooks/useRecapWindow'
 import { usePassStatus } from './hooks/usePassStatus'
 import { setPassStatus, trackPassStatus } from './lib/passEntitlement'
 import { dismissPassLapseNotice } from './lib/playBilling'
-import { backAction, requestDialogClose } from './lib/backNavigation'
+import { backAction, requestDialogClose, requestDismiss } from './lib/backNavigation'
 import {
   leaveApp,
   onAppActiveChange,
@@ -100,7 +100,7 @@ import {
   moonlightForDate,
   sunlightForDate,
 } from './lib/progression'
-import { addDaysToLocalDate } from './lib/date'
+import { addDaysToLocalDate, recapHoursOf } from './lib/date'
 import type { AppView } from './types'
 import { motionClass, motionPreference } from './lib/motion'
 import { isArrival, movedTo } from './lib/hosting'
@@ -151,7 +151,7 @@ const navigation: Array<{
 function App() {
   const garden = useGardenState()
   const today = useLocalDate()
-  const recap = useRecapWindow()
+  const recap = useRecapWindow(recapHoursOf(garden.state?.profile))
   // The page lives in the address (lib/routes), so Back and Forward work, a
   // reload stays put, and a link or shortcut can open a page directly.
   const [route, setRoute] = useState<Route>(
@@ -257,6 +257,7 @@ function App() {
       onBackButton(() => {
         const action = backAction(viewRef.current)
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
+        else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
           // Android's back walks up a fixed ladder (lib/backNavigation), not
           // through history, so each step replaces the address.
@@ -689,6 +690,9 @@ function App() {
               onUncompleteGoal={garden.uncompleteGoal}
               onRestoreGoal={garden.restoreGoal}
               onOpenSupport={openSupport}
+              onSetGentleDay={garden.setGentleDay}
+              onChooseNextPlant={garden.chooseNextPlant}
+              onOpenCare={() => setView('care')}
               recap={offeredRecap}
               moonlightCollected={recapCollected}
               onOpenRecap={() => {
@@ -765,6 +769,7 @@ function App() {
               onOpenNotices={() => setView('notices')}
               onOpenSupport={openSupport}
               onSetDayCountsHidden={garden.setDayCountsHidden}
+              onSetRecapHours={garden.setRecapHours}
               fadeOutMinutes={fadeOut.minutes}
               fadeOutEndsAt={fadeOut.endsAt}
               onChooseFadeOut={(minutes) =>

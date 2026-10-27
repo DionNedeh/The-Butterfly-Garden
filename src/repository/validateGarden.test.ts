@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState } from '../lib/progression'
-import { formatJournalDate, isGoalDue } from '../lib/date'
-import { isLocalDate, validateGarden } from './validateGarden'
+import { formatJournalDate, isGoalDue, isLocalDate } from '../lib/date'
+import { validateGarden } from './validateGarden'
 
 function garden(overrides: Record<string, unknown> = {}) {
   return { ...createInitialState('Tester', 'Test Garden'), ...overrides }
@@ -190,6 +190,70 @@ describe('validating a garden', () => {
     expect(odd.state?.profile?.calmMotion).toBe(false)
     const older = validateGarden(garden({ profile: base }))
     expect(older.state?.profile?.calmMotion).toBeUndefined()
+  })
+
+  it('keeps the later rhythm choices only when they are well formed', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const kept = validateGarden(
+      garden({
+        profile: {
+          ...base,
+          gentleDay: '2026-10-26',
+          tendFirstPlantId: 'plant-2',
+          recapOpensHour: 22,
+          recapGraceEndsHour: 7,
+        },
+      }),
+    ).state?.profile
+    expect(kept).toMatchObject({
+      gentleDay: '2026-10-26',
+      tendFirstPlantId: 'plant-2',
+      recapOpensHour: 22,
+      recapGraceEndsHour: 7,
+    })
+
+    // Hand-edited: a date that is not one, an id that is not text, an evening
+    // inside the late night, and an hour that is no hour.
+    const odd = validateGarden(
+      garden({
+        profile: {
+          ...base,
+          gentleDay: 'tomorrow',
+          tendFirstPlantId: 7,
+          recapOpensHour: 3,
+          recapGraceEndsHour: '4',
+        },
+      }),
+    ).state?.profile
+    expect(odd).not.toHaveProperty('gentleDay')
+    expect(odd).not.toHaveProperty('tendFirstPlantId')
+    expect(odd).not.toHaveProperty('recapOpensHour')
+    expect(odd).not.toHaveProperty('recapGraceEndsHour')
+  })
+
+  it('keeps every goal a recap’s notes became, through a save and a backup', () => {
+    const recap = {
+      id: 'recap',
+      localDate: '2026-10-26',
+      wentWell: '',
+      settingDown: '',
+      forTomorrow: 'One\nTwo',
+      plannedGoalId: 'g1',
+      plannedGoalIds: ['g1', 'g2'],
+      createdAt: '2026-10-26T20:00:00.000Z',
+      updatedAt: '2026-10-26T20:00:00.000Z',
+    }
+    const kept = validateGarden(JSON.parse(JSON.stringify(garden({ recaps: [recap] }))))
+    expect(kept.state?.recaps[0].plannedGoalIds).toEqual(['g1', 'g2'])
+    expect(kept.repaired).toBe(0)
+
+    // Anything but text is left out, and an empty list is no list.
+    const odd = validateGarden(garden({ recaps: [{ ...recap, plannedGoalIds: ['g1', 4, null] }] }))
+    expect(odd.state?.recaps[0].plannedGoalIds).toEqual(['g1'])
+    const none = validateGarden(garden({ recaps: [{ ...recap, plannedGoalIds: [7] }] }))
+    expect(none.state?.recaps[0]).not.toHaveProperty('plannedGoalIds')
+    const notAList = validateGarden(garden({ recaps: [{ ...recap, plannedGoalIds: 'g1' }] }))
+    expect(notAList.state?.recaps[0]).not.toHaveProperty('plannedGoalIds')
   })
 
   it('still refuses a garden from a newer version, saying so', () => {
