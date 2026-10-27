@@ -1033,6 +1033,9 @@ test('stacks alike jars, recycles one for half its Nectar, and Undo takes it bac
     .click()
 
   // An accented capital, from the fold beneath the letters and numbers.
+  // The fold is a 44px target like every control (laid out, not mid-animation).
+  const accents = page.locator('.jar-more-characters summary')
+  expect(await accents.evaluate((fold) => (fold as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44)
   await page.getByText('Accents and marks').click()
   await page.getByRole('button', { name: 'É', exact: true }).click()
   await page.getByRole('button', { name: 'Buy Blue É jar' }).click()

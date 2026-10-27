@@ -50,8 +50,7 @@ import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
 import { welcomeBackToday } from '../lib/visits'
-import { useDraft, useDraftsLoaded } from '../lib/drafts'
-import { HOME_SCREEN_GUIDE_DRAFT, homeScreenAdvice } from '../lib/install'
+import { homeScreenAdvice, isHomeScreenGuidePutAway, putAwayHomeScreenGuide } from '../lib/install'
 
 /** Only on a return after a few days away, so the first load carries none of it. */
 const WelcomeBack = lazy(() =>
@@ -304,13 +303,10 @@ export function GardenView({
     onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
   // On an iPhone or iPad in a browser, how to keep the garden on the Home
   // Screen (lib/install), until put away. The answer cannot change while the
-  // page is open, so it is asked once. Put away is a draft, kept on this
-  // device alone: a backup carried to another iPhone still offers it there.
-  // It waits for the drafts to be read, or a card put away long ago would
-  // flash up on every visit.
+  // page is open, so it is asked once. Put away is remembered by this browser
+  // alone: a backup carried to another iPhone still offers it there.
   const [homeScreen] = useState(homeScreenAdvice)
-  const draftsLoaded = useDraftsLoaded()
-  const [homeScreenGuidePutAway, putAwayHomeScreenGuide] = useDraft(HOME_SCREEN_GUIDE_DRAFT, '')
+  const [homeScreenGuidePutAway, setHomeScreenGuidePutAway] = useState(isHomeScreenGuidePutAway)
 
   return (
     <div className="view garden-view">
@@ -457,14 +453,15 @@ export function GardenView({
         )}
       </div>
 
-      {homeScreen && draftsLoaded && !homeScreenGuidePutAway && (
+      {homeScreen && !homeScreenGuidePutAway && (
         <Suspense fallback={null}>
           <HomeScreenGuide
             advice={homeScreen}
             onPutAway={() => {
               // The card leaves with its button; focus goes to the garden's name.
               gardenTitle.current?.focus()
-              putAwayHomeScreenGuide('put away')
+              putAwayHomeScreenGuide()
+              setHomeScreenGuidePutAway(true)
             }}
           />
         </Suspense>

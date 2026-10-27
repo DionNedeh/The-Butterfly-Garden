@@ -79,6 +79,15 @@ export const releases: ReleaseNote[] = [
           'Care keeps each companion’s story, saves looks to wear again, and says what the next bond level brings.',
           'Keep giving, a garden pace in Settings, lets a host plant in full bloom bloom again.',
           'A small welcome back after a few days away, and Plant a seed says why when it cannot.',
+          'Your own images can be turned, made brighter or darker, and one kept for the night.',
+        ],
+      },
+      {
+        title: 'Guide',
+        items: [
+          'Every species’ fact was checked against field guides, and two more open up as your bond with a companion grows.',
+          'My region, in Settings, marks the butterflies and plants native where you garden, with plants to grow for them.',
+          'The Guide has contents and one search, and “What does this do?” links open the right part and bring you back.',
         ],
       },
       {
@@ -86,6 +95,8 @@ export const releases: ReleaseNote[] = [
         items: [
           'Every purchase says what happened, or why nothing was spent. Supplies can be bought one, three or five at a time.',
           'On a phone, the shop’s filters wait behind one Filter button.',
+          'Alike jars stack on your shelf, a jar on no plant can be recycled for half its Nectar, with a few seconds to undo, and jars take accented capitals and a few marks.',
+          'On the Garden Pass tab, Owned shows the pieces you can wear.',
         ],
       },
       {
@@ -107,11 +118,12 @@ export const releases: ReleaseNote[] = [
             ? 'A gentle note in Settings when your last backup is a month old.'
             : 'A gentle note in Settings when your last backup is a month old, and Share backup… where the browser can share a file.',
           '“If you need support now” lists crisis lines, from Settings, the Guide and after a stormy check-in.',
+          'What’s new opens by itself once after an update.',
           ...(isAndroidApp()
             ? []
             : [
                 'The installed app has shortcuts to Check in, Today and Journal.',
-                'Updates are looked for while the garden is open, What’s new opens once after one, and Update now reloads every open tab together.',
+                'Updates are looked for while the garden is open, and Update now reloads every open tab together.',
                 'On iPhone and iPad, a short guide shows how to add the garden to your Home Screen, where Safari’s seven-day clean-up does not reach it.',
               ]),
         ],

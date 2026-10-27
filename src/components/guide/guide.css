@@ -65,8 +65,10 @@
   background: var(--accent-soft);
 }
 
+/* While empty it keeps its place, so a screen reader is already listening
+   when the first count arrives; it only gives back its margin. */
 .guide-search-status:empty {
-  display: none;
+  margin: 0;
 }
 
 .guide-search-status {

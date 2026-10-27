@@ -1044,10 +1044,21 @@ export function validateGarden(value: unknown): GardenValidation {
 
   if (ctx.refused) return { repaired: ctx.repaired, refused: ctx.refused }
 
+  const profile = checkProfile(candidate.profile, ctx)
+  // A night image the garden no longer holds (removed in a build that did
+  // not know about night images) would have every night say the image is
+  // unavailable; without one, the night shows what the day does.
+  if (
+    profile?.nightCustomBackdropId !== undefined &&
+    !customBackdrops.some((image) => image.id === profile.nightCustomBackdropId)
+  ) {
+    delete profile.nightCustomBackdropId
+  }
+
   const state: AppState = {
     ...(candidate as unknown as AppState),
     version: storedVersionOf({ jars }),
-    profile: checkProfile(candidate.profile, ctx),
+    profile,
     goals,
     completions,
     moods,

@@ -168,6 +168,8 @@
 /* Padding, not flex, for its 44px: flex would take away the fold's marker. */
 .jar-more-characters summary {
   width: fit-content;
+  /* Padding and line alone came to 41px; the marker stays with list-item. */
+  min-height: 44px;
   padding-block: 0.6rem;
   color: var(--forest);
   font-weight: 800;

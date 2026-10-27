@@ -4,5 +4,6 @@
 /* The fold of placed jars opens from a 44px target, like every control. Its
    own padding rather than flex, which would take away the fold's marker. */
 .placed-jars-list summary {
+  min-height: 44px;
   padding-block: 0.6rem;
 }

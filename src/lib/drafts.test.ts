@@ -8,7 +8,6 @@ import {
   loadDrafts,
   resetDrafts,
   useDraft,
-  useDraftsLoaded,
 } from './drafts'
 
 afterEach(() => {
@@ -53,17 +52,6 @@ describe('drafts', () => {
     // Nothing waiting: settles at once, writing nothing.
     await expect(flushDrafts()).resolves.toBeUndefined()
     expect(write).toHaveBeenCalledTimes(1)
-  })
-
-  it('says when the stored drafts have been read, and forgets it with them', async () => {
-    vi.spyOn(gardenRepository, 'readDrafts').mockResolvedValue({ 'home-screen-guide': 'put away' })
-    const { result } = renderHook(() => useDraftsLoaded())
-    expect(result.current).toBe(false)
-    await act(() => loadDrafts())
-    expect(result.current).toBe(true)
-    expect(getDraft('home-screen-guide')).toBe('put away')
-    act(() => resetDrafts())
-    expect(result.current).toBe(false)
   })
 
   it('follows the saved entry while nothing has been typed', () => {

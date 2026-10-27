@@ -1,10 +1,7 @@
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getDraft, loadDrafts, resetDrafts } from '../../lib/drafts'
-import { HOME_SCREEN_GUIDE_DRAFT } from '../../lib/install'
 import { createInitialState } from '../../lib/progression'
-import { gardenRepository } from '../../repository/gardenRepository'
 import { GardenView } from '../GardenView'
 import { HomeScreenGuide } from './HomeScreenGuide'
 
@@ -24,13 +21,6 @@ function onDevice(userAgent: string, { maxTouchPoints = 5, installed = false } =
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
   }))
-}
-
-/** The stored drafts, read as the app reads them once the garden loads. */
-async function draftsRead(stored: Record<string, string> = {}) {
-  vi.spyOn(gardenRepository, 'readDrafts').mockResolvedValue(stored)
-  vi.spyOn(gardenRepository, 'writeDrafts').mockResolvedValue()
-  await act(() => loadDrafts())
 }
 
 function renderGarden() {
@@ -56,7 +46,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
-  resetDrafts()
+  localStorage.clear()
 })
 
 describe('the Home Screen guide', () => {
@@ -91,18 +81,14 @@ describe('the Home Screen guide', () => {
 })
 
 describe('the guide in the garden', () => {
-  it('shows on an iPhone in Safari, once the drafts are read', async () => {
+  it('shows on an iPhone in Safari, from the first visit on', async () => {
     onDevice(IPHONE_SAFARI)
     renderGarden()
-    // Not before: a guide put away long ago would flash up on every visit.
-    expect(screen.queryByRole('region', GUIDE)).toBeNull()
-    await draftsRead()
     expect(await screen.findByRole('region', GUIDE)).toBeInTheDocument()
   })
 
   it('goes for good when put away, handing focus to the garden’s name', async () => {
     onDevice(IPHONE_CHROME)
-    await draftsRead()
     const user = userEvent.setup()
     renderGarden()
     const guide = await screen.findByRole('region', GUIDE)
@@ -110,12 +96,14 @@ describe('the guide in the garden', () => {
     await user.click(within(guide).getByRole('button', { name: 'Got it' }))
     expect(screen.queryByRole('region', GUIDE)).toBeNull()
     expect(screen.getByRole('heading', { level: 1, name: 'Test Garden' })).toHaveFocus()
-    expect(getDraft(HOME_SCREEN_GUIDE_DRAFT)).toBe('put away')
+    // Remembered by this browser on its own, apart from the garden's drafts,
+    // which another tab may write over whole.
+    expect(localStorage.getItem('butterfly-garden:home-screen-guide')).toBe('put away')
   })
 
-  it('stays away once put away on this device', async () => {
+  it('stays away once put away in this browser', async () => {
     onDevice(IPHONE_SAFARI)
-    await draftsRead({ [HOME_SCREEN_GUIDE_DRAFT]: 'put away' })
+    localStorage.setItem('butterfly-garden:home-screen-guide', 'put away')
     renderGarden()
     await screen.findByRole('heading', { level: 1, name: 'Test Garden' })
     await act(() => Promise.resolve())
@@ -123,7 +111,6 @@ describe('the guide in the garden', () => {
   })
 
   it('is never shown once installed, on Android, on a desktop, or in the Android app', async () => {
-    await draftsRead()
     const cases: Array<() => void> = [
       () => onDevice(IPHONE_SAFARI, { installed: true }),
       () => onDevice(ANDROID_CHROME),

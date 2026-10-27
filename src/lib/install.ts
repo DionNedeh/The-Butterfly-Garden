@@ -15,8 +15,35 @@
 /** Safari's own steps, or the same steps in another iOS browser's menu. */
 export type HomeScreenAdvice = 'safari' | 'browser'
 
-/** The draft that remembers the garden's guide was put away (lib/drafts). */
-export const HOME_SCREEN_GUIDE_DRAFT = 'home-screen-guide'
+/** Where this browser remembers that the garden's guide was put away. */
+const PUT_AWAY_KEY = 'butterfly-garden:home-screen-guide'
+
+/**
+ * Whether the Home Screen guide was put away in this browser.
+ *
+ * Kept in the browser's own storage for the site, apart from the garden and
+ * its drafts: read at once, so a guide put away long ago never flashes up while
+ * the garden is being read, and written on its own, so no other tab's drafts
+ * can write over it. It is advice about this browser, so it does not travel
+ * with a backup. Where that storage is refused (a private window), the guide
+ * is simply offered again next time.
+ */
+export function isHomeScreenGuidePutAway(): boolean {
+  try {
+    return localStorage.getItem(PUT_AWAY_KEY) === 'put away'
+  } catch {
+    return false
+  }
+}
+
+/** Remember, in this browser, that the guide was put away for good. */
+export function putAwayHomeScreenGuide(): void {
+  try {
+    localStorage.setItem(PUT_AWAY_KEY, 'put away')
+  } catch {
+    // Offered again next time, which is the gentler failure.
+  }
+}
 
 /**
  * Browsers on iPhone and iPad that are not Safari. They are all WebKit

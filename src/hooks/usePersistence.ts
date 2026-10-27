@@ -173,10 +173,6 @@ export function usePersistence(
         void loadDrafts()
         // Returning gardeners who never got the request still deserve it.
         if (result.state.profile) void requestPersistentStorage()
-      } else if (result.status === 'empty') {
-        // A first visit has no drafts, but saying so lets what waits for them
-        // (the Home Screen guide, for one) appear once a garden is begun.
-        void loadDrafts()
       }
     })
     return () => {

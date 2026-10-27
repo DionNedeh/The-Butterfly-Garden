@@ -87,6 +87,17 @@ describe('the image by night', () => {
     }
   })
 
+  it('drops a choice that names no image the garden holds', () => {
+    // Removed in a build that knew nothing of night images: every night
+    // would say the image is unavailable, and nothing in Settings could
+    // clear it, since "the same as by day" already reads as chosen.
+    const result = validateGarden(withNight('image-gone'))
+    expect(result.refused).toBeUndefined()
+    expect(result.repaired).toBe(0)
+    expect(result.state?.profile).not.toHaveProperty('nightCustomBackdropId')
+    expect(result.state?.profile?.selectedCustomBackdropId).toBe('image-1')
+  })
+
   it('gives an older garden no night image at all', () => {
     const result = validateGarden(garden())
     expect(result.state?.profile).not.toHaveProperty('nightCustomBackdropId')

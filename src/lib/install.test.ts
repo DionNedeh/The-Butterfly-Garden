@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { homeScreenAdvice, isInstalledApp } from './install'
+import {
+  homeScreenAdvice,
+  isHomeScreenGuidePutAway,
+  isInstalledApp,
+  putAwayHomeScreenGuide,
+} from './install'
 
 /** User agents as each browser sends them, trimmed to what matters. */
 const AGENTS = {
@@ -108,5 +113,29 @@ describe('knowing an installed app', () => {
     vi.stubGlobal('matchMedia', undefined)
     expect(isInstalledApp()).toBe(false)
     expect(homeScreenAdvice()).toBe('safari')
+  })
+})
+
+describe('putting the guide away', () => {
+  afterEach(() => {
+    localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  it('is remembered by this browser', () => {
+    expect(isHomeScreenGuidePutAway()).toBe(false)
+    putAwayHomeScreenGuide()
+    expect(isHomeScreenGuidePutAway()).toBe(true)
+  })
+
+  it('offers the guide again where the browser keeps nothing, and never throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError')
+    })
+    expect(() => putAwayHomeScreenGuide()).not.toThrow()
+    expect(isHomeScreenGuidePutAway()).toBe(false)
   })
 })
