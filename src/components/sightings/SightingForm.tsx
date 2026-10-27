@@ -25,6 +25,29 @@ const KIND_WORDS: Record<Kind, { one: string; many: string }> = {
 }
 
 /**
+ * Bring the choice made into sight within its own scrolling list, as little
+ * as it takes, or start the list at its top when none is made. Measured and
+ * scrolled by hand, because scrollIntoView would move the dialog and the page
+ * too, taking the focused heading out of view on a short screen.
+ */
+function showChoiceIn(list: HTMLElement | null) {
+  if (!list) return
+  const row = list.querySelector('input:checked')?.closest('label')
+  if (!row) {
+    list.scrollTop = 0
+    return
+  }
+  // The list's own window onto its rows: inside its border.
+  const top = list.getBoundingClientRect().top + list.clientTop
+  const bottom = top + list.clientHeight
+  const box = row.getBoundingClientRect()
+  if (box.top < top) list.scrollTop -= top - box.top
+  // On until its foot is in sight, though never past its head, so a row
+  // taller than the list (a long name at the largest text) shows its name.
+  else if (box.bottom > bottom) list.scrollTop += Math.min(box.bottom - bottom, box.top - top)
+}
+
+/**
  * Log a sighting, or change one: what was seen, from the field guide, the
  * day, a few words, and a photo if the gardener likes. A modal dialog, so
  * Escape and Android's back gesture put it away like any other (through its
@@ -55,6 +78,7 @@ export default function SightingForm({
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
+  const choiceList = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const ids = useId()
   const start = editing ?? subject
@@ -82,6 +106,13 @@ export default function SightingForm({
       token.current += 1
     }
   }, [])
+
+  // Opened on a butterfly or plant, from its card or a sighting being
+  // changed, the list shows it checked, wherever it sorts; and again when the
+  // kind changes. After the effect above, so the dialog is open to measure.
+  useEffect(() => {
+    showChoiceIn(choiceList.current)
+  }, [kind])
 
   const choices = useMemo(() => subjectChoices(kind, region), [kind, region])
   const words = searchWords(query)
@@ -202,7 +233,7 @@ export default function SightingForm({
           {region && region !== 'elsewhere' && (
             <p className="subtle-copy">Those that live where you garden come first.</p>
           )}
-          <div className="sighting-choice-list">
+          <div className="sighting-choice-list" ref={choiceList}>
             {shown.map((item) => (
               <label key={item.key} className="sighting-choice">
                 <input

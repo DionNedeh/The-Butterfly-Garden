@@ -405,6 +405,11 @@ test('a sighting is logged with a photo in the app, and the back gesture puts it
   await log.click()
   const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
   await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'Log a sighting' })).toBeFocused()
+  // On the Monarch whose card opened it: a small dot beside its name, chosen.
+  const monarch = dialog.getByRole('radio', { name: /^Monarch/ })
+  await expect(monarch).toBeChecked()
+  expect((await monarch.boundingBox())!.width).toBeLessThanOrEqual(24)
   // Back closes the form and stays on the Guide, with focus where it was.
   await pressBack(page)
   await expect(dialog).toHaveCount(0)

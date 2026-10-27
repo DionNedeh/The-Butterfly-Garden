@@ -254,6 +254,19 @@
   font-weight: 650;
 }
 
+/* The app's text fields are full width with padding; a radio is neither. Left
+   to that rule, each radio took most of its row and squeezed the name beside
+   it into a narrow column. A fixed dot, as the app's other radios have. */
+.sighting-form input[type='radio'] {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--forest);
+}
+
 /* 16px text, so a phone does not zoom in on the field it focuses. */
 .sighting-search input,
 .sighting-form input[type='date'],
