@@ -1648,7 +1648,7 @@ test.describe('rounding out the day', () => {
     await page.getByRole('textbox').fill('Book the appointment')
     await page.getByRole('button', { name: /add to tomorrow/i }).click()
     await page.getByRole('button', { name: 'Continue' }).click()
-    await page.getByRole('button', { name: 'Collect Moonlight' }).click()
+    await page.getByRole('button', { name: 'Collect Moonlight', exact: true }).click()
 
     // Back on Today, with the night collected and the bonus in the wallet.
     await expect(page.getByText('The day is rounded out.')).toBeVisible()

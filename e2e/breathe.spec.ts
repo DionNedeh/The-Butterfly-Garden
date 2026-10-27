@@ -100,7 +100,7 @@ test('Stop is one tap and counts nothing, and Escape goes back to support', asyn
   // The cyclic sigh, for three minutes.
   await page.getByRole('radio', { name: /Cyclic sigh/ }).check()
   await expect(page.getByText('In… 2 · In again… 1 · Out… 6')).toBeVisible()
-  await expect(page.getByLabel('Breathe in')).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'Breathe in' })).toHaveCount(0)
   await page.getByRole('radio', { name: '3 minutes' }).check()
   expect(await seriousViolations(page, 'Breathing, choices made')).toEqual([])
 
