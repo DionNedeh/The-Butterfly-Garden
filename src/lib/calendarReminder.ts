@@ -220,7 +220,12 @@ export function staticReminderText(file: { readonly time: string; readonly uid: 
   })
 }
 
-/** The static file for a time, by its name in public/reminders/, if there is one. */
+/**
+ * The static file for a time, by its name in public/reminders/, if there is
+ * one. Named from the list's own entry, never from the time as typed, so the
+ * link can only ever be to one of these files.
+ */
 export function staticReminderFor(time: string): string | undefined {
-  return REMINDER_FILES.some((file) => file.time === time) ? staticReminderName(time) : undefined
+  const file = REMINDER_FILES.find((candidate) => candidate.time === time)
+  return file ? staticReminderName(file.time) : undefined
 }

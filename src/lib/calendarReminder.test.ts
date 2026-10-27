@@ -222,6 +222,9 @@ describe('the calendar files for common times', () => {
     expect(staticReminderFor('18:00')).toBe('evening-1800.ics')
     expect(staticReminderFor('20:30')).toBe('evening-2030.ics')
     expect(staticReminderFor('08:15')).toBeUndefined()
+    // Nothing typed reaches the link: only the list's own names come back.
+    expect(staticReminderFor('08:00"><img src=x onerror=alert(1)>')).toBeUndefined()
+    expect(staticReminderFor('../08:00')).toBeUndefined()
     expect(new Set(REMINDER_FILES.map((file) => file.uid)).size).toBe(REMINDER_FILES.length)
   })
 
