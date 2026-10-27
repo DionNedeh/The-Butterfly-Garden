@@ -126,19 +126,27 @@ export function LockSettings() {
             </button>
           </div>
           {autoLock.ready && (
-            <label>
-              Lock by itself
-              <select
-                value={autoLock.minutes ?? ''}
-                onChange={(event) => void chooseAutoLock(event.target.value)}
-              >
-                {AUTO_LOCK_LABELS.map(([minutes, label]) => (
-                  <option key={label} value={minutes ?? ''}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <>
+              <label>
+                Lock by itself
+                <select
+                  value={autoLock.minutes ?? ''}
+                  aria-describedby={`${ids}-auto-lock`}
+                  onChange={(event) => void chooseAutoLock(event.target.value)}
+                >
+                  {AUTO_LOCK_LABELS.map(([minutes, label]) => (
+                    <option key={label} value={minutes ?? ''}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {/* What it waits for: components/lock/LockWatch. */}
+              <p className="field-hint" id={`${ids}-auto-lock`}>
+                It waits while you are choosing a photo or a file, or have a sighting, a goal or a
+                garden image open to edit, so nothing you are part-way through is lost.
+              </p>
+            </>
           )}
           <div className="form-actions">
             <button className="text-button" type="button" onClick={() => setOpen('passcode')}>

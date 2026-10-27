@@ -222,3 +222,50 @@ test('a second tab follows the lock: locked there too, and opened on its own', a
   await expect(lockScreen(page)).toBeVisible()
   await expect(lockScreen(other)).toBeVisible()
 })
+
+test('a second tab keeps up: a new time to lock by itself at once, and its next change kept once the lock is off', async ({
+  page,
+  context,
+}) => {
+  test.slow()
+  await enterGarden(page)
+  await lockFromSettings(page)
+  const other = await context.newPage()
+  await other.goto('/The-Butterfly-Garden/')
+  await other.getByLabel('Passcode', { exact: true }).fill(PASSCODE)
+  await other.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(other.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible(DERIVING)
+
+  // A time chosen in the first tab is the second's at once, with its
+  // Settings already open; it says what the auto-lock waits for.
+  await goTo(other, 'Settings')
+  const otherLock = other.getByRole('region', { name: 'The garden lock' })
+  const otherChoice = otherLock.getByRole('combobox', { name: 'Lock by itself' })
+  await expect(otherChoice).toHaveValue('')
+  await expect(otherChoice).toHaveAccessibleDescription(/^It waits while you are choosing a photo or a file/)
+  const lockSection = page.getByRole('region', { name: 'The garden lock' })
+  await lockSection
+    .getByRole('combobox', { name: 'Lock by itself' })
+    .selectOption({ label: 'After 15 minutes out of sight' })
+  await expect(lockSection.getByRole('status')).toHaveText(
+    'Saved. The garden will lock itself after that long out of sight.',
+  )
+  await expect(otherChoice).toHaveValue('15')
+
+  // The lock turned off in the first tab. The second reads the garden again,
+  // so the next change made there is kept, not refused as a conflict.
+  await lockSection.getByRole('button', { name: 'Turn the lock off…' }).click()
+  const off = page.getByRole('dialog', { name: 'Turn the lock off' })
+  await off.getByLabel('Your passcode').fill(PASSCODE)
+  await off.getByRole('button', { name: 'Turn the lock off' }).click()
+  const offDone = page.getByRole('dialog', { name: 'The lock is off' })
+  await expect(offDone).toBeVisible(DERIVING)
+  await offDone.getByRole('button', { name: 'Done' }).click()
+  await expect(otherLock.getByRole('button', { name: 'Lock my garden…' })).toBeVisible()
+  await writeSomething(other)
+  // The first tab picks it up from storage, and keeps it through a reload.
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeVisible()
+  await expect(other.getByText(/so your last change was not saved/)).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeVisible()
+})

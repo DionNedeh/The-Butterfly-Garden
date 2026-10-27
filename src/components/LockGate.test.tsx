@@ -1,18 +1,21 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeBroadcastChannel } from '../test/fakeBroadcastChannel'
 import { LAZY_PAGE_MS } from '../test/lazyPage'
 import { getDraft, loadDrafts, resetDrafts, setDraft } from '../lib/drafts'
 import {
+  autoLockMinutes,
   chooseAutoLock,
   lockGarden,
   turnLockOn,
   turnLockOff,
   unlockGarden,
 } from '../lib/gardenLockActions'
+import { withAutoLock, type AutoLockMinutes } from '../lib/gardenLock'
 import { createInitialState } from '../lib/progression'
 import { newRecoveryCode } from '../lib/recoveryCode'
-import { gardenRepository } from '../repository/gardenRepository'
+import { createGardenRepository, gardenRepository } from '../repository/gardenRepository'
+import { GoalEditor } from './GoalEditor'
 import { LockGate } from './LockGate'
 import { LockWatch } from './lock/LockWatch'
 
@@ -170,5 +173,228 @@ describe('locking by itself', { timeout: 30_000 }, () => {
     setVisibility('hidden')
     await act(() => vi.advanceTimersByTimeAsync(5 * 60_000))
     expect(gardenRepository.lockState()).toBe('none')
+  })
+})
+
+/** Another tab choosing when the garden locks itself, and saying so on the tabs' channel. */
+async function chosenInAnotherTab(minutes: AutoLockMinutes | undefined) {
+  const other = createGardenRepository()
+  const record = (await other.readLock())!
+  await other.writeLock(withAutoLock(record, minutes), record)
+  const channel = new FakeBroadcastChannel('butterfly-garden-sync')
+  channel.postMessage({ type: 'garden-auto-lock' })
+  channel.close()
+}
+
+describe('a time chosen in another tab', { timeout: 30_000 }, () => {
+  // Timers and the clock are the test's; storage still answers (fake-indexeddb
+  // runs on setImmediate), and vi.waitFor moves the clock as it waits.
+  const fakeClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+  it('is taken at once, locking a garden already out of sight for longer', async () => {
+    await lockedAndOpen()
+    fakeClock()
+    render(<LockWatch />)
+    setVisibility('hidden')
+    await act(() => vi.advanceTimersByTimeAsync(3 * 60_000))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+    await act(() => chosenInAnotherTab(1))
+    await vi.waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
+  })
+
+  it('is taken at once, counting from when the garden went out of sight', async () => {
+    await lockedAndOpen()
+    fakeClock()
+    render(<LockWatch />)
+    setVisibility('hidden')
+    await act(() => vi.advanceTimersByTimeAsync(3 * 60_000))
+    await act(() => chosenInAnotherTab(5))
+    await vi.waitFor(() => expect(autoLockMinutes()).toBe(5))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    await vi.waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
+  })
+
+  it('is taken at once when it is never: a clock already running stops', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    fakeClock()
+    render(<LockWatch />)
+    setVisibility('hidden')
+    await act(() => vi.advanceTimersByTimeAsync(30_000))
+    await act(() => chosenInAnotherTab(undefined))
+    await vi.waitFor(() => expect(autoLockMinutes()).toBeUndefined())
+    await act(() => vi.advanceTimersByTimeAsync(10 * 60_000))
+    setVisibility('visible')
+    expect(gardenRepository.lockState()).toBe('unlocked')
+  })
+})
+
+describe('waiting on what the gardener is in the middle of', { timeout: 30_000 }, () => {
+  /** A photo field, as the sighting form has, with the watch beside it. */
+  function photoField() {
+    render(
+      <>
+        <label>
+          Add a photo
+          <input type="file" accept="image/webp" />
+        </label>
+        <LockWatch />
+      </>,
+    )
+    return screen.getByLabelText('Add a photo')
+  }
+
+  it('does not start the clock while a photo is chosen, as Android’s picker sends the app to the background', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const photo = photoField()
+    fireEvent.click(photo)
+    act(() => app.active?.(false))
+    await act(() => vi.advanceTimersByTimeAsync(10 * 60_000))
+    act(() => app.active?.(true))
+    fireEvent.change(photo)
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+
+    // Once it is chosen, the next time out of sight counts as ever.
+    act(() => app.active?.(false))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    vi.useRealTimers()
+    await waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
+  })
+
+  it('does not lock on the way back from the camera, whichever comes first, the photo or the app', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const photo = photoField()
+    fireEvent.click(photo)
+    act(() => app.active?.(false))
+    await act(() => vi.advanceTimersByTimeAsync(10 * 60_000))
+    // The photo arrives a moment before the app is back in front.
+    fireEvent.change(photo)
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    act(() => app.active?.(true))
+    await act(() => vi.advanceTimersByTimeAsync(10 * 60_000))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+  })
+
+  it('starts the clock once a chooser is put away while the garden is still out of sight', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const photo = photoField()
+    fireEvent.click(photo)
+    setVisibility('hidden')
+    await act(() => vi.advanceTimersByTimeAsync(5 * 60_000))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+    fireEvent(photo, new Event('cancel', { bubbles: true }))
+    await act(() => vi.advanceTimersByTimeAsync(59_000))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    vi.useRealTimers()
+    await waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
+  })
+
+  it('takes focus coming back as the chooser put away, where a browser says nothing else', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    fireEvent.click(photoField())
+    fireEvent.focus(window)
+    setVisibility('hidden')
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    vi.useRealTimers()
+    await waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
+  })
+
+  it('pays no heed to a click on anything but a file field', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    render(
+      <>
+        <button type="button">Somewhere else</button>
+        <LockWatch />
+      </>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Somewhere else' }))
+    setVisibility('hidden')
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    vi.useRealTimers()
+    await waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
+  })
+
+  it('waits while a goal is open to edit, its words not being a draft, and locks once it is put away', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const editor = (
+      <GoalEditor
+        goal={{
+          id: 'water',
+          title: 'Drink some water',
+          schedule: 'daily',
+          weekdays: [],
+          createdDate: '2026-09-01',
+          archived: false,
+        }}
+        today="2026-09-05"
+        completedBefore={false}
+        completedToday={false}
+        onSave={() => undefined}
+        onArchive={() => undefined}
+        onDelete={() => undefined}
+        onCancel={() => undefined}
+      />
+    )
+    const page = (open: boolean) => (
+      <>
+        {open && editor}
+        <LockWatch />
+      </>
+    )
+    const { rerender } = render(page(true))
+    fireEvent.change(screen.getByRole('textbox', { name: /^Edit goal/ }), {
+      target: { value: 'Drink a glass of water by the window' },
+    })
+    act(() => app.active?.(false))
+    await act(() => vi.advanceTimersByTimeAsync(30 * 60_000))
+    act(() => app.active?.(true))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+    expect(screen.getByRole('textbox', { name: /^Edit goal/ })).toHaveValue(
+      'Drink a glass of water by the window',
+    )
+
+    rerender(page(false))
+    act(() => app.active?.(false))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    vi.useRealTimers()
+    await waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
+  })
+
+  it('looks again while out of sight, starting the clock once what it waited on has gone', async () => {
+    await lockedAndOpen()
+    await chooseAutoLock(1)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const page = (open: boolean) => (
+      <>
+        {open && <form data-auto-lock-waits="" aria-label="An image being framed" />}
+        <LockWatch />
+      </>
+    )
+    const { rerender } = render(page(true))
+    setVisibility('hidden')
+    await act(() => vi.advanceTimersByTimeAsync(5 * 60_000))
+    // Its save finished, and it closed, after the garden went out of sight.
+    rerender(page(false))
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    expect(gardenRepository.lockState()).toBe('unlocked')
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    vi.useRealTimers()
+    await waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
   })
 })

@@ -16,6 +16,7 @@ import {
 } from './sealedBackup'
 import { deriveKey, fromBase64, seal, toBase64 } from './sealing'
 import { withPhotosAsText } from './sightingPhotos'
+import { ArrayBufferFileReader } from '../test/fileReader'
 
 // Fast for every case but the one that checks the real count.
 const FAST = 1_000
@@ -23,8 +24,10 @@ const PASSPHRASE = 'quiet meadow lantern'
 const PHOTO = [82, 73, 70, 70, 9, 8, 7, 6]
 
 beforeEach(() => {
-  // A Blob with arrayBuffer(), as a browser's has.
+  // A Blob with arrayBuffer(), as a browser's has, and a FileReader that
+  // reads it, as the backup's photos are written to text by one.
   vi.stubGlobal('Blob', NodeBlob)
+  vi.stubGlobal('FileReader', ArrayBufferFileReader)
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -65,7 +68,7 @@ async function plainBackup(): Promise<string> {
       format: 'the-butterfly-garden',
       exportedAt: '2026-10-27T09:00:00.000Z',
       appVersion: '3.3.0',
-      garden: await withPhotosAsText(garden),
+      garden: (await withPhotosAsText(garden)).value,
     },
     null,
     2,

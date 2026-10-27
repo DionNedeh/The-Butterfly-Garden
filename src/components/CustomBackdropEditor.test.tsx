@@ -80,6 +80,9 @@ describe('framing a new image', () => {
     prepare.mockReturnValue(pending.promise)
     const { user } = renderEditor()
     expect(screen.getByRole('dialog', { hidden: true })).toHaveAttribute('open')
+    // The auto-lock waits while it is open: the image being framed is no
+    // draft, and locking would take it away (components/lock/LockWatch).
+    expect(screen.getByRole('dialog', { hidden: true })).toHaveAttribute('data-auto-lock-waits')
     expect(screen.queryByLabelText('Image name')).toBeNull()
 
     await user.upload(chooser(), picture)

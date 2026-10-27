@@ -65,6 +65,12 @@ describe('GoalEditor', () => {
     expect(onSave.mock.calls[0][0].tinyTitle).toBeUndefined()
   })
 
+  it('holds the auto-lock while it is open, as nothing in it is kept as a draft', () => {
+    // components/lock/LockWatch waits on what is marked so.
+    renderEditor()
+    expect(titleField().closest('form')).toHaveAttribute('data-auto-lock-waits')
+  })
+
   it('takes focus to the title field when it opens', () => {
     renderEditor()
     expect(titleField()).toHaveFocus()

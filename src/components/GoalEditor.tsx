@@ -115,6 +115,9 @@ export function GoalEditor({
       className="goal-form edit-form"
       // Android's back gesture, like Escape, puts the editor away unsaved.
       data-dismiss-on-back=""
+      // Nothing here is a draft: the auto-lock waits while it is open
+      // (components/lock/LockWatch).
+      data-auto-lock-waits=""
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
