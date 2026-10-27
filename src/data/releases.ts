@@ -40,8 +40,25 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-3',
+    version: '3.3.0',
+    title: 'Out of doors, and for harder days',
+    sections: [
+      {
+        title: 'In the garden',
+        items: [
+          'A field book of butterflies and plants you see in the wild, with a few words and a photo if you like. Sightings earn nothing; the field notes say where you saw them.',
+          'Three good things in nature, a new family of reflection prompts, and what to look for this month where you garden.',
+          'Your garden’s year: a look back at the weather, your companions and the lines you starred, ending in a postcard of your garden you can keep or share.',
+          'My comfort plan: a private page in your own words for harder days, reached from the support page, Settings and a gentle day.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'release-3-2',
     version: '3.2.0',
+    releasedOn: '2026-10-27',
     title: 'New ways to care',
     sections: [
       {
