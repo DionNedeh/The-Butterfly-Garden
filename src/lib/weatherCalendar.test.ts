@@ -232,6 +232,12 @@ describe('labels', () => {
     )
   })
 
+  it('names a check-in written later as such, keeping its weather', () => {
+    expect(
+      dayWeatherLabel('2026-10-06', { ...mood('2026-10-06', 2), writtenLater: true }, 'en-US'),
+    ).toBe('Tuesday, October 6: Rainy, written later')
+  })
+
   it('says when a day has entries but no check-in', () => {
     expect(dayWeatherLabel('2026-10-06', undefined, 'en-US')).toBe(
       'Tuesday, October 6: no check-in',

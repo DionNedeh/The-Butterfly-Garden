@@ -771,6 +771,8 @@ function App() {
               onDeleteReflection={garden.deleteReflection}
               onUpdateRecap={garden.updateRecap}
               onDeleteRecap={garden.deleteRecap}
+              onAddEarlierMood={garden.addEarlierMood}
+              onAddEarlierReflection={garden.addEarlierReflection}
             />
           )}
           {activeView === 'settings' && (

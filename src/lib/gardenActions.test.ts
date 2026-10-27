@@ -158,6 +158,89 @@ describe('the journal', () => {
   })
 })
 
+describe('an entry for an earlier day', () => {
+  // Planted a few weeks before NOW, so earlier days exist.
+  const planted = () => ({
+    ...createInitialState('Tester', 'Actions', new Date(2026, 9, 1, 9)),
+  })
+
+  it('keeps a check-in with its day, marked as written later and stamped now', () => {
+    const before = planted()
+    const after = act.addEarlierMood(before, '2026-10-20', 2, '  Rain all day  ', NOW)
+    expect(after.moods).toHaveLength(1)
+    expect(after.moods[0]).toMatchObject({
+      localDate: '2026-10-20',
+      level: 2,
+      note: 'Rain all day',
+      writtenLater: true,
+      createdAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+    })
+    expect(act.addEarlierMood(before, '2026-10-20', 'unsure', '', NOW).moods[0]).toMatchObject({
+      level: 3,
+      unsure: true,
+      writtenLater: true,
+    })
+  })
+
+  it('keeps a reflection, written freely, with its day', () => {
+    const after = act.addEarlierReflection(planted(), '2026-10-01', '  The first frost.  ', NOW)
+    expect(after.reflections[0]).toMatchObject({
+      localDate: '2026-10-01',
+      promptId: 'free',
+      body: 'The first frost.',
+      writtenLater: true,
+    })
+  })
+
+  it('earns nothing and grows nothing: the care happened today, not then', () => {
+    const before = planted()
+    const mood = act.addEarlierMood(before, '2026-10-20', 4, '', NOW)
+    const reflection = act.addEarlierReflection(mood, '2026-10-20', 'Words', NOW)
+    for (const after of [mood, reflection]) {
+      expect(after.sunlight).toBe(before.sunlight)
+      expect(after.plants).toBe(before.plants)
+      expect(after.creatures).toBe(before.creatures)
+      expect(after.nectar).toBe(before.nectar)
+      expect(after.seeds).toBe(before.seeds)
+    }
+  })
+
+  it('refuses today, a day to come, a day before the garden and a day not on the calendar', () => {
+    const before = planted()
+    for (const day of [TODAY, '2026-10-30', '2026-09-30', '2026-02-30', 'yesterday']) {
+      expect(act.addEarlierMood(before, day, 3, 'x', NOW)).toBe(before)
+      expect(act.addEarlierReflection(before, day, 'x', NOW)).toBe(before)
+    }
+  })
+
+  it('refuses a second check-in or reflection for a day that has one', () => {
+    const once = act.addEarlierReflection(
+      act.addEarlierMood(planted(), '2026-10-20', 4, '', NOW),
+      '2026-10-20',
+      'Words',
+      NOW,
+    )
+    expect(act.addEarlierMood(once, '2026-10-20', 1, '', NOW)).toBe(once)
+    expect(act.addEarlierReflection(once, '2026-10-20', 'More', NOW)).toBe(once)
+    // A check-in written on the day counts as that day's one too.
+    const onTheDay = act.saveMood(planted(), 3, '', new Date(2026, 9, 20, 9))
+    expect(act.addEarlierMood(onTheDay, '2026-10-20', 4, '', NOW)).toBe(onTheDay)
+  })
+
+  it('refuses blank words, and an answer the check-in does not offer', () => {
+    const before = planted()
+    expect(act.addEarlierReflection(before, '2026-10-20', '   ', NOW)).toBe(before)
+    expect(act.addEarlierMood(before, '2026-10-20', 7 as never, '', NOW)).toBe(before)
+  })
+
+  it('keeps the mark through an edit', () => {
+    const written = act.addEarlierMood(planted(), '2026-10-20', 4, 'x', NOW)
+    const edited = act.updateMood(written, { ...written.moods[0], note: 'y' }, NOW)
+    expect(edited.moods[0]).toMatchObject({ note: 'y', writtenLater: true })
+  })
+})
+
 describe('the evening recap', () => {
   it('collects a night once, planning tomorrow from the day being closed', () => {
     const closed = act.collectMoonlight(

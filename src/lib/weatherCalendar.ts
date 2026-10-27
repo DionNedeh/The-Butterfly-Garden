@@ -23,6 +23,9 @@ export type WeekStart = 0 | 1
 /** What a day is called when it has entries but no check-in. */
 const NO_CHECK_IN = 'no check-in'
 
+/** How a day's name marks a check-in written for it afterwards. */
+const WRITTEN_LATER = 'written later'
+
 const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 type FormatKind = 'month' | 'monthShort' | 'year' | 'day' | 'weekdayShort' | 'weekdayLong'
@@ -143,14 +146,18 @@ export function yearLabel(year: number, locale?: string): string {
 /**
  * A day and its weather, as a day's button is named: "Tuesday, October 6:
  * Bright", or "…: no check-in" for a day with only a reflection or a recap.
+ * A check-in written later for the day still gives it its weather, and says
+ * so: "…: Bright, written later".
  */
 export function dayWeatherLabel(
   localDate: string,
-  entry: Pick<MoodEntry, 'level' | 'unsure'> | undefined,
+  entry: Pick<MoodEntry, 'level' | 'unsure' | 'writtenLater'> | undefined,
   locale?: string,
 ): string {
   const day = formatter('day', locale).format(localDateToNoon(localDate))
-  return `${day}: ${entry ? moodName(moodChoiceOf(entry)) : NO_CHECK_IN}`
+  if (!entry) return `${day}: ${NO_CHECK_IN}`
+  const later = entry.writtenLater === true ? `, ${WRITTEN_LATER}` : ''
+  return `${day}: ${moodName(moodChoiceOf(entry))}${later}`
 }
 
 /**

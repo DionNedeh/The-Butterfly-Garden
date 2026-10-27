@@ -234,6 +234,13 @@ export interface MoodEntry {
    */
   unsure?: true
   note: string
+  /**
+   * Written afterwards for this earlier day, from the Journal. It earns no
+   * Sunlight and is not a cared-for day: the care happened on the day it was
+   * written. Only ever stored as true; optional, so an older garden reads as
+   * written on the day.
+   */
+  writtenLater?: true
   createdAt: string
   updatedAt: string
 }
@@ -246,6 +253,8 @@ export interface ReflectionEntry {
   localDate: string
   promptId: string
   body: string
+  /** Written afterwards for this earlier day; see MoodEntry.writtenLater. */
+  writtenLater?: true
   createdAt: string
   updatedAt: string
 }

@@ -73,3 +73,14 @@ describe('counting in words', () => {
     expect(listed(['a', 'b', 'c'])).toBe('a, b and c')
   })
 })
+
+describe('an entry written later for the day', () => {
+  it('is not something done that day, so the day is not said to have it', () => {
+    const later = { createdAt: '', updatedAt: '', writtenLater: true as const }
+    const state = garden({
+      moods: [{ ...later, id: 'm', localDate: DAY, level: 3, note: '' }],
+      reflections: [{ ...later, id: 'r', localDate: DAY, promptId: 'free', body: 'Words' }],
+    })
+    expect(describeDay(state, DAY)).toBe('You made it to the end of the day, and that counts.')
+  })
+})

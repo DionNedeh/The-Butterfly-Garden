@@ -9,6 +9,7 @@ import type {
   RecapEntry,
   ReflectionEntry,
 } from '../types'
+import { freeWritingPrompt } from '../data/content'
 import { availableBackdropIds } from './appearance'
 import {
   addDaysToLocalDate,
@@ -18,6 +19,7 @@ import {
   toLocalDate,
   type RecapHours,
 } from './date'
+import { earlierDayProblem } from './earlierDay'
 import { createId } from './id'
 import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
@@ -305,6 +307,68 @@ export function updateReflection(
 
 export function deleteReflection(state: AppState, id: string): AppState {
   return { ...state, reflections: state.reflections.filter((item) => item.id !== id) }
+}
+
+/** Whether an answer is one the check-in offers. */
+function isMoodChoice(choice: unknown): choice is MoodChoice {
+  return choice === 'unsure' || (typeof choice === 'number' && [1, 2, 3, 4, 5].includes(choice))
+}
+
+/**
+ * A check-in for an earlier day, written now, marked as written later.
+ *
+ * It earns no Sunlight and tends no plant, and it never touches the Sunlight
+ * ledger, so it cannot make that day a cared-for one in the rhythm: the care
+ * happened today, not then. Refused (the garden handed back as it was) for
+ * today or later, before the garden began, or a day that has a check-in.
+ */
+export function addEarlierMood(
+  state: AppState,
+  localDate: string,
+  choice: MoodChoice,
+  note: string,
+  now: Date,
+): AppState {
+  if (!isMoodChoice(choice)) return state
+  if (earlierDayProblem(state, localDate, 'check-in', toLocalDate(now))) return state
+  const written = now.toISOString()
+  const entry: MoodEntry = {
+    id: createId(),
+    localDate,
+    ...moodFields(choice),
+    note: note.trim(),
+    writtenLater: true,
+    createdAt: written,
+    updatedAt: written,
+  }
+  return { ...state, moods: [...state.moods, entry] }
+}
+
+/**
+ * A reflection for an earlier day, written freely now, marked as written
+ * later. Like a check-in written later, it earns nothing. Refused for words
+ * that are only spaces, and for the same days as `addEarlierMood`.
+ */
+export function addEarlierReflection(
+  state: AppState,
+  localDate: string,
+  body: string,
+  now: Date,
+): AppState {
+  const trimmed = body.trim()
+  if (!trimmed) return state
+  if (earlierDayProblem(state, localDate, 'reflection', toLocalDate(now))) return state
+  const written = now.toISOString()
+  const entry: ReflectionEntry = {
+    id: createId(),
+    localDate,
+    promptId: freeWritingPrompt.id,
+    body: trimmed,
+    writtenLater: true,
+    createdAt: written,
+    updatedAt: written,
+  }
+  return { ...state, reflections: [...state.reflections, entry] }
 }
 
 /**
