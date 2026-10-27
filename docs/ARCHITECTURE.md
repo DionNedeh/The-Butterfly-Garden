@@ -52,6 +52,8 @@ tells other tabs which parts it wrote.
 | What counts as a valid garden, and migrations | `repository/validateGarden.ts` |
 | Asking the browser not to evict the garden | `lib/storage.ts` |
 | Unsaved text that survives a reload | `lib/drafts.ts`, `hooks/useSyncedDraft.ts` |
+| A check-in's feelings and energy, and the one next step offered after it | `data/feelings.ts`, `lib/feelings.ts` (what is stored, and in what words), `lib/nextStep.ts`, `components/checkin/` |
+| Ideas for goals, their two-minute versions, a balanced mix | `data/goalSuggestions.ts` (loaded with Today and onboarding only), `lib/goalSuggestions.ts` |
 | Restoring a chosen file | `lib/backupFile.ts` (size and read), `lib/backupPreview.ts` (what it holds) |
 | Suggesting a fresh backup | `lib/backupReminder.ts` (when, and in what words); `lib/shareFile.ts` (*Share backup…* in a browser that can) |
 | A gardener's own images | `lib/imageImport.ts` (header check before decode, resize), `lib/customBackdrops.ts` (limits, crop) |
@@ -61,6 +63,7 @@ tells other tabs which parts it wrote.
 | The installed PWA: icons, shortcuts, screenshots | `pwaManifest.ts`; `scripts/pwa-assets.mjs` renders the shortcut icons and screenshots |
 | Moments worth saying aloud | `lib/gardenEvents.ts` → `lib/announcer.ts` → `Celebrations` |
 | Motion preferences and animation | `lib/motion.ts`, `hooks/useFlightMotion.ts`, `components/sprites/` |
+| The theme, chosen or followed (device, evening), and text size | `lib/theme.ts` (the rule), `hooks/useEffectiveTheme.ts` (when it turns), `lib/textSize.ts`; the shell applies them in `App.tsx` |
 
 ## Invariants
 

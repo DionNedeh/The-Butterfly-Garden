@@ -19,6 +19,7 @@ test.beforeEach(async ({ page }) => {
 async function enterGarden(page: Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
   await expect(
     page.getByRole('heading', { name: 'Sunlit Sanctuary' }),

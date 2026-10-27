@@ -15,6 +15,7 @@ import { hasGardenPassFeature } from '../lib/gardenPass'
 import { buyJar, placeJar, removeJarPlacement } from '../lib/jars'
 import { performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
+import type { ThemeChoice } from '../lib/theme'
 import { removePlant } from '../lib/plantManagement'
 import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
@@ -24,7 +25,9 @@ import { buyShopItem, equipOutfitItem, unequipOutfitSlot } from '../lib/wardrobe
 import { gardenRepository } from '../repository/gardenRepository'
 import type {
   AmbientTrackId,
+  AppearanceTheme,
   AppState,
+  CheckInDetails,
   CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
@@ -36,11 +39,15 @@ import type {
   OutfitSlot,
   RecapEntry,
   ReflectionEntry,
+  TextSize,
 } from '../types'
 import { useMediaSaves, type MediaResult } from './useMediaSaves'
 import { usePersistence } from './usePersistence'
 
 export type { PersistenceStatus } from './usePersistence'
+
+/** A goal chosen while the garden is made: a title, and perhaps its two-minute version. */
+export type StarterGoal = Pick<Goal, 'title' | 'tinyTitle'>
 
 /**
  * The garden and everything that can be done to it.
@@ -117,17 +124,34 @@ export function useGardenState() {
       return result.outcome
     }
     return {
-      onboard: (name: string, gardenName: string) => {
-        setState(createInitialState(name, gardenName))
+      /**
+       * Make the garden, with any starter goals chosen on the way in. They
+       * are added by the same reducer as a goal added on Today, as daily
+       * goals, in the one write that makes the garden.
+       */
+      onboard: (name: string, gardenName: string, starterGoals: readonly StarterGoal[] = []) => {
+        const today = toLocalDate()
+        setState(
+          starterGoals.reduce(
+            (garden, goal) =>
+              act.addGoal(garden, goal.title, 'daily', [], today, goal.tinyTitle),
+            createInitialState(name, gardenName),
+          ),
+        )
         setPersistence((current) =>
           current.notice ? { ...current, notice: undefined } : current,
         )
         // A new garden is the moment to ask the browser to keep it.
         void requestPersistentStorage()
       },
-      addGoal: (title: string, schedule: GoalSchedule, weekdays: number[] = []) => {
+      addGoal: (
+        title: string,
+        schedule: GoalSchedule,
+        weekdays: number[] = [],
+        tinyTitle?: string,
+      ) => {
         const today = toLocalDate()
-        update((current) => act.addGoal(current, title, schedule, weekdays, today))
+        update((current) => act.addGoal(current, title, schedule, weekdays, today, tinyTitle))
       },
       updateGoal: (goal: Goal) => update((current) => act.updateGoal(current, goal)),
       setGoalArchived: (goalId: string, archived: boolean) =>
@@ -155,9 +179,9 @@ export function useGardenState() {
         update((current) => act.uncompleteGoal(current, goalId, localDate)),
       restoreGoal: (goal: Goal, index: number, completions: AppState['completions']) =>
         update((current) => act.restoreGoal(current, goal, index, completions)),
-      saveMood: (choice: MoodChoice, note: string) => {
+      saveMood: (choice: MoodChoice, note: string, details?: CheckInDetails) => {
         const now = new Date()
-        update((current) => act.saveMood(current, choice, note, now))
+        update((current) => act.saveMood(current, choice, note, now, details))
         // The first thing written in the journal is the other moment to ask.
         void requestPersistentStorage()
       },
@@ -177,6 +201,18 @@ export function useGardenState() {
       },
       deleteReflection: (id: string) =>
         update((current) => act.deleteReflection(current, id)),
+      /** A check-in for a day that has passed, marked as written later; it earns nothing. */
+      addEarlierMood: (localDate: string, choice: MoodChoice, note: string) => {
+        const now = new Date()
+        update((current) => act.addEarlierMood(current, localDate, choice, note, now))
+        void requestPersistentStorage()
+      },
+      /** A reflection for a day that has passed, marked as written later; it earns nothing. */
+      addEarlierReflection: (localDate: string, body: string) => {
+        const now = new Date()
+        update((current) => act.addEarlierReflection(current, localDate, body, now))
+        void requestPersistentStorage()
+      },
       collectMoonlight: (
         localDate: string,
         draft: RecapDraft & { tomorrow?: readonly act.TomorrowNote[] } = {},
@@ -286,7 +322,13 @@ export function useGardenState() {
         update((current) => act.setRecapHours(current, hours)),
       selectAmbientTrack: (ambientTrack: AmbientTrackId) =>
         update((current) => act.selectAmbientTrack(current, ambientTrack)),
-      toggleTheme: () => update(act.toggleTheme),
+      /** The header's switch, from the theme `showing` (it may be followed). */
+      toggleTheme: (showing?: AppearanceTheme) =>
+        update((current) => act.toggleTheme(current, showing)),
+      chooseTheme: (choice: ThemeChoice) =>
+        update((current) => act.chooseTheme(current, choice)),
+      setTextSize: (size: TextSize | undefined) =>
+        update((current) => act.setTextSize(current, size)),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**

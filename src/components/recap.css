@@ -1,0 +1,21 @@
+/* The recap's own rules. MoonlightRecap imports this file, so it arrives with
+   the recap rather than in the stylesheet every page waits for. Colours come
+   from the theme's tokens and the shared buttons, which the night theme
+   already redefines. */
+
+/* The last screen's two endings: Collect Moonlight first, then the quieter
+   "Fade the garden to night and close". Together they sit at the row's end;
+   on a narrow screen, or with larger text, each takes its own line there,
+   and a long label wraps inside its button rather than running out of it. */
+.recap-finish {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-left: auto;
+  max-width: 100%;
+}
+
+.recap-finish .secondary-button {
+  text-align: center;
+}

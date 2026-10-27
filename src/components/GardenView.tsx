@@ -297,7 +297,10 @@ export function GardenView({
         </div>
         <div className="garden-heading">
           <p className="eyebrow">Your living sanctuary</p>
-          <h1 id="garden-title">{state.profile?.gardenName}</h1>
+          {/* Focusable by script only: the recap's fade to night lands here. */}
+          <h1 id="garden-title" tabIndex={-1}>
+            {state.profile?.gardenName}
+          </h1>
           <p className="garden-observation">
             {observation?.text ?? 'The garden is finding its rhythm.'}
           </p>

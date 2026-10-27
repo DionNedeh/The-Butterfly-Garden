@@ -1,6 +1,8 @@
 import type {
   AmbientTrackId,
+  AppearanceTheme,
   AppState,
+  CheckInDetails,
   GardenBackdropId,
   Goal,
   GoalSchedule,
@@ -8,7 +10,9 @@ import type {
   MoodEntry,
   RecapEntry,
   ReflectionEntry,
+  TextSize,
 } from '../types'
+import { freeWritingPrompt } from '../data/content'
 import { availableBackdropIds } from './appearance'
 import {
   addDaysToLocalDate,
@@ -18,9 +22,12 @@ import {
   toLocalDate,
   type RecapHours,
 } from './date'
+import { checkInDetails } from './feelings'
+import { earlierDayProblem } from './earlierDay'
 import { createId } from './id'
 import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
+import type { ThemeChoice } from './theme'
 import {
   awardMoonlight,
   awardSunlight,
@@ -39,12 +46,26 @@ import {
  * do, so the save effect sees no change and writes nothing.
  */
 
+/** The longest a goal's title is, and so its two-minute version too. */
+export const GOAL_TITLE_LENGTH = 120
+
+/**
+ * A goal's two-minute version as it is kept: trimmed, no longer than a
+ * title, and left out altogether when there is none, so a goal without one
+ * looks exactly as it did before there were any.
+ */
+function tinyTitleField(tinyTitle: string | undefined): Pick<Goal, 'tinyTitle'> {
+  const tiny = tinyTitle?.trim().slice(0, GOAL_TITLE_LENGTH).trim()
+  return tiny ? { tinyTitle: tiny } : {}
+}
+
 export function addGoal(
   state: AppState,
   title: string,
   schedule: GoalSchedule,
   weekdays: number[],
   today: string,
+  tinyTitle?: string,
 ): AppState {
   return {
     ...state,
@@ -57,15 +78,18 @@ export function addGoal(
         weekdays,
         createdDate: today,
         archived: false,
+        ...tinyTitleField(tinyTitle),
       },
     ],
   }
 }
 
 export function updateGoal(state: AppState, goal: Goal): AppState {
+  const { tinyTitle, ...rest } = goal
+  const saved: Goal = { ...rest, ...tinyTitleField(tinyTitle) }
   return {
     ...state,
-    goals: state.goals.map((item) => (item.id === goal.id ? goal : item)),
+    goals: state.goals.map((item) => (item.id === goal.id ? saved : item)),
   }
 }
 
@@ -230,13 +254,16 @@ export function completeGoal(state: AppState, goalId: string, now: Date): AppSta
  * Today's check-in, written or rewritten, and its Sunlight.
  *
  * The Sunlight is the same whatever the answer, "not sure" included: it is
- * for checking in, never for the weather chosen.
+ * for checking in, never for the weather chosen, and never for the feelings
+ * or energy beside it. Those are stored only when answered, so a rewrite
+ * that unchooses them leaves none behind.
  */
 export function saveMood(
   state: AppState,
   choice: MoodChoice,
   note: string,
   now: Date,
+  details: CheckInDetails = {},
 ): AppState {
   const localDate = toLocalDate(now)
   const existing = state.moods.find((item) => item.localDate === localDate)
@@ -245,6 +272,7 @@ export function saveMood(
     localDate,
     ...moodFields(choice),
     note: note.trim(),
+    ...checkInDetails(details),
     createdAt: existing?.createdAt ?? now.toISOString(),
     updatedAt: now.toISOString(),
   }
@@ -305,6 +333,68 @@ export function updateReflection(
 
 export function deleteReflection(state: AppState, id: string): AppState {
   return { ...state, reflections: state.reflections.filter((item) => item.id !== id) }
+}
+
+/** Whether an answer is one the check-in offers. */
+function isMoodChoice(choice: unknown): choice is MoodChoice {
+  return choice === 'unsure' || (typeof choice === 'number' && [1, 2, 3, 4, 5].includes(choice))
+}
+
+/**
+ * A check-in for an earlier day, written now, marked as written later.
+ *
+ * It earns no Sunlight and tends no plant, and it never touches the Sunlight
+ * ledger, so it cannot make that day a cared-for one in the rhythm: the care
+ * happened today, not then. Refused (the garden handed back as it was) for
+ * today or later, before the garden began, or a day that has a check-in.
+ */
+export function addEarlierMood(
+  state: AppState,
+  localDate: string,
+  choice: MoodChoice,
+  note: string,
+  now: Date,
+): AppState {
+  if (!isMoodChoice(choice)) return state
+  if (earlierDayProblem(state, localDate, 'check-in', toLocalDate(now))) return state
+  const written = now.toISOString()
+  const entry: MoodEntry = {
+    id: createId(),
+    localDate,
+    ...moodFields(choice),
+    note: note.trim(),
+    writtenLater: true,
+    createdAt: written,
+    updatedAt: written,
+  }
+  return { ...state, moods: [...state.moods, entry] }
+}
+
+/**
+ * A reflection for an earlier day, written freely now, marked as written
+ * later. Like a check-in written later, it earns nothing. Refused for words
+ * that are only spaces, and for the same days as `addEarlierMood`.
+ */
+export function addEarlierReflection(
+  state: AppState,
+  localDate: string,
+  body: string,
+  now: Date,
+): AppState {
+  const trimmed = body.trim()
+  if (!trimmed) return state
+  if (earlierDayProblem(state, localDate, 'reflection', toLocalDate(now))) return state
+  const written = now.toISOString()
+  const entry: ReflectionEntry = {
+    id: createId(),
+    localDate,
+    promptId: freeWritingPrompt.id,
+    body: trimmed,
+    writtenLater: true,
+    createdAt: written,
+    updatedAt: written,
+  }
+  return { ...state, reflections: [...state.reflections, entry] }
 }
 
 /**
@@ -526,15 +616,41 @@ export function selectAmbientTrack(state: AppState, ambientTrack: AmbientTrackId
   return { ...state, profile: { ...state.profile, ambientTrack } }
 }
 
-export function toggleTheme(state: AppState): AppState {
-  if (!state.profile) return state
-  return {
-    ...state,
-    profile: {
-      ...state.profile,
-      theme: state.profile.theme === 'night' ? 'sunlight' : 'night',
-    },
+/**
+ * The theme Settings offers: Sunlight or Night by hand, or follow the device
+ * or the evening (lib/theme).
+ *
+ * Choosing by hand stops following. Following leaves the hand-chosen theme
+ * where it was, so an older build, which knows nothing of following, still
+ * opens on the gardener's last choice rather than on a guess.
+ */
+export function chooseTheme(state: AppState, choice: ThemeChoice): AppState {
+  const profile = state.profile
+  if (!profile) return state
+  if (choice === 'device' || choice === 'evening') {
+    if (profile.themeFollows === choice) return state
+    return { ...state, profile: { ...profile, themeFollows: choice } }
   }
+  if (profile.theme === choice && profile.themeFollows === undefined) return state
+  return { ...state, profile: { ...profile, theme: choice, themeFollows: undefined } }
+}
+
+/**
+ * The header's quick switch: the opposite of what is `showing`, chosen by
+ * hand. What is showing may come from following rather than from `theme`, so
+ * the shell says which; pressing it stops following, since a switch the next
+ * evening quietly undid would feel broken.
+ */
+export function toggleTheme(state: AppState, showing?: AppearanceTheme): AppState {
+  if (!state.profile) return state
+  const current = showing ?? state.profile.theme
+  return chooseTheme(state, current === 'night' ? 'sunlight' : 'night')
+}
+
+/** Text larger than usual, or the usual size again (undefined). */
+export function setTextSize(state: AppState, size: TextSize | undefined): AppState {
+  if (!state.profile || state.profile.textSize === size) return state
+  return { ...state, profile: { ...state.profile, textSize: size } }
 }
 
 export function updateProfile(

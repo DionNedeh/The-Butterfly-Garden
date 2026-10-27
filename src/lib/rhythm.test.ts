@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { addEarlierMood, addEarlierReflection } from './gardenActions'
 import { awardMoonlight, createInitialState } from './progression'
 import { careRhythm } from './rhythm'
 
@@ -51,5 +52,22 @@ describe('the rhythm of care', () => {
     )
     expect(state.moonlight).toHaveLength(1)
     expect(careRhythm(state.sunlight, '2026-03-09').lastSeven).toBe(0)
+  })
+})
+
+describe('an entry written later', () => {
+  it('does not make its day a cared-for one: the care happened today', () => {
+    const planted = createInitialState('Tester', 'Rhythm', new Date(2026, 5, 1, 9))
+    const now = new Date(2026, 5, 14, 10)
+    const before = careRhythm(planted.sunlight, '2026-06-14')
+    const later = addEarlierReflection(
+      addEarlierMood(planted, '2026-06-13', 4, 'Caught up', now),
+      '2026-06-12',
+      'Remembered it',
+      now,
+    )
+    expect(later.moods).toHaveLength(1)
+    expect(careRhythm(later.sunlight, '2026-06-14')).toEqual(before)
+    expect(before).toEqual({ lastSeven: 0, thisMonth: 0, longestRun: 0 })
   })
 })

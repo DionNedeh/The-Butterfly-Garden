@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AppState, CreatureInstance } from '../types'
 import { describeEvent, gardenEvents } from './gardenEvents'
+import { addEarlierMood, addEarlierReflection } from './gardenActions'
 import { createInitialState } from './progression'
 
 function creature(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
@@ -62,5 +63,20 @@ describe('what changed, worth marking', () => {
     expect(describeEvent({ kind: 'stage-advanced', creatureName: 'Sol', stage: 'butterfly' })).toBe(
       'Sol emerged as a butterfly!',
     )
+  })
+})
+
+describe('an entry written for an earlier day', () => {
+  it('changes nothing worth marking: no plant grows and nothing hatches', () => {
+    const before = createInitialState('Tester', 'Events', new Date(2026, 9, 1, 9))
+    const now = new Date(2026, 9, 26, 10)
+    const after = addEarlierReflection(
+      addEarlierMood(before, '2026-10-20', 5, '', now),
+      '2026-10-21',
+      'Words',
+      now,
+    )
+    expect(after).not.toBe(before)
+    expect(gardenEvents(before, after)).toEqual([])
   })
 })

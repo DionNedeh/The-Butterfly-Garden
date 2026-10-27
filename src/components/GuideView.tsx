@@ -183,8 +183,8 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       eyebrow: 'Yours alone',
       title: 'Privacy, backdrops, and starting over',
       paragraphs: [
-        'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether.',
-        'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme.',
+        'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether, and Text size makes every word larger.',
+        'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme. Settings can also follow your device’s dark setting, or bring the night in with your evening.',
         isAndroidApp()
           ? 'Delete all local data in Settings permanently removes this garden from this phone; clearing the app\'s storage or uninstalling it does the same. There is no undo, so treat it kindly.'
           : 'Delete all local data in Settings permanently removes this garden from the current browser; clearing site storage does the same. There is no undo, so treat it kindly.',

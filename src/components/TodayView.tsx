@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { freeWritingPrompt, moodLevels, plants, suggestedGoals } from '../data/content'
+import { freeWritingPrompt, moodLevels, plants } from '../data/content'
+import { goalSuggestions, type GoalSuggestion } from '../data/goalSuggestions'
 import {
   completionKey,
   formatJournalDate,
@@ -20,12 +21,36 @@ import {
 } from '../lib/progression'
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
+import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
+import {
+  checkInDetails,
+  feelingsFromDraft,
+  feelingsToDraft,
+  isEnergyLevel,
+} from '../lib/feelings'
 import { moodChoiceOf } from '../lib/mood'
+import { nextStepsAfter, type NextStep } from '../lib/nextStep'
 import { counted } from '../lib/plural'
 import { promptAfter, promptById, promptForDay } from '../lib/prompts'
-import type { AppState, Goal, GoalSchedule, MoodChoice, PlantInstance } from '../types'
+import type {
+  AppState,
+  CheckInDetails,
+  Goal,
+  GoalSchedule,
+  MoodChoice,
+  PlantInstance,
+} from '../types'
+import { CheckInExtras } from './checkin/CheckInExtras'
+import { NextStepOffer } from './checkin/NextStepOffer'
 import { Icon } from './Icons'
-import { GoalEditor, NO_DAYS_CHOSEN, WeekdayPicker, type GoalEdit } from './GoalEditor'
+import {
+  GoalEditor,
+  NO_DAYS_CHOSEN,
+  TINY_TITLE_LABEL,
+  WeekdayPicker,
+  type GoalEdit,
+} from './GoalEditor'
+import { GoalIdeas } from './GoalIdeas'
 import { GoalRow } from './GoalRow'
 import { MonthPlanner } from './MonthPlanner'
 import { UndoToast, type UndoOffer } from './UndoToast'
@@ -84,9 +109,14 @@ export function TodayView({
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
   today: string
-  onSaveMood: (choice: MoodChoice, note: string) => void
+  onSaveMood: (choice: MoodChoice, note: string, details?: CheckInDetails) => void
   onSaveReflection: (promptId: string, body: string) => void
-  onAddGoal: (title: string, schedule: GoalSchedule, weekdays?: number[]) => void
+  onAddGoal: (
+    title: string,
+    schedule: GoalSchedule,
+    weekdays?: number[],
+    tinyTitle?: string,
+  ) => void
   onUpdateGoal: (goal: Goal) => void
   onDeleteGoal: (goalId: string) => void
   onCompleteGoal: (goalId: string) => void
@@ -128,7 +158,23 @@ export function TodayView({
   const moodNoteKey = `mood-note:${today}`
   const reflectionKey = `reflection:${today}`
   const [moodNote, setMoodNote] = useDraft(moodNoteKey, existingMood?.note ?? '')
+  // Feelings and energy are drafted beside the note, so a reload keeps the
+  // whole unsaved answer; until changed, they follow the saved check-in.
+  const feelingsKey = `mood-feelings:${today}`
+  const energyKey = `mood-energy:${today}`
+  const [feelingsDraft, setFeelingsDraft] = useDraft(
+    feelingsKey,
+    feelingsToDraft(existingMood?.feelings ?? []),
+  )
+  const chosenFeelings = useMemo(() => feelingsFromDraft(feelingsDraft), [feelingsDraft])
+  const [energyDraft, setEnergyDraft] = useDraft(energyKey, existingMood?.energy ?? '')
+  const energy = isEnergyLevel(energyDraft) ? energyDraft : undefined
+  // Said once a check-in has been saved on this visit, never on arrival.
+  // Counted, so each save puts the line back and an update is heard too.
+  const [saves, setSaves] = useState(0)
   const [goalTitle, setGoalTitle] = useState('')
+  const [goalTinyTitle, setGoalTinyTitle] = useState('')
+  const goalTitleField = useRef<HTMLInputElement>(null)
   const [schedule, setSchedule] = useState<GoalSchedule>('daily')
   const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
   const [reflection, setReflection] = useDraft(
@@ -158,6 +204,8 @@ export function TodayView({
   const checkInHeading = useRef<HTMLHeadingElement>(null)
   const goalList = useRef<HTMLDivElement>(null)
   const gentleToggle = useRef<HTMLInputElement>(null)
+  const saveCheckIn = useRef<HTMLButtonElement>(null)
+  const reflectionField = useRef<HTMLTextAreaElement>(null)
   // One pass over completions instead of a scan per goal per render.
   const completed = useMemo(
     () =>
@@ -193,6 +241,17 @@ export function TodayView({
     () => state.goals.filter((goal) => goal.archived),
     [state.goals],
   )
+  // Snoozed goals count: an idea already among them is not new to anyone.
+  const activeGoalTitles = useMemo(
+    () => state.goals.filter((goal) => !goal.archived).map((goal) => goal.title),
+    [state.goals],
+  )
+  /** An idea fills the form; the gardener still chooses how often, and adds it. */
+  const chooseIdea = (idea: GoalSuggestion) => {
+    setGoalTitle(idea.title)
+    setGoalTinyTitle(idea.tinyTitle ?? '')
+    goalTitleField.current?.focus()
+  }
   const sunlight = sunlightForDate(state, today)
   const nextPlant = nextPlantToTend(state)
   const isComplete = (goalId: string) => completed.has(completionKey(goalId, today))
@@ -230,6 +289,34 @@ export function TodayView({
   const [editRequest, setEditRequest] = useState(0)
   // The prompt showing before "Write freely", to return to when it is turned off.
   const [beforeFreeWriting, setBeforeFreeWriting] = useState<string>()
+  // One gentle next step under the saved check-in. It belongs to that check-in
+  // as it was saved: put away, it stays away for the day (a draft, so a reload
+  // agrees), and a rewritten check-in brings an offer of its own.
+  const [nextStepSeenFor, setNextStepSeenFor] = useDraft(`next-step:${today}`, '')
+  const checkInMark = existingMood ? `${existingMood.id}@${existingMood.updatedAt}` : ''
+  const nextSteps =
+    existingMood && nextStepSeenFor !== checkInMark
+      ? nextStepsAfter(existingMood, {
+          canMakeGentle: !gentle && onSetGentleDay !== undefined,
+          canReflect: !existingReflection,
+          canVisitCompanion: onOpenCare !== undefined,
+        })
+      : []
+  const putNextStepAway = () => setNextStepSeenFor(checkInMark)
+  const takeNextStep = (step: NextStep) => {
+    putNextStepAway()
+    if (step === 'gentle-day') {
+      // The offer goes once the day is gentle; the switch it set does not.
+      gentleToggle.current?.focus()
+      setGentle(true)
+    } else if (step === 'visit-companion') {
+      onOpenCare?.()
+    } else {
+      // "Write one line" and "Try today's reflection" both start writing;
+      // the field is described by the day's prompt.
+      reflectionField.current?.focus()
+    }
+  }
   const focusAfterRedraw = (goalId = '') => {
     pendingFocus.current = goalId
   }
@@ -371,6 +458,14 @@ export function TodayView({
         >
           Not sure today
         </button>
+        {mood !== undefined && (
+          <CheckInExtras
+            feelings={chosenFeelings}
+            energy={energy}
+            onFeelingsChange={(feelings) => setFeelingsDraft(feelingsToDraft(feelings))}
+            onEnergyChange={(next) => setEnergyDraft(next ?? '')}
+          />
+        )}
         <label>
           A note, if you want
           <input
@@ -381,13 +476,15 @@ export function TodayView({
           />
         </label>
         <button
+          ref={saveCheckIn}
           className="primary-button"
           disabled={mood === undefined}
           aria-describedby={mood === undefined ? 'mood-choose-hint' : undefined}
           onClick={() => {
             if (mood === undefined) return
-            onSaveMood(mood, moodNote)
-            clearDraft(moodNoteKey)
+            onSaveMood(mood, moodNote, checkInDetails({ feelings: chosenFeelings, energy }))
+            clearDraft(moodNoteKey, feelingsKey, energyKey)
+            setSaves((count) => count + 1)
           }}
         >
           {existingMood ? 'Update check-in' : 'Save check-in'}
@@ -397,21 +494,27 @@ export function TodayView({
             Choose a weather, or Not sure today. Every answer is welcome.
           </p>
         )}
-        {existingMood && existingMood.level <= 2 && !existingMood.unsure && !gentle && onSetGentleDay && (
-          <p className="support-link-note">
-            Heavy weather can make everything harder.{' '}
-            <button
-              className="text-button"
-              onClick={() => {
-                // This line goes once the day is gentle; the switch it set does not.
-                gentleToggle.current?.focus()
-                setGentle(true)
+        {/* Polite, so the confirmation and the offer under it are heard as
+            they appear, while focus stays on the button that saved. */}
+        <div aria-live="polite">
+          {saves > 0 && existingMood && (
+            <p key={saves} className="check-in-saved">
+              Kept in your journal.
+            </p>
+          )}
+          {existingMood && nextSteps.length > 0 && (
+            <NextStepOffer
+              checkIn={existingMood}
+              steps={nextSteps}
+              onChoose={takeNextStep}
+              onDismiss={() => {
+                // The offer goes; focus waits on the check-in it followed.
+                saveCheckIn.current?.focus()
+                putNextStepAway()
               }}
-            >
-              Make today a gentle day
-            </button>
-          </p>
-        )}
+            />
+          )}
+        </div>
         {existingMood?.level === 1 && !existingMood.unsure && onOpenSupport && (
           <p className="support-link-note">
             A stormy day can be a lot to hold.{' '}
@@ -477,6 +580,7 @@ export function TodayView({
                 today={today}
                 complete={complete}
                 skipped={skipped}
+                gentle={gentle}
                 onComplete={() => {
                   onCompleteGoal(goal.id)
                   setUndoOffer({
@@ -601,27 +705,46 @@ export function TodayView({
           />
         ) : (
           <form
-            className="goal-form"
+            className="goal-form add-goal-form"
             onSubmit={(event) => {
               event.preventDefault()
               if (!goalTitle.trim() || (schedule === 'weekdays' && weekdays.length === 0)) return
-              onAddGoal(goalTitle, schedule, schedule === 'weekdays' ? weekdays : [])
+              onAddGoal(
+                goalTitle,
+                schedule,
+                schedule === 'weekdays' ? weekdays : [],
+                goalTinyTitle.trim() || undefined,
+              )
               setGoalTitle('')
+              setGoalTinyTitle('')
             }}
           >
-            <label>
+            <GoalIdeas activeGoalTitles={activeGoalTitles} onChoose={chooseIdea} />
+            <label className="goal-title-field">
               Add a goal
               <input
+                ref={goalTitleField}
                 list="suggested-goals"
                 value={goalTitle}
                 onChange={(event) => setGoalTitle(event.target.value)}
                 placeholder="One small act of care"
-                maxLength={120}
+                maxLength={GOAL_TITLE_LENGTH}
                 required
               />
               <datalist id="suggested-goals">
-                {suggestedGoals.map((goal) => <option key={goal} value={goal} />)}
+                {goalSuggestions.map((idea) => (
+                  <option key={idea.title} value={idea.title} />
+                ))}
               </datalist>
+            </label>
+            <label>
+              {TINY_TITLE_LABEL}
+              <input
+                value={goalTinyTitle}
+                onChange={(event) => setGoalTinyTitle(event.target.value)}
+                placeholder="For days that ask for less"
+                maxLength={GOAL_TITLE_LENGTH}
+              />
             </label>
             <label>
               Repeat
@@ -688,6 +811,7 @@ export function TodayView({
         </div>
         <label className="sr-only" htmlFor="daily-reflection">Your reflection</label>
         <textarea
+          ref={reflectionField}
           aria-describedby="reflection-title"
           id="daily-reflection"
           value={reflection}

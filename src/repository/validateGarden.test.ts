@@ -204,6 +204,110 @@ describe('validating a garden', () => {
     })
   })
 
+  describe('the feelings and energy of a check-in', () => {
+    const mood = (overrides: Record<string, unknown>) => ({
+      id: 'm1',
+      localDate: '2026-10-20',
+      level: 2,
+      note: 'Long day',
+      createdAt: '2026-10-20T09:00:00.000Z',
+      updatedAt: '2026-10-20T09:00:00.000Z',
+      ...overrides,
+    })
+
+    it('keeps them as they are when well formed, the entry untouched', () => {
+      const stored = garden({
+        moods: [mood({ feelings: ['hopeful', 'tired'], energy: 'low' }), mood({ id: 'm2', localDate: '2026-10-21' })],
+      })
+      const result = validateGarden(stored)
+      expect(result.repaired).toBe(0)
+      // Same identity, so an undamaged garden costs no extra write.
+      expect(result.state?.moods).toBe(stored.moods)
+    })
+
+    it('drops unknown words, repeats and anything that is not a word', () => {
+      const result = validateGarden(
+        garden({ moods: [mood({ feelings: ['tired', 'ecstatic', 'tired', 4, null, 'calm'] })] }),
+      )
+      expect(result.state?.moods[0].feelings).toEqual(['calm', 'tired'])
+      expect(result.state?.moods[0].note).toBe('Long day')
+    })
+
+    it('stores no list rather than an empty or a broken one', () => {
+      for (const feelings of [[], ['ecstatic'], 'tired', { tired: true }, 7]) {
+        const [entry] = validateGarden(garden({ moods: [mood({ feelings })] })).state!.moods
+        expect(entry).not.toHaveProperty('feelings')
+        expect(entry.level).toBe(2)
+      }
+    })
+
+    it('keeps energy only as one of its three steps', () => {
+      for (const energy of ['high', 3, true, '']) {
+        const [entry] = validateGarden(garden({ moods: [mood({ energy })] })).state!.moods
+        expect(entry).not.toHaveProperty('energy')
+      }
+      const [kept] = validateGarden(garden({ moods: [mood({ energy: 'steady' })] })).state!.moods
+      expect(kept.energy).toBe('steady')
+    })
+
+    it('tidies them on a check-in that needed repair too', () => {
+      const [entry] = validateGarden(
+        garden({ moods: [{ localDate: '2026-10-20', level: 9, note: 'x', feelings: [], energy: 'loud' }] }),
+      ).state!.moods
+      expect(entry.level).toBe(5)
+      expect(entry).not.toHaveProperty('feelings')
+      expect(entry).not.toHaveProperty('energy')
+    })
+
+    it('does not count a dropped answer as damage', () => {
+      const result = validateGarden(garden({ moods: [mood({ feelings: ['ecstatic'], energy: 'loud' })] }))
+      expect(result.repaired).toBe(0)
+      expect(result.refused).toBeUndefined()
+    })
+  })
+
+  it('keeps the mark on an entry written later only when it is stored as true', () => {
+    const check = (id: string, writtenLater?: unknown) => ({
+      id,
+      localDate: '2026-10-20',
+      level: 3,
+      note: 'Words',
+      createdAt: '2026-10-26T09:00:00.000Z',
+      updatedAt: '2026-10-26T09:00:00.000Z',
+      ...(writtenLater === undefined ? {} : { writtenLater }),
+    })
+    const reflection = (id: string, writtenLater?: unknown) => ({
+      id,
+      localDate: '2026-10-20',
+      promptId: 'free',
+      body: 'Words',
+      createdAt: '2026-10-26T09:00:00.000Z',
+      updatedAt: '2026-10-26T09:00:00.000Z',
+      ...(writtenLater === undefined ? {} : { writtenLater }),
+    })
+    const odd = ['yes', false, 1, null, {}]
+    const moods = [check('kept', true), check('on-the-day'), ...odd.map((value, index) => check(`odd-${index}`, value))]
+    const reflections = [
+      reflection('kept', true),
+      reflection('on-the-day'),
+      ...odd.map((value, index) => reflection(`odd-${index}`, value)),
+    ]
+    const result = validateGarden(garden({ moods, reflections }))
+    for (const entries of [result.state!.moods, result.state!.reflections]) {
+      const [kept, ...rest] = entries
+      expect(kept.writtenLater).toBe(true)
+      for (const entry of rest) expect(entry).not.toHaveProperty('writtenLater')
+      // Every entry is still there, words and all.
+      expect(entries).toHaveLength(moods.length)
+      expect(entries.every((entry) => 'note' in entry ? entry.note === 'Words' : entry.body === 'Words')).toBe(true)
+    }
+    // An undamaged garden with the mark keeps its collections as they were.
+    const clean = garden({ moods: [check('kept', true)], reflections: [reflection('kept', true)] })
+    const cleanResult = validateGarden(clean)
+    expect(cleanResult.state?.moods).toBe(clean.moods)
+    expect(cleanResult.state?.reflections).toBe(clean.reflections)
+  })
+
   it('keeps calm motion only as a true or false choice', () => {
     const base = createInitialState('Tester', 'Test Garden').profile!
     const calm = validateGarden(garden({ profile: { ...base, calmMotion: true } }))
@@ -253,6 +357,37 @@ describe('validating a garden', () => {
     expect(odd).not.toHaveProperty('recapGraceEndsHour')
   })
 
+  it('keeps what the theme follows only when it is the device or the evening', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const followsOf = (themeFollows: unknown) =>
+      validateGarden(garden({ profile: { ...base, theme: 'night', themeFollows } })).state
+        ?.profile
+    expect(followsOf('device')?.themeFollows).toBe('device')
+    expect(followsOf('evening')?.themeFollows).toBe('evening')
+    for (const odd of ['sunset', 'Device', 'night', 1, true, {}, null, '']) {
+      const profile = followsOf(odd)
+      expect(profile).not.toHaveProperty('themeFollows')
+      // The theme chosen by hand is still there underneath.
+      expect(profile?.theme).toBe('night')
+    }
+    expect(validateGarden(garden()).state?.profile).not.toHaveProperty('themeFollows')
+  })
+
+  it('keeps a text size only when it is one the garden offers', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const sizeOf = (textSize: unknown) =>
+      validateGarden(garden({ profile: { ...base, textSize } })).state?.profile
+    expect(sizeOf('larger')?.textSize).toBe('larger')
+    expect(sizeOf('largest')?.textSize).toBe('largest')
+    // "Comfortable" is the usual size, which is stored as no size at all.
+    for (const odd of ['comfortable', 'huge', '125%', 1.25, false, [], null, '']) {
+      const profile = sizeOf(odd)
+      expect(profile).not.toHaveProperty('textSize')
+      expect(profile?.gardenName).toBe('Test Garden')
+    }
+    expect(validateGarden(garden()).state?.profile).not.toHaveProperty('textSize')
+  })
+
   it('keeps the time of the last backup only when it is a real moment', () => {
     const base = createInitialState('Tester', 'Test Garden').profile!
     const lastBackupOf = (lastBackupAt: unknown) =>
@@ -271,6 +406,35 @@ describe('validating a garden', () => {
     }
     // An older garden simply has none, and gains none.
     expect(validateGarden(garden()).state?.profile).not.toHaveProperty('lastBackupAt')
+  })
+
+  it('keeps a goal’s two-minute version only when it is words', () => {
+    const base = {
+      id: 'g1',
+      title: 'Stretch your shoulders',
+      schedule: 'daily',
+      weekdays: [],
+      createdDate: '2026-01-01',
+      archived: false,
+    }
+    const kept = garden({ goals: [{ ...base, tinyTitle: 'Roll your shoulders' }] })
+    const result = validateGarden(JSON.parse(JSON.stringify(kept)))
+    expect(result.state?.goals[0].tinyTitle).toBe('Roll your shoulders')
+    expect(result.repaired).toBe(0)
+    // Untouched, so the repository writes nothing for it.
+    expect(validateGarden(kept).state?.goals).toBe(kept.goals)
+
+    for (const odd of [42, null, {}, ['Roll'], true, '', '   ']) {
+      const repaired = validateGarden(garden({ goals: [{ ...base, tinyTitle: odd }] }))
+      const [goal] = repaired.state!.goals
+      expect(goal).not.toHaveProperty('tinyTitle')
+      expect(goal.title).toBe('Stretch your shoulders')
+      expect(repaired.repaired).toBe(1)
+    }
+    // An older goal simply has none, and gains none.
+    const older = validateGarden(garden({ goals: [base] }))
+    expect(older.state?.goals[0]).not.toHaveProperty('tinyTitle')
+    expect(older.repaired).toBe(0)
   })
 
   it('keeps every goal a recap’s notes became, through a save and a backup', () => {

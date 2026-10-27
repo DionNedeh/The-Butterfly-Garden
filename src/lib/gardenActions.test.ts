@@ -34,6 +34,33 @@ describe('goals', () => {
     })
   })
 
+  it('keeps a two-minute version trimmed, no longer than a title, and only when there is one', () => {
+    const tinyOf = (tinyTitle?: string) =>
+      act.addGoal(garden(), 'Stretch', 'daily', [], TODAY, tinyTitle).goals.at(-1)!
+    expect(tinyOf('  Roll your shoulders  ').tinyTitle).toBe('Roll your shoulders')
+    expect(tinyOf('a'.repeat(act.GOAL_TITLE_LENGTH + 30)).tinyTitle).toHaveLength(
+      act.GOAL_TITLE_LENGTH,
+    )
+    for (const none of [undefined, '', '   ']) {
+      expect(tinyOf(none)).not.toHaveProperty('tinyTitle')
+    }
+  })
+
+  it('edits a two-minute version, and takes one away when it is cleared', () => {
+    const before = garden({ goals: [goal({ tinyTitle: 'Water one plant' })] })
+    const edited = act.updateGoal(before, goal({ tinyTitle: '  Water one leaf ' }))
+    expect(edited.goals[0].tinyTitle).toBe('Water one leaf')
+    for (const cleared of [undefined, ' ']) {
+      expect(act.updateGoal(before, goal({ tinyTitle: cleared })).goals[0]).not.toHaveProperty(
+        'tinyTitle',
+      )
+    }
+    // The goal it was given is left as it was.
+    const given = goal({ tinyTitle: ' padded ' })
+    act.updateGoal(before, given)
+    expect(given.tinyTitle).toBe(' padded ')
+  })
+
   it('plans a one-off goal, and ignores a blank one', () => {
     const before = garden()
     expect(act.planGoal(before, '   ', '2026-10-27', TODAY)).toBe(before)
@@ -127,6 +154,30 @@ describe('the journal', () => {
     expect(rewritten.sunlight).toHaveLength(1)
   })
 
+  it('keeps the feelings and energy given with a check-in, and only those', () => {
+    const tagged = act.saveMood(garden(), 2, '', NOW, {
+      feelings: ['tired', 'hopeful', 'tired', 'ecstatic'],
+      energy: 'low',
+    })
+    expect(tagged.moods[0]).toMatchObject({ feelings: ['hopeful', 'tired'], energy: 'low' })
+
+    // Rewritten without them, the check-in keeps none behind, and an empty
+    // list is never stored.
+    const later = new Date(2026, 9, 26, 18)
+    const plain = act.saveMood(tagged, 2, '', later, { feelings: [] })
+    expect(plain.moods[0]).not.toHaveProperty('feelings')
+    expect(plain.moods[0]).not.toHaveProperty('energy')
+  })
+
+  it('earns the same Sunlight whatever the feelings and energy', () => {
+    const before = garden()
+    const plain = act.saveMood(before, 3, '', NOW)
+    const tagged = act.saveMood(before, 3, '', NOW, { feelings: ['joyful'], energy: 'bright' })
+    expect(tagged.sunlight).toHaveLength(plain.sunlight.length)
+    expect(tagged.seeds).toBe(plain.seeds)
+    expect(tagged.plants).toEqual(plain.plants)
+  })
+
   it('writes today’s reflection once and rewrites it after', () => {
     const first = act.saveReflection(garden(), 'notice', 'The light', NOW)
     const again = act.saveReflection(first, 'notice', 'The rain', NOW)
@@ -155,6 +206,89 @@ describe('the journal', () => {
     const changed = act.updateReflection(reflected, { ...reflected.reflections[0], body: 'b' }, later)
     expect(changed.reflections[0].body).toBe('b')
     expect(act.deleteReflection(changed, changed.reflections[0].id).reflections).toEqual([])
+  })
+})
+
+describe('an entry for an earlier day', () => {
+  // Planted a few weeks before NOW, so earlier days exist.
+  const planted = () => ({
+    ...createInitialState('Tester', 'Actions', new Date(2026, 9, 1, 9)),
+  })
+
+  it('keeps a check-in with its day, marked as written later and stamped now', () => {
+    const before = planted()
+    const after = act.addEarlierMood(before, '2026-10-20', 2, '  Rain all day  ', NOW)
+    expect(after.moods).toHaveLength(1)
+    expect(after.moods[0]).toMatchObject({
+      localDate: '2026-10-20',
+      level: 2,
+      note: 'Rain all day',
+      writtenLater: true,
+      createdAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+    })
+    expect(act.addEarlierMood(before, '2026-10-20', 'unsure', '', NOW).moods[0]).toMatchObject({
+      level: 3,
+      unsure: true,
+      writtenLater: true,
+    })
+  })
+
+  it('keeps a reflection, written freely, with its day', () => {
+    const after = act.addEarlierReflection(planted(), '2026-10-01', '  The first frost.  ', NOW)
+    expect(after.reflections[0]).toMatchObject({
+      localDate: '2026-10-01',
+      promptId: 'free',
+      body: 'The first frost.',
+      writtenLater: true,
+    })
+  })
+
+  it('earns nothing and grows nothing: the care happened today, not then', () => {
+    const before = planted()
+    const mood = act.addEarlierMood(before, '2026-10-20', 4, '', NOW)
+    const reflection = act.addEarlierReflection(mood, '2026-10-20', 'Words', NOW)
+    for (const after of [mood, reflection]) {
+      expect(after.sunlight).toBe(before.sunlight)
+      expect(after.plants).toBe(before.plants)
+      expect(after.creatures).toBe(before.creatures)
+      expect(after.nectar).toBe(before.nectar)
+      expect(after.seeds).toBe(before.seeds)
+    }
+  })
+
+  it('refuses today, a day to come, a day before the garden and a day not on the calendar', () => {
+    const before = planted()
+    for (const day of [TODAY, '2026-10-30', '2026-09-30', '2026-02-30', 'yesterday']) {
+      expect(act.addEarlierMood(before, day, 3, 'x', NOW)).toBe(before)
+      expect(act.addEarlierReflection(before, day, 'x', NOW)).toBe(before)
+    }
+  })
+
+  it('refuses a second check-in or reflection for a day that has one', () => {
+    const once = act.addEarlierReflection(
+      act.addEarlierMood(planted(), '2026-10-20', 4, '', NOW),
+      '2026-10-20',
+      'Words',
+      NOW,
+    )
+    expect(act.addEarlierMood(once, '2026-10-20', 1, '', NOW)).toBe(once)
+    expect(act.addEarlierReflection(once, '2026-10-20', 'More', NOW)).toBe(once)
+    // A check-in written on the day counts as that day's one too.
+    const onTheDay = act.saveMood(planted(), 3, '', new Date(2026, 9, 20, 9))
+    expect(act.addEarlierMood(onTheDay, '2026-10-20', 4, '', NOW)).toBe(onTheDay)
+  })
+
+  it('refuses blank words, and an answer the check-in does not offer', () => {
+    const before = planted()
+    expect(act.addEarlierReflection(before, '2026-10-20', '   ', NOW)).toBe(before)
+    expect(act.addEarlierMood(before, '2026-10-20', 7 as never, '', NOW)).toBe(before)
+  })
+
+  it('keeps the mark through an edit', () => {
+    const written = act.addEarlierMood(planted(), '2026-10-20', 4, 'x', NOW)
+    const edited = act.updateMood(written, { ...written.moods[0], note: 'y' }, NOW)
+    expect(edited.moods[0]).toMatchObject({ note: 'y', writtenLater: true })
   })
 })
 
@@ -324,10 +458,62 @@ describe('the gardener and their companions', () => {
     expect(act.toggleAmbientSound(before).profile?.ambientSound).toBe(!before.profile?.ambientSound)
   })
 
+  it('chooses a theme by hand, which ends following', () => {
+    const following = act.chooseTheme(garden(), 'evening')
+    const night = act.chooseTheme(following, 'night')
+    expect(night.profile).toMatchObject({ theme: 'night', themeFollows: undefined })
+    expect(act.chooseTheme(night, 'sunlight').profile?.theme).toBe('sunlight')
+    // The same choice again changes nothing, so nothing is written.
+    expect(act.chooseTheme(night, 'night')).toBe(night)
+    // Back to the hand-chosen theme it already had: only the following ends.
+    const sunlitFollowing = act.chooseTheme(garden(), 'device')
+    const sunlit = act.chooseTheme(sunlitFollowing, 'sunlight')
+    expect(sunlit).not.toBe(sunlitFollowing)
+    expect(sunlit.profile).toMatchObject({ theme: 'sunlight', themeFollows: undefined })
+  })
+
+  it('follows the device or the evening, keeping the theme chosen by hand beneath', () => {
+    const night = act.chooseTheme(garden(), 'night')
+    const device = act.chooseTheme(night, 'device')
+    expect(device.profile).toMatchObject({ theme: 'night', themeFollows: 'device' })
+    const evening = act.chooseTheme(device, 'evening')
+    expect(evening.profile).toMatchObject({ theme: 'night', themeFollows: 'evening' })
+    expect(act.chooseTheme(evening, 'evening')).toBe(evening)
+    expect(night.profile?.themeFollows).toBeUndefined()
+  })
+
+  it('switches from the theme on screen, and stops following', () => {
+    const before = garden()
+    // Following the evening, at night: the switch turns the garden to sunlight.
+    const evening = act.chooseTheme(before, 'evening')
+    const switched = act.toggleTheme(evening, 'night')
+    expect(switched.profile).toMatchObject({ theme: 'sunlight', themeFollows: undefined })
+    // Following the device in daylight, with night chosen by hand beneath:
+    // the switch turns it to night by hand.
+    const device = act.chooseTheme(act.chooseTheme(before, 'night'), 'device')
+    expect(act.toggleTheme(device, 'sunlight').profile).toMatchObject({
+      theme: 'night',
+      themeFollows: undefined,
+    })
+  })
+
+  it('sets a larger text size, and the usual one again', () => {
+    const before = garden()
+    const largest = act.setTextSize(before, 'largest')
+    expect(largest.profile?.textSize).toBe('largest')
+    expect(act.setTextSize(largest, 'larger').profile?.textSize).toBe('larger')
+    expect(act.setTextSize(largest, undefined).profile?.textSize).toBeUndefined()
+    expect(act.setTextSize(largest, 'largest')).toBe(largest)
+    expect(act.setTextSize(before, undefined)).toBe(before)
+    expect(before.profile?.textSize).toBeUndefined()
+  })
+
   it('leaves a garden with no gardener yet untouched', () => {
     const empty = garden({ profile: undefined })
     expect(act.selectCompanion(empty, 'c1')).toBe(empty)
     expect(act.toggleTheme(empty)).toBe(empty)
+    expect(act.chooseTheme(empty, 'device')).toBe(empty)
+    expect(act.setTextSize(empty, 'larger')).toBe(empty)
     expect(act.updateProfile(empty, 'A', 'B', 'calm')).toBe(empty)
     expect(act.markReleaseSeen(empty, 'r')).toBe(empty)
   })

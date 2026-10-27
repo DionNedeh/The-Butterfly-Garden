@@ -1,5 +1,6 @@
 import type { AppState } from '../types'
 import { formatJournalDate, toLocalDate } from './date'
+import { describeCheckInDetails, energyNameOf, feelingNamesOf } from './feelings'
 import { moodChoiceOf, moodName } from './mood'
 import { promptById } from './prompts'
 
@@ -26,9 +27,13 @@ interface ExportDay {
   localDate: string
   /** "Tuesday, October 27, 2026", as the timeline heads the day. */
   heading: string
-  checkIn?: { weather: string; note: string }
+  /**
+   * `details` is "Feeling tired, hopeful · Energy low", or empty when neither was
+   * given; `writtenLater` marks a check-in written afterwards for this day.
+   */
+  checkIn?: { weather: string; details: string; note: string; writtenLater: boolean }
   /** `prompt` is absent for a prompt this build no longer knows. */
-  reflection?: { prompt?: string; body: string }
+  reflection?: { prompt?: string; body: string; writtenLater: boolean }
   recap?: {
     weather?: string
     wentWell: string
@@ -64,13 +69,21 @@ function journalDays(state: AppState): ExportDay[] {
   return dates.map((localDate) => {
     const day: ExportDay = { localDate, heading: formatJournalDate(localDate) }
     const mood = moodByDate.get(localDate)
-    if (mood) day.checkIn = { weather: moodName(moodChoiceOf(mood)), note: mood.note }
+    if (mood) {
+      day.checkIn = {
+        weather: moodName(moodChoiceOf(mood)),
+        details: describeCheckInDetails(mood),
+        note: mood.note,
+        writtenLater: mood.writtenLater === true,
+      }
+    }
     const reflection = reflectionByDate.get(localDate)
     if (reflection) {
       const prompt = promptById(reflection.promptId)
       day.reflection = {
         prompt: prompt?.family === 'free' ? 'Written freely' : prompt?.text,
         body: reflection.body,
+        writtenLater: reflection.writtenLater === true,
       }
     }
     const recap = recapByDate.get(localDate)
@@ -102,6 +115,12 @@ function recapHeading(weather: string | undefined): string {
 }
 
 const NOTHING_YET = 'Nothing has been written in this journal yet.'
+
+/**
+ * The mark on an entry written afterwards for its day, as the Journal shows
+ * it, so a copy read years later says the same as the app did.
+ */
+const WRITTEN_LATER = 'Written later'
 
 // ---------------------------------------------------------------------------
 // Markdown
@@ -152,10 +171,13 @@ function dayMarkdown(day: ExportDay): string[] {
   const blocks = [`## ${markdownLine(day.heading)}`]
   if (day.checkIn) {
     blocks.push(`### ${markdownLine(`Check-in: ${day.checkIn.weather}`)}`)
+    if (day.checkIn.writtenLater) blocks.push(`*${WRITTEN_LATER}*`)
+    if (written(day.checkIn.details)) blocks.push(`*${markdownLine(day.checkIn.details)}*`)
     if (written(day.checkIn.note)) blocks.push(markdownText(day.checkIn.note))
   }
   if (day.reflection) {
     blocks.push('### Reflection')
+    if (day.reflection.writtenLater) blocks.push(`*${WRITTEN_LATER}*`)
     if (day.reflection.prompt) blocks.push(`*${markdownLine(day.reflection.prompt)}*`)
     if (written(day.reflection.body)) blocks.push(markdownText(day.reflection.body))
   }
@@ -229,8 +251,8 @@ const EXPORT_CSS = [
   'p, ul, dl, dd { margin: 0 0 0.5rem; }',
   'ul { padding-left: 1.25rem; }',
   'dt { font-weight: 700; }',
-  '.exported, .prompt { color: #46584f; }',
-  '.prompt { font-style: italic; }',
+  '.exported, .prompt, .details, .later { color: #46584f; }',
+  '.prompt, .later { font-style: italic; }',
   'article { margin-top: 2rem; border-top: 1px solid #d9d8c8; padding-top: 1.25rem; }',
   'section { break-inside: avoid; }',
   'h2, h3, dt { break-after: avoid; }',
@@ -245,17 +267,26 @@ function wordsHtml(text: string, tag: 'p' | 'dd' | 'li' = 'p'): string {
   return `<${tag} class="words">${escapeHtml(text)}</${tag}>`
 }
 
+function writtenLaterHtml(): string {
+  return `<p class="later">${escapeHtml(WRITTEN_LATER)}</p>`
+}
+
 function dayHtml(day: ExportDay): string {
   const parts = [
     `<h2><time datetime="${escapeHtml(day.localDate)}">${escapeHtml(day.heading)}</time></h2>`,
   ]
   if (day.checkIn) {
     parts.push('<section>', `<h3>${escapeHtml(`Check-in: ${day.checkIn.weather}`)}</h3>`)
+    if (day.checkIn.writtenLater) parts.push(writtenLaterHtml())
+    if (written(day.checkIn.details)) {
+      parts.push(`<p class="details">${escapeHtml(day.checkIn.details)}</p>`)
+    }
     if (written(day.checkIn.note)) parts.push(wordsHtml(day.checkIn.note))
     parts.push('</section>')
   }
   if (day.reflection) {
     parts.push('<section>', '<h3>Reflection</h3>')
+    if (day.reflection.writtenLater) parts.push(writtenLaterHtml())
     if (day.reflection.prompt) {
       parts.push(`<p class="prompt">${escapeHtml(day.reflection.prompt)}</p>`)
     }
@@ -357,14 +388,28 @@ function csvRecord(fields: readonly string[]): string {
   return fields.map(csvField).join(',')
 }
 
-/** Every check-in as a spreadsheet: date, weather and note, newest first. */
+/**
+ * Every check-in as a spreadsheet, newest first: date, weather and note, then
+ * feelings and energy, then "yes" for one written later for its day. The later
+ * columns come last, so a sheet built on the first three still finds them
+ * where they were.
+ */
 export function checkInsCsv(state: AppState): string {
   const moods = [...byDate(state.moods).values()].sort((a, b) =>
     newerFirst(a.localDate, b.localDate),
   )
   const records = [
-    csvRecord(['date', 'weather', 'note']),
-    ...moods.map((mood) => csvRecord([mood.localDate, moodName(moodChoiceOf(mood)), mood.note])),
+    csvRecord(['date', 'weather', 'note', 'feelings', 'energy', 'written later']),
+    ...moods.map((mood) =>
+      csvRecord([
+        mood.localDate,
+        moodName(moodChoiceOf(mood)),
+        mood.note,
+        feelingNamesOf(mood.feelings).join(', '),
+        energyNameOf(mood.energy) ?? '',
+        mood.writtenLater === true ? 'yes' : '',
+      ]),
+    ),
   ]
   return `${BOM}${records.join(CRLF)}${CRLF}`
 }

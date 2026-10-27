@@ -46,6 +46,13 @@ export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
 export type AppearanceTheme = 'sunlight' | 'night'
+/**
+ * What the theme follows in place of the gardener's own choice: the device's
+ * dark setting, or the gardener's evening (lib/theme).
+ */
+export type ThemeFollows = 'device' | 'evening'
+/** A text size larger than the usual one (lib/textSize). */
+export type TextSize = 'larger' | 'largest'
 export type AmbientTrackId = 'garden-chimes' | 'garden' | 'piano-music'
 export type FlightPatternId =
   | 'gentle-drift'
@@ -108,7 +115,18 @@ export interface Profile {
   ambientSound?: boolean
   /** Soundscape played while ambient sound is enabled. */
   ambientTrack?: AmbientTrackId
+  /**
+   * The theme chosen by hand. While `themeFollows` is set it waits underneath,
+   * so an older build, which follows nothing, still opens on this.
+   */
   theme?: AppearanceTheme
+  /**
+   * Follow the device's dark setting, or the gardener's evening, instead of
+   * `theme`. Optional: without it the theme is the one chosen by hand.
+   */
+  themeFollows?: ThemeFollows
+  /** Text larger than usual. Optional: without it, the usual size. */
+  textSize?: TextSize
   selectedBackdropId?: GardenBackdropId
   unlockedBackdropIds?: GardenBackdropId[]
   /**
@@ -215,6 +233,12 @@ export interface Goal {
   snoozedUntil?: string
   /** Local dates the user chose to skip — no pressure, no penalty. */
   skippedDates?: string[]
+  /**
+   * The same goal made small enough for two minutes ("Roll your shoulders"
+   * for "Stretch your shoulders"). A gentle day shows it in place of the
+   * title; completing it is completing the goal.
+   */
+  tinyTitle?: string
 }
 
 export interface DailyCompletion {
@@ -234,18 +258,42 @@ export interface MoodEntry {
    */
   unsure?: true
   note: string
+  /**
+   * Feeling words chosen beside the weather: ids from data/feelings, each
+   * once, in that list's order, at most MAX_FEELINGS. Absent when none were
+   * chosen; an empty list is never stored. Optional, so an older build reads
+   * an ordinary check-in.
+   */
+  feelings?: string[]
+  /** How much energy the day had, when the gardener said. Absent means not answered. */
+  energy?: EnergyLevel
+  /**
+   * Written afterwards for this earlier day, from the Journal. It earns no
+   * Sunlight and is not a cared-for day: the care happened on the day it was
+   * written. Only ever stored as true; optional, so an older garden reads as
+   * written on the day.
+   */
+  writtenLater?: true
   createdAt: string
   updatedAt: string
 }
 
+/** The three steps of the check-in's optional energy question. */
+export type EnergyLevel = 'low' | 'steady' | 'bright'
+
 /** A check-in answer: one of the five weathers, or not sure. */
 export type MoodChoice = MoodEntry['level'] | 'unsure'
+
+/** The optional extras a check-in may carry beside its weather and note. */
+export type CheckInDetails = Pick<MoodEntry, 'feelings' | 'energy'>
 
 export interface ReflectionEntry {
   id: string
   localDate: string
   promptId: string
   body: string
+  /** Written afterwards for this earlier day; see MoodEntry.writtenLater. */
+  writtenLater?: true
   createdAt: string
   updatedAt: string
 }

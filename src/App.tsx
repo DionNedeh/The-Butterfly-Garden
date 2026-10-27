@@ -81,8 +81,9 @@ import {
   DEFAULT_AMBIENT_TRACK_ID,
 } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
-import { useFadeOut } from './hooks/useFadeOut'
-import { useGardenState } from './hooks/useGardenState'
+import { useEffectiveTheme } from './hooks/useEffectiveTheme'
+import { useFadeOut, type FadeOutMinutes } from './hooks/useFadeOut'
+import { useGardenState, type StarterGoal } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
 import { useRecapWindow } from './hooks/useRecapWindow'
 import { usePassStatus } from './hooks/usePassStatus'
@@ -106,6 +107,9 @@ import { addDaysToLocalDate, localDateToNoon, recapHoursOf } from './lib/date'
 import { isBackupDue } from './lib/backupReminder'
 import type { AppView } from './types'
 import { motionClass, motionPreference } from './lib/motion'
+import { applyTextSize } from './lib/textSize'
+import { nextMorning, paintBrowserBars } from './lib/theme'
+import { useDraft } from './lib/drafts'
 import { isArrival, movedTo } from './lib/hosting'
 import { routeFromHash, urlForRoute, type Route } from './lib/routes'
 import { MovedBanner } from './components/MovedBanner'
@@ -127,6 +131,16 @@ interface InstallPromptEvent extends Event {
  * usually loads from IndexedDB in a few dozen milliseconds.
  */
 const SPLASH_MINIMUM_MS = 700
+
+/**
+ * How long the sound takes to fade when the recap ends by fading the garden
+ * to night and no fade-out was chosen in Settings: the shortest one offered,
+ * since the gardener has just said they are putting the phone down.
+ */
+const FADE_TO_NIGHT_MINUTES: FadeOutMinutes = 15
+
+/** The draft that holds night until the morning after the recap's ending. */
+const NIGHT_UNTIL_DRAFT = 'night-until'
 
 /**
  * Every page in the navigation, in the header's order. On a phone the dock
@@ -234,9 +248,13 @@ function App() {
   }, [route, hasGarden])
   /** Read once: whether this visit arrived from the old address (lib/hosting). */
   const [arriving] = useState(isArrival)
-  const finishOnboarding = (name: string, gardenName: string) => {
+  const finishOnboarding = (
+    name: string,
+    gardenName: string,
+    starterGoals?: readonly StarterGoal[],
+  ) => {
     navigate({ view: 'garden' }, { replace: true })
-    garden.onboard(name, gardenName)
+    garden.onboard(name, gardenName, starterGoals)
   }
   const [seedFocus, setSeedFocus] = useState<string>()
   /** The day the recap was actually opened for, so it is never re-entered. */
@@ -314,10 +332,40 @@ function App() {
   const pass = usePassStatus()
   useEffect(() => (isAndroidApp() ? trackPassStatus() : undefined), [])
 
-  const night = garden.state?.profile?.theme === 'night'
+  // The theme on screen, chosen or followed (lib/theme). Everything that
+  // matches the theme reads this, never profile.theme, which is only the
+  // choice made by hand.
+  //
+  // The recap's "Fade the garden to night and close" holds night until the
+  // morning without touching that choice, so following the device, or a
+  // sunlight chosen by hand, is back after it. A draft, so a reload keeps it.
+  const [nightUntilDraft, setNightUntil] = useDraft(NIGHT_UNTIL_DRAFT, '')
+  const nightUntil = Number(nightUntilDraft) || undefined
+  const chosenTheme = useEffectiveTheme(garden.state?.profile)
+  const theme = useEffectiveTheme(garden.state?.profile, nightUntil)
+  const night = theme === 'night'
+  const nightHeld = theme !== chosenTheme
   useEffect(() => {
     void setSystemBarsForTheme(night)
   }, [night])
+  // The browser's own bars follow the garden while one is open, and the
+  // device's dark setting again (as index.html has it) once none is.
+  useEffect(() => (hasGarden ? paintBrowserBars(theme) : undefined), [hasGarden, theme])
+
+  // Text size scales the root, which every rem in the stylesheets reads. It
+  // goes with the garden: onboarding and the recovery screen are always at
+  // the usual size.
+  const textSize = garden.state?.profile?.textSize
+  useEffect(() => applyTextSize(textSize), [textSize])
+
+  // The recap's "Fade the garden to night and close" hands focus to the
+  // garden's name when the garden arrives, rather than leaving it nowhere.
+  const focusGardenTitle = useRef(false)
+  useEffect(() => {
+    if (view !== 'garden' || !focusGardenTitle.current) return
+    focusGardenTitle.current = false
+    document.getElementById('garden-title')?.focus()
+  }, [view])
 
   useEffect(() => {
     const handleOnline = () => setOnline(true)
@@ -417,10 +465,36 @@ function App() {
       : undefined
   const inRecap = view === 'recap' && openedRecapDate !== undefined
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
+  // The header's switch says what pressing it does, following included: it
+  // chooses the other theme by hand, which ends following. A night held by
+  // the recap simply ends, and what was chosen or followed is back.
+  const themeSwitchLabel = `${night ? 'Switch to sunlight mode' : 'Switch to night mode'}${
+    nightHeld
+      ? ''
+      : profile.themeFollows === 'device'
+      ? ' and stop following your device'
+      : profile.themeFollows === 'evening'
+        ? ' and stop following your evening'
+        : ''
+  }`
+  /**
+   * The recap's other ending: put the phone down. The night is collected as
+   * ever (MoonlightRecap does that first); then the garden turns to night
+   * until the morning, unless it is already night, without changing the
+   * theme chosen or followed; and a sound that is playing starts to fade, as
+   * Settings' timer would, unless a fade is already on its way.
+   */
+  const fadeToNight = () => {
+    if (!night) setNightUntil(String(nextMorning(profile, new Date()).getTime()))
+    if (profile.ambientSound && fadeOut.endsAt === undefined)
+      fadeOut.choose(fadeOut.minutes ?? FADE_TO_NIGHT_MINUTES, true)
+    focusGardenTitle.current = true
+    setView('garden')
+  }
 
   return (
     <div
-      className={`app-shell theme-${profile.theme ?? 'sunlight'} ${motionClass(motionPreference(profile))}`}
+      className={`app-shell theme-${theme} ${motionClass(motionPreference(profile))}`}
     >
       <header className="app-header">
         <button
@@ -492,19 +566,14 @@ function App() {
           </button>
           <button
             className="theme-toggle"
-            onClick={garden.toggleTheme}
-            aria-label={
-              profile.theme === 'night'
-                ? 'Switch to sunlight mode'
-                : 'Switch to night mode'
-            }
-            title={
-              profile.theme === 'night'
-                ? 'Switch to sunlight mode'
-                : 'Switch to night mode'
-            }
+            onClick={() => {
+              setNightUntil('')
+              if (!nightHeld) garden.toggleTheme(theme)
+            }}
+            aria-label={themeSwitchLabel}
+            title={themeSwitchLabel}
           >
-            <Icon name={profile.theme === 'night' ? 'sun' : 'moon'} />
+            <Icon name={night ? 'sun' : 'moon'} />
           </button>
         </div>
       </header>
@@ -737,6 +806,7 @@ function App() {
                 garden.collectMoonlight(openedRecapDate, submission)
               }
               onClose={() => setView('today')}
+              onFadeToNight={fadeToNight}
             />
           )}
           {activeView === 'guide' && (
@@ -771,6 +841,8 @@ function App() {
               onDeleteReflection={garden.deleteReflection}
               onUpdateRecap={garden.updateRecap}
               onDeleteRecap={garden.deleteRecap}
+              onAddEarlierMood={garden.addEarlierMood}
+              onAddEarlierReflection={garden.addEarlierReflection}
             />
           )}
           {activeView === 'settings' && (
@@ -799,6 +871,11 @@ function App() {
               onOpenSupport={openSupport}
               onSetDayCountsHidden={garden.setDayCountsHidden}
               onSetRecapHours={garden.setRecapHours}
+              onChooseTheme={(choice) => {
+                setNightUntil('')
+                garden.chooseTheme(choice)
+              }}
+              onSetTextSize={garden.setTextSize}
               fadeOutMinutes={fadeOut.minutes}
               fadeOutEndsAt={fadeOut.endsAt}
               onChooseFadeOut={(minutes) =>

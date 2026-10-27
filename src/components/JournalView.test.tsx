@@ -169,6 +169,74 @@ describe('butterflies welcomed', () => {
     renderJournal({ ...base, creatures: [monarch('a'), monarch('b')] })
     expect(document.querySelector('.field-notes .count-badge')?.textContent).toMatch(/^1 \/ \d+$/)
   })
+
+  const butterfly = (name: string, speciesId: string, discoveredAt: string) => ({
+    id: name,
+    speciesId,
+    name,
+    stage: 'butterfly' as const,
+    careDates: {},
+    actionLog: {},
+    bond: 0,
+    outfit: {},
+    carePoints: 0,
+    discoveredAt,
+  })
+  const onDay = (year: number, monthIndex: number, day: number) =>
+    new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', year: 'numeric' }).format(
+      new Date(year, monthIndex, day, 12),
+    )
+
+  it('says how many species and how many companions, both', () => {
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [
+        butterfly('Sol', 'monarch', '2026-03-03T15:00:00.000Z'),
+        butterfly('Luna', 'monarch', '2026-04-03T15:00:00.000Z'),
+        butterfly('Pip', 'queen', '2026-05-03T15:00:00.000Z'),
+        { ...butterfly('Egg', 'viceroy', '2026-06-03T15:00:00.000Z'), stage: 'egg' as const },
+      ],
+    })
+    expect(screen.getByText('2 species · 3 companions')).toBeInTheDocument()
+    expect(document.querySelector('.field-notes .count-badge')?.textContent).toMatch(/^2 \/ \d+$/)
+  })
+
+  it('says nothing of counts before the first butterfly', () => {
+    renderJournal({ ...gardenWithDays(1), creatures: [] })
+    expect(screen.queryByText(/companions?$/)).toBeNull()
+  })
+
+  it('gives each card the day its species was welcomed, naming the first of several', async () => {
+    const user = userEvent.setup()
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [
+        butterfly('Luna', 'monarch', '2026-04-03T15:00:00.000Z'),
+        // 01:30 UTC on 4 March is the evening of 3 March in New York.
+        butterfly('Sol', 'monarch', '2026-03-04T01:30:00.000Z'),
+        butterfly('Pip', 'queen', '2026-05-03T15:00:00.000Z'),
+      ],
+    })
+    await user.click(screen.getByText('Butterflies welcomed'))
+    const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
+    expect(within(monarch).getByText(`Welcomed on ${onDay(2026, 2, 3)}`)).toBeInTheDocument()
+    expect(within(monarch).getByText('Welcomed as Sol, the first of 2')).toBeInTheDocument()
+    const queen = screen.getByText('Queen').closest('article') as HTMLElement
+    expect(within(queen).getByText(`Welcomed on ${onDay(2026, 4, 3)}`)).toBeInTheDocument()
+    expect(within(queen).getByText('Welcomed as Pip')).toBeInTheDocument()
+  })
+
+  it('leaves the date off a card whose arrival is unknown', async () => {
+    const user = userEvent.setup()
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [butterfly('Sol', 'monarch', new Date(0).toISOString())],
+    })
+    await user.click(screen.getByText('Butterflies welcomed'))
+    const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
+    expect(within(monarch).queryByText(/Welcomed on/)).toBeNull()
+    expect(within(monarch).getByText('Welcomed as Sol')).toBeInTheDocument()
+  })
 })
 
 describe('recaps in the journal', () => {
@@ -416,6 +484,33 @@ describe('the rhythm of care', () => {
     renderJournal({ ...seed, profile: { ...seed.profile!, hideDayCounts: true } })
     expect(screen.getByText(/Day counts are hidden, as you chose/)).toBeInTheDocument()
     expect(screen.queryByText(/of the last 7/)).toBeNull()
+  })
+})
+
+describe('feelings and energy in the journal', () => {
+  it('says them in plain words under the weather, and nothing when not answered', () => {
+    const tagged = { ...mood('2026-01-02', 'A long day'), feelings: ['hopeful', 'tired'], energy: 'low' as const }
+    renderJournal({
+      ...createInitialState('Tester', 'Test Garden'),
+      moods: [mood('2026-01-01', 'Quiet'), tagged],
+    })
+    const block = screen.getByText('A long day').closest('.journal-block') as HTMLElement
+    expect(within(block).getByText('Feeling hopeful, tired · Energy low')).toBeInTheDocument()
+    const quiet = screen.getByText('Quiet').closest('.journal-block') as HTMLElement
+    expect(within(quiet).queryByText(/^Feeling|^Energy/)).toBeNull()
+  })
+
+  it('keeps them through an edit of the weather or note', async () => {
+    const user = userEvent.setup()
+    const tagged = { ...mood('2026-01-02', 'A long day'), feelings: ['calm'], energy: 'steady' as const }
+    const { onUpdateMood } = renderJournal({ ...createInitialState('Tester', 'Test Garden'), moods: [tagged] })
+    const block = screen.getByText('A long day').closest('.journal-block') as HTMLElement
+    await user.click(within(block).getByRole('button', { name: 'Edit' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Inner weather' }), '2')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onUpdateMood).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 2, feelings: ['calm'], energy: 'steady' }),
+    )
   })
 })
 

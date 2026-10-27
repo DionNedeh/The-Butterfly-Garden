@@ -125,6 +125,23 @@ describe('journalMarkdown', () => {
     )
   })
 
+  it('says a check-in’s feelings and energy in words, between its weather and its note', () => {
+    const markdown = journalMarkdown(
+      garden({
+        moods: [
+          mood('2026-01-01', { level: 2, feelings: ['hopeful', 'tired'], energy: 'low' }),
+          mood('2026-01-02', { energy: 'bright', note: '' }),
+        ],
+      }),
+      NOW,
+    )
+
+    expect(markdown).toContain(
+      '### Check-in: Rainy\n\n*Feeling hopeful, tired · Energy low*\n\nFelt calm after the walk.',
+    )
+    expect(markdown).toContain(`### Check-in: Bright\n\n*Energy bright*\n\n## ${formatJournalDate('2026-01-01')}`)
+  })
+
   it('gives a reflection its prompt, free writing its own words, and an unknown prompt none', () => {
     const markdown = journalMarkdown(
       garden({
@@ -371,6 +388,22 @@ describe('journalHtml', () => {
     expect(texts(document, '.exported')).toEqual([`Exported on ${formatJournalDate('2026-10-27')}`])
   })
 
+  it('says a check-in’s feelings and energy in words, and nothing for one without', () => {
+    const document = parse(
+      journalHtml(
+        garden({
+          moods: [
+            mood('2026-01-01', { feelings: ['calm'], energy: 'steady' }),
+            mood('2026-01-02'),
+          ],
+        }),
+        NOW,
+      ),
+    )
+    expect(texts(document, '.details')).toEqual(['Feeling calm · Energy steady'])
+    expect(document.querySelector('.details + .words')?.textContent).toBe('Felt calm after the walk.')
+  })
+
   it('says so when nothing has been written yet', () => {
     const document = parse(journalHtml(garden(), NOW))
     expect(document.querySelector('main')?.textContent).toBe(
@@ -382,7 +415,7 @@ describe('journalHtml', () => {
 
 describe('checkInsCsv', () => {
   it('starts with a byte order mark and a header row, and ends every record with CRLF', () => {
-    expect(checkInsCsv(garden())).toBe('\uFEFF"date","weather","note"\r\n')
+    expect(checkInsCsv(garden())).toBe('\uFEFF"date","weather","note","feelings","energy","written later"\r\n')
   })
 
   it('writes one quoted row per check-in, newest first, with the date as stored', () => {
@@ -399,13 +432,28 @@ describe('checkInsCsv', () => {
     expect(csv).toBe(
       '\uFEFF' +
         [
-          '"date","weather","note"',
-          '"2026-01-03","Not sure",""',
-          '"2026-01-02","Radiant","Café with Zoë 🌼"',
-          '"2026-01-01","Stormy","Heavy day"',
+          '"date","weather","note","feelings","energy","written later"',
+          '"2026-01-03","Not sure","","","",""',
+          '"2026-01-02","Radiant","Café with Zoë 🌼","","",""',
+          '"2026-01-01","Stormy","Heavy day","","",""',
           '',
         ].join('\r\n'),
     )
+  })
+
+  it('adds feelings and energy after the first three columns, in words', () => {
+    const csv = checkInsCsv(
+      garden({
+        moods: [
+          mood('2026-01-02', { level: 2, feelings: ['anxious', 'tired'], energy: 'low' }),
+          mood('2026-01-01', { feelings: ['proud'] }),
+        ],
+      }),
+    )
+    expect(csv.split('\r\n').slice(1, -1)).toEqual([
+      '"2026-01-02","Rainy","Felt calm after the walk.","anxious, tired","low",""',
+      '"2026-01-01","Bright","Felt calm after the walk.","proud","",""',
+    ])
   })
 
   it('keeps quotes, commas and line breaks inside their field', () => {
@@ -413,7 +461,9 @@ describe('checkInsCsv', () => {
       garden({ moods: [mood('2026-01-01', { note: 'She said "rest", so I did,\nfinally.' })] }),
     )
 
-    expect(csv.split('\r\n')[1]).toBe('"2026-01-01","Bright","She said ""rest"", so I did,\nfinally."')
+    expect(csv.split('\r\n')[1]).toBe(
+      '"2026-01-01","Bright","She said ""rest"", so I did,\nfinally.","","",""',
+    )
   })
 
   it('opens a field that looks like a formula as text', () => {
@@ -444,7 +494,7 @@ describe('checkInsCsv', () => {
       csv
         .split('\r\n')
         .slice(1, -1)
-        .map((record) => record.slice('"2026-01-01","Bright",'.length)),
+        .map((record) => record.slice('"2026-01-01","Bright",'.length, -',"","",""'.length)),
     ).toEqual(notes.map(([, field]) => field))
   })
 
@@ -455,6 +505,34 @@ describe('checkInsCsv', () => {
       }),
     )
 
-    expect(csv.split('\r\n').slice(1)).toEqual(['"2026-01-01","Bright","Rewritten"', ''])
+    expect(csv.split('\r\n').slice(1)).toEqual(['"2026-01-01","Bright","Rewritten","","",""', ''])
+  })
+})
+
+describe('entries written later', () => {
+  const later = garden({
+    moods: [mood('2026-01-02', { writtenLater: true, note: 'Caught up.' }), mood('2026-01-01')],
+    reflections: [reflection('2026-01-02', { promptId: 'free', body: 'Remembered.', writtenLater: true })],
+  })
+
+  it('are marked in Markdown under their heading, and only they', () => {
+    const markdown = journalMarkdown(later, NOW)
+    expect(markdown).toContain('### Check-in: Bright\n\n*Written later*\n\nCaught up.')
+    expect(markdown).toContain('### Reflection\n\n*Written later*\n\n*Written freely*\n\nRemembered.')
+    expect(markdown.match(/Written later/g)).toHaveLength(2)
+  })
+
+  it('are marked on the printable page', () => {
+    const document = parse(journalHtml(later, NOW))
+    expect(texts(document, '.later')).toEqual(['Written later', 'Written later'])
+    const first = document.querySelector('article section')
+    expect(first?.querySelector('.later')?.textContent).toBe('Written later')
+  })
+
+  it('say "yes" in the spreadsheet’s last column, and nothing for the others', () => {
+    expect(checkInsCsv(later).split('\r\n').slice(1, -1)).toEqual([
+      '"2026-01-02","Bright","Caught up.","","","yes"',
+      '"2026-01-01","Bright","Felt calm after the walk.","","",""',
+    ])
   })
 })

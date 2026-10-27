@@ -15,9 +15,12 @@ const NAMED_COMPANIONS = 2
  */
 export function describeDay(state: AppState, localDate: string): string {
   const parts: string[] = []
-  if (state.moods.some((entry) => entry.localDate === localDate)) parts.push('checked in')
-  if (state.reflections.some((entry) => entry.localDate === localDate))
-    parts.push('wrote a reflection')
+  // An entry written later for this day was written on another one: it
+  // describes the day, but it is not something done that day.
+  const doneThatDay = (entry: { localDate: string; writtenLater?: true }) =>
+    entry.localDate === localDate && entry.writtenLater !== true
+  if (state.moods.some(doneThatDay)) parts.push('checked in')
+  if (state.reflections.some(doneThatDay)) parts.push('wrote a reflection')
   const goals = state.completions.filter((item) => item.localDate === localDate).length
   if (goals > 0) parts.push(`finished ${countedInWords(goals, 'goal', 'goals')}`)
   const cared = state.creatures
