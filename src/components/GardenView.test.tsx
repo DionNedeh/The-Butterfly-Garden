@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { species } from '../data/content'
@@ -206,6 +206,28 @@ describe('meeting a butterfly in the garden', () => {
       expect(screen.queryByRole('dialog')).toBeNull()
       expect(flyer).toHaveFocus()
     }
+  })
+
+  it('stays open when opened again before the last close has been told', async () => {
+    const user = userEvent.setup()
+    gardenWithSol()
+    const flyer = screen.getByRole('button', { name: 'Meet Sol, Monarch' })
+    await user.click(flyer)
+    await screen.findByRole('dialog', { name: 'Sol' })
+    const first = document.querySelector('dialog')!
+    // As a browser does: the dialog closes at once and hands focus back, but
+    // its close event comes a moment later.
+    first.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open')
+      setTimeout(() => this.dispatchEvent(new Event('close')), 0)
+    }
+    first.close()
+    // Pressed in that moment, before the event has come.
+    act(() => {
+      fireEvent.click(flyer)
+    })
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    expect(screen.getByRole('dialog', { name: 'Sol' })).toHaveAttribute('open')
   })
 
   it('closes on a tap outside the card, and not on one inside it', async () => {
