@@ -1,12 +1,12 @@
-import { useCallback, useMemo, useState } from 'react'
-import { moodLevels, reflectionPrompts, suggestedGoals } from '../data/content'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { freeWritingPrompt, moodLevels, plants, suggestedGoals } from '../data/content'
 import {
   completionKey,
   formatJournalDate,
   formatWeekday,
-  getDailyPromptIndex,
   isGoalDue,
   isGoalSkipped,
+  recapHoursOf,
   recapOpensAt,
   retiredOnceGoalIds,
   type RecapWindow,
@@ -14,15 +14,47 @@ import {
 import {
   DAILY_SEED_REWARD,
   DAILY_SUNLIGHT_CAP,
+  MAX_PLANT_GROWTH,
+  nextPlantToTend,
   sunlightForDate,
 } from '../lib/progression'
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
 import { moodChoiceOf } from '../lib/mood'
-import type { AppState, Goal, GoalSchedule, MoodChoice } from '../types'
+import { counted } from '../lib/plural'
+import { promptAfter, promptById, promptForDay } from '../lib/prompts'
+import type { AppState, Goal, GoalSchedule, MoodChoice, PlantInstance } from '../types'
 import { Icon } from './Icons'
+import { GoalEditor, NO_DAYS_CHOSEN, WeekdayPicker, type GoalEdit } from './GoalEditor'
+import { GoalRow } from './GoalRow'
 import { MonthPlanner } from './MonthPlanner'
 import { UndoToast, type UndoOffer } from './UndoToast'
+
+const plantNames = new Map(plants.map((plant) => [plant.id, plant.name]))
+
+/** "Milkweed 2": a plant as the garden's own list names it. */
+function plantName(plant: PlantInstance, index: number): string {
+  return `${plantNames.get(plant.plantId) ?? 'Plant'} ${index + 1}`
+}
+
+/** How many goals a gentle day shows before "show the others". */
+const GENTLE_DAY_GOALS = 3
+
+/**
+ * The goals a gentle day shows: the few chosen when the day turned gentle
+ * (a list of ids, kept as a draft), or the first few due when the day was
+ * made gentle elsewhere, in another tab.
+ */
+function gentleGoals(dueGoals: readonly Goal[], chosen: string): Goal[] {
+  let ids: unknown
+  try {
+    ids = chosen ? JSON.parse(chosen) : undefined
+  } catch {
+    ids = undefined
+  }
+  if (!Array.isArray(ids)) return dueGoals.slice(0, GENTLE_DAY_GOALS)
+  return dueGoals.filter((goal) => ids.includes(goal.id))
+}
 
 export function TodayView({
   state,
@@ -41,6 +73,9 @@ export function TodayView({
   onUncompleteGoal,
   onRestoreGoal,
   onOpenSupport,
+  onSetGentleDay,
+  onOpenCare,
+  onChooseNextPlant,
   recap,
   moonlightCollected,
   onOpenRecap,
@@ -64,6 +99,11 @@ export function TodayView({
   /** Put back a goal just deleted, where it was, with its completions. */
   onRestoreGoal: (goal: Goal, index: number, completions: AppState['completions']) => void
   onOpenSupport?: () => void
+  /** Make today a gentle day, or an ordinary one again. */
+  onSetGentleDay?: (gentle: boolean) => void
+  onOpenCare?: () => void
+  /** Choose which growing plant the next Sunlight tends. */
+  onChooseNextPlant?: (plantId: string) => void
   /** Undefined when the recap is not on offer at all, as in a read-only garden. */
   recap?: RecapWindow
   moonlightCollected: boolean
@@ -92,10 +132,28 @@ export function TodayView({
     reflectionKey,
     existingReflection?.body ?? '',
   )
-  const [editingGoal, setEditingGoal] = useState<Goal>()
+  const [editingId, setEditingId] = useState<string>()
   const [undoOffer, setUndoOffer] = useState<UndoOffer>()
-  const dismissUndo = useCallback(() => setUndoOffer(undefined), [])
-  const prompt = reflectionPrompts[getDailyPromptIndex(today, reflectionPrompts.length)]
+  // UndoToast keeps the latest callback itself, so this need not be stable.
+  const dismissUndo = () => setUndoOffer(undefined)
+  // The prompt the gardener chose ("Another prompt", "Write freely") is a
+  // draft beside the words, so the two survive a reload together and a
+  // reflection is always kept under the prompt it answered. Otherwise it is
+  // the prompt of one already written today, or the day's own.
+  const reflectionPromptKey = `reflection-prompt:${today}`
+  const [chosenPromptId, setChosenPromptId] = useDraft(reflectionPromptKey, '')
+  const answered = existingReflection ? promptById(existingReflection.promptId) : undefined
+  const prompt = promptById(chosenPromptId) ?? answered ?? promptForDay(today)
+  const writingFreely = prompt.id === freeWritingPrompt.id
+  // Where focus goes once the page has redrawn: a goal's ⋯ button by its id,
+  // or '' for the Goals heading when the goal it was on has gone. Only set by
+  // handlers whose change always redraws the page, so it never lingers.
+  const pendingFocus = useRef<string | undefined>(undefined)
+  // The first goal "Show the other goals" revealed, to take focus.
+  const revealFrom = useRef<number | undefined>(undefined)
+  const goalsHeading = useRef<HTMLHeadingElement>(null)
+  const goalList = useRef<HTMLDivElement>(null)
+  const gentleToggle = useRef<HTMLInputElement>(null)
   // One pass over completions instead of a scan per goal per render.
   const completed = useMemo(
     () =>
@@ -132,7 +190,70 @@ export function TodayView({
     [state.goals],
   )
   const sunlight = sunlightForDate(state, today)
+  const nextPlant = nextPlantToTend(state)
   const isComplete = (goalId: string) => completed.has(completionKey(goalId, today))
+  // A gentle day shows a few goals and no counts, until midnight.
+  const gentle = state.profile?.gentleDay === today
+  // Both kept as drafts for the day, so leaving Today and coming back (or a
+  // reload) does not change them: asked for once, the full list stays; and
+  // the few goals chosen when the day turned gentle stay the few, done,
+  // snoozed or set aside, so the list never refills itself.
+  const [showAll, setShowAll] = useDraft(`gentle-show-all:${today}`, '')
+  const showAllGoals = showAll !== ''
+  const [gentleGoalIds, setGentleGoalIds] = useDraft(`gentle-goals:${today}`, '')
+  const shownGoals =
+    gentle && !showAllGoals ? gentleGoals(dueGoals, gentleGoalIds) : dueGoals
+  const hiddenGoalCount = dueGoals.length - shownGoals.length
+  const completedBefore = (goalId: string) =>
+    state.completions.some((item) => item.goalId === goalId && item.localDate < today)
+  const setGentle = (on: boolean) => {
+    setShowAll('')
+    setGentleGoalIds(
+      on ? JSON.stringify(dueGoals.slice(0, GENTLE_DAY_GOALS).map((goal) => goal.id)) : '',
+    )
+    onSetGentleDay?.(on)
+  }
+  // The goal open in the editor as it is now: a skip or snooze made from its
+  // row meanwhile is kept, and an archived or deleted goal is not edited.
+  const editing = editingId
+    ? state.goals.find((goal) => goal.id === editingId && !goal.archived)
+    : undefined
+  // One archived or deleted from its row, or in another tab, closes the
+  // editor for good, so restoring the goal later does not reopen it.
+  if (editingId && !editing) setEditingId(undefined)
+  // Bumped by every Edit, so choosing Edit again for the goal already open
+  // still takes focus to the editor.
+  const [editRequest, setEditRequest] = useState(0)
+  // The prompt showing before "Write freely", to return to when it is turned off.
+  const [beforeFreeWriting, setBeforeFreeWriting] = useState<string>()
+  const focusAfterRedraw = (goalId = '') => {
+    pendingFocus.current = goalId
+  }
+  const archive = (goal: Goal) => {
+    focusAfterRedraw()
+    onSetGoalArchived(goal.id, true)
+    setUndoOffer({
+      message: `${goal.title} archived.`,
+      undo: () => onSetGoalArchived(goal.id, false),
+    })
+  }
+
+  // Focus that had to wait for the page to redraw: a control that removed
+  // itself or its row would otherwise leave focus on the page's body.
+  useEffect(() => {
+    const rows = () =>
+      Array.from(goalList.current?.querySelectorAll<HTMLElement>('.goal-row') ?? [])
+    if (revealFrom.current !== undefined) {
+      const first = rows()[revealFrom.current]
+      revealFrom.current = undefined
+      first?.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
+    }
+    const pending = pendingFocus.current
+    pendingFocus.current = undefined
+    if (pending === undefined) return
+    const row = pending ? rows().find((item) => item.dataset.goalId === pending) : undefined
+    ;(row?.querySelector<HTMLElement>('.goal-menu-button') ?? goalsHeading.current)?.focus()
+  })
 
   return (
     <div className="view today-view">
@@ -142,10 +263,13 @@ export function TodayView({
           <h1>Today</h1>
           <p>Small acts of care are enough. Choose what fits this day.</p>
         </div>
-        <div className="sunlight-meter" aria-label={`${sunlight} of ${DAILY_SUNLIGHT_CAP} Sunlight earned`}>
+        <div
+          className="sunlight-meter"
+          aria-label={gentle ? 'Sunlight' : `${sunlight} of ${DAILY_SUNLIGHT_CAP} Sunlight earned`}
+        >
           <Icon name="sun" size={28} />
           <div>
-            <strong>{sunlight} / {DAILY_SUNLIGHT_CAP}</strong>
+            <strong>{gentle ? 'Rest counts too' : `${sunlight} / ${DAILY_SUNLIGHT_CAP}`}</strong>
             <span>Sunlight</span>
           </div>
         </div>
@@ -156,6 +280,25 @@ export function TodayView({
           ? `Today’s ${DAILY_SEED_REWARD} bonus seed is safely in your tray.`
           : `Your first Sunlight today also adds ${DAILY_SEED_REWARD} seed to your tray.`}
       </p>
+      {nextPlant !== -1 && onChooseNextPlant && (
+        <div className="next-tend">
+          <label>
+            Your next Sunlight tends
+            <select
+              value={state.plants[nextPlant].id}
+              onChange={(event) => onChooseNextPlant(event.target.value)}
+            >
+              {state.plants.map((plant, index) =>
+                plant.growth < MAX_PLANT_GROWTH ? (
+                  <option key={plant.id} value={plant.id}>
+                    {plantName(plant, index)}
+                  </option>
+                ) : null,
+              )}
+            </select>
+          </label>
+        </div>
+      )}
 
       {recap && (
         <section
@@ -180,7 +323,7 @@ export function TodayView({
               {moonlightCollected
                 ? 'Your recap is kept in the journal.'
                 : !recap.open
-                  ? `From ${recapOpensAt()}, you can look back on the day and collect a Moonlight bonus.`
+                  ? `From ${recapOpensAt(recapHoursOf(state.profile).opensHour)}, you can look back on the day and collect a Moonlight bonus.`
                   : 'A few questions, all of them skippable, and a Moonlight bonus for closing the day.'}
             </p>
           </div>
@@ -242,6 +385,21 @@ export function TodayView({
             Choose a weather, or Not sure today. Every answer is welcome.
           </p>
         )}
+        {existingMood && existingMood.level <= 2 && !existingMood.unsure && !gentle && onSetGentleDay && (
+          <p className="support-link-note">
+            Heavy weather can make everything harder.{' '}
+            <button
+              className="text-button"
+              onClick={() => {
+                // This line goes once the day is gentle; the switch it set does not.
+                gentleToggle.current?.focus()
+                setGentle(true)
+              }}
+            >
+              Make today a gentle day
+            </button>
+          </p>
+        )}
         {existingMood?.level === 1 && !existingMood.unsure && onOpenSupport && (
           <p className="support-link-note">
             A stormy day can be a lot to hold.{' '}
@@ -256,96 +414,99 @@ export function TodayView({
         <div className="section-heading">
           <div>
             <p className="eyebrow">Care at your pace</p>
-            <h2 id="goals-title">Goals</h2>
+            <h2 id="goals-title" ref={goalsHeading} tabIndex={-1}>
+              Goals
+            </h2>
           </div>
-          <span className="count-badge">
-            {dueGoals.filter((goal) => isComplete(goal.id)).length} / {dueGoals.length}
-          </span>
+          {!gentle && (
+            <span className="count-badge">
+              {dueGoals.filter((goal) => isComplete(goal.id)).length} / {dueGoals.length}
+            </span>
+          )}
         </div>
-        <div className="goal-list">
+        {onSetGentleDay && (
+          <label className="toggle-row gentle-toggle">
+            <span>
+              <strong>Gentle day</strong>
+              <small>A few small things, no counts. It ends by itself at midnight.</small>
+            </span>
+            <input
+              ref={gentleToggle}
+              type="checkbox"
+              checked={gentle}
+              onChange={(event) => setGentle(event.target.checked)}
+            />
+          </label>
+        )}
+        {gentle && (
+          <p className="gentle-note">
+            Rest counts too. Today asks for very little.
+            {onOpenCare && (
+              <>
+                {' '}
+                <button className="text-button" onClick={onOpenCare}>
+                  Your companions' care is free
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        <div className="goal-list" ref={goalList}>
           {dueGoals.length === 0 && (
             <p className="empty-copy">Add one small thing you would like to care for.</p>
           )}
-          {dueGoals.map((goal) => {
+          {shownGoals.map((goal) => {
             const skipped = isGoalSkipped(goal, today)
             const complete = isComplete(goal.id)
             return (
-              <article
-                className={`goal-row ${complete ? 'complete' : ''} ${skipped ? 'skipped' : ''}`}
+              <GoalRow
                 key={goal.id}
-              >
-                <button
-                  className="goal-check"
-                  onClick={() => {
-                    onCompleteGoal(goal.id)
-                    setUndoOffer({
-                      message: `${goal.title} marked done.`,
-                      undo: () => onUncompleteGoal(goal.id, today),
-                    })
-                  }}
-                  disabled={complete || skipped}
-                  aria-label={
-                    complete ? `${goal.title} completed` : `Complete ${goal.title}`
-                  }
-                >
-                  {complete ? 'Done' : 'Care'}
-                </button>
-                <div>
-                  <strong>{goal.title}</strong>
-                  <small>
-                    {goal.schedule === 'once'
-                      ? goal.scheduledDate
-                        ? `Planned · ${formatJournalDate(goal.scheduledDate)}`
-                        : 'One time'
-                      : goal.schedule === 'daily'
-                        ? 'Every day'
-                        : 'Selected days'}
-                    {skipped && ' · skipped today'}
-                  </small>
-                </div>
-                <div className="goal-row-actions">
-                  {!complete && (
-                    <>
-                      <button
-                        className="text-button"
-                        onClick={() => {
-                          onSkipGoal(goal.id)
-                          // Skipping toggles, so skipping again is the undo.
-                          setUndoOffer(
-                            skipped
-                              ? undefined
-                              : {
-                                  message: `${goal.title} set aside for today.`,
-                                  undo: () => onSkipGoal(goal.id),
-                                },
-                          )
-                        }}
-                        title={
-                          skipped
-                            ? 'Bring this goal back today'
-                            : 'Set aside for today, guilt-free'
-                        }
-                      >
-                        {skipped ? 'Unskip' : 'Skip'}
-                      </button>
-                      {!skipped && (
-                        <button
-                          className="text-button"
-                          onClick={() => onSnoozeGoal(goal.id, 1)}
-                          title="Snooze until tomorrow"
-                        >
-                          Snooze
-                        </button>
-                      )}
-                    </>
-                  )}
-                  <button className="text-button" onClick={() => setEditingGoal(goal)}>
-                    Edit
-                  </button>
-                </div>
-              </article>
+                goal={goal}
+                today={today}
+                complete={complete}
+                skipped={skipped}
+                onComplete={() => {
+                  onCompleteGoal(goal.id)
+                  setUndoOffer({
+                    message: `${goal.title} marked done.`,
+                    undo: () => onUncompleteGoal(goal.id, today),
+                  })
+                }}
+                onSkip={() => {
+                  onSkipGoal(goal.id)
+                  // Skipping toggles, so skipping again is the undo.
+                  setUndoOffer(
+                    skipped
+                      ? undefined
+                      : {
+                          message: `${goal.title} set aside for today.`,
+                          undo: () => onSkipGoal(goal.id),
+                        },
+                  )
+                }}
+                onSnooze={(days) => {
+                  focusAfterRedraw()
+                  onSnoozeGoal(goal.id, days)
+                }}
+                onEdit={() => {
+                  setEditingId(goal.id)
+                  setEditRequest((count) => count + 1)
+                }}
+                onArchive={() => archive(goal)}
+              />
             )
           })}
+          {hiddenGoalCount > 0 && (
+            <button
+              className="text-button goal-list-more"
+              onClick={() => {
+                revealFrom.current = shownGoals.length
+                setShowAll('shown')
+              }}
+            >
+              Show the other {counted(hiddenGoalCount, 'goal', 'goals')}
+            </button>
+          )}
         </div>
         {snoozedGoals.length > 0 && (
           <details className="snoozed-goals">
@@ -389,79 +550,50 @@ export function TodayView({
           </details>
         )}
 
-        {editingGoal ? (
-          <form
-            className="goal-form edit-form"
-            onSubmit={(event) => {
-              event.preventDefault()
-              onUpdateGoal(editingGoal)
-              setEditingGoal(undefined)
+        {editing ? (
+          <GoalEditor
+            key={editing.id}
+            goal={editing}
+            focusRequest={editRequest}
+            today={today}
+            completedBefore={retired.has(editing.id) || completedBefore(editing.id)}
+            completedToday={isComplete(editing.id)}
+            onSave={(edit: GoalEdit) => {
+              onUpdateGoal({ ...editing, ...edit })
+              focusAfterRedraw(editing.id)
+              setEditingId(undefined)
             }}
-          >
-            <label>
-              Edit goal
-              <input
-                value={editingGoal.title}
-                onChange={(event) =>
-                  setEditingGoal({ ...editingGoal, title: event.target.value })
-                }
-                maxLength={120}
-                required
-              />
-            </label>
-            <div className="form-actions">
-              <button className="secondary-button" type="submit">Save</button>
-              <button
-                className="text-button"
-                type="button"
-                onClick={() => {
-                  const archived = editingGoal
-                  onSetGoalArchived(archived.id, true)
-                  setEditingGoal(undefined)
-                  setUndoOffer({
-                    message: `${archived.title} archived.`,
-                    undo: () => onSetGoalArchived(archived.id, false),
-                  })
-                }}
-                title="Stop showing this goal without losing the days you completed it"
-              >
-                Archive
-              </button>
-              <button
-                className="text-button danger-text"
-                type="button"
-                onClick={() => {
-                  // Kept here, so the undo can put back the goal and every
-                  // day it was completed, exactly where they were.
-                  const deleted = state.goals.find((goal) => goal.id === editingGoal.id)
-                  const index = state.goals.findIndex((goal) => goal.id === editingGoal.id)
-                  const completions = state.completions.filter(
-                    (completion) => completion.goalId === editingGoal.id,
-                  )
-                  onDeleteGoal(editingGoal.id)
-                  setEditingGoal(undefined)
-                  if (deleted)
-                    setUndoOffer({
-                      message: `${deleted.title} deleted.`,
-                      undo: () => onRestoreGoal(deleted, index, completions),
-                    })
-                }}
-                title="Remove the goal and every record of completing it"
-              >
-                Delete
-              </button>
-              <button className="text-button" type="button" onClick={() => setEditingGoal(undefined)}>
-                Cancel
-              </button>
-            </div>
-          </form>
+            onArchive={() => {
+              archive(editing)
+              setEditingId(undefined)
+            }}
+            onDelete={() => {
+              // Kept here, so the undo can put back the goal and every
+              // day it was completed, exactly where they were.
+              const index = state.goals.findIndex((goal) => goal.id === editing.id)
+              const completions = state.completions.filter(
+                (completion) => completion.goalId === editing.id,
+              )
+              focusAfterRedraw()
+              onDeleteGoal(editing.id)
+              setEditingId(undefined)
+              setUndoOffer({
+                message: `${editing.title} deleted.`,
+                undo: () => onRestoreGoal(editing, index, completions),
+              })
+            }}
+            onCancel={() => {
+              focusAfterRedraw(editing.id)
+              setEditingId(undefined)
+            }}
+          />
         ) : (
           <form
             className="goal-form"
             onSubmit={(event) => {
               event.preventDefault()
-              if (!goalTitle.trim()) return
-              onAddGoal(goalTitle, schedule, weekdays)
+              if (!goalTitle.trim() || (schedule === 'weekdays' && weekdays.length === 0)) return
+              onAddGoal(goalTitle, schedule, schedule === 'weekdays' ? weekdays : [])
               setGoalTitle('')
             }}
           >
@@ -490,28 +622,19 @@ export function TodayView({
                 <option value="weekdays">Selected days</option>
               </select>
             </label>
-            {schedule === 'weekdays' && (
-              <fieldset className="weekday-picker">
-                <legend>Days</legend>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
-                  <label key={day}>
-                    <input
-                      type="checkbox"
-                      checked={weekdays.includes(index)}
-                      onChange={() =>
-                        setWeekdays((current) =>
-                          current.includes(index)
-                            ? current.filter((item) => item !== index)
-                            : [...current, index],
-                        )
-                      }
-                    />
-                    {day}
-                  </label>
-                ))}
-              </fieldset>
+            {schedule === 'weekdays' && <WeekdayPicker weekdays={weekdays} onChange={setWeekdays} />}
+            {schedule === 'weekdays' && weekdays.length === 0 && (
+              <p className="form-hint" role="alert">
+                {NO_DAYS_CHOSEN}
+              </p>
             )}
-            <button className="secondary-button" type="submit">Add goal</button>
+            <button
+              className="secondary-button"
+              type="submit"
+              disabled={schedule === 'weekdays' && weekdays.length === 0}
+            >
+              Add goal
+            </button>
           </form>
         )}
       </section>
@@ -520,9 +643,40 @@ export function TodayView({
 
       <section className="card reflection-card" aria-labelledby="reflection-title">
         <p className="eyebrow">Optional reflection</p>
-        <h2 id="reflection-title">{prompt.text}</h2>
+        {/* Polite, so a new prompt is heard without leaving the button that asked. */}
+        <h2 id="reflection-title" aria-live="polite">
+          {prompt.text}
+        </h2>
+        <div className="prompt-choices">
+          <button
+            className="text-button"
+            onClick={() => setChosenPromptId(promptAfter(prompt, today).id)}
+          >
+            Another prompt
+          </button>
+          <button
+            className="text-button"
+            aria-pressed={writingFreely}
+            onClick={() => {
+              if (!writingFreely) {
+                setBeforeFreeWriting(prompt.id)
+                setChosenPromptId(freeWritingPrompt.id)
+                return
+              }
+              // Back to the prompt that was showing, so a reflection is never
+              // kept under a question it does not answer.
+              const back =
+                beforeFreeWriting ??
+                (answered && answered.id !== freeWritingPrompt.id ? answered.id : undefined)
+              setChosenPromptId(back ?? promptForDay(today).id)
+            }}
+          >
+            Write freely
+          </button>
+        </div>
         <label className="sr-only" htmlFor="daily-reflection">Your reflection</label>
         <textarea
+          aria-describedby="reflection-title"
           id="daily-reflection"
           value={reflection}
           onChange={(event) => setReflection(event.target.value)}
@@ -535,7 +689,7 @@ export function TodayView({
           disabled={!reflection.trim()}
           onClick={() => {
             onSaveReflection(prompt.id, reflection)
-            clearDraft(reflectionKey)
+            clearDraft(reflectionKey, reflectionPromptKey)
           }}
         >
           {existingReflection ? 'Update reflection' : 'Keep this reflection'}

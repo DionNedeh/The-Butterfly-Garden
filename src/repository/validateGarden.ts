@@ -4,6 +4,7 @@ import { jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { createId } from '../lib/id'
+import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES } from '../lib/date'
 import type { AmbientTrackId, AppState, OutfitSlot } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
@@ -53,20 +54,6 @@ type UnknownRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is UnknownRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/
-
-/** A real calendar day written as YYYY-MM-DD, the app's only date shape. */
-export function isLocalDate(value: unknown): value is string {
-  if (typeof value !== 'string' || !LOCAL_DATE.test(value)) return false
-  const [year, month, day] = value.split('-').map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day))
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  )
 }
 
 const EPOCH = new Date(0).toISOString()
@@ -301,6 +288,13 @@ function checkReflection(raw: unknown, ctx: Context) {
  * writing; an empty one is dropped. Identity is repaired rather than required:
  * a recap is the gardener's writing whether or not its id survived.
  */
+/** The goals a recap's notes became, kept only as a list of ids. */
+function plannedGoalIdsOf(value: unknown): { plannedGoalIds?: string[] } {
+  if (!Array.isArray(value)) return {}
+  const ids = value.filter((id): id is string => typeof id === 'string')
+  return ids.length ? { plannedGoalIds: ids } : {}
+}
+
 function migrateRecaps(value: unknown, ctx: Context): AppState['recaps'] {
   if (!Array.isArray(value)) return []
   const seen = new Set<string>()
@@ -334,6 +328,7 @@ function migrateRecaps(value: unknown, ctx: Context): AppState['recaps'] {
       ...(typeof entry.plannedGoalId === 'string'
         ? { plannedGoalId: entry.plannedGoalId }
         : {}),
+      ...plannedGoalIdsOf(entry.plannedGoalIds),
       createdAt: stamp(entry.createdAt),
       updatedAt: stamp(entry.updatedAt),
     })
@@ -562,6 +557,29 @@ function checkProfile(
   }
   if (value.calmMotion !== undefined) {
     profile.calmMotion = value.calmMotion === true
+  }
+  // Later optional choices: kept when well-formed, dropped otherwise, so a
+  // hand-edited value can never reach the screen in the wrong type.
+  if (value.hideDayCounts !== undefined) {
+    profile.hideDayCounts = value.hideDayCounts === true
+  }
+  if (value.gentleDay !== undefined && !isLocalDate(value.gentleDay)) {
+    delete profile.gentleDay
+  }
+  if (value.tendFirstPlantId !== undefined && typeof value.tendFirstPlantId !== 'string') {
+    delete profile.tendFirstPlantId
+  }
+  if (
+    value.recapOpensHour !== undefined &&
+    !RECAP_OPENS_CHOICES.includes(value.recapOpensHour as number)
+  ) {
+    delete profile.recapOpensHour
+  }
+  if (
+    value.recapGraceEndsHour !== undefined &&
+    !RECAP_GRACE_CHOICES.includes(value.recapGraceEndsHour as number)
+  ) {
+    delete profile.recapGraceEndsHour
   }
   if (value.theme !== undefined && !THEMES.has(value.theme as string)) {
     ctx.repaired += 1

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { AppState } from '../types'
 import { SpeciesDirectory } from './SpeciesDirectory'
 import { STAGE_CARE_DAYS } from '../lib/lifecycle'
@@ -12,7 +13,7 @@ import {
 import type { IconName } from '../types'
 import { Icon } from './Icons'
 import { isAndroidApp } from '../lib/platform'
-import { recapOpensAt } from '../lib/date'
+import { formatHour, recapHoursOf, recapOpensAt, type RecapHours } from '../lib/date'
 
 interface GuideSection {
   icon: IconName
@@ -21,174 +22,176 @@ interface GuideSection {
   paragraphs: string[]
 }
 
-const sections: GuideSection[] = [
-  {
-    icon: 'sun',
-    eyebrow: 'The heart of the garden',
-    title: 'Sunlight — care for yourself first',
-    paragraphs: [
-      `Everything begins with your own self-care. Checking in with your mood, completing a goal, or writing a reflection each earn one Sunlight, up to ${DAILY_SUNLIGHT_CAP} per day.`,
-      `Every Sunlight converts into ${NECTAR_PER_SUNLIGHT} Nectar for the shop, grows one of your plants a step, and your first Sunlight each day adds ${DAILY_SEED_REWARD} seed to your tray. Nothing is ever lost on a hard day — the garden simply waits.`,
-    ],
-  },
-  {
-    icon: 'moon',
-    eyebrow: 'Closing the day',
-    title: 'Moonlight — round out the evening',
-    paragraphs: [
-      `From ${recapOpensAt()} you can round out your day: a few short questions about how it ended up, what went well, and what you would rather not carry into tomorrow. Every question can be skipped, and the recap is kept in your journal.`,
-      `Closing the day earns ${MOONLIGHT_STARDUST_REWARD} Stardust — once per day, whether or not you earned any Sunlight. Some days the only thing you managed was getting to the end of them, and that still counts. If you are up past midnight the recap keeps offering yesterday until four in the morning, so a late night closes the day you actually lived.`,
-      'Moonlight is separate from Sunlight. It does not grow your plants and it does not count toward your rhythm of care days — that still asks for an act of care.',
-    ],
-  },
-  {
-    icon: 'seed',
-    eyebrow: 'Growing things',
-    title: 'Seeds, plants, and butterfly eggs',
-    paragraphs: [
-      `Each seed plants one flower, shrub, or tree (${PLANT_SEED_COST} seed per plant, up to ${PLANT_CAPACITY} spaces in the scene). Host plants shelter particular butterfly species; nectar plants feed everyone. Shared host plants prefer a species you have not welcomed yet.`,
-      'Plants grow one stage per Sunlight — seed, sprout, budding, full bloom — with each Sunlight tending the earliest plant that can still grow. When a host plant reaches full bloom, look closely: a butterfly egg appears on its leaves, and a new companion begins.',
-      'Missed days simply pause growth; nothing ever wilts. You can remove a plant from its field-guide panel (no seed refund), but a plant sheltering an egg, caterpillar, or chrysalis is protected until its butterfly emerges.',
-    ],
-  },
-  {
-    icon: 'care',
-    eyebrow: 'From egg to wings',
-    title: 'The life cycle and care days',
-    paragraphs: [
-      `Every companion passes through four stages: egg, caterpillar, chrysalis, butterfly. Each stage before butterfly needs ${STAGE_CARE_DAYS} days of care to advance — and the days never need to be consecutive. Care on Monday, rest all week, care twice more later: that counts.`,
-      'Any one care activity on a day marks that day as cared-for. The Care page shows dots for each stage: fill all three and your companion transforms, with a little celebration of Nectar (and Stardust and seeds when a butterfly emerges).',
-      'Butterflies never stop needing you. Their care days keep counting forever and every activity deepens your bond.',
-    ],
-  },
-  {
-    icon: 'leaf',
-    eyebrow: 'Daily tending',
-    title: 'Care activities and supplies',
-    paragraphs: [
-      'Each stage has its own care menu: eggs like warmth, mist, and lullabies; caterpillars love fresh leaves, berry treats, dew baths, playtime, and being tucked in; chrysalises want mist, sunbeams, and encouragement; butterflies enjoy nectar sips, fruit, puddling baths, grooming, and flying with you.',
-      'Every activity can be done once per companion per day. Some use a supply from your satchel — leaves, spring water, bath dew, nectar drops, fruit slices — bought with Nectar in the Shop. Free activities are always available, so you can care every day even with an empty satchel.',
-    ],
-  },
-  {
-    icon: 'care',
-    eyebrow: 'A friendship meter',
-    title: 'Bond levels',
-    paragraphs: [
-      'Every care activity earns bond points (supply-based ones earn more). Each bond level rewards you with Stardust and Nectar, and there is no ceiling — a butterfly you have loved for months keeps giving back.',
-    ],
-  },
-  {
-    icon: 'nectar',
-    eyebrow: 'Two currencies',
-    title: 'Nectar and Stardust',
-    paragraphs: [
-      'Nectar is the everyday currency: earned from Sunlight, spent on supplies, outfits, jars, and flight patterns.',
-      'Stardust is rarer: earned from bond level-ups and butterfly emergences, spent in the Stardust atelier of the Boutique (pieces like the Star Diadem, Moonlit Halo, and Firefly Glow) and on the two most graceful flight patterns, Spiral Rise and Garden Waltz. Save it for what you love.',
-    ],
-  },
-  {
-    icon: 'bow',
-    eyebrow: 'Dress-up',
-    title: 'The Boutique and wardrobe',
-    paragraphs: [
-      "Cosmetics come in three slots — headwear, accessories, and auras — and each lists the life stages it fits. Buy once, dress everyone: your whole garden shares one closet, managed from each companion's wardrobe on the Care page.",
-      'If a companion changes stage and an item no longer fits, it is only hidden, never lost.',
-    ],
-  },
-  {
-    icon: 'crown',
-    eyebrow: 'Something to look forward to',
-    title: 'The Garden Pass',
-    paragraphs: [
-      isAndroidApp()
-        ? 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape — beside extra scenes and your own images as backdrops. They come with the optional Garden Pass subscription from Google Play; you can try any outfit on first, and everything else in the garden is free.'
-        : 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. They are included free in the current PWA preview. Try them from the Care wardrobe; no subscription or payment is active.',
-    ],
-  },
-  {
-    icon: 'today',
-    eyebrow: 'Gentle structure',
-    title: 'Goals, skipping, and snoozing',
-    paragraphs: [
-      'Goals can repeat daily, on chosen weekdays, or happen just once. Completing one earns Sunlight — though repeating the same completed activity never creates extra Sunlight, and recurrence follows the calendar date on this device (daylight-saving changes are handled for you).',
-      'Not every day has room for every goal. Skip sets a goal aside for today with zero penalty — it simply rests. Snooze tucks it away until tomorrow, and planned one-time goals move to the new day automatically. You can wake a snoozed goal any time.',
-    ],
-  },
-  {
-    icon: 'flight',
-    eyebrow: 'Life in the scene',
-    title: 'Companions in the garden',
-    paragraphs: [
-      'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly for a little burst of hearts; on the Care page, every stage answers the same way, egg to butterfly.',
-      'Choose one butterfly as your active companion from its card in the Garden, and rename any companion whenever you like from its card or the Care page.',
-    ],
-  },
-  {
-    icon: 'journal',
-    eyebrow: 'Kept as you wrote it',
-    title: 'Journal and your rhythm',
-    paragraphs: [
-      'The Journal holds your dated moods, reflections, and butterfly field notes. Personal entries can be edited or deleted at any time, and nothing you write is scored or analyzed.',
-      'Your rhythm counts the days you earned at least one Sunlight: how many of the last seven, and how many this month. A missed day never sets it back to zero. It is just a gentle mirror, it never changes plant or butterfly progress, and Settings can hide the numbers altogether.',
-    ],
-  },
-  {
-    icon: 'journal',
-    eyebrow: 'Seeing the month',
-    title: 'The calendar planner',
-    paragraphs: [
-      "The calendar on the Today page shows your whole month: dots for the goals landing on each day, suns for days you gathered Sunlight, and your mood's weather. Tap any upcoming day to plan a one-time goal for it — future you will find it waiting on the right morning.",
-    ],
-  },
-  {
-    icon: 'shop',
-    eyebrow: 'Keepsakes',
-    title: 'Letter jars',
-    paragraphs: [
-      "Letter and number jars are decorative keepsakes for your plant spots: uppercase A–Z and 0–9 in eight colors, one reusable jar per purchase. Place, move, or return them from a plant's detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.",
-      'Removing a plant returns its jar safely to inventory. Like all shop purchases, jars are local, permanent, and non-refundable.',
-    ],
-  },
-  {
-    icon: 'flight',
-    eyebrow: 'Ways of flying',
-    title: 'Flight patterns',
-    paragraphs: [
-      'Flight patterns change how your butterflies move through the garden scene — drifting, petal-hopping, figure eights, spirals. Buy them in the Shop, choose the active one on the Flight page.',
-    ],
-  },
-  {
-    icon: 'music',
-    eyebrow: 'Set the mood',
-    title: 'Your garden soundscape',
-    paragraphs: [
-      'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, or an original classical-style piano loop in Settings. Everything is generated on your device, works offline, and can be toggled off at any time.',
-    ],
-  },
-  {
-    icon: 'settings',
-    eyebrow: 'Take it with you',
-    title: isAndroidApp() ? 'Offline and updates' : 'Install, offline, and updates',
-    paragraphs: [
-      isAndroidApp()
-        ? 'The whole garden is inside the app, so it works offline from the moment it is installed. New versions arrive through Google Play.'
-        : 'After the first successful load, the whole garden works offline. Supported browsers offer an Install button in the header for a standalone home-screen app, and when a new version is ready the app always asks before refreshing to apply it.',
-    ],
-  },
-  {
-    icon: 'moon',
-    eyebrow: 'Yours alone',
-    title: 'Privacy, backdrops, and starting over',
-    paragraphs: [
-      'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether.',
-      'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme.',
-      isAndroidApp()
-        ? 'Delete all local data in Settings permanently removes this garden from this phone; clearing the app\'s storage or uninstalling it does the same. There is no undo, so treat it kindly.'
-        : 'Delete all local data in Settings permanently removes this garden from the current browser; clearing site storage does the same. There is no undo, so treat it kindly.',
-    ],
-  },
-]
+function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[] {
+  return [
+    {
+      icon: 'sun',
+      eyebrow: 'The heart of the garden',
+      title: 'Sunlight — care for yourself first',
+      paragraphs: [
+        `Everything begins with your own self-care. Checking in with your mood, completing a goal, or writing a reflection each earn one Sunlight, up to ${DAILY_SUNLIGHT_CAP} per day.`,
+        `Every Sunlight converts into ${NECTAR_PER_SUNLIGHT} Nectar for the shop, grows one of your plants a step, and your first Sunlight each day adds ${DAILY_SEED_REWARD} seed to your tray. Nothing is ever lost on a hard day — the garden simply waits.`,
+      ],
+    },
+    {
+      icon: 'moon',
+      eyebrow: 'Closing the day',
+      title: 'Moonlight — round out the evening',
+      paragraphs: [
+        `From ${recapOpensAt(opensHour)} you can round out your day: a few short questions about how it ended up, what went well, and what you would rather not carry into tomorrow. Every question can be skipped, and the recap is kept in your journal.`,
+        `Closing the day earns ${MOONLIGHT_STARDUST_REWARD} Stardust — once per day, whether or not you earned any Sunlight. Some days the only thing you managed was getting to the end of them, and that still counts. ${graceEndsHour > 0 ? `If you are up past midnight the recap keeps offering yesterday until ${formatHour(graceEndsHour)}, so a late night closes the day you actually lived. ` : ''}Both hours can be moved in Settings, under Your rhythm.`,
+        'Moonlight is separate from Sunlight. It does not grow your plants and it does not count toward your rhythm of care days — that still asks for an act of care.',
+      ],
+    },
+    {
+      icon: 'seed',
+      eyebrow: 'Growing things',
+      title: 'Seeds, plants, and butterfly eggs',
+      paragraphs: [
+        `Each seed plants one flower, shrub, or tree (${PLANT_SEED_COST} seed per plant, up to ${PLANT_CAPACITY} spaces in the scene). Host plants shelter particular butterfly species; nectar plants feed everyone. Shared host plants prefer a species you have not welcomed yet.`,
+        'Plants grow one stage per Sunlight — seed, sprout, budding, full bloom — with each Sunlight tending the plant you chose on Today, or else the earliest one that can still grow. When a host plant reaches full bloom, look closely: a butterfly egg appears on its leaves, and a new companion begins.',
+        'Missed days simply pause growth; nothing ever wilts. You can remove a plant from its field-guide panel (no seed refund), but a plant sheltering an egg, caterpillar, or chrysalis is protected until its butterfly emerges.',
+      ],
+    },
+    {
+      icon: 'care',
+      eyebrow: 'From egg to wings',
+      title: 'The life cycle and care days',
+      paragraphs: [
+        `Every companion passes through four stages: egg, caterpillar, chrysalis, butterfly. Each stage before butterfly needs ${STAGE_CARE_DAYS} days of care to advance — and the days never need to be consecutive. Care on Monday, rest all week, care twice more later: that counts.`,
+        'Any one care activity on a day marks that day as cared-for. The Care page shows dots for each stage: fill all three and your companion transforms, with a little celebration of Nectar (and Stardust and seeds when a butterfly emerges).',
+        'Butterflies never stop needing you. Their care days keep counting forever and every activity deepens your bond.',
+      ],
+    },
+    {
+      icon: 'leaf',
+      eyebrow: 'Daily tending',
+      title: 'Care activities and supplies',
+      paragraphs: [
+        'Each stage has its own care menu: eggs like warmth, mist, and lullabies; caterpillars love fresh leaves, berry treats, dew baths, playtime, and being tucked in; chrysalises want mist, sunbeams, and encouragement; butterflies enjoy nectar sips, fruit, puddling baths, grooming, and flying with you.',
+        'Every activity can be done once per companion per day. Some use a supply from your satchel — leaves, spring water, bath dew, nectar drops, fruit slices — bought with Nectar in the Shop. Free activities are always available, so you can care every day even with an empty satchel.',
+      ],
+    },
+    {
+      icon: 'care',
+      eyebrow: 'A friendship meter',
+      title: 'Bond levels',
+      paragraphs: [
+        'Every care activity earns bond points (supply-based ones earn more). Each bond level rewards you with Stardust and Nectar, and there is no ceiling — a butterfly you have loved for months keeps giving back.',
+      ],
+    },
+    {
+      icon: 'nectar',
+      eyebrow: 'Two currencies',
+      title: 'Nectar and Stardust',
+      paragraphs: [
+        'Nectar is the everyday currency: earned from Sunlight, spent on supplies, outfits, jars, and flight patterns.',
+        'Stardust is rarer: earned from bond level-ups and butterfly emergences, spent in the Stardust atelier of the Boutique (pieces like the Star Diadem, Moonlit Halo, and Firefly Glow) and on the two most graceful flight patterns, Spiral Rise and Garden Waltz. Save it for what you love.',
+      ],
+    },
+    {
+      icon: 'bow',
+      eyebrow: 'Dress-up',
+      title: 'The Boutique and wardrobe',
+      paragraphs: [
+        "Cosmetics come in three slots — headwear, accessories, and auras — and each lists the life stages it fits. Buy once, dress everyone: your whole garden shares one closet, managed from each companion's wardrobe on the Care page.",
+        'If a companion changes stage and an item no longer fits, it is only hidden, never lost.',
+      ],
+    },
+    {
+      icon: 'crown',
+      eyebrow: 'Something to look forward to',
+      title: 'The Garden Pass',
+      paragraphs: [
+        isAndroidApp()
+          ? 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape — beside extra scenes and your own images as backdrops. They come with the optional Garden Pass subscription from Google Play; you can try any outfit on first, and everything else in the garden is free.'
+          : 'A very exclusive corner of the shop displays seasonal regalia — the Royal Monarch Crown, Aurora Veil, Rainbow Trail, and Celestial Cape. They are included free in the current PWA preview. Try them from the Care wardrobe; no subscription or payment is active.',
+      ],
+    },
+    {
+      icon: 'today',
+      eyebrow: 'Gentle structure',
+      title: 'Goals, skipping, and snoozing',
+      paragraphs: [
+        'Goals can repeat daily, on chosen weekdays, or happen just once. Completing one earns Sunlight — though repeating the same completed activity never creates extra Sunlight, and recurrence follows the calendar date on this device (daylight-saving changes are handled for you).',
+        'Not every day has room for every goal. Skip sets a goal aside for today with zero penalty — it simply rests. Snooze tucks it away until tomorrow, and planned one-time goals move to the new day automatically. You can wake a snoozed goal any time.',
+      ],
+    },
+    {
+      icon: 'flight',
+      eyebrow: 'Life in the scene',
+      title: 'Companions in the garden',
+      paragraphs: [
+        'Every emerged butterfly flies through the garden scene, pausing near flowers — and Marigold, your monarch guide, is always among them. Tap or click any butterfly for a little burst of hearts; on the Care page, every stage answers the same way, egg to butterfly.',
+        'Choose one butterfly as your active companion from its card in the Garden, and rename any companion whenever you like from its card or the Care page.',
+      ],
+    },
+    {
+      icon: 'journal',
+      eyebrow: 'Kept as you wrote it',
+      title: 'Journal and your rhythm',
+      paragraphs: [
+        'The Journal holds your dated moods, reflections, and butterfly field notes. Personal entries can be edited or deleted at any time, and nothing you write is scored or analyzed.',
+        'Your rhythm counts the days you earned at least one Sunlight: how many of the last seven, and how many this month. A missed day never sets it back to zero. It is just a gentle mirror, it never changes plant or butterfly progress, and Settings can hide the numbers altogether.',
+      ],
+    },
+    {
+      icon: 'journal',
+      eyebrow: 'Seeing the month',
+      title: 'The calendar planner',
+      paragraphs: [
+        "The calendar on the Today page shows your whole month: dots for the goals landing on each day, suns for days you gathered Sunlight, and your mood's weather. Tap any upcoming day to plan a one-time goal for it — future you will find it waiting on the right morning.",
+      ],
+    },
+    {
+      icon: 'shop',
+      eyebrow: 'Keepsakes',
+      title: 'Letter jars',
+      paragraphs: [
+        "Letter and number jars are decorative keepsakes for your plant spots: uppercase A–Z and 0–9 in eight colors, one reusable jar per purchase. Place, move, or return them from a plant's detail panel in the Garden — each plant spot holds one jar. Spell names, dates, or tiny messages across your flowerbed.",
+        'Removing a plant returns its jar safely to inventory. Like all shop purchases, jars are local, permanent, and non-refundable.',
+      ],
+    },
+    {
+      icon: 'flight',
+      eyebrow: 'Ways of flying',
+      title: 'Flight patterns',
+      paragraphs: [
+        'Flight patterns change how your butterflies move through the garden scene — drifting, petal-hopping, figure eights, spirals. Buy them in the Shop, choose the active one on the Flight page.',
+      ],
+    },
+    {
+      icon: 'music',
+      eyebrow: 'Set the mood',
+      title: 'Your garden soundscape',
+      paragraphs: [
+        'The note button in the header plays your selected soundscape. Choose the original garden sounds with wind chimes, garden sounds without chimes, or an original classical-style piano loop in Settings. Everything is generated on your device, works offline, and can be toggled off at any time.',
+      ],
+    },
+    {
+      icon: 'settings',
+      eyebrow: 'Take it with you',
+      title: isAndroidApp() ? 'Offline and updates' : 'Install, offline, and updates',
+      paragraphs: [
+        isAndroidApp()
+          ? 'The whole garden is inside the app, so it works offline from the moment it is installed. New versions arrive through Google Play.'
+          : 'After the first successful load, the whole garden works offline. Supported browsers offer an Install button in the header for a standalone home-screen app, and when a new version is ready the app always asks before refreshing to apply it.',
+      ],
+    },
+    {
+      icon: 'moon',
+      eyebrow: 'Yours alone',
+      title: 'Privacy, backdrops, and starting over',
+      paragraphs: [
+        'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether.',
+        'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme.',
+        isAndroidApp()
+          ? 'Delete all local data in Settings permanently removes this garden from this phone; clearing the app\'s storage or uninstalling it does the same. There is no undo, so treat it kindly.'
+          : 'Delete all local data in Settings permanently removes this garden from the current browser; clearing site storage does the same. There is no undo, so treat it kindly.',
+      ],
+    },
+  ]
+}
 
 export function GuideView({
   state,
@@ -199,6 +202,12 @@ export function GuideView({
   onShowSeed: (id: string) => void
   onOpenSupport?: () => void
 }) {
+  const { opensHour, graceEndsHour } = recapHoursOf(state.profile)
+  // Rebuilt only when the gardener's evening moves, not on every garden change.
+  const sections = useMemo(
+    () => guideSections({ opensHour, graceEndsHour }),
+    [opensHour, graceEndsHour],
+  )
   return (
     <div className="view guide-view">
       <header className="page-header">

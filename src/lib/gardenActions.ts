@@ -10,13 +10,21 @@ import type {
   ReflectionEntry,
 } from '../types'
 import { availableBackdropIds } from './appearance'
-import { addDaysToLocalDate, toLocalDate } from './date'
+import {
+  addDaysToLocalDate,
+  RECAP_GRACE_CHOICES,
+  RECAP_OPENS_CHOICES,
+  recapHoursOf,
+  toLocalDate,
+  type RecapHours,
+} from './date'
 import { createId } from './id'
 import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
 import {
   awardMoonlight,
   awardSunlight,
+  MAX_PLANT_GROWTH,
   moonlightForDate,
   progressGarden,
   type RecapDraft,
@@ -311,34 +319,66 @@ export function deleteReflection(state: AppState, id: string): AppState {
 export function collectMoonlight(
   state: AppState,
   localDate: string,
-  draft: RecapDraft & { planForTomorrow?: boolean },
+  draft: RecapDraft & { tomorrow?: readonly TomorrowNote[]; planForTomorrow?: boolean },
   now: Date,
 ): AppState {
   if (moonlightForDate(state, localDate)) return state
 
-  const title = draft.forTomorrow?.trim() ?? ''
-  const plannedGoal: Goal | undefined =
-    draft.planForTomorrow && title
-      ? {
-          id: createId(),
-          title,
-          schedule: 'once',
-          weekdays: [],
-          createdDate: toLocalDate(now),
-          archived: false,
-          scheduledDate: addDaysToLocalDate(localDate, 1),
-        }
-      : undefined
+  // A specific list for tomorrow, written at bedtime, is the version that
+  // helped people fall asleep (Scullin et al. 2018), so up to three notes,
+  // each of which can become one of tomorrow's goals.
+  const notes = (
+    draft.tomorrow ??
+    (draft.forTomorrow ? [{ text: draft.forTomorrow, plan: draft.planForTomorrow === true }] : [])
+  )
+    .map((note) => ({ text: note.text.trim(), plan: note.plan }))
+    .filter((note) => note.text)
+    .slice(0, TOMORROW_NOTES)
+  const plannedGoals: Goal[] = notes
+    .filter((note) => note.plan)
+    .map((note) => ({
+      id: createId(),
+      // A draft restored from an older build is not held to the field's
+      // limit; the note is kept whole, and its goal fits a goal's title.
+      title: note.text.slice(0, TOMORROW_NOTE_LENGTH).trim(),
+      schedule: 'once',
+      weekdays: [],
+      createdDate: toLocalDate(now),
+      archived: false,
+      scheduledDate: addDaysToLocalDate(localDate, 1),
+    }))
 
   const collected = awardMoonlight(
     state,
     localDate,
-    { ...draft, plannedGoalId: plannedGoal?.id },
+    {
+      level: draft.level,
+      wentWell: draft.wentWell,
+      settingDown: draft.settingDown,
+      forTomorrow: notes.map((note) => note.text).join('\n'),
+      plannedGoalId: plannedGoals[0]?.id,
+      plannedGoalIds: plannedGoals.map((goal) => goal.id),
+    },
     now,
   )
-  return plannedGoal
-    ? { ...collected, goals: [...collected.goals, plannedGoal] }
+  return plannedGoals.length
+    ? { ...collected, goals: [...collected.goals, ...plannedGoals] }
     : collected
+}
+
+/** How many notes "Anything for tomorrow?" takes. */
+export const TOMORROW_NOTES = 3
+
+/** The longest a note for tomorrow is: a goal's title, since it can become one. */
+export const TOMORROW_NOTE_LENGTH = 120
+
+/** Every note for tomorrow, a line each, as the journal edits them together. */
+export const TOMORROW_TEXT_LENGTH = TOMORROW_NOTES * (TOMORROW_NOTE_LENGTH + 1) - 1
+
+/** One note for tomorrow, and whether to plan it as a goal. */
+export interface TomorrowNote {
+  text: string
+  plan: boolean
 }
 
 export function updateRecap(state: AppState, entry: RecapEntry, now: Date): AppState {
@@ -403,6 +443,54 @@ export function selectBackdrop(
 export function markReleaseSeen(state: AppState, releaseId: string): AppState {
   if (!state.profile || state.profile.lastSeenReleaseId === releaseId) return state
   return { ...state, profile: { ...state.profile, lastSeenReleaseId: releaseId } }
+}
+
+/** Ask the next Sunlight to tend this plant, or the first one growing again. */
+export function chooseNextPlant(state: AppState, plantId: string | undefined): AppState {
+  if (!state.profile || state.profile.tendFirstPlantId === plantId) return state
+  // Only a plant that is here and still growing can be tended next.
+  if (
+    plantId !== undefined &&
+    !state.plants.some((plant) => plant.id === plantId && plant.growth < MAX_PLANT_GROWTH)
+  ) {
+    return state
+  }
+  return { ...state, profile: { ...state.profile, tendFirstPlantId: plantId } }
+}
+
+/** Make a day gentle, or not; a gentle day ends by itself at midnight. */
+export function setGentleDay(state: AppState, localDate: string | undefined): AppState {
+  if (!state.profile || state.profile.gentleDay === localDate) return state
+  return { ...state, profile: { ...state.profile, gentleDay: localDate } }
+}
+
+/**
+ * Move the gardener's evening: when the recap opens, and when a late night
+ * stops offering the day before. Hours outside the offered choices are ignored.
+ */
+export function setRecapHours(state: AppState, hours: RecapHours): AppState {
+  if (!state.profile) return state
+  if (
+    !RECAP_OPENS_CHOICES.includes(hours.opensHour) ||
+    !RECAP_GRACE_CHOICES.includes(hours.graceEndsHour)
+  ) {
+    return state
+  }
+  const current = recapHoursOf(state.profile)
+  if (
+    current.opensHour === hours.opensHour &&
+    current.graceEndsHour === hours.graceEndsHour
+  ) {
+    return state
+  }
+  return {
+    ...state,
+    profile: {
+      ...state.profile,
+      recapOpensHour: hours.opensHour,
+      recapGraceEndsHour: hours.graceEndsHour,
+    },
+  }
 }
 
 /** Show or hide day counts in the journal. Nothing counted is lost either way. */

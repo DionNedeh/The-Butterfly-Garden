@@ -546,6 +546,24 @@ h1 {
   transform: translateX(2px);
   box-shadow: 0 12px 24px -16px rgba(36, 58, 50, 0.45);
 }
+/* A row under a finger follows it at once; easing is for the snap back. */
+.goal-row.swiping {
+  transition: none;
+}
+.reduce-motion .goal-row {
+  transition: none;
+}
+.reduce-motion .goal-row:hover {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .goal-row {
+    transition: none;
+  }
+  .goal-row:hover {
+    transform: none;
+  }
+}
 .theme-night .goal-row {
   background: linear-gradient(120deg, rgba(24, 50, 64, 0.7), rgba(18, 42, 56, 0.6));
   border-color: rgba(140, 201, 171, 0.16);

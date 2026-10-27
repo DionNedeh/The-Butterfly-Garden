@@ -124,6 +124,26 @@ export interface Profile {
    * many days. Optional, so an older garden reads as counts shown.
    */
   hideDayCounts?: boolean
+  /**
+   * The local date of a gentle day, if today is one: Today shows a few small
+   * goals and no counts until midnight. Optional and self-expiring.
+   */
+  gentleDay?: string
+  /**
+   * The plant the gardener asked the next Sunlight to tend, while it is still
+   * growing. Without it, the first plant still growing is tended.
+   */
+  tendFirstPlantId?: string
+  /**
+   * The hour (12–23) the gardener's evening starts, when the Moonlight recap
+   * opens. Optional: without it the recap opens at 6pm.
+   */
+  recapOpensHour?: number
+  /**
+   * The hour (0–10) a late night ends: until then the recap still offers
+   * the day before. Optional: without it, 4am.
+   */
+  recapGraceEndsHour?: number
 }
 
 /** Image formats a garden image may be stored as. */
@@ -234,10 +254,15 @@ export interface RecapEntry {
   wentWell: string
   /** "What are you setting down?" */
   settingDown: string
-  /** "Anything for tomorrow?" */
+  /**
+   * "Anything for tomorrow?": up to three notes, one per line. A single
+   * string, so a build from before the lines reads them as one note.
+   */
   forTomorrow: string
-  /** Set when the tomorrow note was also planned as a goal. */
+  /** The first note planned as a goal; kept for builds that know only one. */
   plannedGoalId?: string
+  /** Every note planned as a goal, in order. */
+  plannedGoalIds?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -349,9 +374,21 @@ export interface PlantDefinition {
   description: string
 }
 
+/** What kind of reflection a prompt invites. */
+export type ReflectionPromptFamily =
+  | 'noticing'
+  | 'savouring'
+  | 'gratitude'
+  | 'self-compassion'
+  | 'processing'
+  | 'rest'
+  | 'connection'
+  | 'free'
+
 export interface ReflectionPrompt {
   id: string
   text: string
+  family: ReflectionPromptFamily
 }
 
 export interface Observation {

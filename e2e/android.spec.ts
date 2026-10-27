@@ -124,6 +124,25 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(currentPage(page)).toHaveText('Shop')
 
+  // A goal's menu, and then the goal editor, are put away before Today is left.
+  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await page.getByLabel('Add a goal').fill('Water the fern')
+  await page.getByRole('button', { name: 'Add goal' }).click()
+  const more = page.getByRole('button', { name: 'More for Water the fern' })
+  await more.click()
+  await expect(more).toHaveAttribute('aria-expanded', 'true')
+  await pressBack(page)
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+  await expect(currentPage(page)).toHaveText('Today')
+  await more.click()
+  await page.getByRole('group', { name: 'Water the fern options' }).getByRole('button', { name: 'Edit' }).click()
+  await expect(page.getByRole('textbox', { name: /^Edit goal/ })).toBeVisible()
+  await pressBack(page)
+  await expect(page.getByRole('textbox', { name: /^Edit goal/ })).toHaveCount(0)
+  await expect(currentPage(page)).toHaveText('Today')
+  await pressBack(page)
+  await expect(currentPage(page)).toHaveText('Garden')
+
   // A page opened from Settings returns to Settings.
   await mainNav(page)
     .getByRole('button', { name: 'Settings', exact: true })

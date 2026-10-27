@@ -11,16 +11,20 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 
 - Five-level inner weather check-ins with nothing preselected, plus "Not sure
   today", and an editable private journal
-- One-time, daily, and selected-weekday goals, plus skip, snooze and archive,
-  each of them undoable for a few seconds
+- One-time, daily, and selected-weekday goals in compact rows, with skip,
+  snooze, full editing and archive behind a ⋯ menu (and swipes on a touch
+  screen), each of them undoable for a few seconds
+- A gentle day: one switch shows a few small goals and no counts, until midnight
 - A month planner for scheduling one-time goals onto any upcoming day
-- Optional daily reflections drawn from a rotating set of prompts
+- Optional daily reflections from sixty prompts in families, with "Another
+  prompt" and "Write freely"
 - Sunlight rewards capped at five per day, converting to Nectar, and a rhythm
   in the journal: days cared for in the last seven and this month, which a
   missed day never resets, and which Settings can hide
-- Moonlight: from 6 pm (until 4 am on a late night) a short evening recap closes
-  the day, can plan tomorrow's first goal, is kept in the journal, and earns
-  one Stardust, whether or not the day earned any Sunlight
+- Moonlight: from 6 pm (until 4 am on a late night, and both hours can be
+  moved) a short evening recap closes the day, takes up to three notes for
+  tomorrow that can each become a goal, is kept in the journal, and earns one
+  Stardust, whether or not the day earned any Sunlight
 - Stardust, the rarer currency, from bond levels, emergences and closing the
   day, spent in the Boutique's Stardust atelier and on the two most graceful
   flight patterns

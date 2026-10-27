@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { backAction, requestDialogClose } from './backNavigation'
+import { backAction, requestDialogClose, requestDismiss } from './backNavigation'
 
 /** An open dialog, with a stand-in close() since jsdom has none. */
 function openDialog() {
@@ -20,6 +20,26 @@ describe('backAction', () => {
     openDialog()
     const { dialog: top } = openDialog()
     expect(backAction('shop')).toEqual({ kind: 'close-dialog', dialog: top })
+  })
+
+  it('puts away something open in place before leaving the page', () => {
+    const menu = document.createElement('div')
+    menu.setAttribute('data-dismiss-on-back', '')
+    document.body.append(menu)
+    expect(backAction('today')).toEqual({ kind: 'dismiss', element: menu })
+    // A dialog is still the top layer.
+    const { dialog } = openDialog()
+    expect(backAction('today')).toEqual({ kind: 'close-dialog', dialog })
+  })
+
+  it('dismisses as Escape would', () => {
+    const menu = document.createElement('div')
+    const heard = vi.fn((event: KeyboardEvent) => event.key)
+    document.body.append(menu)
+    document.body.addEventListener('keydown', heard)
+    requestDismiss(menu)
+    // It bubbles, so the handler of whatever holds the menu hears it.
+    expect(heard).toHaveReturnedWith('Escape')
   })
 
   it('ignores dialogs that are not open', () => {

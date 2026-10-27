@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react'
 import {
   moodLevels,
   moodNames,
-  reflectionPrompts,
   species,
 } from '../data/content'
 import { formatJournalDate } from '../lib/date'
 import { useLocalDate } from '../hooks/useLocalDate'
 import { moodChoiceOf, moodName, UNSURE_MOOD_NAME, withMoodChoice } from '../lib/mood'
-import { counted } from '../lib/plural'
+import { counted, listed } from '../lib/plural'
+import { TOMORROW_TEXT_LENGTH } from '../lib/gardenActions'
+import { promptById } from '../lib/prompts'
 import { careRhythm } from '../lib/rhythm'
 import type {
   AppState,
@@ -61,10 +62,6 @@ export function JournalView({
   const recapByDate = useMemo(
     () => new Map(state.recaps.map((entry) => [entry.localDate, entry])),
     [state.recaps],
-  )
-  const promptById = useMemo(
-    () => new Map(reflectionPrompts.map((prompt) => [prompt.id, prompt])),
-    [],
   )
   const goalTitleById = useMemo(
     () => new Map(state.goals.map((goal) => [goal.id, goal.title])),
@@ -216,12 +213,16 @@ export function JournalView({
               const mood = moodByDate.get(date)
               const reflection = reflectionByDate.get(date)
               const recap = recapByDate.get(date)
-              const plannedGoalTitle = recap?.plannedGoalId
-                ? goalTitleById.get(recap.plannedGoalId)
-                : undefined
-              const prompt = reflection
-                ? promptById.get(reflection.promptId)
-                : undefined
+              // Every note planned as a goal; an older recap names only one.
+              const plannedGoalTitles = (
+                recap?.plannedGoalIds ?? (recap?.plannedGoalId ? [recap.plannedGoalId] : [])
+              )
+                .map((id) => goalTitleById.get(id))
+                .filter((title): title is string => Boolean(title))
+              const tomorrowNotes = recap?.forTomorrow
+                ? recap.forTomorrow.split('\n').filter((note) => note.trim())
+                : []
+              const prompt = reflection ? promptById(reflection.promptId) : undefined
               return (
                 <article className="card timeline-entry" key={date}>
                   <span className="timeline-dot" aria-hidden="true" />
@@ -380,7 +381,7 @@ export function JournalView({
                         <>
                           <div>
                             <div>
-                              <small>{prompt?.text}</small>
+                              <small>{prompt?.family === 'free' ? 'Written freely' : prompt?.text}</small>
                               <p>{reflection.body}</p>
                             </div>
                           </div>
@@ -496,8 +497,8 @@ export function JournalView({
                                   forTomorrow: event.target.value,
                                 })
                               }
-                              maxLength={280}
-                              rows={2}
+                              maxLength={TOMORROW_TEXT_LENGTH}
+                              rows={3}
                             />
                           </label>
                           <div className="form-actions">
@@ -536,16 +537,27 @@ export function JournalView({
                                   {recap.settingDown}
                                 </p>
                               )}
-                              {recap.forTomorrow && (
+                              {tomorrowNotes.length === 1 && (
                                 <p>
                                   <small>For tomorrow</small>
-                                  {recap.forTomorrow}
+                                  {tomorrowNotes[0]}
                                 </p>
                               )}
-                              {plannedGoalTitle && (
+                              {tomorrowNotes.length > 1 && (
+                                <div>
+                                  <small>For tomorrow</small>
+                                  <ul className="tomorrow-list">
+                                    {tomorrowNotes.map((note, index) => (
+                                      <li key={index}>{note}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {plannedGoalTitles.length > 0 && (
                                 <p className="recap-planned">
                                   <Icon name="today" size={16} />
-                                  Became a goal: {plannedGoalTitle}
+                                  {plannedGoalTitles.length === 1 ? 'Became a goal' : 'Became goals'}:{' '}
+                                  {listed(plannedGoalTitles)}
                                 </p>
                               )}
                             </div>

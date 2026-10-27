@@ -13,9 +13,11 @@ import {
   progressGarden,
   STARTER_SEEDS,
   MOONLIGHT_STARDUST_REWARD,
+  MAX_PLANT_GROWTH,
   moonlightForDate,
   NECTAR_PER_SUNLIGHT,
   nextCompanionName,
+  nextPlantToTend,
   recapForDate,
 } from './progression'
 import { butterflyNames } from '../data/content'
@@ -25,6 +27,27 @@ beforeEach(() => {
     randomUUID: vi.fn(() => `id-${Math.random()}`),
   })
 })
+
+/** A garden of asters at these growths, p1 onwards, tending the chosen one. */
+function plantedGarden(growths: number[], tendFirstPlantId?: string): AppState {
+  return {
+    ...createEmptyState(),
+    profile: {
+      id: 'profile',
+      name: 'Gardener',
+      gardenName: 'Tending Garden',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      reducedMotion: false,
+      ...(tendFirstPlantId === undefined ? {} : { tendFirstPlantId }),
+    },
+    plants: growths.map((growth, index) => ({
+      id: `p${index + 1}`,
+      plantId: 'aster',
+      growth,
+      plantedAt: '2026-06-01T00:00:00.000Z',
+    })),
+  }
+}
 
 describe('garden progression', () => {
   it('caps Sunlight at five unique care activities per day', () => {
@@ -210,6 +233,66 @@ describe('garden progression', () => {
     expect(clockMovedBack.creatures[0].stage).toBe('butterfly')
     expect(clockMovedBack.seeds).toBe(EMERGENCE_SEED_REWARD)
     expect(clockMovedBack.profile?.activeCompanionId).toBe('creature-1')
+  })
+})
+
+describe('choosing the plant Sunlight tends', () => {
+  it('tends the first plant still growing when none was chosen', () => {
+    expect(nextPlantToTend(plantedGarden([3, 1, 0]))).toBe(1)
+    // A garden with no gardener yet tends the same way.
+    expect(nextPlantToTend({ ...plantedGarden([3, 3, 2]), profile: undefined })).toBe(2)
+  })
+
+  it('tends the chosen plant while it is still growing', () => {
+    expect(nextPlantToTend(plantedGarden([1, 0, 2], 'p3'))).toBe(2)
+  })
+
+  it('goes back to the first plant growing once the chosen one is fully grown', () => {
+    expect(nextPlantToTend(plantedGarden([3, 2, MAX_PLANT_GROWTH], 'p3'))).toBe(1)
+  })
+
+  it('goes back to the first plant growing when the chosen one is gone', () => {
+    expect(nextPlantToTend(plantedGarden([3, 0, 1], 'removed-plant'))).toBe(1)
+  })
+
+  it('tends nothing when every plant is grown, chosen or not', () => {
+    expect(nextPlantToTend(plantedGarden([3, 3]))).toBe(-1)
+    expect(nextPlantToTend(plantedGarden([3, 3], 'p2'))).toBe(-1)
+    expect(nextPlantToTend(plantedGarden([]))).toBe(-1)
+  })
+
+  it('grows the chosen plant with the next Sunlight, and leaves the rest alone', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const garden = plantedGarden([0, 1, 0], 'p3')
+    const after = awardSunlight(garden, 'mood:2026-06-13', now)
+    expect(after.plants.map((plant) => plant.growth)).toEqual([0, 1, 1])
+    expect(after.plants[0]).toBe(garden.plants[0])
+    expect(after.plants[1]).toBe(garden.plants[1])
+  })
+
+  it('reveals an egg from the chosen plant when it reaches full bloom', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const garden: AppState = {
+      ...plantedGarden([], 'host'),
+      plants: [
+        { id: 'p1', plantId: 'aster', growth: 0, plantedAt: '2026-06-01T00:00:00.000Z' },
+        { id: 'host', plantId: 'milkweed', growth: 2, plantedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    }
+    const after = awardSunlight(garden, 'goal:one', now)
+    expect(after.plants.map((plant) => plant.growth)).toEqual([0, MAX_PLANT_GROWTH])
+    expect(after.creatures.at(-1)).toMatchObject({
+      speciesId: 'monarch',
+      stage: 'egg',
+      sourcePlantId: 'host',
+    })
+  })
+
+  it('moves on to the first plant growing after the chosen one blooms', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const bloomed = awardSunlight(plantedGarden([0, 1, 2], 'p3'), 'activity-1', now)
+    const next = awardSunlight(bloomed, 'activity-2', now)
+    expect(next.plants.map((plant) => plant.growth)).toEqual([1, 1, MAX_PLANT_GROWTH])
   })
 })
 

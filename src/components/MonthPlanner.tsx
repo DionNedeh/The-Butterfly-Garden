@@ -1,10 +1,11 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useId, useMemo, useState } from 'react'
 import {
   isGoalPlannedOn,
   isGoalSkipped,
   localDateToNoon,
   monthDates,
 } from '../lib/date'
+import { counted } from '../lib/plural'
 import type { AppState, Goal, MoodEntry } from '../types'
 import { Icon } from './Icons'
 
@@ -51,6 +52,11 @@ const EMPTY_DAY: DayInfo = {
   sunlight: 0,
 }
 
+/** Whether the screen is phone-sized, where the month starts folded. */
+function phoneSized(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(max-width: 620px)').matches
+}
+
 export const MonthPlanner = memo(function MonthPlanner({
   state,
   today,
@@ -69,6 +75,11 @@ export const MonthPlanner = memo(function MonthPlanner({
   })
   const [selectedDate, setSelectedDate] = useState(today)
   const [planTitle, setPlanTitle] = useState('')
+  // Folded on a phone, where the month under a dozen goals is a long scroll;
+  // open wherever there is room for it beside everything else.
+  const [open, setOpen] = useState(() => !phoneSized())
+  const bodyId = useId()
+  const [showRoutines, setShowRoutines] = useState(false)
 
   const dates = useMemo(
     () => monthDates(yearMonth.year, yearMonth.month),
@@ -141,6 +152,11 @@ export const MonthPlanner = memo(function MonthPlanner({
     ...(byDate.get(selectedDate) ?? EMPTY_DAY),
     planned: selectedPlanned,
   }
+  // One-time goals are what planning is for; routines come round anyway, so
+  // a day lists them only when asked.
+  const plannedOnce = selected.planned.filter((goal) => goal.schedule === 'once')
+  const routines = selected.planned.filter((goal) => goal.schedule !== 'once')
+  const listed = showRoutines ? selected.planned : plannedOnce
   const selectedLabel = dayLabelFormat.format(localDateToNoon(selectedDate))
   const isFutureOrToday = selectedDate >= today
 
@@ -151,148 +167,178 @@ export const MonthPlanner = memo(function MonthPlanner({
           <p className="eyebrow">Plan the month</p>
           <h2 id="planner-title">Calendar</h2>
         </div>
-        <div className="month-switch">
+        <div className="month-planner-actions">
+          {open && (
+            <div className="month-switch">
+              <button
+                className="secondary-button compact"
+                onClick={() => shiftMonth(-1)}
+                aria-label="Previous month"
+              >
+                ←
+              </button>
+              <strong>{monthLabel}</strong>
+              <button
+                className="secondary-button compact"
+                onClick={() => shiftMonth(1)}
+                aria-label="Next month"
+              >
+                →
+              </button>
+            </div>
+          )}
+          {/* Stays put either way, so focus is never left behind. */}
           <button
             className="secondary-button compact"
-            onClick={() => shiftMonth(-1)}
-            aria-label="Previous month"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={() => setOpen((value) => !value)}
           >
-            ←
-          </button>
-          <strong>{monthLabel}</strong>
-          <button
-            className="secondary-button compact"
-            onClick={() => shiftMonth(1)}
-            aria-label="Next month"
-          >
-            →
+            {open ? 'Hide the month' : 'Show the month'}
           </button>
         </div>
       </div>
-      <p className="section-explainer">
-        Dots show goals landing on each day; suns and skies show how past
-        days went. Pick any upcoming day to plan a one-time goal for it.
-      </p>
+      <div id={bodyId}>
+        {open && (
+          <>
+            <p className="section-explainer">
+              Dots show goals landing on each day; suns and skies show how past
+              days went. Pick any upcoming day to plan a one-time goal for it.
+            </p>
 
-      {/* Not role="grid": that promises row/gridcell structure this flat CSS
-          grid does not have, which axe flags as critical. Each day is a button
-          that announces its own date and counts, so a labelled group is both
-          honest and easier to navigate. */}
-      <div className="calendar-grid" role="group" aria-label={monthLabel}>
-        {weekdayHeadings.map((day) => (
-          <span className="calendar-heading" key={day} aria-hidden="true">
-            {day}
-          </span>
-        ))}
-        {Array.from({ length: leadingBlanks }, (_, index) => (
-          <span key={`blank-${index}`} aria-hidden="true" />
-        ))}
-        {dates.map((date) => {
-          const info = dayInfo(date)
-          const dayNumber = Number(date.slice(-2))
-          const done = info.completions
-          const isPast = date < today
-          return (
-            <button
-              key={date}
-              className={[
-                'calendar-day',
-                date === today ? 'today' : '',
-                date === selectedDate ? 'selected' : '',
-                isPast ? 'past' : '',
-              ].join(' ')}
-              aria-pressed={date === selectedDate}
-              aria-label={`${dayLabelFormat.format(
-                localDateToNoon(date),
-              )}: ${info.planned.length} goals, ${done} completed`}
-              onClick={() => setSelectedDate(date)}
-            >
-              <span className="calendar-day-number">{dayNumber}</span>
-              <span className="calendar-day-marks" aria-hidden="true">
-                {info.mood && (
-                  <span className="calendar-mood">
-                    {info.mood.unsure ? UNSURE_GLYPH : moodGlyphs[info.mood.level]}
-                  </span>
-                )}
-                {info.sunlight > 0 && <span className="calendar-sun" />}
-              </span>
-              {info.planned.length > 0 && (
-                <span className="calendar-goal-dots" aria-hidden="true">
-                  {info.planned.slice(0, 4).map((goal) => (
-                    <span
-                      key={goal.id}
-                      className={
-                        info.completedGoalIds.has(goal.id)
-                          ? 'done'
-                          : isGoalSkipped(goal, date)
-                            ? 'skipped'
-                            : ''
-                      }
-                    />
-                  ))}
+            {/* Not role="grid": that promises row/gridcell structure this flat CSS
+                grid does not have, which axe flags as critical. Each day is a button
+                that announces its own date and counts, so a labelled group is both
+                honest and easier to navigate. */}
+            <div className="calendar-grid" role="group" aria-label={monthLabel}>
+              {weekdayHeadings.map((day) => (
+                <span className="calendar-heading" key={day} aria-hidden="true">
+                  {day}
                 </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
+              ))}
+              {Array.from({ length: leadingBlanks }, (_, index) => (
+                <span key={`blank-${index}`} aria-hidden="true" />
+              ))}
+              {dates.map((date) => {
+                const info = dayInfo(date)
+                const dayNumber = Number(date.slice(-2))
+                const done = info.completions
+                const isPast = date < today
+                return (
+                  <button
+                    key={date}
+                    className={[
+                      'calendar-day',
+                      date === today ? 'today' : '',
+                      date === selectedDate ? 'selected' : '',
+                      isPast ? 'past' : '',
+                    ].join(' ')}
+                    aria-pressed={date === selectedDate}
+                    aria-label={`${dayLabelFormat.format(
+                      localDateToNoon(date),
+                    )}: ${info.planned.length} goals, ${done} completed`}
+                    onClick={() => setSelectedDate(date)}
+                  >
+                    <span className="calendar-day-number">{dayNumber}</span>
+                    <span className="calendar-day-marks" aria-hidden="true">
+                      {info.mood && (
+                        <span className="calendar-mood">
+                          {info.mood.unsure ? UNSURE_GLYPH : moodGlyphs[info.mood.level]}
+                        </span>
+                      )}
+                      {info.sunlight > 0 && <span className="calendar-sun" />}
+                    </span>
+                    {info.planned.length > 0 && (
+                      <span className="calendar-goal-dots" aria-hidden="true">
+                        {info.planned.slice(0, 4).map((goal) => (
+                          <span
+                            key={goal.id}
+                            className={
+                              info.completedGoalIds.has(goal.id)
+                                ? 'done'
+                                : isGoalSkipped(goal, date)
+                                  ? 'skipped'
+                                  : ''
+                            }
+                          />
+                        ))}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
 
-      <div className="calendar-day-detail">
-        <h3>{selectedLabel}</h3>
-        {selected.planned.length === 0 ? (
-          <p className="empty-copy">Nothing planned for this day yet.</p>
-        ) : (
-          <ul className="calendar-goal-list">
-            {selected.planned.map((goal) => {
-              const done = selected.completedGoalIds.has(goal.id)
-              const skipped = isGoalSkipped(goal, selectedDate)
-              return (
-                <li key={goal.id} className={done ? 'done' : skipped ? 'skipped' : ''}>
-                  <span>{goal.title}</span>
-                  <small>
-                    {done
-                      ? 'Completed'
-                      : skipped
-                        ? 'Skipped'
-                        : goal.schedule === 'once'
-                          ? 'Planned'
-                          : 'Routine'}
-                  </small>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        {selected.sunlight > 0 && (
-          <p className="calendar-sunlight-note">
-            <Icon name="sun" size={16} /> {selected.sunlight} Sunlight gathered.
-          </p>
-        )}
-        {isFutureOrToday ? (
-          <form
-            className="calendar-plan-form"
-            onSubmit={(event) => {
-              event.preventDefault()
-              if (!planTitle.trim()) return
-              onPlanGoal(planTitle, selectedDate)
-              setPlanTitle('')
-            }}
-          >
-            <label>
-              Plan a goal for this day
-              <input
-                value={planTitle}
-                onChange={(event) => setPlanTitle(event.target.value)}
-                placeholder="e.g. Water the balcony plants"
-                maxLength={80}
-              />
-            </label>
-            <button className="secondary-button compact" type="submit">
-              Add to {selectedLabel.split(',')[0]}
-            </button>
-          </form>
-        ) : (
-          <p className="empty-copy">Past days are for remembering, not planning.</p>
+            <div className="calendar-day-detail">
+              <h3>{selectedLabel}</h3>
+              {listed.length === 0 && routines.length === 0 ? (
+                <p className="empty-copy">Nothing planned for this day yet.</p>
+              ) : (
+                <ul className="calendar-goal-list">
+                  {listed.map((goal) => {
+                    const done = selected.completedGoalIds.has(goal.id)
+                    const skipped = isGoalSkipped(goal, selectedDate)
+                    return (
+                      <li key={goal.id} className={done ? 'done' : skipped ? 'skipped' : ''}>
+                        <span>{goal.title}</span>
+                        <small>
+                          {done
+                            ? 'Completed'
+                            : skipped
+                              ? 'Skipped'
+                              : goal.schedule === 'once'
+                                ? 'Planned'
+                                : 'Routine'}
+                        </small>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {routines.length > 0 && (
+                <button
+                  className="text-button"
+                  aria-expanded={showRoutines}
+                  onClick={() => setShowRoutines((value) => !value)}
+                >
+                  {showRoutines
+                    ? 'Hide routine goals'
+                    : `+ ${counted(routines.length, 'routine goal', 'routine goals')}`}
+                </button>
+              )}
+              {selected.sunlight > 0 && (
+                <p className="calendar-sunlight-note">
+                  <Icon name="sun" size={16} /> {selected.sunlight} Sunlight gathered.
+                </p>
+              )}
+              {isFutureOrToday ? (
+                <form
+                  className="calendar-plan-form"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    if (!planTitle.trim()) return
+                    onPlanGoal(planTitle, selectedDate)
+                    setPlanTitle('')
+                  }}
+                >
+                  <label>
+                    Plan a goal for this day
+                    <input
+                      value={planTitle}
+                      onChange={(event) => setPlanTitle(event.target.value)}
+                      placeholder="e.g. Water the balcony plants"
+                      maxLength={80}
+                    />
+                  </label>
+                  <button className="secondary-button compact" type="submit">
+                    Add to {selectedLabel.split(',')[0]}
+                  </button>
+                </form>
+              ) : (
+                <p className="empty-copy">Past days are for remembering, not planning.</p>
+              )}
+            </div>
+          </>
         )}
       </div>
     </section>

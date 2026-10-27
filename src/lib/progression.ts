@@ -223,6 +223,23 @@ export function progressGarden(state: AppState, now = new Date()): AppState {
 }
 
 /**
+ * The index of the plant the next Sunlight will grow, or -1 when every plant
+ * is grown: the one the gardener chose while it still grows, otherwise the
+ * first plant still growing. Today names it, so which plant reveals the next
+ * egg is never a guess.
+ */
+export function nextPlantToTend(state: Pick<AppState, 'plants' | 'profile'>): number {
+  const chosen = state.profile?.tendFirstPlantId
+  if (chosen) {
+    const index = state.plants.findIndex(
+      (plant) => plant.id === chosen && plant.growth < MAX_PLANT_GROWTH,
+    )
+    if (index !== -1) return index
+  }
+  return state.plants.findIndex((plant) => plant.growth < MAX_PLANT_GROWTH)
+}
+
+/**
  * Self-care Sunlight: capped daily, converts to Nectar, grows one plant per
  * award. When a host plant reaches full bloom it may reveal a butterfly egg.
  */
@@ -250,7 +267,7 @@ export function awardSunlight(
   // nothing to write there.
   let plants = state.plants
   let grownPlant: PlantInstance | undefined
-  const growing = state.plants.findIndex((plant) => plant.growth < MAX_PLANT_GROWTH)
+  const growing = nextPlantToTend(state)
   if (growing !== -1) {
     grownPlant = { ...state.plants[growing], growth: state.plants[growing].growth + 1 }
     plants = [...state.plants]
@@ -278,6 +295,7 @@ export interface RecapDraft {
   settingDown?: string
   forTomorrow?: string
   plannedGoalId?: string
+  plannedGoalIds?: string[]
 }
 
 /** The Moonlight already collected for a day, if any. */
@@ -325,6 +343,7 @@ export function awardMoonlight(
     settingDown: draft.settingDown?.trim() ?? '',
     forTomorrow: draft.forTomorrow?.trim() ?? '',
     ...(draft.plannedGoalId ? { plannedGoalId: draft.plannedGoalId } : {}),
+    ...(draft.plannedGoalIds?.length ? { plannedGoalIds: draft.plannedGoalIds } : {}),
     createdAt: nowIso,
     updatedAt: nowIso,
   }

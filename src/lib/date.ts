@@ -56,14 +56,43 @@ export function daysBetweenLocalDates(from: string, to: string): number {
   return Math.round((utc(to) - utc(from)) / 86_400_000)
 }
 
-/** The hour the Moonlight recap becomes available, in local time. */
+const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * A real calendar day written as YYYY-MM-DD, the app's only date shape. A
+ * date field can be typed with a five-digit year, which would then compare
+ * wrongly as text, so every date the gardener enters is checked with this.
+ */
+export function isLocalDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !LOCAL_DATE.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  )
+}
+
+/** The latest a date field offers, so a five-digit year cannot be typed. */
+export const LATEST_LOCAL_DATE = '9999-12-31'
+
+/** The hour the Moonlight recap becomes available, in local time, by default. */
 export const RECAP_OPENS_HOUR = 18
 
-/** That hour as the gardener's clock shows it: "6 PM", or "18" in 24-hour locales. */
-export function recapOpensAt(locale?: string): string {
-  return new Intl.DateTimeFormat(locale, { hour: 'numeric' }).format(
-    new Date(2000, 0, 1, RECAP_OPENS_HOUR),
-  )
+const hourFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric' })
+
+/** An hour as the gardener's clock shows it: "6 PM", or "18" in 24-hour locales. */
+export function formatHour(hour: number, locale?: string): string {
+  // Settings lists two dozen hours on every render, so the gardener's own
+  // locale uses one formatter built once, like the others in this file.
+  const format = locale ? new Intl.DateTimeFormat(locale, { hour: 'numeric' }) : hourFormat
+  return format.format(new Date(2000, 0, 1, hour))
+}
+
+/** The hour the recap opens, as the gardener's clock shows it. */
+export function recapOpensAt(hour = RECAP_OPENS_HOUR, locale?: string): string {
+  return formatHour(hour, locale)
 }
 
 /**
@@ -75,6 +104,45 @@ export function recapOpensAt(locale?: string): string {
  * through no fault of their own.
  */
 export const RECAP_GRACE_ENDS_HOUR = 4
+
+/**
+ * When a gardener's evening starts and their late night ends. A shift worker
+ * or a night owl can move both (Settings → Your rhythm). The two ranges never
+ * meet, so an hour is always either evening, grace, or neither.
+ */
+export interface RecapHours {
+  opensHour: number
+  graceEndsHour: number
+}
+
+export const DEFAULT_RECAP_HOURS: RecapHours = {
+  opensHour: RECAP_OPENS_HOUR,
+  graceEndsHour: RECAP_GRACE_ENDS_HOUR,
+}
+
+/** Evenings that can be chosen: from noon to 11pm. */
+export const RECAP_OPENS_CHOICES: readonly number[] = Array.from({ length: 12 }, (_, i) => 12 + i)
+
+/** Late nights that can be chosen: the recap keeps offering yesterday until midnight…10am. */
+export const RECAP_GRACE_CHOICES: readonly number[] = Array.from({ length: 11 }, (_, i) => i)
+
+/** The gardener's own hours where they chose them, the defaults otherwise. */
+export function recapHoursOf(
+  profile: { recapOpensHour?: number; recapGraceEndsHour?: number } | undefined,
+): RecapHours {
+  const opensHour = profile?.recapOpensHour
+  const graceEndsHour = profile?.recapGraceEndsHour
+  return {
+    opensHour:
+      opensHour !== undefined && RECAP_OPENS_CHOICES.includes(opensHour)
+        ? opensHour
+        : RECAP_OPENS_HOUR,
+    graceEndsHour:
+      graceEndsHour !== undefined && RECAP_GRACE_CHOICES.includes(graceEndsHour)
+        ? graceEndsHour
+        : RECAP_GRACE_ENDS_HOUR,
+  }
+}
 
 export type RecapWindowState = 'evening' | 'grace' | 'waiting'
 
@@ -93,12 +161,15 @@ export interface RecapWindow {
  * has nothing else to ask -- so an evening is whatever the device calls one,
  * including after a flight.
  */
-export function recapWindow(now = new Date()): RecapWindow {
+export function recapWindow(
+  now = new Date(),
+  { opensHour, graceEndsHour }: RecapHours = DEFAULT_RECAP_HOURS,
+): RecapWindow {
   const hour = now.getHours()
-  if (hour >= RECAP_OPENS_HOUR) {
+  if (hour >= opensHour) {
     return { open: true, targetDate: toLocalDate(now), state: 'evening' }
   }
-  if (hour < RECAP_GRACE_ENDS_HOUR) {
+  if (hour < graceEndsHour) {
     return {
       open: true,
       targetDate: addDaysToLocalDate(toLocalDate(now), -1),
