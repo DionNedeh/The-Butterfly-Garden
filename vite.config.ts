@@ -66,26 +66,26 @@ export default defineConfig(({ mode }) => {
       __BUILD_ID__: JSON.stringify(buildId(mode)),
     },
     base: android ? '/' : WEB_BASE,
-    build: android
-      ? {
-          outDir: 'dist-android',
-          rolldownOptions: {
-            output: {
-              // The garden's storage in a chunk of its own beside the entry,
-              // as the web build already splits it: it still loads with the
-              // app, but the entry stays under its cap (check-budgets.mjs).
-              codeSplitting: {
-                groups: [
-                  {
-                    name: 'repository',
-                    test: /[\\/]src[\\/]repository[\\/]|[\\/]node_modules[\\/]idb[\\/]/,
-                  },
-                ],
+    build: {
+      ...(android ? { outDir: 'dist-android' } : {}),
+      rolldownOptions: {
+        output: {
+          // The garden's storage in a chunk of its own beside the entry, in
+          // both builds: it still loads with the app, but the entry stays
+          // under its cap (check-budgets.mjs) however the rest of the graph
+          // is split, and the web build no longer repeats what the chunks
+          // around it already hold.
+          codeSplitting: {
+            groups: [
+              {
+                name: 'repository',
+                test: /[\\/]src[\\/]repository[\\/]|[\\/]node_modules[\\/]idb[\\/]/,
               },
-            },
+            ],
           },
-        }
-      : {},
+        },
+      },
+    },
     // Scan only the application, not local review HTML or archived checkouts.
     optimizeDeps: {
       entries: ['index.html'],
