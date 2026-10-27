@@ -176,3 +176,54 @@ test('a sighting is changed, crossed out, and put back with Undo', async ({ page
   await expect(book.getByRole('heading', { level: 3, name: 'Milkweed' })).toBeFocused()
   expect(await seriousViolations(page, 'Journal field book, after Undo')).toEqual([])
 })
+
+test('the sighting form opened on a plant far down its list shows it chosen, a dot beside its name, at the largest text by night', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 740 })
+  await enterGarden(page)
+  // The UK and Europe's own plants come first, which puts Milkweed far down.
+  await goTo(page, 'Settings')
+  await page.getByLabel('My region').selectOption('europe')
+  await page.getByRole('group', { name: 'Text size' }).getByRole('radio', { name: /^Largest/ }).check()
+  await page.getByRole('button', { name: 'Switch to night mode' }).click()
+  await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
+
+  await goTo(page, 'Guide')
+  await monarchCard(page).getByRole('button', { name: 'Log a sighting of Milkweed' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
+  const heading = dialog.getByRole('heading', { name: 'Log a sighting' })
+  await expect(heading).toBeFocused()
+  const milkweed = dialog.getByRole('radio', { name: /^Milkweed/ })
+  await expect(milkweed).toBeChecked()
+
+  // The list has scrolled itself to show the choice whole; nothing else has,
+  // so the focused heading is still in sight at the dialog's top.
+  const list = dialog.locator('.sighting-choice-list')
+  expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0)
+  await expect(heading).toBeInViewport()
+  const shown = await list.evaluate((element) => {
+    const top = element.getBoundingClientRect().top + element.clientTop
+    const row = element.querySelector('input:checked')!.closest('label')!.getBoundingClientRect()
+    return { above: top - row.top, below: row.bottom - (top + element.clientHeight) }
+  })
+  expect(shown.above).toBeLessThanOrEqual(0.5)
+  expect(shown.below).toBeLessThanOrEqual(0.5)
+
+  // Every radio is a small dot, its name right beside it, not a text
+  // field's full width pushing the name into a narrow column.
+  const radios = await dialog.locator('input[type="radio"]').evaluateAll((inputs) =>
+    inputs.map((input) => {
+      const dot = input.getBoundingClientRect()
+      const name = input.nextElementSibling?.getBoundingClientRect()
+      return { width: dot.width, gap: name ? name.left - dot.right : 0 }
+    }),
+  )
+  expect(radios.length).toBeGreaterThan(20)
+  for (const { width, gap } of radios) {
+    expect(width).toBeLessThanOrEqual(24)
+    expect(gap).toBeLessThanOrEqual(16)
+  }
+  expect(await seriousViolations(page, 'Sighting form at the largest text, by night')).toEqual([])
+})

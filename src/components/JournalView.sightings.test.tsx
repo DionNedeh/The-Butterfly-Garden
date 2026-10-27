@@ -67,6 +67,19 @@ describe('the field notes and the wild', LAZY_TEST, () => {
     expect(card('Queen').querySelector('.pressed-flower')).toBeNull()
   })
 
+  it('draws a species not yet welcomed as an image with a name, and names nothing that may not be named', async () => {
+    const user = renderJournal()
+    await user.click(screen.getByText('Butterflies welcomed'))
+    const admiral = card('Red Admiral')
+    expect(within(admiral).getByRole('img', { name: 'Not yet discovered' })).toHaveClass('unknown-butterfly')
+    // A div or span with no role of its own may not carry a name: axe counts
+    // one as a serious violation (aria-prohibited-attr).
+    const grid = admiral.closest('.species-grid')!
+    const named = [...grid.querySelectorAll('[aria-label]')]
+    expect(named.length).toBeGreaterThan(20)
+    expect(named.filter((element) => /^(DIV|SPAN)$/.test(element.tagName) && !element.hasAttribute('role'))).toEqual([])
+  })
+
   it('opens the field book with the field notes, once there is a way to change it', async () => {
     const user = renderJournal()
     expect(screen.queryByRole('heading', { name: 'Seen in the wild' })).toBeNull()

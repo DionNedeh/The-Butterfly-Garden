@@ -299,8 +299,11 @@ export function JournalView({
                       label={definition.commonName}
                     />
                   ) : (
+                    // An image, as a welcomed one's drawing is: a plain div may
+                    // not be named, and axe counts a name on one as serious.
                     <div
                       className="unknown-butterfly"
+                      role="img"
                       aria-label="Not yet discovered"
                     >
                       <span className="unknown-wing unknown-wing-left" />
