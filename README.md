@@ -57,7 +57,10 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
   off to the phone, reachable from Settings, the Guide and a stormy check-in
 - Backup and restore to a JSON file including your personal backdrop images
 - IndexedDB persistence with no account, analytics, or cloud transfer
-- Installable offline PWA and GitHub Pages deployment
+- Installable offline PWA and GitHub Pages deployment, with a one-time guide
+  to the Home Screen on iPhone and iPad, an hourly look for updates while it
+  is open, *Update now* reloading every open tab together, and *What's new*
+  opening once after an update
 - An Android app for Google Play, built with Capacitor from the same code
 - Reduced-motion, night mode (by hand, following the device, or following the
   evening), three text sizes, and responsive mobile support

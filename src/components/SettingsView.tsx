@@ -17,12 +17,11 @@ import { canShareFile, shareTextFile } from '../lib/shareFile'
 import { isAndroidApp } from '../lib/platform'
 import {
   formatBytes,
-  isAppleMobileBrowser,
-  isInstalledApp,
   requestPersistentStorage,
   storageStatus,
   type StorageStatus,
 } from '../lib/storage'
+import { homeScreenAdvice } from '../lib/install'
 import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
@@ -32,7 +31,7 @@ import { motionPreference, type MotionPreference } from '../lib/motion'
 import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
 import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
-import { releaseName } from '../data/releases'
+import { releaseName } from '../data/currentRelease'
 import { soundVolumeOf } from '../lib/sound'
 import { SoundSwitches, SoundVolume } from './SoundControls'
 import './settings.css'
@@ -339,6 +338,8 @@ export function SettingsView({
   const [canShareBackup] = useState(() =>
     canShareFile(datedFileName(''), 'application/json'),
   )
+  /** iPhone and iPad, not yet on the Home Screen: how to put it there. */
+  const [homeScreen] = useState(homeScreenAdvice)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Inline rather than isAndroidApp(): the bundler folds only an inline
   // check, which keeps the Android-only cards and Play calls out of the PWA.
@@ -1084,24 +1085,24 @@ export function SettingsView({
                 `The garden and the app use about ${formatBytes(storage.usage)} here.`}
             </p>
             {storage.protection === 'best-effort' && (
-              <>
-                {isAppleMobileBrowser() && !isInstalledApp() && (
-                  <p>
-                    On iPhone and iPad, Safari clears a site's storage after
-                    seven days without a visit. Add the garden to your Home
-                    Screen (Share → Add to Home Screen) to keep it, and keep a
-                    backup too.
-                  </p>
-                )}
-                <button
-                  className="text-button"
-                  onClick={() => void askToKeepStorage()}
-                >
-                  Ask the browser again
-                </button>
-              </>
+              <button
+                className="text-button"
+                onClick={() => void askToKeepStorage()}
+              >
+                Ask the browser again
+              </button>
             )}
           </div>
+        )}
+        {/* The garden's Home Screen guide is shown once; this line stays,
+            whatever the browser says about storage, until it agrees to keep
+            the garden or the garden is on the Home Screen. */}
+        {!android && homeScreen && storage && storage.protection !== 'protected' && (
+          <p className="settings-note">
+            {homeScreen === 'safari'
+              ? 'On iPhone and iPad, Safari may clear what a website keeps after seven days of use without a visit. Add the garden to your Home Screen to keep it (Share, then Add to Home Screen, then Add), and keep a backup too.'
+              : 'On iPhone and iPad, a browser may clear what a website keeps after seven days of use without a visit. Add the garden to your Home Screen to keep it (your browser’s Share menu, then Add to Home Screen, then Add), and keep a backup too.'}
+          </p>
         )}
       </section>
 

@@ -974,6 +974,15 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     },
 
     /**
+     * Settles once every write already asked for has finished, whether it
+     * was kept or refused. An update's reload waits on it, so a change made
+     * a moment before is never cut off half-written.
+     */
+    async settled(): Promise<void> {
+      await queue
+    },
+
+    /**
      * Write a whole garden, replacing whatever was stored.
      *
      * `save` writes only what changed, which is right for an edit and wrong

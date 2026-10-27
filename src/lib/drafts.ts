@@ -16,6 +16,8 @@ import { addDaysToLocalDate, toLocalDate } from './date'
  */
 
 let drafts: Drafts = {}
+/** Whether the stored drafts have been read, so a missing one means none. */
+let loaded = false
 const listeners = new Set<() => void>()
 let writeTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -34,12 +36,15 @@ function scheduleWrite() {
   }, WRITE_DELAY_MS)
 }
 
-/** Write any pending draft now, for example as the page is being hidden. */
-export function flushDrafts() {
-  if (writeTimer === undefined) return
+/**
+ * Write any pending draft now, for example as the page is being hidden.
+ * Settles once it is written, so a reload can wait for it.
+ */
+export function flushDrafts(): Promise<void> {
+  if (writeTimer === undefined) return Promise.resolve()
   clearTimeout(writeTimer)
   writeTimer = undefined
-  void gardenRepository.writeDrafts(drafts)
+  return gardenRepository.writeDrafts(drafts)
 }
 
 /** A day named in a draft's key, as in `reflection:2026-10-26:…`. */
@@ -73,6 +78,7 @@ export async function loadDrafts(): Promise<void> {
   const { kept, dropped } = withoutOldDays(stored, toLocalDate())
   // Anything typed while the read was in flight wins over what was stored.
   drafts = { ...kept, ...drafts }
+  loaded = true
   emit()
   if (dropped) scheduleWrite()
 }
@@ -97,11 +103,15 @@ export function clearDraft(...keys: string[]) {
   scheduleWrite()
 }
 
-/** Forget every draft, as deleting the garden does. */
+/**
+ * Forget every draft, as deleting the garden does. What was read is
+ * forgotten too, so the garden begun next starts as one not yet read.
+ */
 export function resetDrafts() {
   if (writeTimer !== undefined) clearTimeout(writeTimer)
   writeTimer = undefined
   drafts = {}
+  loaded = false
   emit()
 }
 
@@ -114,8 +124,21 @@ function subscribe(listener: () => void) {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushDrafts()
+    if (document.visibilityState === 'hidden') void flushDrafts()
   })
+}
+
+/**
+ * Whether the stored drafts have been read. Until then a draft that is not
+ * there may simply not have arrived, so something shown only while a draft
+ * is missing (a card put away for good) waits for this.
+ */
+export function useDraftsLoaded(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => loaded,
+    () => false,
+  )
 }
 
 /**

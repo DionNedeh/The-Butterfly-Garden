@@ -3,7 +3,7 @@ import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
 import './android.css'
-import { currentRelease, hasUnseenRelease, releaseName } from './data/releases'
+import { currentRelease, hasUnseenRelease, releaseName } from './data/currentRelease'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
 import { BottomNav, PrimaryNav } from './components/Navigation'
@@ -11,7 +11,6 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { RecoveryScreen } from './components/RecoveryScreen'
 import { ViewProblem } from './components/ViewProblem'
 import { SplashScreen } from './components/SplashScreen'
-import { UpdatePrompt } from './components/UpdatePrompt'
 
 /**
  * The garden and Today are what the app opens on; everything else is fetched
@@ -69,6 +68,15 @@ const NoticesView = lazy(() =>
 const SupportView = lazy(() =>
   import('./components/SupportView').then((m) => ({ default: m.SupportView })),
 )
+// The offer of a new version, and the hourly look for one, arrive once the
+// garden is on screen. A chunk that cannot be fetched shows nothing, rather
+// than taking the garden down with it.
+const UpdatePrompt = lazy(() =>
+  import('./components/UpdatePrompt').then(
+    (m) => ({ default: m.UpdatePrompt }),
+    () => ({ default: () => null }),
+  ),
+)
 
 /** What the support page's own back button says, for the page that opened it. */
 const SUPPORT_BACK_LABELS: Partial<Record<AppView, string>> = {
@@ -82,6 +90,8 @@ import { useEffectiveTheme } from './hooks/useEffectiveTheme'
 import { useFadeOut, type FadeOutMinutes } from './hooks/useFadeOut'
 import { useGardenState, type StarterGoal } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
+import { useWhatsNewOnce } from './hooks/useWhatsNewOnce'
+import { followUpdates } from './lib/appUpdate'
 import { useRecapWindow } from './hooks/useRecapWindow'
 import { usePassStatus } from './hooks/usePassStatus'
 import { setPassStatus, trackPassStatus } from './lib/passEntitlement'
@@ -386,6 +396,26 @@ function App() {
       window.removeEventListener('beforeinstallprompt', handleInstall)
     }
   }, [])
+
+  // When another tab applies an update, this one reloads with it, whatever
+  // it shows (lib/appUpdate). The Android app has one window and no service
+  // worker; the check is inline so its build leaves all of this out.
+  useEffect(
+    () => (import.meta.env.VITE_PLATFORM === 'android' ? undefined : followUpdates()),
+    [],
+  )
+
+  // After an update, What's new opens by itself once (hooks/useWhatsNewOnce).
+  useWhatsNewOnce({
+    screen:
+      garden.loading || !splashDone ? 'loading' : garden.state?.profile ? 'garden' : 'no-garden',
+    readOnly: garden.persistence.readOnly,
+    lastSeenReleaseId: garden.state?.profile?.lastSeenReleaseId,
+    onOpen: () => {
+      garden.markReleaseSeen(currentRelease.id)
+      setView('whats-new')
+    },
+  })
 
   if (garden.loading || !splashDone) {
     return <SplashScreen />
@@ -909,7 +939,11 @@ function App() {
       </main>
 
       <BottomNav items={navItems} current={activeView} onNavigate={setView} />
-      <UpdatePrompt />
+      {import.meta.env.VITE_PLATFORM !== 'android' && (
+        <Suspense fallback={null}>
+          <UpdatePrompt />
+        </Suspense>
+      )}
     </div>
   )
 }
