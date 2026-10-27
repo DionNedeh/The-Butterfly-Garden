@@ -54,6 +54,7 @@ import {
   wearOutfitPreset,
   type WearLookResult,
 } from '../lib/wardrobe'
+import type { ChangeSightings } from '../lib/sightings'
 import { gardenRepository } from '../repository/gardenRepository'
 import { storedVersionOf } from '../repository/validateGarden'
 import type {
@@ -195,7 +196,25 @@ export function useGardenState() {
     /** Make a purchase and say how it went. */
     const purchase = (buy: (current: AppState) => PurchaseResult): PurchaseOutcome =>
       settle(buy, { kind: 'unavailable', reason: 'unknown' })
+    /**
+     * Change the field book's sightings, and say whether the garden took it.
+     * The field book's own rules (lib/sightings, fieldBookActions) arrive
+     * with the pages that log a sighting, never with the garden's first
+     * load; this applies what they work out, on the newest garden, as a
+     * purchase is. Only the sightings can change here: a sighting earns
+     * nothing.
+     */
+    const changeSightings: ChangeSightings = (change) => {
+      const now = new Date()
+      const run = (current: AppState) => {
+        const sightings = change(current.sightings, now)
+        const state = sightings === current.sightings ? current : { ...current, sightings }
+        return { state, outcome: state !== current }
+      }
+      return settle(run, false)
+    }
     return {
+      changeSightings,
       /**
        * Make the garden, with any starter goals chosen on the way in. They
        * are added by the same reducer as a goal added on Today, as daily
@@ -504,17 +523,25 @@ export function useGardenState() {
        * of it would be an empty file that a later restore trusts. The set-aside
        * copy is what can be downloaded instead (see `quarantinedCopy`).
        */
-      exportGarden: (): string | undefined => {
+      exportGarden: async (): Promise<string | undefined> => {
         if (readOnlyRef.current) return undefined
+        const exportedAt = new Date().toISOString()
+        // At the version an older app can tell apart (storedVersionOf).
+        const garden = stateRef.current && {
+          ...stateRef.current,
+          version: storedVersionOf(),
+        }
+        // A sighting's photo is a Blob, which goes into the file as text, as
+        // a personal image always has (lib/sightingPhotos).
+        const portable = garden?.sightings.some((sighting) => sighting.photo)
+          ? await (await import('../lib/sightingPhotos')).withPhotosAsText(garden)
+          : garden
         return JSON.stringify(
           {
             format: 'the-butterfly-garden',
-            exportedAt: new Date().toISOString(),
+            exportedAt,
             appVersion: __APP_VERSION__,
-            // At the version an older app can tell apart (storedVersionOf).
-            garden: stateRef.current
-              ? { ...stateRef.current, version: storedVersionOf(stateRef.current) }
-              : stateRef.current,
+            garden: portable,
           },
           null,
           2,

@@ -15,6 +15,7 @@ const families: ReadonlySet<ReflectionPromptFamily> = new Set<ReflectionPromptFa
   'processing',
   'rest',
   'connection',
+  'nature',
   'free',
 ])
 
@@ -113,5 +114,20 @@ describe('the prompts themselves', () => {
   it('draws the daily rotation from every family but free writing', () => {
     const used = new Set(reflectionPrompts.map((prompt) => prompt.family))
     expect(used).toEqual(new Set([...families].filter((family) => family !== 'free')))
+  })
+})
+
+describe('three good things in nature', () => {
+  it('is a family of its own in the daily rotation, asking about real nature', () => {
+    const nature = reflectionPrompts.filter((prompt) => prompt.family === 'nature')
+    expect(nature.length).toBeGreaterThanOrEqual(3)
+    expect(nature.map((prompt) => prompt.text)).toContain(
+      'What were three good things you noticed in nature today?',
+    )
+    // Concrete "what" and "which" questions, never "why".
+    for (const prompt of nature) expect(prompt.text).toMatch(/^(What|Which)\b.*\?$/)
+    // Each comes round in the rotation like any other.
+    const offered = reflectionPrompts.map((_, skipped) => promptForDay(DAY, skipped))
+    for (const prompt of nature) expect(offered).toContain(prompt)
   })
 })

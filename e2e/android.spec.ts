@@ -369,3 +369,28 @@ test('a calendar reminder goes through the app, which carries no calendar files 
   const response = await page.request.get('/reminders/morning-0800.ics')
   expect(response.headers()['content-type'] ?? '').not.toMatch(/text\/calendar/)
 })
+
+test('a sighting is logged with a photo in the app, and the back gesture puts its form away', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Guide')
+  const log = page.getByRole('button', { name: 'Log a sighting of Monarch' })
+  await log.click()
+  const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
+  await expect(dialog).toBeVisible()
+  // Back closes the form and stays on the Guide, with focus where it was.
+  await pressBack(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(log).toBeFocused()
+  await expect(page.getByRole('heading', { level: 1, name: 'How the garden works' })).toBeVisible()
+
+  await log.click()
+  await dialog.getByLabel('Add a photo, if you like').setInputFiles('src/assets/thumb-cottage-bloom.webp')
+  await expect(dialog.getByRole('img', { name: 'Your photo for this sighting' })).toBeVisible()
+  expect(await seriousViolations(page, 'Android sighting form')).toEqual([])
+  await dialog.getByRole('button', { name: 'Save sighting' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(log).toBeFocused()
+  await expect(page.getByText(/Saved to your field book/)).toBeVisible()
+})

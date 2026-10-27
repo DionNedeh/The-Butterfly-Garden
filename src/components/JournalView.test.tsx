@@ -219,10 +219,10 @@ describe('butterflies welcomed', () => {
     })
     await user.click(screen.getByText('Butterflies welcomed'))
     const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
-    expect(within(monarch).getByText(`Welcomed on ${onDay(2026, 2, 3)}`)).toBeInTheDocument()
+    expect(within(monarch).getByText(`Welcomed in your garden on ${onDay(2026, 2, 3)}`)).toBeInTheDocument()
     expect(within(monarch).getByText('Welcomed as Sol, the first of 2')).toBeInTheDocument()
     const queen = screen.getByText('Queen').closest('article') as HTMLElement
-    expect(within(queen).getByText(`Welcomed on ${onDay(2026, 4, 3)}`)).toBeInTheDocument()
+    expect(within(queen).getByText(`Welcomed in your garden on ${onDay(2026, 4, 3)}`)).toBeInTheDocument()
     expect(within(queen).getByText('Welcomed as Pip')).toBeInTheDocument()
   })
 
@@ -255,7 +255,7 @@ describe('butterflies welcomed', () => {
     })
     await user.click(screen.getByText('Butterflies welcomed'))
     const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
-    expect(within(monarch).queryByText(/Welcomed on/)).toBeNull()
+    expect(within(monarch).queryByText(/Welcomed in your garden on/)).toBeNull()
     expect(within(monarch).getByText('Welcomed as Sol')).toBeInTheDocument()
   })
 })

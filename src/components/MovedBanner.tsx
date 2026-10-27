@@ -13,14 +13,15 @@ export function MovedBanner({
   onExportGarden,
 }: {
   target: URL
-  onExportGarden: () => string | undefined
+  /** The backup's text, at once or once its photos are read. */
+  onExportGarden: () => string | undefined | Promise<string | undefined>
 }) {
   const [saved, setSaved] = useState(false)
   const [note, setNote] = useState<string>()
 
   const save = async () => {
     setNote(undefined)
-    const text = onExportGarden()
+    const text = await onExportGarden()
     if (!text) {
       setNote(
         'This garden cannot be saved just now. Settings can download the copy that was set aside.',

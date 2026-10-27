@@ -384,7 +384,7 @@ describe('backups the garden cannot trust', () => {
     })
     const { result } = renderHook(() => useGardenState())
     await waitFor(() => expect(result.current.loading).toBe(false))
-    expect(result.current.exportGarden()).toBeUndefined()
+    await expect(result.current.exportGarden()).resolves.toBeUndefined()
   })
 
   it('begins a garden with the starter goals chosen, as daily goals', async () => {
@@ -472,7 +472,7 @@ describe('saved looks in a backup', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.state?.profile?.outfitPresets).toEqual(looks)
 
-    const file = result.current.exportGarden()!
+    const file = (await result.current.exportGarden())!
     const { garden } = JSON.parse(file) as { garden: Record<string, unknown> & { profile: object } }
     // Inside the profile, which an older build restoring this file carries
     // through whole, and not beside it, where that build would drop it.
@@ -915,7 +915,7 @@ describe('every action, through the hook', () => {
 
   it('exports the garden it holds as a backup file', async () => {
     const { result } = await renderReady()
-    const file = JSON.parse(result.current.exportGarden()!) as { format: string; garden: { seeds: number } }
+    const file = JSON.parse((await result.current.exportGarden())!) as { format: string; garden: { seeds: number } }
     expect(file.format).toBe('the-butterfly-garden')
     expect(file.garden.seeds).toBe(5)
   })
@@ -926,7 +926,7 @@ describe('every action, through the hook', () => {
     act(() => result.current.recordBackup(madeAt))
     expect(result.current.state?.profile?.lastBackupAt).toBe(madeAt.toISOString())
     // The time is in the garden, so the next backup file carries it along.
-    const file = JSON.parse(result.current.exportGarden()!) as {
+    const file = JSON.parse((await result.current.exportGarden())!) as {
       garden: { profile: { lastBackupAt?: string } }
     }
     expect(file.garden.profile.lastBackupAt).toBe(madeAt.toISOString())

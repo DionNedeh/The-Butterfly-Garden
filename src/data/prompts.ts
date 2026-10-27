@@ -79,6 +79,13 @@ const reflectionPromptRows: ReadonlyArray<
   ['belong', 'Where do you feel you belong?', 'connection'],
   ['learn-small', 'What is one small thing you learned or would like to learn?', 'noticing'],
   ['made', 'What did you make, tidy or mend today?', 'savouring'],
+  // Three good things in nature: noticing good things in everyday nature,
+  // even a city's, lifted wellbeing in an app-based trial of 582 people
+  // (McEwan et al. 2019). The field book keeps the butterflies and plants.
+  ['nature-three', 'What were three good things you noticed in nature today?', 'nature'],
+  ['nature-noticed', 'What did you notice in nature today?', 'nature'],
+  ['nature-plant', 'Which plant caught your eye today, and what did you like about it?', 'nature'],
+  ['nature-street', 'What bit of wild nature did you pass today, even in a street?', 'nature'],
 ]
 
 export const reflectionPrompts: ReflectionPrompt[] = reflectionPromptRows.map(

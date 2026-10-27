@@ -13,6 +13,7 @@ import {
   type LoadResult,
 } from '../repository/gardenRepository'
 import { isQuietWrite } from '../lib/quietWrites'
+import { hasPictures } from '../lib/customBackdrops'
 import type { AppState } from '../types'
 import type { useMediaSaves } from './useMediaSaves'
 
@@ -360,6 +361,8 @@ export function usePersistence(
       quarantinedCopy: async (): Promise<string | undefined> => {
         const [newest] = await repository.quarantined()
         if (!newest) return undefined
+        // Its photos are Blobs, which go into a file as text (lib/sightingPhotos).
+        const { withPhotosAsText } = await import('../lib/sightingPhotos')
         return JSON.stringify(
           {
             format: 'the-butterfly-garden-set-aside',
@@ -367,7 +370,7 @@ export function usePersistence(
             appVersion: __APP_VERSION__,
             reason: newest.reason,
             storedAt: newest.storedAt,
-            garden: newest.raw,
+            garden: await withPhotosAsText(newest.raw),
           },
           null,
           2,
@@ -404,9 +407,9 @@ export function usePersistence(
         let written: GardenPart[]
         const startedAt = new Date().toISOString()
         try {
-          if (imported.customBackdrops.length) {
-            const { verifyBackdropImages } = await import('../lib/imageImport')
-            await verifyBackdropImages(imported.customBackdrops)
+          if (hasPictures(imported)) {
+            const { verifyGardenImages } = await import('../lib/imageImport')
+            await verifyGardenImages(imported)
           }
           // Replaced rather than saved: a restore swaps the whole document,
           // and writing only the difference from the garden being replaced can
