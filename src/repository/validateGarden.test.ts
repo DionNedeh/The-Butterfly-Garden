@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState } from '../lib/progression'
-import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, PRESET_NAME_LENGTH } from '../lib/companionDiary'
+import {
+  MAX_GOAL_DAYS,
+  MAX_OUTFIT_PRESETS,
+  MAX_OUTFITS_WORN,
+  PRESET_NAME_LENGTH,
+} from '../lib/companionDiary'
 import { formatJournalDate, isGoalDue, isLocalDate, toLocalDate } from '../lib/date'
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { jarCharacters } from '../data/jars'
@@ -638,6 +643,94 @@ describe('validating a garden', () => {
       expect(validateGarden(garden({ profile: older })).state?.profile).not.toHaveProperty(
         'diarySince',
       )
+    })
+  })
+
+  describe('a companion grown alongside a goal', () => {
+    const walk = {
+      id: 'walk',
+      title: 'Walk outside',
+      schedule: 'daily',
+      weekdays: [],
+      createdDate: '2026-06-01',
+      archived: false,
+    }
+    const base = createInitialState('Tester', 'Test Garden').creatures[0]
+    const story = [{ goalId: 'walk', title: 'Walk outside', dates: ['2026-06-02', '2026-06-04'] }]
+    const read = (fields: Record<string, unknown>, goals: unknown[] = [walk]) => {
+      const result = validateGarden(garden({ goals, creatures: [{ ...base, ...fields }] }))
+      return { creature: result.state!.creatures[0], repaired: result.repaired }
+    }
+
+    it('keeps the goal and the diary as they are, through a backup too', () => {
+      const { creature, repaired } = read({ adoptedGoalId: 'walk', grownAlongside: story })
+      expect(creature.adoptedGoalId).toBe('walk')
+      expect(creature.grownAlongside).toEqual(story)
+      expect(repaired).toBe(0)
+      const stored = garden({ goals: [walk], creatures: [{ ...base, adoptedGoalId: 'walk', grownAlongside: story }] })
+      const once = validateGarden(JSON.parse(JSON.stringify(stored)) as unknown)
+      const twice = validateGarden(JSON.parse(JSON.stringify(once.state)) as unknown)
+      expect(twice.state!.creatures).toEqual(once.state!.creatures)
+      expect(twice.state!.creatures[0]).toMatchObject({ adoptedGoalId: 'walk', grownAlongside: story })
+    })
+
+    it('lets go, silently, of a goal not here, archived, or not a goal id', () => {
+      for (const [adoptedGoalId, goals] of [
+        ['gone', [walk]],
+        ['walk', [{ ...walk, archived: true }]],
+        ['walk', []],
+        [7, [walk]],
+        [null, [walk]],
+      ] as const) {
+        const { creature, repaired } = read({ adoptedGoalId, grownAlongside: story }, [...goals])
+        expect(creature).not.toHaveProperty('adoptedGoalId')
+        // The story stays: the diary does not need the goal to be here.
+        expect(creature.grownAlongside).toEqual(story)
+        expect(repaired).toBe(0)
+      }
+    })
+
+    it('lets a butterfly go of its goal: it has no stage left to grow', () => {
+      const { creature } = read({ stage: 'butterfly', adoptedGoalId: 'walk' })
+      expect(creature).not.toHaveProperty('adoptedGoalId')
+    })
+
+    it('keeps only well-formed goals in the diary, each day once and no more than it keeps', () => {
+      const { creature, repaired } = read({
+        grownAlongside: [
+          { goalId: 'walk', title: 'Walk outside', dates: ['2026-06-02', 'yesterday', '2026-02-30', 5] },
+          { goalId: 'water', title: 'Drink water', dates: ['2026-06-02', '2026-06-03'] },
+          { goalId: 'walk', title: 'A twin', dates: ['2026-06-05'] },
+          { goalId: '', title: 'No id', dates: ['2026-06-06'] },
+          { goalId: 'blank', title: '  ', dates: ['2026-06-06'] },
+          { goalId: 'number', title: 4, dates: ['2026-06-06'] },
+          { goalId: 'none', title: 'No days', dates: [] },
+          { goalId: 'odd', title: 'Odd days', dates: '2026-06-06' },
+          'Walk outside',
+          null,
+        ],
+      })
+      expect(creature.grownAlongside).toEqual([
+        { goalId: 'walk', title: 'Walk outside', dates: ['2026-06-02'] },
+        { goalId: 'water', title: 'Drink water', dates: ['2026-06-03'] },
+      ])
+      expect(repaired).toBe(0)
+
+      const many = Array.from({ length: MAX_GOAL_DAYS + 5 }, (_, day) =>
+        toLocalDate(new Date(2026, 0, day + 1, 12)),
+      )
+      const capped = read({ grownAlongside: [{ goalId: 'walk', title: 'Walk', dates: many }] })
+      expect(capped.creature.grownAlongside?.[0].dates).toEqual(many.slice(0, MAX_GOAL_DAYS))
+
+      for (const odd of [[], 'Walk outside', { walk: ['2026-06-02'] }, [{ goalId: 'x', title: 'X', dates: ['no'] }]]) {
+        expect(read({ grownAlongside: odd }).creature).not.toHaveProperty('grownAlongside')
+      }
+    })
+
+    it('gives an older companion neither', () => {
+      const { creature } = read({})
+      expect(creature).not.toHaveProperty('adoptedGoalId')
+      expect(creature).not.toHaveProperty('grownAlongside')
     })
   })
 

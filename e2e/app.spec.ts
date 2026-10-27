@@ -75,6 +75,7 @@ interface GardenRecord {
     emergeAt?: string
     awaitingName?: boolean
     outfit?: Record<string, string>
+    careDates?: Record<string, string[]>
   }>
   ownedFlightPatternIds?: string[]
   ownedItemIds?: string[]
@@ -583,6 +584,98 @@ test.describe('an earlier day', () => {
     await card.getByRole('button', { name: 'Put away for today' }).click()
     await expect(card).toHaveCount(0)
     await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeFocused()
+  })
+})
+
+/**
+ * Marigold's weekly letter. The zone and the instant are pinned: seven in the
+ * evening of Sunday 25 October in UTC, so the letter about the week ending
+ * that day has just arrived, and the run never crosses into the next week.
+ */
+test.describe('a letter from Marigold', () => {
+  test.use({ timezoneId: 'UTC' })
+
+  test('waits in the garden on Sunday evening, quotes only a starred line, and can quote nothing', async ({
+    page,
+  }) => {
+    // Three accessibility sweeps, a reload and four pages.
+    test.slow()
+    const now = new Date('2026-10-25T19:00:00.000Z')
+    await page.clock.setFixedTime(now)
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await goTo(page, 'Today')
+    await page.getByRole('button', { name: /bright/i }).click()
+    await page.getByLabel('A note, if you want').fill('The light on the river after work')
+    await page.getByRole('button', { name: /save check-in/i }).click()
+    // Planted ten days ago, so this is not its first Sunday.
+    await editGardenRecord(page, (state) => {
+      state.profile.createdAt = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString()
+    })
+    await page.reload()
+    await goTo(page, 'Garden')
+
+    const card = page.getByRole('region', { name: 'A letter from Marigold is waiting' })
+    await expect(card).toBeVisible()
+    expect(await seriousViolations(page, 'Garden, a letter waiting')).toEqual([])
+    await card.getByRole('button', { name: 'Read the letter' }).click()
+
+    const letter = page.getByRole('article', { name: /^The week of / })
+    await expect(letter.getByRole('heading')).toBeFocused()
+    await expect(letter.getByText(/^Dear .+,$/)).toBeVisible()
+    await expect(letter.getByText('This week you checked in once.')).toBeVisible()
+    // Never a line the gardener did not star.
+    await expect(letter.getByText('The light on the river after work')).toHaveCount(0)
+
+    // Starred in the journal, the line comes back in the letter.
+    const star = page.locator('#day-2026-10-25').getByRole('button', { name: 'Star this line' })
+    await expect(star).toHaveAttribute('aria-pressed', 'false')
+    await star.click()
+    await expect(star).toHaveAttribute('aria-pressed', 'true')
+    await expect(star).toBeFocused()
+    await expect(letter.getByText('The light on the river after work')).toBeVisible()
+    expect(await seriousViolations(page, 'Journal, a letter from Marigold')).toEqual([])
+
+    // Never quoting, chosen in Settings, quotes nothing, starred or not.
+    await goTo(page, 'Settings')
+    const quotes = page.getByRole('group', { name: 'Quote my words in letters' })
+    await expect(quotes.getByRole('radio', { name: /^Only lines I star/ })).toBeChecked()
+    await quotes.getByRole('radio', { name: /^Never/ }).check()
+    await expect(quotes.getByRole('radio', { name: /^Never/ })).toBeChecked()
+    expect(await seriousViolations(page, 'Settings, letters from Marigold')).toEqual([])
+    await goTo(page, 'Journal')
+    const letters = page.getByRole('region', { name: 'Letters from Marigold' })
+    await expect(letters.getByText('A letter each Sunday evening')).toBeVisible()
+    await letters.getByText('Letters from Marigold').click()
+    await expect(letter.getByText('This week you checked in once.')).toBeVisible()
+    await expect(letter.getByText('The light on the river after work')).toHaveCount(0)
+    await expect(
+      letters.getByText('Letters never quote your words, as you chose in Settings.'),
+    ).toBeVisible()
+
+    // Read, so the garden no longer says it is waiting, and the garden keeps
+    // only which letter that was.
+    await goTo(page, 'Garden')
+    await expect(page.locator('#garden-title')).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    await expect(card).toHaveCount(0)
+    const profile = await page.evaluate(
+      () =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const request = indexedDB.open('butterfly-garden')
+          request.onerror = () => reject(request.error)
+          request.onsuccess = () => {
+            const db = request.result
+            const get = db.transaction('meta', 'readonly').objectStore('meta').get('current')
+            get.onsuccess = () => {
+              db.close()
+              resolve((get.result as { profile: Record<string, unknown> }).profile)
+            }
+            get.onerror = () => reject(get.error)
+          }
+        }),
+    )
+    expect(profile).toMatchObject({ lastLetterRead: '2026-10-25', letterQuotes: 'never' })
   })
 })
 
@@ -1150,6 +1243,100 @@ test('a new egg is offered a name of its own on the Care page', async ({ page })
   await expect(page.getByRole('region', { name: /Would you like to name/ })).toHaveCount(0)
 })
 
+test('a companion grown alongside a goal is cared for when the goal is done, and remembers it', async ({
+  page,
+}) => {
+  // Care, Today and Care again, with three accessibility sweeps and a reload.
+  test.slow()
+  await enterGarden(page)
+  await goTo(page, 'Today')
+  for (const title of ['Walk outside', 'Drink water']) {
+    await page.getByLabel('Add a goal').fill(title)
+    await page.getByRole('button', { name: 'Add goal' }).click()
+  }
+  await editGardenRecord(page, (state) => {
+    // Sol, the starter caterpillar, two days of care from its chrysalis.
+    state.creatures[0].careDates = { caterpillar: ['2026-01-01', '2026-01-02'] }
+  })
+  await page.reload()
+
+  await goTo(page, 'Care')
+  const choice = page.getByRole('combobox', { name: 'Grow alongside a goal' })
+  await choice.selectOption({ label: 'Walk outside' })
+  await expect(
+    page.getByText('Each day you complete Walk outside on Today counts as a day of care for Sol.'),
+  ).toBeVisible()
+  expect(await seriousViolations(page, 'Care with a goal to grow alongside')).toEqual([])
+
+  // Today names Sol quietly on the goal's row, which stays as compact as
+  // its neighbour's.
+  await goTo(page, 'Today')
+  const walk = page.locator('[data-goal-id]', { hasText: 'Walk outside' })
+  const water = page.locator('[data-goal-id]', { hasText: 'Drink water' })
+  await expect(walk.locator('.goal-companions')).toHaveText(/growing alongside Sol$/)
+  await expect(water.locator('.goal-companions')).toHaveCount(0)
+  const heights = await Promise.all(
+    [walk, water].map((row) => row.evaluate((element) => element.getBoundingClientRect().height)),
+  )
+  expect(Math.abs(heights[0] - heights[1])).toBeLessThanOrEqual(1)
+  expect(await seriousViolations(page, 'Today with a goal growing a companion')).toEqual([])
+  // At the largest text the badge may take a line of its own, but the
+  // schedule is never cut short. As Settings sets it (lib/textSize).
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '125%'
+    document.documentElement.dataset.textSize = 'largest'
+  })
+  const schedule = walk.locator('.goal-schedule')
+  await expect(schedule).toHaveText('Every day')
+  expect(
+    await schedule.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+  ).toBe(true)
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('font-size')
+    delete document.documentElement.dataset.textSize
+  })
+
+  // Done today: Sol's third day of care, and a chrysalis, celebrated. The
+  // same Sunlight brings the milkweed into bloom, with an egg.
+  await page.getByRole('button', { name: 'Care for Walk outside' }).click()
+  await expect(page.locator('.celebration-toast')).toContainText('Sol wrapped up into a chrysalis.')
+
+  // The new egg can grow alongside a goal of its own, chosen with its name.
+  await goTo(page, 'Care')
+  const arrival = page.getByRole('region', { name: /Would you like to name your .* egg\?/ })
+  await arrival
+    .getByRole('combobox', { name: 'Grow alongside a goal' })
+    .selectOption({ label: 'Drink water' })
+  expect(await seriousViolations(page, 'Care with a new arrival and goals')).toEqual([])
+  await arrival.getByRole('button', { name: /^Keep / }).click()
+  await expect(arrival).toHaveCount(0)
+  await expect(page.getByText(/^Each day you complete Drink water on Today/)).toBeVisible()
+
+  await page.getByRole('tab', { name: /\bSol\b/ }).click()
+  await expect(page.getByRole('tab', { name: /\bSol\b/ })).toContainText('Chrysalis · 0/3')
+  await expect(
+    page.getByText('Each day you complete Walk outside on Today counts as a day of care for Sol.'),
+  ).toBeVisible()
+  await page.getByText('Sol’s story').click()
+  const grown = page.locator('.story-list div', { hasText: 'Grown alongside' }).locator('dd')
+  await expect(grown).toHaveText('Walk outside · 1 day')
+
+  // Archived, the goal lets Sol go back to the care menu; the story stays.
+  await goTo(page, 'Today')
+  await expect(water.locator('.goal-companions')).toHaveCount(1)
+  await page.getByRole('button', { name: 'More for Walk outside' }).click()
+  await page
+    .getByRole('group', { name: 'Walk outside options' })
+    .getByRole('button', { name: 'Archive' })
+    .click()
+  await reloadAfterSave(page)
+  await goTo(page, 'Care')
+  await page.getByRole('tab', { name: /\bSol\b/ }).click()
+  await expect(choice).toHaveValue('')
+  await page.getByText('Sol’s story').click()
+  await expect(grown).toHaveText('Walk outside · 1 day')
+})
+
 test('persists emergence and selects the new butterfly as companion', async ({
   page,
 }) => {
@@ -1476,7 +1663,7 @@ test.describe('rounding out the day', () => {
     await page.getByRole('textbox').fill('Book the appointment')
     await page.getByRole('button', { name: /add to tomorrow/i }).click()
     await page.getByRole('button', { name: 'Continue' }).click()
-    await page.getByRole('button', { name: 'Collect Moonlight' }).click()
+    await page.getByRole('button', { name: 'Collect Moonlight', exact: true }).click()
 
     // Back on Today, with the night collected and the bonus in the wallet.
     await expect(page.getByText('The day is rounded out.')).toBeVisible()

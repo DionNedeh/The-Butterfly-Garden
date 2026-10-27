@@ -120,6 +120,18 @@ async function scrollToSection(page, selector, { exact = false } = {}) {
   }, exact)
 }
 
+/**
+ * The Sunday on or before today, as a local date. Stored as the last letter
+ * read, so no letter from Marigold waits in the pictures.
+ */
+function lastSunday() {
+  const day = new Date()
+  day.setDate(day.getDate() - day.getDay())
+  return [day.getFullYear(), day.getMonth() + 1, day.getDate()]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0'))
+    .join('-')
+}
+
 async function screenshots() {
   await mkdir(SHOTS, { recursive: true })
   const context = await browser.newContext({
@@ -173,7 +185,7 @@ async function screenshots() {
       ...meta,
       nectar: 140,
       stardust: 12,
-      profile: { ...meta.profile, createdAt: plantedAt },
+      profile: { ...meta.profile, createdAt: plantedAt, lastLetterRead: lastSunday() },
     },
     plants: grown,
     creatures: butterflies,

@@ -22,6 +22,7 @@ import {
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
 import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
+import { companionsByGoal } from '../lib/growAlongside'
 import {
   checkInDetails,
   feelingsFromDraft,
@@ -29,9 +30,11 @@ import {
   isEnergyLevel,
 } from '../lib/feelings'
 import { moodChoiceOf } from '../lib/mood'
+import { isBreathingGoal, pacerFor } from '../lib/breathing'
 import { nextStepsAfter, type NextStep } from '../lib/nextStep'
 import { counted } from '../lib/plural'
 import { promptAfter, promptById, promptForDay } from '../lib/prompts'
+import type { BreatheWay } from '../lib/routes'
 import type {
   AppState,
   CheckInDetails,
@@ -107,6 +110,8 @@ export function TodayView({
   onOpenRecap,
   openAtCheckIn = false,
   onOpenGuide,
+  onOpenBreathe,
+  onAdoptGoal,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -145,6 +150,16 @@ export function TodayView({
   openAtCheckIn?: boolean
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
+  /**
+   * Breathe with a butterfly: from the next step, and a breathing goal's row,
+   * named by its goal so that coming back finds the link again.
+   */
+  onOpenBreathe?: (way: Extract<BreatheWay, 'goal' | 'next-step'>, goalId?: string) => void
+  /**
+   * Grow a companion alongside a goal again: how Undo gives back the
+   * companions that archiving or deleting the goal let go.
+   */
+  onAdoptGoal?: (creatureId: string, goalId: string) => void
 }) {
   const existingMood = state.moods.find((entry) => entry.localDate === today)
   const existingReflection = state.reflections.find(
@@ -245,6 +260,17 @@ export function TodayView({
     () => state.goals.filter((goal) => goal.archived),
     [state.goals],
   )
+  // The companions each goal is growing, named quietly on its row.
+  const growing = useMemo(() => companionsByGoal(state.creatures), [state.creatures])
+  // Archiving or deleting a goal lets its companions go; Undo brings them
+  // back together, so these are kept with the offer.
+  const growingWith = (goalId: string) =>
+    state.creatures
+      .filter((creature) => creature.adoptedGoalId === goalId)
+      .map((creature) => creature.id)
+  const regrow = (creatureIds: readonly string[], goalId: string) => {
+    for (const creatureId of creatureIds) onAdoptGoal?.(creatureId, goalId)
+  }
   // Snoozed goals count: an idea already among them is not new to anyone.
   const activeGoalTitles = useMemo(
     () => state.goals.filter((goal) => !goal.archived).map((goal) => goal.title),
@@ -304,6 +330,7 @@ export function TodayView({
           canMakeGentle: !gentle && onSetGentleDay !== undefined,
           canReflect: !existingReflection,
           canVisitCompanion: onOpenCare !== undefined,
+          canBreathe: onOpenBreathe !== undefined,
         })
       : []
   const putNextStepAway = () => setNextStepSeenFor(checkInMark)
@@ -315,6 +342,8 @@ export function TodayView({
       setGentle(true)
     } else if (step === 'visit-companion') {
       onOpenCare?.()
+    } else if (step === 'breathe') {
+      onOpenBreathe?.('next-step')
     } else {
       // "Write one line" and "Try today's reflection" both start writing;
       // the field is described by the day's prompt.
@@ -325,11 +354,15 @@ export function TodayView({
     pendingFocus.current = goalId
   }
   const archive = (goal: Goal) => {
+    const companions = growingWith(goal.id)
     focusAfterRedraw()
     onSetGoalArchived(goal.id, true)
     setUndoOffer({
       message: `${goal.title} archived.`,
-      undo: () => onSetGoalArchived(goal.id, false),
+      undo: () => {
+        onSetGoalArchived(goal.id, false)
+        regrow(companions, goal.id)
+      },
     })
   }
 
@@ -482,7 +515,7 @@ export function TodayView({
         </label>
         <button
           ref={saveCheckIn}
-          className="primary-button"
+          className="primary-button check-in-save"
           disabled={mood === undefined}
           aria-describedby={mood === undefined ? 'mood-choose-hint' : undefined}
           onClick={() => {
@@ -511,6 +544,7 @@ export function TodayView({
             <NextStepOffer
               checkIn={existingMood}
               steps={nextSteps}
+              breatheWith={pacerFor(state).name}
               onChoose={takeNextStep}
               onDismiss={() => {
                 // The offer goes; focus waits on the check-in it followed.
@@ -586,6 +620,7 @@ export function TodayView({
                 complete={complete}
                 skipped={skipped}
                 gentle={gentle}
+                companions={growing.get(goal.id)}
                 onComplete={() => {
                   onCompleteGoal(goal.id)
                   setUndoOffer({
@@ -614,6 +649,11 @@ export function TodayView({
                   setEditRequest((count) => count + 1)
                 }}
                 onArchive={() => archive(goal)}
+                onBreathe={
+                  onOpenBreathe && isBreathingGoal(goal)
+                    ? () => onOpenBreathe('goal', goal.id)
+                    : undefined
+                }
               />
             )
           })}
@@ -695,12 +735,16 @@ export function TodayView({
               const completions = state.completions.filter(
                 (completion) => completion.goalId === editing.id,
               )
+              const companions = growingWith(editing.id)
               focusAfterRedraw()
               onDeleteGoal(editing.id)
               setEditingId(undefined)
               setUndoOffer({
                 message: `${editing.title} deleted.`,
-                undo: () => onRestoreGoal(editing, index, completions),
+                undo: () => {
+                  onRestoreGoal(editing, index, completions)
+                  regrow(companions, editing.id)
+                },
               })
             }}
             onCancel={() => {

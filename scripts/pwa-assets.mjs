@@ -162,6 +162,7 @@ async function grownGarden(page) {
         ...meta.profile,
         createdAt: plantedAt,
         lastBackupAt: new Date(Date.now() - 86_400_000).toISOString(),
+        lastLetterRead: lastSunday(),
       },
     },
     plants: grown,
@@ -171,6 +172,18 @@ async function grownGarden(page) {
   await page.getByRole('heading', { name: 'Willowlight Garden' }).waitFor()
   // Entrance animations finish and butterflies spread out across the scene.
   await page.waitForTimeout(7000)
+}
+
+/**
+ * The Sunday on or before today, as a local date. Stored as the last letter
+ * read, so no letter from Marigold waits in the pictures.
+ */
+function lastSunday() {
+  const day = new Date()
+  day.setDate(day.getDate() - day.getDay())
+  return [day.getFullYear(), day.getMonth() + 1, day.getDate()]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0'))
+    .join('-')
 }
 
 /**

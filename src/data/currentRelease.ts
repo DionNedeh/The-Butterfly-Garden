@@ -7,9 +7,9 @@
  * the first load however long they grow. data/releases.test.ts checks that
  * the newest entry there is this one.
  */
-export const currentRelease = { id: 'release-3-1', version: '3.1.0' } as const
+export const currentRelease = { id: 'release-3-2', version: '3.2.0' } as const
 
-/** "3.1" from "3.1.0": how the app speaks of a release. */
+/** "3.2" from "3.2.0": how the app speaks of a release. */
 export function releaseName(release: { version: string } = currentRelease): string {
   return release.version.split('.').slice(0, 2).join('.')
 }

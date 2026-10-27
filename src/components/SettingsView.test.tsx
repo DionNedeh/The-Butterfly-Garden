@@ -591,7 +591,8 @@ describe('SettingsView backup habits', () => {
     render(<StatefulSettings initial={gardenOf(45)} onBackupMade={onBackupMade} />)
     await user.click(screen.getByRole('button', { name: 'Share backup…' }))
     expect(onBackupMade).not.toHaveBeenCalled()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    const backupCard = screen.getByRole('heading', { name: 'Backup and restore' }).closest('section')!
+    expect(within(backupCard).queryByRole('status')).not.toBeInTheDocument()
     expect(screen.getByText(/You have not saved a copy yet\./)).toBeInTheDocument()
   })
 

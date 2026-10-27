@@ -1,4 +1,5 @@
 import type { AppState } from '../types'
+import { breathSource } from './gardenActions'
 import { countedInWords, listed } from './plural'
 
 /** Companions named in a summary before it says how many instead. */
@@ -21,6 +22,9 @@ export function describeDay(state: AppState, localDate: string): string {
     entry.localDate === localDate && entry.writtenLater !== true
   if (state.moods.some(doneThatDay)) parts.push('checked in')
   if (state.reflections.some(doneThatDay)) parts.push('wrote a reflection')
+  // A breathing session run to its end, as its Sunlight records it.
+  if (state.sunlight.some((award) => award.source === breathSource(localDate)))
+    parts.push('took time to breathe')
   const goals = state.completions.filter((item) => item.localDate === localDate).length
   if (goals > 0) parts.push(`finished ${countedInWords(goals, 'goal', 'goals')}`)
   const cared = state.creatures

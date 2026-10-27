@@ -17,6 +17,7 @@ function renderRecap(
     state?: AppState
     onFadeToNight?: () => void
     onOpenGuide?: (section: string) => void
+    onBreathe?: () => void
   } = {},
 ) {
   const onCollect = vi.fn()
@@ -30,6 +31,7 @@ function renderRecap(
       onClose={onClose}
       onFadeToNight={overrides.onFadeToNight}
       onOpenGuide={overrides.onOpenGuide}
+      onBreathe={overrides.onBreathe}
     />,
   )
   return { onCollect, onClose, unmount }
@@ -69,6 +71,28 @@ describe('the Moonlight recap', () => {
       tomorrow: [{ text: '', plan: false }],
     })
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('can end with a few slow breaths, the night collected first', async () => {
+    const onBreathe = vi.fn()
+    const { onCollect, onClose } = renderRecap({ onBreathe })
+    await skipToEnd()
+    // Quiet, and after the ordinary finish.
+    const finishes = screen.getAllByRole('button').filter((button) => button.closest('.recap-finish'))
+    expect(finishes.map((button) => button.textContent)).toEqual([
+      'Collect Moonlight',
+      'Collect Moonlight and breathe with Marigold',
+    ])
+    await userEvent.click(screen.getByRole('button', { name: 'Collect Moonlight and breathe with Marigold' }))
+    expect(onCollect).toHaveBeenCalledOnce()
+    expect(onBreathe).toHaveBeenCalledOnce()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('offers no breathing ending unless asked to', async () => {
+    renderRecap()
+    await skipToEnd()
+    expect(screen.queryByRole('button', { name: /breathe with/ })).toBeNull()
   })
 
   it('can end by fading the garden to night, collected exactly as the ordinary finish', async () => {

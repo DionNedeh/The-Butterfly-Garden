@@ -3,6 +3,7 @@ import {
   homeScreenAdvice,
   isHomeScreenGuidePutAway,
   isInstalledApp,
+  isIPhoneOrIPad,
   putAwayHomeScreenGuide,
 } from './install'
 
@@ -137,5 +138,26 @@ describe('putting the guide away', () => {
     })
     expect(() => putAwayHomeScreenGuide()).not.toThrow()
     expect(isHomeScreenGuidePutAway()).toBe(false)
+  })
+})
+
+describe('knowing an iPhone or iPad, for a calendar file', () => {
+  it('knows one in any browser, installed or not, an iPad included', () => {
+    for (const agent of [AGENTS.iPhoneSafari, AGENTS.iPhoneChrome, AGENTS.iPadSafari]) {
+      onDevice(agent, { maxTouchPoints: 5 })
+      expect(isIPhoneOrIPad()).toBe(true)
+    }
+    onDevice(AGENTS.iPhoneSafari, { maxTouchPoints: 5, standalone: true })
+    expect(isIPhoneOrIPad()).toBe(true)
+  })
+
+  it('is not a Mac, an Android phone, a desktop or the Android app', () => {
+    for (const agent of [AGENTS.macSafari, AGENTS.androidChrome, AGENTS.desktopChrome]) {
+      onDevice(agent)
+      expect(isIPhoneOrIPad()).toBe(false)
+    }
+    vi.stubEnv('VITE_PLATFORM', 'android')
+    onDevice(AGENTS.iPhoneSafari, { maxTouchPoints: 5 })
+    expect(isIPhoneOrIPad()).toBe(false)
   })
 })

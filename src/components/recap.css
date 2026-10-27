@@ -19,3 +19,9 @@
 .recap-finish .secondary-button {
   text-align: center;
 }
+
+/* The optional breath before bed: quiet beside the two endings, but a full
+   touch target. */
+.recap-breathe {
+  min-height: 44px;
+}

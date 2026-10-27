@@ -23,6 +23,7 @@ const PATHS: Record<AppView, string> = {
   privacy: 'privacy',
   notices: 'notices',
   support: 'support',
+  breathe: 'breathe',
 }
 
 const VIEWS = new Map<string, AppView>(
@@ -30,17 +31,29 @@ const VIEWS = new Map<string, AppView>(
 )
 
 /**
- * Where on a page a "What does this do?" link was pressed, so that leaving
- * the Guide puts the gardener back there, rather than at the top of a fresh
+ * A way into breathing with a butterfly (plan c.1), named for where it is
+ * offered: a breathing goal's "Breathe now" on Today, the step offered under
+ * Today's check-in, the support page's link, and the recap's last step.
+ */
+export type BreatheWay = 'goal' | 'next-step' | 'support' | 'recap'
+
+/**
+ * Where on a page a link to a page opened for a moment was pressed (a "What
+ * does this do?" link to the Guide, or a way into breathing), so that leaving
+ * that page puts the gardener back there, rather than at the top of a fresh
  * copy of the page with focus nowhere.
  */
 export interface LinkPlace {
-  /** The Guide section the link opened, which names the link on its page. */
-  section: string
+  /** A Guide link: the section it opened, which names the link on its page. */
+  section?: string
+  /** A way into breathing: which one, which names it on its page. */
+  breathe?: BreatheWay
   /** How far down the page had been scrolled. */
   scrollY: number
   /** On Care, the companion whose link it was. */
   companionId?: string
+  /** On Today, the breathing goal whose "Breathe now" it was. */
+  goalId?: string
 }
 
 export interface Route {
@@ -65,16 +78,24 @@ export interface Route {
   section?: string
   /**
    * The page a "What does this do?" link left, which the Guide offers a way
-   * back to and Android's back gesture returns to. Not part of the address.
+   * back to and Android's back gesture returns to; for breathing, the page
+   * that offered it. Not part of the address.
    */
   from?: AppView
-  /** On the Guide, where on the page `from` its link was pressed. */
+  /** On the Guide or breathing, where on the page `from` its link was pressed. */
   fromPlace?: LinkPlace
   /**
-   * Back from the Guide: the place on this page to put the gardener at, as
-   * it was when they pressed the link. Not part of the address.
+   * Back from the Guide or breathing: the place on this page to put the
+   * gardener at, as it was when they pressed the link. Not part of the
+   * address.
    */
   restore?: LinkPlace
+  /**
+   * The Journal opened on Marigold's newest letter, from the garden's card.
+   * Not part of the address: a reload opens the Journal as usual, where the
+   * letter is kept.
+   */
+  letter?: boolean
 }
 
 /** A Guide section's name in the address: lower case words and hyphens. */
@@ -98,12 +119,15 @@ export function routeFromHash(hash: string): Route | undefined {
 }
 
 /**
- * The way back from a Guide opened by a "What does this do?" link: the page
- * it left, for the same companion on Care, with the place to put the
- * gardener back at. Nothing for a Guide opened any other way.
+ * The way back from a page another page opened for a moment: the Guide, from
+ * a "What does this do?" link, or breathing, from wherever it was offered.
+ * It is the page left, for the same companion on Care, with the place to put
+ * the gardener back at. Nothing for either opened any other way (a link, the
+ * navigation), or for any other page.
  */
-export function returnFromGuide(route: Route): Route | undefined {
-  if (route.view !== 'guide' || !route.from || route.from === 'guide') return undefined
+export function returnFrom(route: Route): Route | undefined {
+  if (route.view !== 'guide' && route.view !== 'breathe') return undefined
+  if (!route.from || route.from === route.view) return undefined
   return { view: route.from, companionId: route.fromPlace?.companionId, restore: route.fromPlace }
 }
 

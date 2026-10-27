@@ -8,6 +8,7 @@ import { reloadApp } from './lib/reload'
 import { gardenRepository } from './repository/gardenRepository'
 import { FakeBroadcastChannel } from './test/fakeBroadcastChannel'
 import type { AppState } from './types'
+import { LAZY_PAGE_MS } from './test/lazyPage'
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({
@@ -54,7 +55,7 @@ describe("after an update, What's new", { timeout: 20_000 }, () => {
     const save = storedGarden(gardenFromBefore())
     const user = userEvent.setup()
     render(<App />)
-    expect(await screen.findByRole('heading', WHATS_NEW, { timeout: 3000 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', WHATS_NEW, { timeout: LAZY_PAGE_MS })).toBeInTheDocument()
     expect(window.location.hash).toBe('#/whats-new')
     await waitFor(() =>
       expect(save.mock.lastCall?.[0].profile?.lastSeenReleaseId).toBe(currentRelease.id),
@@ -70,7 +71,7 @@ describe("after an update, What's new", { timeout: 20_000 }, () => {
     const seed = createInitialState('Robin', 'Quiet Corner')
     storedGarden(seed)
     render(<App />)
-    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: 3000 })
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: LAZY_PAGE_MS })
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
     expect(screen.queryByRole('heading', WHATS_NEW)).toBeNull()
     expect(window.location.hash).toBe('')
@@ -82,7 +83,7 @@ describe('an update applied in another tab', { timeout: 20_000 }, () => {
     // A tab still on the welcome, with no garden yet.
     storedGarden(undefined)
     render(<App />)
-    await screen.findByRole('heading', { name: /welcome to your butterfly garden/i }, { timeout: 3000 })
+    await screen.findByRole('heading', { name: /welcome to your butterfly garden/i }, { timeout: LAZY_PAGE_MS })
     new FakeBroadcastChannel('butterfly-garden-update').postMessage({
       type: 'reload-for-update',
       from: __BUILD_ID__,
@@ -93,7 +94,7 @@ describe('an update applied in another tab', { timeout: 20_000 }, () => {
   it('stops listening once the app is closed', async () => {
     storedGarden(createInitialState('Robin', 'Quiet Corner'))
     const { unmount } = render(<App />)
-    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: 3000 })
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: LAZY_PAGE_MS })
     unmount()
     expect(FakeBroadcastChannel.named('butterfly-garden-update')).toHaveLength(0)
   })

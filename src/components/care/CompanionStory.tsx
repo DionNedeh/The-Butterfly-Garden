@@ -13,7 +13,8 @@ function times(count: number): string {
 
 /**
  * A companion's story: the days its life began and changed, how many days it
- * was cared for, the care it was given most and the outfits it wore. Folded
+ * was cared for, the goals it grew alongside, the care it was given most and
+ * the outfits it wore. Folded
  * until asked for, like the Journal's field notes, and worked out only then.
  * What the garden did not keep is said plainly, never filled in.
  */
@@ -77,6 +78,21 @@ export function CompanionStory({
                   : 'None yet'}
               </dd>
             </div>
+            {/* Counted by the days each goal gave, as the diary wrote
+                them down, so an Undo on Today or a goal since archived or
+                deleted changes nothing here. */}
+            {story.grownAlongside.length > 0 && (
+              <div>
+                <dt>Grown alongside</dt>
+                <dd>
+                  {story.grownAlongside.map((goal, index) => (
+                    <span className="story-line" key={index}>
+                      {goal.title} · {counted(goal.days, 'day', 'days')}
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            )}
             {(story.favourite || whole) && (
               <div>
                 <dt>Favourite care</dt>

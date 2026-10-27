@@ -1,13 +1,31 @@
 import { SUPPORT_CHECKED_ON, supportLines } from '../data/support'
+import { pacerFor } from '../lib/breathing'
 import { formatJournalDate } from '../lib/date'
+import type { AppState } from '../types'
+import { BreatheLink } from './BreatheLink'
 
 /**
  * "If you need support now": people to talk to, never the app pretending to
  * be one. Reached from Settings, the Guide, and quietly after a stormy
  * check-in. Every link hands off to the phone's own dialler, messages or
  * browser; nothing is fetched or sent from here.
+ *
+ * Below the people, one quiet line offers breathing with a butterfly, as a
+ * calming exercise and never in their place.
  */
-export function SupportView({ onBack, backLabel }: { onBack: () => void; backLabel: string }) {
+export function SupportView({
+  onBack,
+  backLabel,
+  state,
+  onBreathe,
+}: {
+  onBack: () => void
+  backLabel: string
+  /** The garden, for whose wings would pace the breath. */
+  state?: Pick<AppState, 'creatures' | 'profile'>
+  /** Breathe with a butterfly; offered only when given. */
+  onBreathe?: () => void
+}) {
   return (
     <div className="view support-view">
       <header className="page-header">
@@ -55,6 +73,14 @@ export function SupportView({ onBack, backLabel }: { onBack: () => void; backLab
           </li>
         ))}
       </ul>
+
+      {state && onBreathe && (
+        <p className="support-link-note">
+          If a quiet minute would help, you can{' '}
+          <BreatheLink onOpen={onBreathe}>{`breathe with ${pacerFor(state).name}`}</BreatheLink>. It
+          is a calming exercise, not a substitute for the people above.
+        </p>
+      )}
 
       <p className="subtle-copy support-checked">
         These numbers were checked with each service on{' '}

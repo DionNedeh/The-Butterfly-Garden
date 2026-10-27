@@ -42,6 +42,7 @@ function todayProps(state: AppState, overrides: Record<string, unknown> = {}) {
     onSetGoalArchived: vi.fn(),
     onUncompleteGoal: vi.fn(),
     onRestoreGoal: vi.fn(),
+    onAdoptGoal: vi.fn(),
     onOpenRecap: vi.fn(),
     moonlightCollected: false,
     ...overrides,
@@ -124,6 +125,26 @@ describe('TodayView goals', () => {
     expect(
       screen.getByRole('button', { name: /care for three slow breaths/i }),
     ).toBeEnabled()
+  })
+
+  it('names the companions each goal is growing, and not a butterfly', () => {
+    const base = createInitialState('Tester', 'Test Garden')
+    const sol = base.creatures[0]
+    renderToday({
+      ...base,
+      goals: [
+        goal({ id: 'walk', title: 'Walk outside', schedule: 'daily' }),
+        goal({ id: 'water', title: 'Drink water', schedule: 'daily' }),
+      ],
+      creatures: [
+        { ...sol, adoptedGoalId: 'walk' },
+        { ...sol, id: 'pip', name: 'Pip', stage: 'egg', adoptedGoalId: 'walk' },
+        { ...sol, id: 'fern', name: 'Fern', stage: 'butterfly', adoptedGoalId: 'water' },
+      ],
+    })
+    const badges = Array.from(document.querySelectorAll('.goal-companions'))
+    expect(badges.map((badge) => badge.textContent)).toEqual([', growing alongside Sol and Pip'])
+    expect(badges[0].closest('[data-goal-id]')).toHaveAttribute('data-goal-id', 'walk')
   })
 
   it('archives a goal instead of destroying the days it was completed', async () => {
@@ -508,6 +529,36 @@ describe('undo on Today', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Open a window archived.')
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(handlers.onSetGoalArchived).toHaveBeenLastCalledWith('first', false)
+  })
+
+  /** Sol, the starter caterpillar, grown alongside Water the fern. */
+  const growingWithFern = (): AppState => {
+    const state = withGoal()
+    return { ...state, creatures: [{ ...state.creatures[0], adoptedGoalId: 'g' }] }
+  }
+
+  it('brings back the companion an archived goal let go', async () => {
+    const user = userEvent.setup()
+    const state = growingWithFern()
+    const handlers = renderToday(state)
+    await user.click(screen.getByRole('button', { name: 'More for Water the fern' }))
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(handlers.onAdoptGoal).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onSetGoalArchived).toHaveBeenLastCalledWith('g', false)
+    expect(handlers.onAdoptGoal).toHaveBeenCalledWith(state.creatures[0].id, 'g')
+  })
+
+  it('brings back the companion a deleted goal let go', async () => {
+    const user = userEvent.setup()
+    const state = growingWithFern()
+    const handlers = renderToday(state)
+    await user.click(screen.getByRole('button', { name: 'More for Water the fern' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onRestoreGoal).toHaveBeenCalledWith(state.goals[1], 1, state.completions)
+    expect(handlers.onAdoptGoal).toHaveBeenCalledWith(state.creatures[0].id, 'g')
   })
 
   it('lets the offer go after a few seconds, but not while it is being reached for', () => {
@@ -1270,3 +1321,76 @@ describe('TodayView and the Guide', () => {
   })
 })
 
+
+describe('breathing with a butterfly, from Today', () => {
+  afterEach(() => {
+    cleanup()
+    resetDrafts()
+  })
+
+  const breathing = { onSetGentleDay: vi.fn(), onOpenCare: vi.fn() }
+
+  it('is one of the steps after heavy weather, with whoever paces it', async () => {
+    const user = userEvent.setup()
+    const onOpenBreathe = vi.fn()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 1 })] }), {
+      ...breathing,
+      onOpenBreathe,
+    })
+    const group = screen.getByRole('group', { name: /One small thing/ })
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Make today a gentle day',
+      'Breathe with Marigold',
+      'Write one line',
+      'Visit your companion',
+      'Not now',
+    ])
+    await user.click(within(group).getByRole('button', { name: 'Breathe with Marigold' }))
+    // Named, so that coming back finds the check-in it followed.
+    expect(onOpenBreathe).toHaveBeenCalledExactlyOnceWith('next-step')
+    expect(screen.queryByRole('group', { name: /One small thing/ })).toBeNull()
+  })
+
+  it('is not offered after an ordinary day', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 4 })] }), {
+      ...breathing,
+      onOpenBreathe: vi.fn(),
+    })
+    expect(screen.queryByRole('button', { name: /^Breathe with/ })).toBeNull()
+  })
+
+  it('is a small link on a "Take three slow breaths" goal, until it is done', async () => {
+    const user = userEvent.setup()
+    const onOpenBreathe = vi.fn()
+    const breaths = goal({ id: 'b', title: 'Take three slow breaths', schedule: 'daily' })
+    const water = goal({ id: 'w', title: 'Drink a glass of water', schedule: 'daily' })
+    renderToday(gardenWith({}, { goals: [breaths, water] }), { onOpenBreathe })
+    const links = screen.getAllByRole('link', { name: 'Breathe now' })
+    expect(links).toHaveLength(1)
+    expect(links[0].closest('.goal-row')).toHaveAttribute('data-goal-id', 'b')
+    expect(links[0]).toHaveAttribute('href', '#/breathe')
+    await user.click(links[0])
+    // Named by its goal, so that coming back finds this link again.
+    expect(onOpenBreathe).toHaveBeenCalledExactlyOnceWith('goal', 'b')
+
+    cleanup()
+    renderToday(
+      gardenWith(
+        {},
+        {
+          goals: [breaths],
+          completions: [{ id: `b:${TODAY}`, goalId: 'b', localDate: TODAY, completedAt: '' }],
+        },
+      ),
+      { onOpenBreathe },
+    )
+    expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+  })
+
+  it('offers nothing where breathing cannot be opened', () => {
+    renderToday(
+      gardenWith({}, { goals: [goal({ id: 'b', title: 'Take three slow breaths', schedule: 'daily' })] }),
+    )
+    expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+  })
+})

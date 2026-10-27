@@ -1,0 +1,39 @@
+/* Settings → Reminders (components/ReminderSetting). Imported by it, so it
+   arrives with Settings rather than in the stylesheet every page waits for. */
+
+.reminder-setting fieldset {
+  margin-bottom: 1rem;
+}
+
+/* The time field under its words, like Your rhythm's hours. */
+.reminder-time {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
+
+.reminder-time input {
+  max-width: 12rem;
+}
+
+/* The field's own clock icon follows the night, as the field itself does. */
+.theme-night .reminder-time input {
+  color-scheme: dark;
+}
+
+/* A link to a calendar file stands in for the button on an iPhone or iPad,
+   and looks like it. */
+.reminder-setting a.secondary-button {
+  text-decoration: none;
+}
+
+.reminder-setting .subtle-copy {
+  margin: 0.75rem 0 0;
+}
+
+/* The status line stays in the page while it is empty, so a screen reader is
+   already listening when it fills; it just takes no room until then. */
+.reminder-setting .settings-note:empty {
+  margin: 0;
+}

@@ -669,6 +669,16 @@ describe('every action, through the hook', () => {
     expect(garden().recaps).toEqual([])
   })
 
+  it('counts a breathing session run to its end, once a day', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => result.current.finishBreathing())
+    expect(garden().sunlight.map((award) => award.source)).toEqual([`breath:${toLocalDate()}`])
+    const once = garden()
+    act(() => result.current.finishBreathing())
+    expect(garden()).toBe(once)
+  })
+
   it('writes for an earlier day, earning nothing and announcing nothing', async () => {
     const planted = createInitialState('Tester', 'Test Garden', new Date(Date.now() - 20 * 86_400_000))
     vi.spyOn(gardenRepository, 'load').mockResolvedValue({ status: 'loaded', state: planted })
@@ -748,6 +758,22 @@ describe('every action, through the hook', () => {
     act(() => result.current.selectCompanion(sol.id))
     expect(garden().creatures[0].name).toBe('Pip')
     expect(garden().profile?.activeCompanionId).toBe(sol.id)
+  })
+
+  it('grows a companion alongside a goal, counting the goal as care until it is archived', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    const sol = garden().creatures[0]
+    act(() => result.current.adoptGoal(sol.id, 'g1'))
+    expect(garden().creatures[0].adoptedGoalId).toBe('g1')
+    act(() => result.current.completeGoal('g1'))
+    expect(garden().creatures[0].careDates[sol.stage]).toEqual([toLocalDate()])
+    expect(garden().creatures[0].grownAlongside).toEqual([
+      { goalId: 'g1', title: 'Walk', dates: [toLocalDate()] },
+    ])
+    act(() => result.current.setGoalArchived('g1', true))
+    expect(garden().creatures[0]).not.toHaveProperty('adoptedGoalId')
+    expect(garden().creatures[0].grownAlongside).toHaveLength(1)
   })
 
   it('saves, wears, renames, deletes and puts back a look', async () => {

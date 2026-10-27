@@ -42,6 +42,8 @@ export type AppView =
   | 'notices'
   /** "If you need support now": from Settings, the Guide and Today. */
   | 'support'
+  /** Breathing with a butterfly: from Today, the recap and the support page. */
+  | 'breathe'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
@@ -255,6 +257,26 @@ export interface Profile {
    * and planting tips. Optional: without it the Guide shows neither.
    */
   region?: RegionId
+  /**
+   * The time of day ("HH:MM", 24-hour) of the daily garden visit last added
+   * to the gardener's calendar (lib/reminderTime), so Settings offers it
+   * again. Optional: without it, Settings offers 8:00. The calendar does the
+   * reminding; nothing else about the reminder is kept.
+   */
+  reminderTime?: string
+  /**
+   * The Sunday (a local date) ending the week of the newest letter from
+   * Marigold the gardener has read or put away (lib/letters). Letters
+   * themselves are worked out when read and never stored. Optional: without
+   * it no letter has been read.
+   */
+  lastLetterRead?: string
+  /**
+   * Never quote the gardener's words in a letter. Optional, and only ever
+   * 'never': without it a letter may quote a line the gardener starred, and
+   * nothing else.
+   */
+  letterQuotes?: 'never'
 }
 
 /** Image formats a garden image may be stored as. */
@@ -360,6 +382,11 @@ export interface MoodEntry {
    * written on the day.
    */
   writtenLater?: true
+  /**
+   * The gardener starred the note, so a letter from Marigold may quote it
+   * (lib/letters). Only ever stored as true; without it, never quoted.
+   */
+  starred?: true
   createdAt: string
   updatedAt: string
 }
@@ -380,6 +407,8 @@ export interface ReflectionEntry {
   body: string
   /** Written afterwards for this earlier day; see MoodEntry.writtenLater. */
   writtenLater?: true
+  /** Starred, so a letter may quote it; see MoodEntry.starred. */
+  starred?: true
   createdAt: string
   updatedAt: string
 }
@@ -489,6 +518,31 @@ export interface CreatureInstance {
    * first put on, from the diary on. At most MAX_OUTFITS_WORN.
    */
   outfitsWorn?: string[]
+  /**
+   * The goal this companion is grown alongside while it grows: each day the
+   * goal is completed counts as a day of care for its current stage
+   * (careFromGoal in lib/lifecycle). Archiving or deleting the goal clears
+   * it, and so does emerging, with no stage left to grow; `grownAlongside`
+   * keeps the story. Optional: without it, care comes from the care menu
+   * alone, as it always has.
+   */
+  adoptedGoalId?: string
+  /**
+   * The goals this companion was grown alongside, from the diary on, and the
+   * days each counted as its care. Kept after the goal is archived or deleted
+   * and after the companion emerges, so its story keeps them. Only the story
+   * reads it, and careFromGoal, to count a day once.
+   */
+  grownAlongside?: GrownAlongside[]
+}
+
+/** A goal a companion was grown alongside, as its diary wrote it down. */
+export interface GrownAlongside {
+  goalId: string
+  /** The goal's title when it last counted, so a deleted goal keeps its name. */
+  title: string
+  /** Local dates (YYYY-MM-DD) it counted as a day of care, each once. */
+  dates: string[]
 }
 
 /** A look saved from a companion's outfit, to put on any companion later. */

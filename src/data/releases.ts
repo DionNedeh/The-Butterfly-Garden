@@ -40,8 +40,25 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-2',
+    version: '3.2.0',
+    title: 'New ways to care',
+    sections: [
+      {
+        title: 'In the garden',
+        items: [
+          'Breathe with a butterfly: its wings open as you breathe in and close as you breathe out, for one, three or five minutes. Finishing counts as care, once a day.',
+          'A young companion can grow alongside one of your goals, and each day the goal is done counts as a day of its care.',
+          'Settings can add a daily garden visit to your own calendar. Your calendar does the reminding; the garden sends nothing.',
+          'On Sunday evening a letter from Marigold says what your week held. It quotes only lines you star in your journal, or none at all.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'release-3-1',
     version: '3.1.0',
+    releasedOn: '2026-10-27',
     title: 'A kinder rhythm',
     sections: [
       {

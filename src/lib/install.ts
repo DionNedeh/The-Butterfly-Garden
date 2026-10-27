@@ -9,7 +9,8 @@
  * the Android app is installed by definition, so neither is ever advised.
  *
  * This is the one place the app reads the user agent, and only to word a
- * suggestion: nothing stored, shown or allowed depends on it beyond that.
+ * suggestion, or to choose how a calendar file is handed over: nothing
+ * stored or allowed depends on it beyond that.
  */
 
 /** Safari's own steps, or the same steps in another iOS browser's menu. */
@@ -67,6 +68,16 @@ function navigatorOrUndefined(): (Navigator & { standalone?: boolean }) | undefi
 function isAppleTouchDevice(nav: Navigator): boolean {
   const agent = nav.userAgent
   return /iPhone|iPad|iPod/.test(agent) || (/Macintosh/.test(agent) && nav.maxTouchPoints > 1)
+}
+
+/**
+ * Whether this is an iPhone or iPad, which opens a calendar file best from a
+ * plain link to it (components/ReminderSetting). Never the Android app.
+ */
+export function isIPhoneOrIPad(): boolean {
+  if (import.meta.env.VITE_PLATFORM === 'android') return false
+  const nav = navigatorOrUndefined()
+  return nav !== undefined && isAppleTouchDevice(nav)
 }
 
 /** Whether the app is running from the Home Screen or as an installed app. */

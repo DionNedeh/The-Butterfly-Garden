@@ -1,12 +1,13 @@
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { shopItems } from '../data/shopItems'
 import { BOND_LEVEL_NECTAR, BOND_LEVEL_STARDUST, BOND_PER_LEVEL } from '../lib/lifecycle'
 import { renameCreature } from '../lib/gardenActions'
+import { adoptGoal } from '../lib/lifecycle'
 import { createInitialState } from '../lib/progression'
-import type { AppState, CreatureInstance } from '../types'
+import type { AppState, CreatureInstance, Goal } from '../types'
 import { CareView } from './CareView'
 
 const TODAY = '2026-09-05'
@@ -251,6 +252,85 @@ describe('naming a new arrival', () => {
       screen.getByRole('region', { name: /name your monarch egg/i }),
     ).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Fern')
+  })
+})
+
+describe('growing a companion alongside a goal', () => {
+  const walk: Goal = {
+    id: 'walk',
+    title: 'Walk outside',
+    schedule: 'daily',
+    weekdays: [],
+    createdDate: '2026-09-01',
+    archived: false,
+  }
+
+  /** Care over a garden that really changes, naming and adopting as the shell would. */
+  function CareWithGoals({ initial }: { initial: AppState }) {
+    const [state, setState] = useState(initial)
+    return (
+      <CareView
+        state={state}
+        today={TODAY}
+        onCare={vi.fn()}
+        onEquip={vi.fn()}
+        onUnequip={vi.fn()}
+        onRenameCreature={(id, name) => setState((current) => renameCreature(current, id, name))}
+        onAdoptGoal={(id, goalId) => setState((current) => adoptGoal(current, id, goalId))}
+        onGoToShop={vi.fn()}
+        {...lookHandlers()}
+      />
+    )
+  }
+
+  const choice = () => screen.queryByRole('combobox', { name: 'Grow alongside a goal' })
+
+  it('grows a caterpillar alongside a goal chosen on its page', async () => {
+    const user = userEvent.setup()
+    render(<CareWithGoals initial={gardenWithCaterpillar({ goals: [walk] })} />)
+    await user.selectOptions(choice()!, 'Walk outside')
+    expect(choice()).toHaveValue('walk')
+    expect(choice()).toHaveFocus()
+    expect(choice()).toHaveAccessibleDescription(
+      'Each day you complete Walk outside on Today counts as a day of care for Sol.',
+    )
+  })
+
+  it('offers nothing to a butterfly, or where goals cannot be chosen', () => {
+    const base = gardenWithCaterpillar({ goals: [walk] })
+    renderCare({
+      ...base,
+      creatures: [{ ...base.creatures[0], stage: 'butterfly' }],
+    }, { onAdoptGoal: vi.fn() })
+    expect(choice()).toBeNull()
+    cleanup()
+    renderCare(base)
+    expect(choice()).toBeNull()
+  })
+
+  it('grows a new egg alongside the goal chosen with its name', async () => {
+    const user = userEvent.setup()
+    const base = gardenWithCaterpillar({ goals: [walk] })
+    const egg: CreatureInstance = {
+      ...base.creatures[0],
+      id: 'egg',
+      name: 'Clover',
+      stage: 'egg',
+      awaitingName: true,
+    }
+    render(<CareWithGoals initial={{ ...base, creatures: [base.creatures[0], egg] }} />)
+    const offer = screen.getByRole('region', { name: /name your .* egg/i })
+    // Asked once: the egg's own page waits until the offer is answered.
+    expect(screen.getAllByRole('combobox', { name: 'Grow alongside a goal' })).toHaveLength(1)
+    await user.selectOptions(
+      within(offer).getByRole('combobox', { name: 'Grow alongside a goal' }),
+      'Walk outside',
+    )
+    await user.click(within(offer).getByRole('button', { name: 'Keep Clover' }))
+    expect(screen.queryByRole('region', { name: /name your .* egg/i })).toBeNull()
+    expect(screen.getByRole('tab', { name: /Clover/ })).toHaveFocus()
+    // Its page now shows the goal it grows alongside.
+    expect(choice()).toHaveValue('walk')
   })
 })
 

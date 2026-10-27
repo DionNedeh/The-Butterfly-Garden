@@ -44,6 +44,9 @@ import { soundVolumeOf } from '../lib/sound'
 import { SoundSwitches, SoundVolume } from './SoundControls'
 import { GuideLink } from './GuideLink'
 import { RegionSetting } from './RegionSetting'
+import { ReminderSetting } from './ReminderSetting'
+import { LetterSetting } from './LetterSetting'
+import { letterQuotesOf, type LetterQuotes } from '../lib/letters'
 import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
@@ -266,6 +269,8 @@ export function SettingsView({
   onSetRegion,
   onOpenGuide,
   onChooseNightBackdrop,
+  onSetReminderTime,
+  onSetLetterQuotes,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -326,6 +331,10 @@ export function SettingsView({
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
   onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
+  /** Remember the time of the daily visit just added to the calendar. */
+  onSetReminderTime?: (time: string) => void
+  /** Whether Marigold's letters may quote starred lines, or never. */
+  onSetLetterQuotes?: (quotes: LetterQuotes) => void
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -813,6 +822,15 @@ export function SettingsView({
             </label>
           )}
         </section>
+      )}
+
+      <ReminderSetting
+        savedTime={profile?.reminderTime}
+        eveningHour={recapHours.opensHour}
+        onChooseTime={onSetReminderTime}
+      />
+      {onSetLetterQuotes && (
+        <LetterSetting quotes={letterQuotesOf(profile)} onChoose={onSetLetterQuotes} />
       )}
 
       {onSetGardenPace && (

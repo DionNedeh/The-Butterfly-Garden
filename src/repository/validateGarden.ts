@@ -2,7 +2,12 @@ import { DEFAULT_FLIGHT_PATTERN_ID } from '../lib/flightPatterns'
 import { flightPatterns } from '../data/flightPatterns'
 import { getCareAction } from '../data/careActions'
 import { getShopItem } from '../data/shopItems'
-import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, presetName } from '../lib/companionDiary'
+import {
+  MAX_GOAL_DAYS,
+  MAX_OUTFIT_PRESETS,
+  MAX_OUTFITS_WORN,
+  presetName,
+} from '../lib/companionDiary'
 import { JAR_LETTERS, JAR_NUMBERS, jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import { isValidBrightness, isValidCustomBackdropCollection } from '../lib/customBackdrops'
@@ -12,7 +17,16 @@ import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } fr
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { clampVolume } from '../lib/sound'
 import { isRegionId } from '../lib/region'
-import type { AmbientTrackId, AppState, OutfitPreset, OutfitSlot, PlantInstance } from '../types'
+import { isSunday } from '../lib/letters'
+import { isReminderTime } from '../lib/reminderTime'
+import type {
+  AmbientTrackId,
+  AppState,
+  GrownAlongside,
+  OutfitPreset,
+  OutfitSlot,
+  PlantInstance,
+} from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
  *  newer client and must be left untouched rather than overwritten. */
@@ -357,6 +371,18 @@ function writtenLaterChecked<T extends { writtenLater?: true }>(entry: T | undef
 }
 
 /**
+ * A star, which lets a letter from Marigold quote the entry, is likewise only
+ * ever true. Anything else is no star: a hand-edited value must never make a
+ * line quotable that the gardener did not choose.
+ */
+function starredChecked<T extends { starred?: true }>(entry: T | undefined): T | undefined {
+  if (!entry || !('starred' in entry) || entry.starred === true) return entry
+  const fixed = { ...entry }
+  delete fixed.starred
+  return fixed
+}
+
+/**
  * Recaps that survive validation, at most one per local date.
  *
  * A recap with words but no valid day refuses the garden like any other
@@ -509,7 +535,11 @@ const CREATURE_STAGES = new Set(['egg', 'caterpillar', 'chrysalis', 'butterfly']
 const OUTFIT_SLOTS = new Set<OutfitSlot>(['headwear', 'accessory', 'aura'])
 const FLIGHT_PATTERN_IDS = new Set<string>(flightPatterns.map((pattern) => pattern.id))
 
-function checkCreature(raw: unknown, ctx: Context) {
+/**
+ * `activeGoalIds` are the goals a companion may be grown alongside: those
+ * the garden has, and has not archived.
+ */
+function checkCreature(raw: unknown, ctx: Context, activeGoalIds: ReadonlySet<string>) {
   if (
     !isRecord(raw) ||
     typeof raw.id !== 'string' ||
@@ -599,7 +629,58 @@ function checkCreature(raw: unknown, ctx: Context) {
   const outfitsWorn = checkOutfitsWorn(raw.outfitsWorn)
   if (outfitsWorn) creature.outfitsWorn = outfitsWorn
   else delete creature.outfitsWorn
+  const grownAlongside = checkGrownAlongside(raw.grownAlongside)
+  if (grownAlongside) creature.grownAlongside = grownAlongside
+  else delete creature.grownAlongside
+  // Grown alongside a goal only while it grows, and only a goal still in
+  // use: archiving or deleting one lets its companions go, which an older
+  // build does not know to do, and a butterfly has no stage left for a goal
+  // to count toward. Letting go loses nothing (the diary above keeps the
+  // story), so it is not damage to report.
+  if (
+    typeof raw.adoptedGoalId !== 'string' ||
+    !activeGoalIds.has(raw.adoptedGoalId) ||
+    stage === 'butterfly'
+  ) {
+    delete creature.adoptedGoalId
+  }
   return creature
+}
+
+/**
+ * The goals a companion was grown alongside, kept only in the shape the
+ * diary writes: a goal's id and title as text, and real local dates, each
+ * day once across them all and at most MAX_GOAL_DAYS. A goal the garden no
+ * longer has is still part of the story, so its id need not name one.
+ */
+function checkGrownAlongside(value: unknown): GrownAlongside[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const goals = new Set<string>()
+  const days = new Set<string>()
+  const kept: GrownAlongside[] = []
+  for (const entry of value) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.goalId !== 'string' ||
+      !entry.goalId ||
+      goals.has(entry.goalId) ||
+      typeof entry.title !== 'string' ||
+      !entry.title.trim() ||
+      !Array.isArray(entry.dates)
+    ) {
+      continue
+    }
+    const dates: string[] = []
+    for (const date of entry.dates) {
+      if (!isLocalDate(date) || days.has(date) || days.size >= MAX_GOAL_DAYS) continue
+      days.add(date)
+      dates.push(date)
+    }
+    if (dates.length === 0) continue
+    goals.add(entry.goalId)
+    kept.push({ goalId: entry.goalId, title: entry.title, dates })
+  }
+  return kept.length > 0 ? kept : undefined
 }
 
 /** Counts of care actions this build knows, each a whole number above zero. */
@@ -859,12 +940,29 @@ function checkProfile(
   if (value.region !== undefined && !isRegionId(value.region)) {
     delete profile.region
   }
+  // Only ever a suggestion for the time field, so anything that is not a
+  // time of day is dropped and Settings offers the morning's again.
+  if (value.reminderTime !== undefined && !isReminderTime(value.reminderTime)) {
+    delete profile.reminderTime
+  }
   // Visits are days that have happened: a date in the future could hold
   // back a welcome, or show one, on the wrong day.
   const today = toLocalDate()
   for (const field of ['lastVisitOn', 'welcomeBackOn'] as const) {
     const date = value[field]
     if (date !== undefined && !(isLocalDate(date) && date <= today)) delete profile[field]
+  }
+  // The last letter read is a Sunday that has come: any other day, or one
+  // still to come, could hide a letter that is waiting, so it is dropped and
+  // the newest letter simply waits again.
+  const lastLetterRead = value.lastLetterRead
+  if (lastLetterRead !== undefined && !(isSunday(lastLetterRead) && lastLetterRead <= today)) {
+    delete profile.lastLetterRead
+  }
+  // Never quoting is the one choice stored; anything else is the default,
+  // which quotes only starred lines.
+  if (value.letterQuotes !== undefined && value.letterQuotes !== 'never') {
+    delete profile.letterQuotes
   }
   // Saved looks live here, in the profile, because every older build carries
   // the profile through whole (see Profile.outfitPresets). A look dropped is
@@ -1031,12 +1129,17 @@ export function validateGarden(value: unknown): GardenValidation {
 
   const goals = sanitise(candidate.goals, ctx, checkGoal)
   const completions = sanitise(candidate.completions, ctx, checkCompletion)
-  const moods = sanitise(candidate.moods, ctx, (raw, c) => writtenLaterChecked(checkMood(raw, c)))
+  const moods = sanitise(candidate.moods, ctx, (raw, c) =>
+    starredChecked(writtenLaterChecked(checkMood(raw, c))),
+  )
   const reflections = sanitise(candidate.reflections, ctx, (raw, c) =>
-    writtenLaterChecked(checkReflection(raw, c)),
+    starredChecked(writtenLaterChecked(checkReflection(raw, c))),
   )
   const sunlight = sanitise(candidate.sunlight, ctx, checkSunlight)
-  const creatures = sanitise(candidate.creatures, ctx, checkCreature)
+  const activeGoalIds = new Set(goals.filter((goal) => !goal.archived).map((goal) => goal.id))
+  const creatures = sanitise(candidate.creatures, ctx, (raw, c) =>
+    checkCreature(raw, c, activeGoalIds),
+  )
   // Absent in every garden written before version 5, which is why these are
   // tolerated rather than required the way `moods` is above.
   const recaps = migrateRecaps(candidate.recaps, ctx)

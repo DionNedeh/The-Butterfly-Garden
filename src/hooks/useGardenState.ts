@@ -27,7 +27,7 @@ import {
   type RecycledJar,
   type RecycleOutcome,
 } from '../lib/jars'
-import { performCare } from '../lib/lifecycle'
+import { adoptGoal, performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import type { ThemeChoice } from '../lib/theme'
 import * as looks from '../lib/outfitPresets'
@@ -36,9 +36,17 @@ import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
+import { setReminderTime } from '../lib/reminderTime'
 import { requestPersistentStorage } from '../lib/storage'
 import { markQuietWrite } from '../lib/quietWrites'
 import { noteVisit, putAwayWelcomeBack } from '../lib/visits'
+import {
+  readLetter,
+  setLetterQuotes,
+  setStarred,
+  type LetterQuotes,
+  type StarredKind,
+} from '../lib/letters'
 import {
   buyShopItem,
   equipOutfitItem,
@@ -89,6 +97,9 @@ export type StarterGoal = Pick<Goal, 'title' | 'tinyTitle'>
  * What is left here is the wiring: reading the clock, routing each action
  * through `update`, and marking the moments the gardener brought about.
  */
+/** How many times a letter read is marked again after another tab wrote first. */
+const LETTER_READ_TRIES = 3
+
 export function useGardenState() {
   const media = useMediaSaves()
   const { state, setState, loading, persistence, setPersistence, readOnlyRef, lifecycle } =
@@ -156,6 +167,24 @@ export function useGardenState() {
       document.removeEventListener('visibilitychange', visit)
     }
   }, [loading, hasGarden, setState, readOnlyRef])
+
+  // The newest letter this tab read or put away. Marking it is a quiet write
+  // (lib/quietWrites), which a conflict with another tab drops without a word
+  // and replaces with that tab's garden. Unlike a visit, the other tab has not
+  // done this for us, so the mark is made again on the garden that arrived. A
+  // few tries at most: a write refused every time must not loop.
+  const letterRead = useRef<{ sunday: string; tries: number } | undefined>(undefined)
+  useEffect(() => {
+    const read = letterRead.current
+    if (!read || !state?.profile || readOnlyRef.current) return
+    if ((state.profile.lastLetterRead ?? '') >= read.sunday || read.tries >= LETTER_READ_TRIES) return
+    read.tries += 1
+    setState((current) => {
+      if (!current) return current
+      const next = readLetter(current, read.sunday)
+      return next === current ? current : markQuietWrite(next)
+    })
+  }, [state, setState, readOnlyRef])
 
   /**
    * Every action keeps a stable identity so memoized views (the month
@@ -265,6 +294,11 @@ export function useGardenState() {
       },
       deleteReflection: (id: string) =>
         update((current) => act.deleteReflection(current, id)),
+      /** A breathing session run to its end: its Sunlight, once a day. */
+      finishBreathing: () => {
+        const now = new Date()
+        update((current) => act.finishBreathing(current, now))
+      },
       /** A check-in for a day that has passed, marked as written later; it earns nothing. */
       addEarlierMood: (localDate: string, choice: MoodChoice, note: string) => {
         const now = new Date()
@@ -354,6 +388,9 @@ export function useGardenState() {
         update((current) => act.selectCompanion(current, creatureId)),
       renameCreature: (creatureId: string, name: string) =>
         update((current) => act.renameCreature(current, creatureId, name)),
+      /** Grow a companion alongside one of the goals, or none (undefined). */
+      adoptGoal: (creatureId: string, goalId: string | undefined) =>
+        update((current) => adoptGoal(current, creatureId, goalId)),
       selectBackdrop: (backdropId: GardenBackdropId) => {
         const now = new Date()
         update((current) => act.selectBackdrop(current, backdropId, now))
@@ -453,8 +490,33 @@ export function useGardenState() {
       /** Where the gardener gardens, for the Guide's native marks, or none. */
       setRegion: (region: RegionId | undefined) =>
         update((current) => act.setRegion(current, region)),
+      /** The time of the daily visit just added to the calendar (lib/reminderTime). */
+      setReminderTime: (time: string) =>
+        update((current) => setReminderTime(current, time)),
       /** Put the garden's welcome-back reveal away (lib/visits). */
       putAwayWelcomeBack: () => update(putAwayWelcomeBack),
+      /**
+       * The letter for the week ending `sunday` was read, or put away
+       * (lib/letters). Straight through setState, like a visit: nothing of
+       * the gardener's is in this write, and an older letter read again
+       * hands back the same garden, so nothing is written.
+       */
+      readLetter: (sunday: string) => {
+        if (readOnlyRef.current) return
+        if (!letterRead.current || sunday > letterRead.current.sunday)
+          letterRead.current = { sunday, tries: 0 }
+        setState((current) => {
+          if (!current) return current
+          const next = readLetter(current, sunday)
+          return next === current ? current : markQuietWrite(next)
+        })
+      },
+      /** Quote starred lines in letters, or never. */
+      setLetterQuotes: (quotes: LetterQuotes) =>
+        update((current) => setLetterQuotes(current, quotes)),
+      /** Star a check-in's note or a reflection for letters to quote, or not. */
+      setStarred: (kind: StarredKind, id: string, starred: boolean) =>
+        update((current) => setStarred(current, kind, id, starred)),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**

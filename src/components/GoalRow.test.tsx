@@ -26,6 +26,7 @@ function renderRow(
     complete?: boolean
     skipped?: boolean
     gentle?: boolean
+    companions?: string[]
   } = {},
 ) {
   const handlers = {
@@ -42,6 +43,7 @@ function renderRow(
       complete={overrides.complete ?? false}
       skipped={overrides.skipped ?? false}
       gentle={overrides.gentle}
+      companions={overrides.companions}
       {...handlers}
     />,
   )
@@ -98,6 +100,25 @@ describe('the schedule under the title', () => {
   it('says when the goal was skipped today', () => {
     renderRow({ skipped: true })
     expect(screen.getByText('Every day · skipped today')).toBeInTheDocument()
+  })
+})
+
+describe('the companions a goal is grown alongside', () => {
+  it('names them quietly at the end of the schedule, and says what they are', () => {
+    renderRow({ skipped: true, companions: ['Sol', 'Pip'] })
+    const badge = document.querySelector('.goal-companions')!
+    expect(badge).toHaveTextContent(/^, growing alongside Sol and Pip$/)
+    expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText('Every day · skipped today')).toBeInTheDocument()
+    // Still one quiet line beneath the title, which keeps its own name.
+    expect(badge.closest('small')).toHaveClass('with-companions')
+    expect(screen.getByRole('button', { name: 'Care for Water the ferns' })).toBeInTheDocument()
+  })
+
+  it('adds nothing to a goal no companion grows alongside', () => {
+    renderRow({ companions: [] })
+    expect(document.querySelector('.goal-companions')).toBeNull()
+    expect(document.querySelector('.with-companions')).toBeNull()
   })
 })
 

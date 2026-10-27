@@ -124,3 +124,118 @@
 .species-card small {
   color: var(--muted);
 }
+
+/* Letters from Marigold (journal/Letters.tsx): folded at the top until
+   asked for, then the letter on a quiet rule, like a day given back above. */
+.letters > details > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.letters > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.letters-summary {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.letters-summary strong {
+  color: var(--forest-dark);
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2.4vw, 1.5rem);
+}
+
+.letters-status {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.letters-body {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.letters-weeks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* The chosen week keeps its colours and gains a heavier edge, so its
+   contrast is the same as every other week's in both themes. */
+.letters-week {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  background: transparent;
+  color: var(--forest-dark);
+  font-weight: 600;
+}
+
+.letters-week[aria-pressed='true'] {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 1px var(--forest);
+  font-weight: 800;
+}
+
+.letter {
+  border-left: 3px solid var(--line);
+  padding-left: 1rem;
+}
+
+.letter h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.15rem;
+}
+
+.letter p {
+  margin: 0 0 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+.letter-quote {
+  margin: 0 0 0.6rem;
+}
+
+.letter-quote figcaption {
+  color: var(--muted);
+}
+
+.letter-quote blockquote {
+  margin: 0.3rem 0 0;
+  font-style: italic;
+}
+
+.letter .letter-signature {
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.letters-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* "Star this line", beside an entry's Edit and Delete. */
+.journal-block .inline-actions {
+  flex-wrap: wrap;
+}
+
+.star-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 44px;
+}
+
+.star-toggle svg {
+  flex: none;
+}

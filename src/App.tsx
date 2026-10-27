@@ -68,6 +68,9 @@ const NoticesView = lazy(() =>
 const SupportView = lazy(() =>
   import('./components/SupportView').then((m) => ({ default: m.SupportView })),
 )
+const BreathingView = lazy(() =>
+  import('./components/BreathingView').then((m) => ({ default: m.BreathingView })),
+)
 // Only ever shown on the address the garden moved from, never in the app.
 const MovedBanner = lazy(() =>
   import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
@@ -129,9 +132,10 @@ import { useDraft } from './lib/drafts'
 import { heardTrack, soundVolumeOf } from './lib/sound'
 import { isArrival, movedTo } from './lib/hosting'
 import {
-  returnFromGuide,
+  returnFrom,
   routeFromHash,
   urlForRoute,
+  type BreatheWay,
   type LinkPlace,
   type Route,
 } from './lib/routes'
@@ -143,10 +147,10 @@ function currentUrl(): string {
 }
 
 /**
- * Puts the gardener back where they pressed a "What does this do?" link, once
- * the page they return to is drawn. Rendered after the page, inside the same
- * Suspense, so it runs after the page's own first focus (Care's chip) and
- * never before the page is there.
+ * Puts the gardener back where they pressed a "What does this do?" link or a
+ * way into breathing, once the page they return to is drawn. Rendered after
+ * the page, inside the same Suspense, so it runs after the page's own first
+ * focus (Care's chip) and never before the page is there.
  */
 function PutBack({ place }: { place: LinkPlace }) {
   useEffect(() => putBackAt(place), [place])
@@ -334,7 +338,8 @@ function App() {
   // would expect: the open dialog first, then the recap to Today, then any
   // page to the garden, and only then out of the app. The handler is
   // registered once and reads the current page from a ref, with the page a
-  // "What does this do?" link left, which back returns the Guide to.
+  // "What does this do?" link or a way into breathing left, which back
+  // returns the Guide or breathing to.
   const routeRef = useRef(route)
   useEffect(() => {
     routeRef.current = route
@@ -347,9 +352,10 @@ function App() {
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
         else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
-          // Out of the Guide, back does what its Back button does: the same
-          // companion on Care, and the gardener where they were on the page.
-          const back = returnFromGuide(current)
+          // Out of the Guide or breathing, back does what its Back button
+          // does: the same companion on Care, and the gardener where they
+          // were on the page.
+          const back = returnFrom(current)
           const next = back?.view === action.view ? back : { view: action.view }
           // Android's back walks up a fixed ladder (lib/backNavigation), not
           // through history, so each step replaces the address.
@@ -542,6 +548,20 @@ function App() {
       from: activeView,
       fromPlace: { section, scrollY: window.scrollY, companionId },
     })
+  /**
+   * Breathing with a butterfly, remembering the page that offered it and
+   * where on it, as a Guide link does, so that leaving puts the gardener back
+   * at the way in they took. The recap is collected on the way in and is not
+   * there to come back to, so from it the way back is Today, at its top.
+   */
+  const openBreathe = (way: BreatheWay, goalId?: string) => {
+    const fromRecap = way === 'recap'
+    navigate({
+      view: 'breathe',
+      from: fromRecap ? 'today' : activeView,
+      fromPlace: { breathe: way, goalId, scrollY: fromRecap ? 0 : window.scrollY },
+    })
+  }
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -814,6 +834,8 @@ function App() {
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
               onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
+              onOpenLetter={() => navigate({ view: 'journal', letter: true })}
+              onReadLetter={garden.readLetter}
               theme={theme}
             />
           )}
@@ -834,6 +856,7 @@ function App() {
               openOn={route.companionId}
               onChooseFlight={garden.chooseCompanionFlight}
               onOpenGuide={openGuideAt}
+              onAdoptGoal={garden.adoptGoal}
             />
           )}
           {activeView === 'shop' && (
@@ -881,10 +904,12 @@ function App() {
               onSetGentleDay={garden.setGentleDay}
               onChooseNextPlant={garden.chooseNextPlant}
               onOpenCare={() => setView('care')}
+              onAdoptGoal={garden.adoptGoal}
               recap={offeredRecap}
               moonlightCollected={recapCollected}
               openAtCheckIn={route.checkIn}
               onOpenGuide={openGuideAt}
+              onOpenBreathe={openBreathe}
               onOpenRecap={() => {
                 setRecapOpenedFor(recapTarget)
                 setView('recap')
@@ -902,6 +927,7 @@ function App() {
               onClose={() => setView('today')}
               onFadeToNight={fadeToNight}
               onOpenGuide={openGuideAt}
+              onBreathe={() => openBreathe('recap')}
             />
           )}
           {activeView === 'guide' && (
@@ -915,7 +941,7 @@ function App() {
               section={route.section}
               returnTo={route.from}
               onReturn={() => {
-                const back = returnFromGuide(route)
+                const back = returnFrom(route)
                 if (back) navigate(back)
               }}
               onOpenSection={(section) => navigate({ ...route, section })}
@@ -932,6 +958,17 @@ function App() {
             <SupportView
               onBack={() => setView(supportFrom)}
               backLabel={SUPPORT_BACK_LABELS[supportFrom] ?? 'Back to the garden'}
+              state={state}
+              onBreathe={() => openBreathe('support')}
+            />
+          )}
+          {activeView === 'breathe' && (
+            <BreathingView
+              state={state}
+              // A session cannot be counted where nothing can be saved.
+              onFinish={garden.persistence.readOnly ? undefined : garden.finishBreathing}
+              from={route.from}
+              onBack={() => navigate(returnFrom(route) ?? { view: 'garden' })}
             />
           )}
           {activeView === 'journal' && (
@@ -945,6 +982,9 @@ function App() {
               onDeleteRecap={garden.deleteRecap}
               onAddEarlierMood={garden.addEarlierMood}
               onAddEarlierReflection={garden.addEarlierReflection}
+              openLetter={route.letter}
+              onReadLetter={garden.readLetter}
+              onSetStarred={garden.setStarred}
             />
           )}
           {activeView === 'settings' && (
@@ -995,6 +1035,8 @@ function App() {
               onSetRegion={garden.setRegion}
               onOpenGuide={openGuideAt}
               onChooseNightBackdrop={garden.chooseNightBackdrop}
+              onSetReminderTime={garden.setReminderTime}
+              onSetLetterQuotes={garden.setLetterQuotes}
             />
           )}
           {route.restore && <PutBack place={route.restore} />}

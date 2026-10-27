@@ -28,14 +28,7 @@ import {
   PLANT_SEED_COST,
 } from '../lib/progression'
 import type { AppState, AppearanceTheme, OutfitSlot } from '../types'
-import {
-  PLANT_CAPACITY,
-  plantBloomNote,
-  plantEggNote,
-  plantingBlocker,
-  plantRemovalBlocker,
-  remainingPlantGrowth,
-} from '../lib/plantManagement'
+import { PLANT_CAPACITY, plantingBlocker } from '../lib/plantManagement'
 import {
   careDaysCompleted,
   hasCaredToday,
@@ -59,9 +52,20 @@ const WelcomeBack = lazy(() =>
 const HomeScreenGuide = lazy(() =>
   import('./garden/HomeScreenGuide').then((m) => ({ default: m.HomeScreenGuide })),
 )
-/** A plant's jars, only once a plant is chosen. */
-const JarManager = lazy(() =>
-  import('./garden/JarManager').then((m) => ({ default: m.JarManager })),
+/**
+ * Marigold's letter, while one waits. It decides that for itself, so none of
+ * the letters' timing is in the first load.
+ */
+const LetterCard = lazy(() =>
+  import('./garden/LetterCard').then((m) => ({ default: m.LetterCard })),
+)
+/** The seed tray, once it is first opened. */
+const SeedTray = lazy(() =>
+  import('./garden/SeedTray').then((m) => ({ default: m.SeedTray })),
+)
+/** A plant's field guide and its jars, only once a plant is chosen. */
+const PlantPanel = lazy(() =>
+  import('./garden/PlantPanel').then((m) => ({ default: m.PlantPanel })),
 )
 
 /** Catalogs are static, so index them once at module load instead of scanning
@@ -74,10 +78,6 @@ const GUIDE_ID = 'marigold-guide'
 const ButterflyCard = lazy(() =>
   import('./ButterflyCard').then((m) => ({ default: m.ButterflyCard })),
 )
-/** Built once; constructing an Intl formatter per render is not free. */
-const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-})
 
 /**
  * Rendered width of a plant sprite in the scene.
@@ -103,6 +103,8 @@ export function GardenView({
   seedFocus,
   onOpenGuide,
   onPutAwayWelcomeBack,
+  onOpenLetter,
+  onReadLetter,
   theme,
 }: {
   state: AppState
@@ -119,14 +121,14 @@ export function GardenView({
   onOpenGuide?: () => void
   /** Put away the welcome back after a few days away (lib/visits). */
   onPutAwayWelcomeBack?: () => void
+  /** Open Marigold's newest letter in the Journal (lib/letters). */
+  onOpenLetter?: () => void
+  /** Note the letter for the week ending on this Sunday as read, or put away. */
+  onReadLetter?: (sunday: string) => void
   /** The theme on screen, chosen or followed: night shows the night's image. */
   theme?: AppearanceTheme
 }) {
   const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
-  const seedTray = useRef<HTMLElement>(null)
-  useEffect(() => {
-    if (seedFocus) seedTray.current?.scrollIntoView({ block: 'start' })
-  }, [seedFocus])
   const [selectedPlantId, setSelectedPlantId] = useState<string>()
   const [confirmPlantRemoval, setConfirmPlantRemoval] = useState(false)
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
@@ -241,15 +243,6 @@ export function GardenView({
   )
   const selectedPlantDefinition = selectedPlant
     ? plantsById.get(selectedPlant.plantId)
-    : undefined
-  const removalBlocker = selectedPlant
-    ? plantRemovalBlocker(state, selectedPlant.id)
-    : undefined
-  const eggNote = selectedPlant
-    ? plantEggNote(state, selectedPlant, MAX_PLANT_GROWTH)
-    : undefined
-  const bloomNote = selectedPlant
-    ? plantBloomNote(state, selectedPlant, MAX_PLANT_GROWTH)
     : undefined
   const visiblePlants = state.plants.slice(0, PLANT_CAPACITY)
   const visiblePlantIds = new Set(visiblePlants.map((plant) => plant.id))
@@ -461,6 +454,22 @@ export function GardenView({
         </Suspense>
       )}
 
+      {/* From Sunday evening, Marigold's letter about the week (lib/letters),
+          until it is read or put away, or the next Sunday's replaces it. */}
+      {onOpenLetter && onReadLetter && (
+        <Suspense fallback={null}>
+          <LetterCard
+            profile={state.profile}
+            onRead={onOpenLetter}
+            onPutAway={(sunday) => {
+              // The card leaves with its button; focus goes to the garden's name.
+              gardenTitle.current?.focus()
+              onReadLetter(sunday)
+            }}
+          />
+        </Suspense>
+      )}
+
       {sceneUnavailable && (
         <p role="status">
           {isAndroidApp()
@@ -564,179 +573,43 @@ export function GardenView({
           })}
         </div>
         {selectedPlant && selectedPlantDefinition ? (
-          <article className="plant-detail">
-            <div>
-              <p className="eyebrow">
-                {selectedPlantDefinition.kind === 'host'
-                  ? 'Host plant'
-                  : 'Nectar plant'}
-              </p>
-              <h3>{selectedPlantDefinition.name}</h3>
-              <em>{selectedPlantDefinition.scientificName}</em>
-              <p>{selectedPlantDefinition.description}</p>
-            </div>
-            <dl>
-              <div>
-                <dt>Growth stage</dt>
-                <dd>
-                  {selectedPlant.growth === 0
-                    ? 'Seed waiting'
-                    : selectedPlant.growth === 1
-                      ? 'Small sprout'
-                      : selectedPlant.growth === 2
-                        ? 'Growing with buds'
-                        : 'Mature and blooming'}
-                </dd>
-              </div>
-              <div>
-                <dt>Care remaining</dt>
-                <dd>
-                  {remainingPlantGrowth(selectedPlant, MAX_PLANT_GROWTH) === 0
-                    ? 'Fully grown'
-                    : `${remainingPlantGrowth(selectedPlant, MAX_PLANT_GROWTH)} eligible Sunlight`}
-                </dd>
-              </div>
-              <div>
-                <dt>Supports</dt>
-                <dd>
-                  {selectedPlantDefinition.speciesIds.length
-                    ? selectedPlantDefinition.speciesIds
-                        .map((id) => speciesById.get(id)?.commonName)
-                        .filter(Boolean)
-                        .join(' and ')
-                    : 'Adult butterflies visiting for nectar'}
-                </dd>
-              </div>
-              {eggNote && (
-                <div>
-                  <dt>Eggs</dt>
-                  <dd>{eggNote}</dd>
-                </div>
-              )}
-              {bloomNote && (
-                <div>
-                  <dt>Next bloom</dt>
-                  <dd>{bloomNote}</dd>
-                </div>
-              )}
-              <div>
-                <dt>Planted</dt>
-                <dd>
-                  {plantedDateFormat.format(new Date(selectedPlant.plantedAt))}
-                </dd>
-              </div>
-            </dl>
-            {/* Its own boundary: the App's would put the whole page away
-                while the jar panel loads. */}
-            <Suspense fallback={null}>
-              <JarManager
-                state={state}
-                plantId={selectedPlant.id}
-                plantName={selectedPlantDefinition.name}
-                visible={selectedPlantIsVisible}
-                onPlaceJar={onPlaceJar}
-                onRemoveJarPlacement={onRemoveJarPlacement}
-              />
-            </Suspense>
-            <div className="plant-removal">
-              {removalBlocker && (
-                <p className="protected-plant-note">
-                  {removalBlocker} It cannot be removed yet.
-                </p>
-              )}
-              {!confirmPlantRemoval ? (
-                <button
-                  className="text-button danger-text"
-                  disabled={Boolean(removalBlocker)}
-                  onClick={() => setConfirmPlantRemoval(true)}
-                >
-                  Remove this plant
-                </button>
-              ) : (
-                <div className="delete-confirmation" role="alert">
-                  <strong>Remove this plant without a seed refund?</strong>
-                  <div className="form-actions">
-                    <button
-                      className="danger-button"
-                      onClick={() => {
-                        onRemovePlant(selectedPlant.id)
-                        setSelectedPlantId(undefined)
-                        setConfirmPlantRemoval(false)
-                      }}
-                    >
-                      Yes, remove plant
-                    </button>
-                    <button
-                      className="secondary-button"
-                      onClick={() => setConfirmPlantRemoval(false)}
-                    >
-                      Keep plant
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </article>
+          // Its own boundary: the App's would put the whole page away while
+          // the plant's panel loads.
+          <Suspense fallback={null}>
+            <PlantPanel
+              state={state}
+              plant={selectedPlant}
+              definition={selectedPlantDefinition}
+              visible={selectedPlantIsVisible}
+              confirmingRemoval={confirmPlantRemoval}
+              onConfirmRemoval={setConfirmPlantRemoval}
+              onRemove={() => {
+                onRemovePlant(selectedPlant.id)
+                setSelectedPlantId(undefined)
+                setConfirmPlantRemoval(false)
+              }}
+              onPlaceJar={onPlaceJar}
+              onRemoveJarPlacement={onRemoveJarPlacement}
+            />
+          </Suspense>
         ) : (
           <p className="empty-copy">Choose a plant to open its field guide.</p>
         )}
       </section>
 
       {showSeedTray && (
-        <section
-          ref={seedTray}
-          className="card seed-tray"
-          aria-labelledby="seed-tray-title"
-        >
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Choose a new beginning</p>
-              <h2 id="seed-tray-title">Seed tray</h2>
-            </div>
-            <button
-              className="text-button"
-              onClick={() => setShowSeedTray(false)}
-            >
-              Close
-            </button>
-          </div>
-          <p className="section-explainer">
-            Spend {PLANT_SEED_COST} seed to add a plant. Host plants can welcome
-            the listed caterpillars after growing; nectar plants add flowers for
-            the butterflies already visiting. The garden has {PLANT_CAPACITY}{' '}
-            spaces.
-          </p>
-          <div className="catalog-grid">
-            {plants.map((plant) => (
-              <button
-                className={`plant-choice ${seedFocus === plant.id ? 'seed-highlight' : ''}`}
-                disabled={state.seeds < PLANT_SEED_COST || gardenFull}
-                key={plant.id}
-                onClick={() => {
-                  onPlant(plant.id)
-                  if (state.seeds <= 1) setShowSeedTray(false)
-                }}
-              >
-                <span
-                  className="plant-dot"
-                  style={{ backgroundColor: plant.color }}
-                  aria-hidden="true"
-                />
-                <strong>{plant.name}</strong>
-                <small>
-                  {plant.kind === 'host'
-                    ? `Host for ${plant.speciesIds
-                        .map(
-                          (speciesId) => speciesById.get(speciesId)?.commonName,
-                        )
-                        .filter(Boolean)
-                        .join(' and ')}`
-                    : 'Nectar plant for visiting butterflies'}
-                </small>
-              </button>
-            ))}
-          </div>
-        </section>
+        <Suspense fallback={null}>
+          <SeedTray
+            seeds={state.seeds}
+            gardenFull={gardenFull}
+            seedFocus={seedFocus}
+            onPlant={(plantId) => {
+              onPlant(plantId)
+              if (state.seeds <= 1) setShowSeedTray(false)
+            }}
+            onClose={() => setShowSeedTray(false)}
+          />
+        </Suspense>
       )}
 
       <section className="content-grid">

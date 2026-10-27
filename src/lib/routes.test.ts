@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppView } from '../types'
-import { hashForRoute, returnFromGuide, routeFromHash, urlForRoute } from './routes'
+import { hashForRoute, returnFrom, routeFromHash, urlForRoute } from './routes'
 
 const EVERY_VIEW: AppView[] = [
   'garden',
@@ -15,6 +15,7 @@ const EVERY_VIEW: AppView[] = [
   'privacy',
   'notices',
   'support',
+  'breathe',
 ]
 
 describe('pages in the address bar', () => {
@@ -49,6 +50,11 @@ describe('pages in the address bar', () => {
     expect(hashForRoute({ view: 'flight-patterns' })).toBe('#/flight')
     expect(hashForRoute({ view: 'journal' })).toBe('#/journal')
     expect(routeFromHash('#/journal/')).toEqual({ view: 'journal' })
+  })
+
+  it('gives breathing with a butterfly an address of its own, without where it came from', () => {
+    expect(hashForRoute({ view: 'breathe', from: 'today' })).toBe('#/breathe')
+    expect(routeFromHash('#/breathe')).toEqual({ view: 'breathe' })
   })
 
   it('sends a reloaded recap to Today, where tonight’s is offered', () => {
@@ -99,14 +105,14 @@ describe('pages in the address bar', () => {
 describe('the way back from the Guide', () => {
   it('returns to the page its link left, for the same companion, at the same place', () => {
     const fromPlace = { section: 'bond', scrollY: 480, companionId: 'zed' }
-    expect(returnFromGuide({ view: 'guide', section: 'bond', from: 'care', fromPlace })).toEqual({
+    expect(returnFrom({ view: 'guide', section: 'bond', from: 'care', fromPlace })).toEqual({
       view: 'care',
       companionId: 'zed',
       restore: fromPlace,
     })
     // Another section chosen in the Guide since does not move the way back.
     expect(
-      returnFromGuide({
+      returnFrom({
         view: 'guide',
         section: 'stardust',
         from: 'settings',
@@ -120,17 +126,46 @@ describe('the way back from the Guide', () => {
   })
 
   it('offers none from a Guide opened any other way, or from another page', () => {
-    expect(returnFromGuide({ view: 'guide' })).toBeUndefined()
-    expect(returnFromGuide({ view: 'guide', section: 'bond' })).toBeUndefined()
-    expect(returnFromGuide({ view: 'guide', from: 'guide' })).toBeUndefined()
-    expect(returnFromGuide({ view: 'care', from: 'today' })).toBeUndefined()
+    expect(returnFrom({ view: 'guide' })).toBeUndefined()
+    expect(returnFrom({ view: 'guide', section: 'bond' })).toBeUndefined()
+    expect(returnFrom({ view: 'guide', from: 'guide' })).toBeUndefined()
+    expect(returnFrom({ view: 'care', from: 'today' })).toBeUndefined()
   })
 
   it('still returns to the page when no place was kept', () => {
-    expect(returnFromGuide({ view: 'guide', section: 'sunlight', from: 'today' })).toEqual({
+    expect(returnFrom({ view: 'guide', section: 'sunlight', from: 'today' })).toEqual({
       view: 'today',
       companionId: undefined,
       restore: undefined,
     })
+  })
+})
+
+describe('the way back from breathing', () => {
+  it('returns to the page that offered it, at the way in that was taken', () => {
+    const fromPlace = { breathe: 'goal' as const, goalId: 'breaths', scrollY: 2315 }
+    expect(returnFrom({ view: 'breathe', from: 'today', fromPlace })).toEqual({
+      view: 'today',
+      companionId: undefined,
+      restore: fromPlace,
+    })
+    const support = { breathe: 'support' as const, scrollY: 900 }
+    expect(returnFrom({ view: 'breathe', from: 'support', fromPlace: support })).toEqual({
+      view: 'support',
+      companionId: undefined,
+      restore: support,
+    })
+    // Where it was pressed stays out of the address, both ways.
+    expect(hashForRoute({ view: 'breathe', from: 'today', fromPlace })).toBe('#/breathe')
+    expect(hashForRoute({ view: 'today', restore: fromPlace })).toBe('#/today')
+  })
+
+  it('offers none for breathing opened from its address, or from another page', () => {
+    expect(returnFrom({ view: 'breathe' })).toBeUndefined()
+    expect(returnFrom({ view: 'breathe', from: 'breathe' })).toBeUndefined()
+    // A page left for another is not a way back, whatever it remembers.
+    expect(
+      returnFrom({ view: 'today', from: 'support', fromPlace: { breathe: 'support', scrollY: 0 } }),
+    ).toBeUndefined()
   })
 })

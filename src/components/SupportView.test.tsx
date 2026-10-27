@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { supportLines } from '../data/support'
+import { createInitialState } from '../lib/progression'
 import { SupportView } from './SupportView'
 
 describe('if you need support now', () => {
@@ -31,5 +32,31 @@ describe('if you need support now', () => {
     render(<SupportView onBack={onBack} backLabel="Back to Today" />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Back to Today' }))
     expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  it('offers breathing with a butterfly quietly, beneath the people and never in their place', async () => {
+    const onBreathe = vi.fn()
+    render(
+      <SupportView
+        onBack={vi.fn()}
+        backLabel="Back to Settings"
+        state={createInitialState('Robin', 'Calm')}
+        onBreathe={onBreathe}
+      />,
+    )
+    const link = screen.getByRole('link', { name: 'breathe with Marigold' })
+    expect(link.closest('p')).toHaveTextContent(
+      'If a quiet minute would help, you can breathe with Marigold. It is a calming exercise, not a substitute for the people above.',
+    )
+    // Below every line of support.
+    const lastLine = screen.getAllByRole('listitem').at(-1)!
+    expect(lastLine.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await userEvent.setup().click(link)
+    expect(onBreathe).toHaveBeenCalledOnce()
+  })
+
+  it('says nothing of breathing where it cannot be opened', () => {
+    render(<SupportView onBack={vi.fn()} backLabel="Back to Settings" />)
+    expect(screen.queryByRole('link', { name: /breathe/i })).toBeNull()
   })
 })
