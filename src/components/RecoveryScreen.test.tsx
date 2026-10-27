@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PersistenceStatus } from '../hooks/useGardenState'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
 import { saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
+import { sealBackup } from '../lib/sealedBackup'
 import { RecoveryScreen } from './RecoveryScreen'
 
 vi.mock('../lib/download', async (original) => ({
@@ -123,6 +124,43 @@ describe('putting a backup back', () => {
     await upload(user, gone)
     expect(await screen.findByText(/could not be read. Try choosing it again/)).toBeInTheDocument()
     expect(onRestore).not.toHaveBeenCalled()
+  })
+})
+
+describe('putting a protected backup back', () => {
+  const PASSPHRASE = 'quiet meadow lantern'
+
+  async function protectedFile(plain: string) {
+    const outcome = await sealBackup(plain, PASSPHRASE, { iterations: 1_000 })
+    return new File([(outcome as { text: string }).text], 'protected.json', { type: 'application/json' })
+  }
+
+  it('asks for its passphrase, then restores the backup inside as any other', async () => {
+    const { onRestore, user } = renderRecovery()
+    await user.upload(screen.getByLabelText('Restore a backup'), await protectedFile('{"a":1}'))
+    const dialog = await screen.findByRole('dialog', { name: 'This backup is protected' })
+    expect(onRestore).not.toHaveBeenCalled()
+
+    await user.type(within(dialog).getByLabelText('Passphrase'), 'not it at all')
+    await user.click(within(dialog).getByRole('button', { name: 'Open the backup' }))
+    expect(await within(dialog).findByText(/does not open this backup/)).toBeInTheDocument()
+    expect(onRestore).not.toHaveBeenCalled()
+
+    await user.clear(within(dialog).getByLabelText('Passphrase'))
+    await user.type(within(dialog).getByLabelText('Passphrase'), PASSPHRASE)
+    await user.click(within(dialog).getByRole('button', { name: 'Open the backup' }))
+    await waitFor(() => expect(onRestore).toHaveBeenCalledWith('{"a":1}'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(note()).toHaveTextContent('Restored 7 characters.')
+  })
+
+  it('restores nothing when it is put away', async () => {
+    const { onRestore, user } = renderRecovery()
+    await user.upload(screen.getByLabelText('Restore a backup'), await protectedFile('{"a":1}'))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onRestore).not.toHaveBeenCalled()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })
 

@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   gardenRepository,
   inspectImportedState,
 } from '../repository/gardenRepository'
-import { readBackupFile } from '../lib/backupFile'
+import { isSealedBackup, readBackupFile } from '../lib/backupFile'
 import { hasPictures } from '../lib/customBackdrops'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
 import { storedCopy } from '../lib/storedCopy'
+import { ProtectedRestore } from './backup/ProtectedRestore'
 
 /**
  * What the gardener sees when the app itself could not draw.
@@ -21,6 +22,9 @@ export function SafeMode({ error }: { error: Error }) {
   const [note, setNote] = useState<string>()
   const [downloaded, setDownloaded] = useState(false)
   const [confirmFresh, setConfirmFresh] = useState(false)
+  /** A protected backup chosen to restore, waiting for its passphrase. */
+  const [sealedChoice, setSealedChoice] = useState<string>()
+  const fileInput = useRef<HTMLInputElement>(null)
 
   const downloadStored = async () => {
     setNote(undefined)
@@ -45,16 +49,10 @@ export function SafeMode({ error }: { error: Error }) {
     }
   }
 
-  const restore = async (file: File) => {
-    setNote(undefined)
-    const chosen = await readBackupFile(file)
-    if (!chosen.ok) {
-      setNote(chosen.message)
-      return
-    }
+  const restoreText = async (text: string) => {
     let parsed: unknown
     try {
-      parsed = JSON.parse(chosen.text)
+      parsed = JSON.parse(text)
     } catch {
       // The parser's own wording ("Unexpected token…") means nothing here.
       setNote('That file is not a garden backup.')
@@ -81,6 +79,18 @@ export function SafeMode({ error }: { error: Error }) {
           : 'That file is not a garden backup.',
       )
     }
+  }
+
+  const restore = async (file: File) => {
+    setNote(undefined)
+    const chosen = await readBackupFile(file)
+    if (!chosen.ok) {
+      setNote(chosen.message)
+      return
+    }
+    // A protected backup asks for its passphrase, then restores as any other.
+    if (isSealedBackup(chosen.text)) setSealedChoice(chosen.text)
+    else await restoreText(chosen.text)
   }
 
   const startFresh = async () => {
@@ -118,6 +128,7 @@ export function SafeMode({ error }: { error: Error }) {
           <label className="secondary-button file-button">
             Restore a backup
             <input
+              ref={fileInput}
               type="file"
               accept="application/json,.json,text/plain,application/octet-stream"
               onChange={(event) => {
@@ -134,6 +145,20 @@ export function SafeMode({ error }: { error: Error }) {
             Try again
           </button>
         </div>
+        {sealedChoice !== undefined && (
+          <ProtectedRestore
+            text={sealedChoice}
+            returnFocus={() => fileInput.current}
+            onOpened={(plain) => {
+              setSealedChoice(undefined)
+              void restoreText(plain)
+            }}
+            onClose={(message) => {
+              setSealedChoice(undefined)
+              setNote(message)
+            }}
+          />
+        )}
         {note && (
           <p className="settings-note" role="status">
             {note}

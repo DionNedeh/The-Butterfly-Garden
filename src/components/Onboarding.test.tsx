@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
@@ -194,5 +194,40 @@ describe('bringing a garden from a backup', () => {
     expect(window.location.hash).toBe('#/journal')
     expect(screen.queryByRole('status')).toBeNull()
     window.history.replaceState(null, '', '/')
+  })
+})
+
+describe('bringing a garden from a protected backup', () => {
+  it('asks for its passphrase, then brings the backup inside as any other', async () => {
+    const user = userEvent.setup()
+    const onRestore = vi.fn(() => Promise.resolve({ ok: false, message: 'That backup could not be restored.' }))
+    render(<Onboarding onComplete={vi.fn()} onRestore={onRestore} arriving />)
+    const { sealBackup } = await import('../lib/sealedBackup')
+    const outcome = await sealBackup('{"format":"the-butterfly-garden"}', 'quiet meadow lantern', {
+      iterations: 1_000,
+    })
+    await user.upload(
+      screen.getByLabelText('Choose a backup'),
+      new File([(outcome as { text: string }).text], 'protected.json', { type: 'application/json' }),
+    )
+    await user.type(await screen.findByLabelText('Passphrase'), 'quiet meadow lantern')
+    await user.click(screen.getByRole('button', { name: 'Open the backup' }))
+    await waitFor(() => expect(onRestore).toHaveBeenCalledWith('{"format":"the-butterfly-garden"}'))
+    // A refusal of what was inside stays to be read, as for any backup.
+    expect(await screen.findByRole('status')).toHaveTextContent('That backup could not be restored.')
+  })
+
+  it('brings nothing when the prompt is put away', async () => {
+    const user = userEvent.setup()
+    const onRestore = vi.fn(() => Promise.resolve({ ok: true, message: 'Restored.' }))
+    render(<Onboarding onComplete={vi.fn()} onRestore={onRestore} arriving />)
+    const { sealBackup } = await import('../lib/sealedBackup')
+    const outcome = await sealBackup('{}', 'quiet meadow lantern', { iterations: 1_000 })
+    const input = screen.getByLabelText('Choose a backup')
+    await user.upload(input, new File([(outcome as { text: string }).text], 'protected.json', { type: 'application/json' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onRestore).not.toHaveBeenCalled()
+    await waitFor(() => expect(input).toHaveFocus())
   })
 })
