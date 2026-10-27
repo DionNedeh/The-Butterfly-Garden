@@ -753,6 +753,21 @@ describe('the garden pace and its plants', () => {
     careDaysSinceBloom,
   })
 
+  it('keeps a known region and drops anything else, so the Guide marks nothing', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    for (const region of ['north-america', 'europe', 'australasia', 'elsewhere']) {
+      const result = validateGarden(garden({ profile: { ...seed.profile, region } }))
+      expect(result.state?.profile?.region).toBe(region)
+    }
+    for (const region of ['uk', 'North America', '', 1, true, null, { id: 'europe' }]) {
+      const result = validateGarden(garden({ profile: { ...seed.profile, region } }))
+      expect(result.state?.profile).not.toHaveProperty('region')
+    }
+    expect(validateGarden(garden({ profile: seed.profile })).state?.profile).not.toHaveProperty(
+      'region',
+    )
+  })
+
   it('keeps Keep giving, and reads anything else as Classic', () => {
     const seed = createInitialState('Tester', 'Test Garden')
     const kept = validateGarden(garden({ profile: { ...seed.profile, gardenPace: 'keep-giving' } }))

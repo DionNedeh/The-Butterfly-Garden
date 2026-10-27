@@ -10,6 +10,7 @@ import {
 import { describeDay } from '../lib/daySummary'
 import { TOMORROW_NOTE_LENGTH, TOMORROW_NOTES, type TomorrowNote } from '../lib/gardenActions'
 import type { AppState, MoodEntry } from '../types'
+import { GuideLink } from './GuideLink'
 import { Icon } from './Icons'
 import './recap.css'
 
@@ -77,6 +78,7 @@ export function MoonlightRecap({
   onCollect,
   onClose,
   onFadeToNight,
+  onOpenGuide,
 }: {
   state: AppState
   /** The day being closed out, which after midnight is yesterday. */
@@ -90,6 +92,8 @@ export function MoonlightRecap({
    * given.
    */
   onFadeToNight?: () => void
+  /** Open the Guide at a section, from a "What does this do?" link. */
+  onOpenGuide?: (section: string) => void
 }) {
   const [step, setStep] = useState(0)
   const [level, setLevel] = useState<MoodEntry['level']>()
@@ -218,6 +222,11 @@ export function MoonlightRecap({
                 </span>
               </li>
             </ul>
+            {/* Only here, before any answer: the recap's step and weather are
+                not drafts, so leaving from a later step would lose them. */}
+            {onOpenGuide && (
+              <GuideLink section="moonlight" topic="Moonlight" onOpen={onOpenGuide} />
+            )}
           </>
         )}
 

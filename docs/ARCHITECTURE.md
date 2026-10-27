@@ -68,6 +68,9 @@ tells other tabs which parts it wrote.
 | Motion preferences and animation | `lib/motion.ts`, `hooks/useFlightMotion.ts`, `components/sprites/` |
 | Where each butterfly flies, and meeting one | `lib/flightMotion.ts` (a lane of sky each), `lib/flightPatterns.ts` (`flightPatternFor`: a companion's own pattern or the garden's), `components/ButterflyCard.tsx` (the card a tap opens, with Pet and *Care for {name}*) |
 | The theme, chosen or followed (device, evening), and text size | `lib/theme.ts` (the rule), `hooks/useEffectiveTheme.ts` (when it turns), `lib/textSize.ts`; the shell applies them in `App.tsx` |
+| The Guide as a reference: its contents, its search, and a "What does this do?" link from each meter | `components/GuideView.tsx` (sections, `#/guide/{section}` in `lib/routes.ts`), `lib/searchText.ts` (the same search as the Journal's), `components/GuideLink.tsx`; Android's back returns the Guide to the page a link left (`lib/backNavigation.ts`) |
+| Each species' three facts, shared as a bond grows, and where they were checked | `data/speciesFacts.ts` (loaded with Care, the Journal and the Guide, not the garden), `lib/speciesFacts.ts` (bond levels 1, 3 and 5), `components/FieldFacts.tsx` |
+| My region: native marks and planting tips, chosen by hand | `lib/region.ts` (the ids a stored garden may hold), `lib/regionMarks.ts` (the words), `data/regions.ts` (what is native where, with sources), `lib/regionGuide.ts`, `components/guide/RegionGuide.tsx`, `components/RegionSetting.tsx` |
 | The soundscapes: what plays, how loud, and when it rests | `data/ambientTracks.ts` (the list), `lib/sound.ts` (volume, night's piano, the switches), `hooks/useAmbientSound.ts` (the audio context, its level, pauses and the fade-out), `lib/soundscapes.ts` (the synthesis, loaded when the sound first starts) |
 
 ## Invariants

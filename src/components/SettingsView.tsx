@@ -27,7 +27,14 @@ import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
-import type { AmbientTrackId, AppState, GardenBackdropId, GardenPace, TextSize } from '../types'
+import type {
+  AmbientTrackId,
+  AppState,
+  GardenBackdropId,
+  GardenPace,
+  RegionId,
+  TextSize,
+} from '../types'
 import { motionPreference, type MotionPreference } from '../lib/motion'
 import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
@@ -35,6 +42,8 @@ import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { releaseName } from '../data/releases'
 import { soundVolumeOf } from '../lib/sound'
 import { SoundSwitches, SoundVolume } from './SoundControls'
+import { GuideLink } from './GuideLink'
+import { RegionSetting } from './RegionSetting'
 import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
@@ -254,6 +263,8 @@ export function SettingsView({
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
   onSelectCustomBackdrop,
+  onSetRegion,
+  onOpenGuide,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -309,6 +320,10 @@ export function SettingsView({
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
   onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
+  /** Where the gardener gardens, for the Guide's native marks, or none. */
+  onSetRegion?: (region: RegionId | undefined) => void
+  /** Open the Guide at a section, from a "What does this do?" link. */
+  onOpenGuide?: (section: string) => void
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -768,6 +783,12 @@ export function SettingsView({
                 The Moonlight recap opens in your evening. Up past midnight, it
                 still offers the day before until your late night ends. For
                 shift work and night owls.
+                {onOpenGuide && (
+                  <>
+                    {' '}
+                    <GuideLink section="moonlight" topic="Moonlight" onOpen={onOpenGuide} />
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -797,6 +818,12 @@ export function SettingsView({
           <p className="section-explainer">
             A day of care is a day you earn Sunlight. Changing the pace keeps
             every plant, egg and day of care where it is.
+            {onOpenGuide && (
+              <>
+                {' '}
+                <GuideLink section="seeds" topic="Seeds, plants and eggs" onOpen={onOpenGuide} />
+              </>
+            )}
           </p>
           <fieldset className="motion-options">
             <legend className="sr-only">Garden pace</legend>
@@ -817,6 +844,14 @@ export function SettingsView({
             ))}
           </fieldset>
         </section>
+      )}
+
+      {onSetRegion && (
+        <RegionSetting
+          region={profile?.region}
+          onChoose={onSetRegion}
+          onOpenGuide={onOpenGuide}
+        />
       )}
 
       {onSaveCustomBackdrop &&

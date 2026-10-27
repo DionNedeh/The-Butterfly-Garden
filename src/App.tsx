@@ -298,13 +298,16 @@ function App() {
   // page to the garden, and only then out of the app. The handler is
   // registered once and reads the current page from a ref.
   const viewRef = useRef(view)
+  // The page a "What does this do?" link left, which back returns the Guide to.
+  const fromRef = useRef(route.from)
   useEffect(() => {
     viewRef.current = view
-  }, [view])
+    fromRef.current = route.from
+  }, [view, route.from])
   useEffect(
     () =>
       onBackButton(() => {
-        const action = backAction(viewRef.current)
+        const action = backAction(viewRef.current, document, fromRef.current)
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
         else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
@@ -468,6 +471,9 @@ function App() {
       : undefined
   const inRecap = view === 'recap' && openedRecapDate !== undefined
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
+  /** The Guide at one of its sections, remembering the page to return to. */
+  const openGuideAt = (section: string) =>
+    navigate({ view: 'guide', section, from: activeView })
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -756,6 +762,7 @@ function App() {
               onGoToShop={() => setView('shop')}
               openOn={route.companionId}
               onChooseFlight={garden.chooseCompanionFlight}
+              onOpenGuide={openGuideAt}
             />
           )}
           {activeView === 'shop' && (
@@ -803,6 +810,7 @@ function App() {
               recap={offeredRecap}
               moonlightCollected={recapCollected}
               openAtCheckIn={route.checkIn}
+              onOpenGuide={openGuideAt}
               onOpenRecap={() => {
                 setRecapOpenedFor(recapTarget)
                 setView('recap')
@@ -819,6 +827,7 @@ function App() {
               }
               onClose={() => setView('today')}
               onFadeToNight={fadeToNight}
+              onOpenGuide={openGuideAt}
             />
           )}
           {activeView === 'guide' && (
@@ -829,6 +838,10 @@ function App() {
                 setView('garden')
               }}
               onOpenSupport={openSupport}
+              section={route.section}
+              returnTo={route.from}
+              onReturn={() => route.from && setView(route.from)}
+              onOpenSection={(section) => navigate({ ...route, section })}
             />
           )}
           {activeView === 'whats-new' && <WhatsNewView />}
@@ -902,6 +915,8 @@ function App() {
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
+              onSetRegion={garden.setRegion}
+              onOpenGuide={openGuideAt}
             />
           )}
         </Suspense>

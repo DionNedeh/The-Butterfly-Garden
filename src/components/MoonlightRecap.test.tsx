@@ -16,6 +16,7 @@ function renderRecap(
     today?: string
     state?: AppState
     onFadeToNight?: () => void
+    onOpenGuide?: (section: string) => void
   } = {},
 ) {
   const onCollect = vi.fn()
@@ -28,6 +29,7 @@ function renderRecap(
       onCollect={onCollect}
       onClose={onClose}
       onFadeToNight={overrides.onFadeToNight}
+      onOpenGuide={overrides.onOpenGuide}
     />,
   )
   return { onCollect, onClose, unmount }
@@ -420,3 +422,16 @@ describe('the Moonlight recap', () => {
     )
   })
 })
+
+describe('the recap and the Guide', () => {
+  it('links to what Moonlight does before any question, and only then', async () => {
+    const onOpenGuide = vi.fn()
+    renderRecap({ onOpenGuide })
+    await userEvent.click(screen.getByRole('link', { name: 'What does this do? Moonlight, in the Guide' }))
+    expect(onOpenGuide).toHaveBeenCalledWith('moonlight')
+    // Leaving later would lose the answers, so the link is not offered there.
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.queryByRole('link', { name: /^What does this do/ })).toBeNull()
+  })
+})
+

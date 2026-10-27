@@ -1257,3 +1257,16 @@ describe('the next step after a check-in', () => {
     expect(offer()!.compareDocumentPosition(support) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
+
+describe('TodayView and the Guide', () => {
+  it('links the Sunlight meter to what Sunlight does', async () => {
+    const user = userEvent.setup()
+    const onOpenGuide = vi.fn()
+    renderToday(createInitialState('Tester', 'Test Garden'), { onOpenGuide })
+    const link = screen.getByRole('link', { name: 'What does this do? Sunlight, in the Guide' })
+    expect(link).toHaveAttribute('href', '#/guide/sunlight')
+    await user.click(link)
+    expect(onOpenGuide).toHaveBeenCalledWith('sunlight')
+  })
+})
+

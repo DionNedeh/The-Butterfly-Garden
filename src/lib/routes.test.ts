@@ -56,6 +56,25 @@ describe('pages in the address bar', () => {
     expect(routeFromHash('#/recap')).toEqual({ view: 'today' })
   })
 
+  it('opens the Guide at a section, and reads it back', () => {
+    expect(hashForRoute({ view: 'guide', section: 'stardust' })).toBe('#/guide/stardust')
+    expect(routeFromHash('#/guide/nectar-and-stardust')).toEqual({
+      view: 'guide',
+      section: 'nectar-and-stardust',
+    })
+    expect(routeFromHash('#/guide/bond/')).toEqual({ view: 'guide', section: 'bond' })
+    // Only the Guide has sections, and the page it came from is not in the address.
+    expect(hashForRoute({ view: 'journal', section: 'bond' })).toBe('#/journal')
+    expect(hashForRoute({ view: 'guide', section: 'bond', from: 'care' })).toBe('#/guide/bond')
+  })
+
+  it('names no section that is not plain words', () => {
+    expect(routeFromHash('#/guide/Bond')).toBeUndefined()
+    expect(routeFromHash('#/guide/a/b')).toBeUndefined()
+    expect(routeFromHash('#/guide/<x>')).toBeUndefined()
+    expect(routeFromHash(`#/guide/${'a'.repeat(41)}`)).toBeUndefined()
+  })
+
   it('names no page for an unknown hash, including the move’s arrival', () => {
     expect(routeFromHash('#/nowhere')).toBeUndefined()
     expect(routeFromHash('#/arrive')).toBeUndefined()

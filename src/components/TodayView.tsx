@@ -51,6 +51,7 @@ import {
   type GoalEdit,
 } from './GoalEditor'
 import { GoalIdeas } from './GoalIdeas'
+import { GuideLink } from './GuideLink'
 import { GoalRow } from './GoalRow'
 import { MonthPlanner } from './MonthPlanner'
 import { UndoToast, type UndoOffer } from './UndoToast'
@@ -105,6 +106,7 @@ export function TodayView({
   moonlightCollected,
   onOpenRecap,
   openAtCheckIn = false,
+  onOpenGuide,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -141,6 +143,8 @@ export function TodayView({
   onOpenRecap: () => void
   /** Opened by the "Check in" shortcut: start at the weather question. */
   openAtCheckIn?: boolean
+  /** Open the Guide at a section, from a "What does this do?" link. */
+  onOpenGuide?: (section: string) => void
 }) {
   const existingMood = state.moods.find((entry) => entry.localDate === today)
   const existingReflection = state.reflections.find(
@@ -376,6 +380,7 @@ export function TodayView({
         {sunlight > 0
           ? `Today’s ${DAILY_SEED_REWARD} bonus seed is safely in your tray.`
           : `Your first Sunlight today also adds ${DAILY_SEED_REWARD} seed to your tray.`}
+        {onOpenGuide && <GuideLink section="sunlight" topic="Sunlight" onOpen={onOpenGuide} />}
       </p>
       {nextPlant !== -1 && onChooseNextPlant && (
         <div className="next-tend">

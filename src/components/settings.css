@@ -62,3 +62,15 @@
 .sound-switches .subtle-copy {
   margin: 0;
 }
+
+/* Where you garden: the select with its words above, like Your rhythm's hours. */
+.region-select {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.8rem;
+  font-weight: 700;
+}
+
+.region-select select {
+  max-width: 18rem;
+}

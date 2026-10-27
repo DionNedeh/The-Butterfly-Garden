@@ -26,6 +26,8 @@ import { NameArrival } from './NameArrival'
 import { CompanionFlight } from './CompanionFlight'
 import { CompanionStory } from './care/CompanionStory'
 import { OutfitLooks } from './care/OutfitLooks'
+import { FieldFacts } from './FieldFacts'
+import { GuideLink } from './GuideLink'
 // Only Care draws these, so they arrive with it rather than with the
 // stylesheet every page waits for.
 import './care/care.css'
@@ -55,6 +57,7 @@ export function CareView({
   onGoToShop,
   openOn,
   onChooseFlight,
+  onOpenGuide,
 }: {
   state: AppState
   /** Current local date, refreshed across midnight by the app shell. */
@@ -73,6 +76,8 @@ export function CareView({
   openOn?: string
   /** A companion's own flight pattern, or none for the garden's. */
   onChooseFlight?: (creatureId: string, patternId: FlightPatternId | undefined) => void
+  /** Open the Guide at a section, from a "What does this do?" link. */
+  onOpenGuide?: (section: string) => void
 }) {
   const ordered = useMemo(
     () =>
@@ -327,6 +332,7 @@ export function CareView({
                 {milestone.stardust} {currencyLabel('stardust')}, {milestone.nectar}{' '}
                 {currencyLabel('nectar')}
               </p>
+              {onOpenGuide && <GuideLink section="bond" topic="Bond levels" onOpen={onOpenGuide} />}
             </div>
 
             {isButterfly && onChooseFlight && (
@@ -488,7 +494,8 @@ export function CareView({
         <section className="card species-fact-card">
           <p className="eyebrow">Field guide</p>
           <h2>{definition.commonName}</h2>
-          <p>{definition.fact}</p>
+          {/* A deeper bond shares more of what the species is like. */}
+          <FieldFacts speciesId={definition.id} level={level} />
         </section>
       )}
     </div>

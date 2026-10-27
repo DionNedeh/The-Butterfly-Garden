@@ -58,6 +58,12 @@ export type TextSize = 'larger' | 'largest'
  * (lib/gardenPace). Classic is the absence of a choice, so it stores nothing.
  */
 export type GardenPace = 'keep-giving'
+/**
+ * Where the gardener said they garden, chosen in Settings (lib/region): the
+ * Guide then marks which butterflies and plants are native there. Never
+ * worked out from a location.
+ */
+export type RegionId = 'north-america' | 'europe' | 'australasia' | 'elsewhere'
 export type AmbientTrackId =
   | 'garden-chimes'
   | 'garden'
@@ -228,6 +234,11 @@ export interface Profile {
    * guessing. Optional: an older garden has kept nothing yet.
    */
   diarySince?: string
+  /**
+   * The region the gardener chose in Settings, for the Guide's native marks
+   * and planting tips. Optional: without it the Guide shows neither.
+   */
+  region?: RegionId
 }
 
 /** Image formats a garden image may be stored as. */
@@ -526,7 +537,6 @@ export interface SpeciesDefinition {
   wingColors: [string, string]
   visualPattern: string
   wingShape: ButterflyWingShape
-  fact: string
 }
 
 export interface PlantDefinition {

@@ -11,6 +11,7 @@ import type {
   MoodEntry,
   RecapEntry,
   ReflectionEntry,
+  RegionId,
   TextSize,
 } from '../types'
 import { freeWritingPrompt } from '../data/content'
@@ -659,6 +660,18 @@ export function setGardenPace(state: AppState, pace: GardenPace | undefined): Ap
   const profile = { ...state.profile }
   if (pace === 'keep-giving') profile.gardenPace = pace
   else delete profile.gardenPace
+  return { ...state, profile }
+}
+
+/**
+ * The region the gardener gardens in, or none again (undefined), which is how
+ * every garden began: the Guide then marks nothing.
+ */
+export function setRegion(state: AppState, region: RegionId | undefined): AppState {
+  if (!state.profile || state.profile.region === region) return state
+  const profile = { ...state.profile }
+  if (region === undefined) delete profile.region
+  else profile.region = region
   return { ...state, profile }
 }
 

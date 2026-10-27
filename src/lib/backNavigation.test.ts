@@ -57,6 +57,16 @@ describe('backAction', () => {
     expect(backAction('support')).toEqual({ kind: 'view', view: 'settings' })
   })
 
+  it('returns the Guide to the page a "What does this do?" link left', () => {
+    expect(backAction('guide', document, 'care')).toEqual({ kind: 'view', view: 'care' })
+    expect(backAction('guide', document, 'recap')).toEqual({ kind: 'view', view: 'recap' })
+    // Opened from the navigation, it goes back to the garden as before.
+    expect(backAction('guide')).toEqual({ kind: 'view', view: 'garden' })
+    expect(backAction('guide', document, 'guide')).toEqual({ kind: 'view', view: 'garden' })
+    // Only the Guide remembers where it came from.
+    expect(backAction('journal', document, 'care')).toEqual({ kind: 'view', view: 'garden' })
+  })
+
   it('returns any other page to the garden', () => {
     for (const view of ['care', 'today', 'journal', 'settings'] as const)
       expect(backAction(view)).toEqual({ kind: 'view', view: 'garden' })

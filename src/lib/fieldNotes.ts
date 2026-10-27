@@ -13,6 +13,11 @@ export interface FieldNote {
   first: CreatureInstance
   /** How many of the garden's butterflies are of this species. */
   count: number
+  /**
+   * The deepest bond with any of them: the card shares as many of the
+   * species' facts as that bond would on the Care page (lib/speciesFacts).
+   */
+  bond: number
 }
 
 /**
@@ -39,10 +44,11 @@ export function fieldNotesBySpecies(
     if (creature.stage !== 'butterfly') continue
     const note = notes.get(creature.speciesId)
     if (!note) {
-      notes.set(creature.speciesId, { first: creature, count: 1 })
+      notes.set(creature.speciesId, { first: creature, count: 1, bond: creature.bond })
       continue
     }
     note.count += 1
+    note.bond = Math.max(note.bond, creature.bond)
     const time = arrivalTime(creature)
     const firstTime = arrivalTime(note.first)
     if (time !== undefined && (firstTime === undefined || time < firstTime)) {
