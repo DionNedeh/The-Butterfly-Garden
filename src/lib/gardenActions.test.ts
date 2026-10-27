@@ -508,6 +508,21 @@ describe('the gardener and their companions', () => {
     expect(before.profile?.textSize).toBeUndefined()
   })
 
+  it('sets a region, and none again, without touching anything else', () => {
+    const before = garden()
+    const europe = act.setRegion(before, 'europe')
+    expect(europe.profile?.region).toBe('europe')
+    expect(europe.profile).toMatchObject({ name: before.profile?.name })
+    expect(act.setRegion(europe, 'australasia').profile?.region).toBe('australasia')
+    const cleared = act.setRegion(europe, undefined)
+    expect(cleared.profile).not.toHaveProperty('region')
+    // Nothing to change, nothing new.
+    expect(act.setRegion(europe, 'europe')).toBe(europe)
+    expect(act.setRegion(before, undefined)).toBe(before)
+    expect(before.profile).not.toHaveProperty('region')
+    expect(act.setRegion(garden({ profile: undefined }), 'europe').profile).toBeUndefined()
+  })
+
   it('leaves a garden with no gardener yet untouched', () => {
     const empty = garden({ profile: undefined })
     expect(act.selectCompanion(empty, 'c1')).toBe(empty)

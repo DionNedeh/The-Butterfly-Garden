@@ -55,6 +55,7 @@ import type {
   OutfitSlot,
   RecapEntry,
   ReflectionEntry,
+  RegionId,
   TextSize,
 } from '../types'
 import { useMediaSaves, type MediaResult } from './useMediaSaves'
@@ -419,6 +420,9 @@ export function useGardenState() {
       /** Keep giving, or Classic again (undefined): see lib/gardenPace. */
       setGardenPace: (pace: GardenPace | undefined) =>
         update((current) => act.setGardenPace(current, pace)),
+      /** Where the gardener gardens, for the Guide's native marks, or none. */
+      setRegion: (region: RegionId | undefined) =>
+        update((current) => act.setRegion(current, region)),
       /** Put the garden's welcome-back reveal away (lib/visits). */
       putAwayWelcomeBack: () => update(putAwayWelcomeBack),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>

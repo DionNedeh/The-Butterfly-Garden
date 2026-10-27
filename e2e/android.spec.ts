@@ -173,6 +173,16 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await pressBack(page)
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
 
+  // The Guide, opened by a "What does this do?" link, returns to its page.
+  await goTo(page, 'Care')
+  await page.getByRole('link', { name: /^What does this do\? Bond levels/ }).click()
+  await expect(page).toHaveURL(/#\/guide\/bond$/)
+  await expect(page.getByRole('heading', { name: 'Bond levels', level: 2 })).toBeFocused()
+  await pressBack(page)
+  await expect(currentPage(page)).toHaveText('Care')
+  await pressBack(page)
+  await expect(currentPage(page)).toHaveText('Garden')
+
   // From the garden, back leaves the app; in a browser that is a no-op.
   await pressBack(page)
   await expect(currentPage(page)).toHaveText('Garden')

@@ -11,6 +11,7 @@ import { createId } from '../lib/id'
 import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } from '../lib/date'
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { clampVolume } from '../lib/sound'
+import { isRegionId } from '../lib/region'
 import type { AmbientTrackId, AppState, OutfitPreset, OutfitSlot, PlantInstance } from '../types'
 
 /** Newest schema this build understands. Anything higher was written by a
@@ -810,6 +811,11 @@ function checkProfile(
   // Classic is the absence of a pace, so anything but Keep giving is Classic.
   if (value.gardenPace !== undefined && value.gardenPace !== 'keep-giving') {
     delete profile.gardenPace
+  }
+  // An unknown region is dropped, not guessed at: without one the Guide
+  // simply marks nothing, as it did before there was a choice.
+  if (value.region !== undefined && !isRegionId(value.region)) {
+    delete profile.region
   }
   // Visits are days that have happened: a date in the future could hold
   // back a welcome, or show one, on the wrong day.

@@ -12,13 +12,15 @@ export type BackAction =
  * open in place that Escape would put away (a goal's ⋯ menu, the goal
  * editor; each carries `data-dismiss-on-back`), then a page that
  * was opened from another page back to it (the Moonlight recap to Today; the
- * privacy policy, the notices and the support page to Settings), then any
- * other page back to the garden. Only from the garden itself does it leave
- * the app.
+ * privacy policy, the notices and the support page to Settings; the Guide,
+ * opened by a "What does this do?" link, to the page `from` that link), then
+ * any other page back to the garden. Only from the garden itself does it
+ * leave the app.
  */
 export function backAction(
   view: AppView | undefined,
   root: ParentNode = document,
+  from?: AppView,
 ): BackAction {
   const open = root.querySelectorAll<HTMLDialogElement>('dialog[open]')
   const top = open.item(open.length - 1) as HTMLDialogElement | null
@@ -26,6 +28,7 @@ export function backAction(
   const layer = root.querySelector<HTMLElement>('[data-dismiss-on-back]')
   if (layer) return { kind: 'dismiss', element: layer }
   if (view === 'recap') return { kind: 'view', view: 'today' }
+  if (view === 'guide' && from && from !== 'guide') return { kind: 'view', view: from }
   if (view === 'privacy' || view === 'notices' || view === 'support')
     return { kind: 'view', view: 'settings' }
   if (view && view !== 'garden') return { kind: 'view', view: 'garden' }

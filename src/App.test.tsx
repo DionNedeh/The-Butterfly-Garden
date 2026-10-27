@@ -177,6 +177,33 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'How the garden works' })).toBeInTheDocument()
   })
 
+  it('opens the Guide where a "What does this do?" link points, and goes back', async () => {
+    const user = await openGarden()
+    await user.click(primaryNav().getByRole('button', { name: 'Today' }))
+    await user.click(
+      await screen.findByRole('link', { name: /^What does this do\? Sunlight/ }, { timeout: 3000 }),
+    )
+    const heading = await screen.findByRole(
+      'heading',
+      { level: 2, name: 'Sunlight — care for yourself first' },
+      { timeout: 3000 },
+    )
+    expect(window.location.hash).toBe('#/guide/sunlight')
+    await waitFor(() => expect(heading).toHaveFocus())
+    await user.click(screen.getByRole('button', { name: 'Back to Today' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/today')
+  })
+
+  it('opens the Guide at a section a link names, with no way back to offer', async () => {
+    window.history.replaceState(null, '', '/#/guide/bond')
+    await openGardenAt('How the garden works')
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Bond levels' })).toHaveFocus(),
+    )
+    expect(screen.queryByRole('button', { name: /^Back to/ })).toBeNull()
+  })
+
   it('starts the fade-out when the sound is turned on, and turns the sound off at the end', async () => {
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Settings' }))

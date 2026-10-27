@@ -10,6 +10,7 @@ import { describeCheckInDetails } from '../lib/feelings'
 import { useDraft } from '../lib/drafts'
 import { gardenStartDate } from '../lib/earlierDay'
 import { fieldNotesBySpecies, formatWelcomedOn } from '../lib/fieldNotes'
+import { bondLevel } from '../lib/lifecycle'
 import { moodChoiceOf, moodName, UNSURE_MOOD_NAME, withMoodChoice } from '../lib/mood'
 import { counted, listed } from '../lib/plural'
 import { TOMORROW_TEXT_LENGTH } from '../lib/gardenActions'
@@ -34,6 +35,7 @@ import { Butterfly } from './Butterfly'
 import { Icon } from './Icons'
 import { JournalExport } from './JournalExport'
 import { JournalSearch } from './JournalSearch'
+import { FieldFacts } from './FieldFacts'
 import { WeatherCalendar } from './WeatherCalendar'
 import { EarlierEntry } from './journal/EarlierEntry'
 import { OnThisDayCard } from './journal/OnThisDayCard'
@@ -270,7 +272,7 @@ export function JournalView({
                           : `Welcomed as ${creature.name}`}
                       </small>
                     )}
-                    {creature && <p>{definition.fact}</p>}
+                    {note && <FieldFacts speciesId={definition.id} level={bondLevel(note.bond)} />}
                   </div>
                 </article>
               )

@@ -1426,4 +1426,18 @@ describe('the day the garden was opened', () => {
     act(() => result.current.setGardenPace(undefined))
     expect(result.current.state?.profile).not.toHaveProperty('gardenPace')
   })
+
+  it('chooses a region, and none again', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(0),
+    })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() => result.current.setRegion('north-america'))
+    expect(result.current.state?.profile?.region).toBe('north-america')
+    act(() => result.current.setRegion(undefined))
+    expect(result.current.state?.profile).not.toHaveProperty('region')
+  })
 })

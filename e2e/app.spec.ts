@@ -1678,6 +1678,44 @@ test('species seed guidance opens the right seed without planting it', async ({
   await expect(page.locator('.garden-plant')).toHaveCount(2)
 })
 
+test('the Guide finds things, marks what lives where you garden, and explains a meter', async ({
+  page,
+}) => {
+  await enterGarden(page)
+
+  // "What does this do?" beside Today's Sunlight, and the way back.
+  await goTo(page, 'Today')
+  await page.getByRole('link', { name: /^What does this do\? Sunlight/ }).click()
+  await expect(page).toHaveURL(/#\/guide\/sunlight$/)
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Sunlight — care for yourself first' }),
+  ).toBeFocused()
+  await page.getByRole('button', { name: 'Back to Today' }).click()
+  await expect(page).toHaveURL(/#\/today$/)
+
+  // A region chosen by hand, never from a location.
+  await goTo(page, 'Settings')
+  await page.getByLabel('My region').selectOption('europe')
+  await goTo(page, 'Guide')
+  const contents = page.getByRole('navigation', { name: 'In this guide' })
+  await contents.getByRole('link', { name: 'Where you live' }).click()
+  await expect(page).toHaveURL(/#\/guide\/region$/)
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Butterflies where you live' }),
+  ).toBeFocused()
+  await expect(page.getByText('Holly and ivy, for holly blues')).toBeVisible()
+
+  // One search for the sections and the butterflies.
+  await page.getByRole('searchbox', { name: 'Search the guide' }).fill('red admiral')
+  await expect(page.locator('.species-card')).toHaveCount(1)
+  await expect(
+    page.locator('.species-card').getByText(/^Native to the UK and Europe/).first(),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Letter jars' })).toHaveCount(0)
+  await page.waitForTimeout(300)
+  expect(await seriousViolations(page, 'Guide with a region and a search')).toEqual([])
+})
+
 test.describe('the garden in flight', () => {
   // These are about motion itself, so they keep it on where a project turns
   // it off for everything else (WebKit in CI; see playwright.config.ts).

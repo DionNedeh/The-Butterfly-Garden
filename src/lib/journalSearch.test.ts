@@ -6,10 +6,10 @@ import {
   indexJournalText,
   isFilterActive,
   JOURNAL_KINDS,
-  normaliseForSearch,
   type JournalDays,
   type JournalFilter,
 } from './journalSearch'
+import { normaliseForSearch } from './searchText'
 
 function mood(localDate: string, note: string, overrides: Partial<MoodEntry> = {}): MoodEntry {
   return {
