@@ -18,9 +18,8 @@ interface FakeAnimation {
 }
 
 let animations: FakeAnimation[] = []
-
-/** What was brought into view, in order: jsdom has no scrolling of its own. */
-let scrolledTo: Array<{ element: Element; options: ScrollIntoViewOptions | boolean | undefined }> = []
+/** jsdom has no scrolling of its own; this remembers what was asked. */
+let scrollBy = vi.fn()
 
 function garden(profile: Partial<Profile> = {}, overrides: Partial<AppState> = {}): AppState {
   const state = createInitialState('Robin', 'Breath', NOW)
@@ -71,13 +70,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
   vi.setSystemTime(NOW)
   animations = []
-  scrolledTo = []
-  Element.prototype.scrollIntoView = vi.fn(function (
-    this: Element,
-    options?: ScrollIntoViewOptions | boolean,
-  ) {
-    scrolledTo.push({ element: this, options })
-  })
+  scrollBy = vi.fn()
+  window.scrollBy = scrollBy
   // jsdom has no Web Animations; this one remembers what it was asked.
   Element.prototype.animate = vi.fn(function (
     keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
@@ -100,7 +94,6 @@ afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
   Reflect.deleteProperty(Element.prototype, 'animate')
-  Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
   vi.restoreAllMocks()
   Reflect.deleteProperty(document, 'visibilityState')
 })
@@ -146,31 +139,47 @@ describe('breathing with a butterfly', () => {
     expect(count()).toBe('In… 1')
   })
 
-  it('brings Stop, then the count, into view as it starts, and no further', () => {
+  it('brings Stop, then the count, into view as it starts, measured, and no further', () => {
+    // Safari does not apply scroll-padding when bringing an element into view,
+    // so the page is scrolled by what is measured: here Stop is behind the
+    // dock (lib/breathView has the rule itself).
+    const at = (rect: Partial<DOMRect>) => () => ({ top: 0, bottom: 0, height: 0, ...rect }) as DOMRect
     const header = document.createElement('header')
     header.className = 'app-header'
-    header.getBoundingClientRect = () => ({ height: 124.4 }) as DOMRect
-    document.body.append(header)
-    renderView()
-    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
-    start()
-    const stop = screen.getByRole('button', { name: 'Stop' })
-    // Focus alone would centre Stop, which can take the count up under the
-    // header; it is only moved as far as each needs, the count last, so the
-    // count is what stays in view, clear of the header as tall as it is.
-    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
-    expect(stop).toHaveFocus()
-    const countBox = document.querySelector<HTMLElement>('.breath-count-box')!
-    expect(scrolledTo).toEqual([
-      { element: stop, options: { block: 'nearest' } },
-      { element: countBox, options: { block: 'nearest' } },
-    ])
-    expect(countBox.style.scrollMarginTop).toBe('133px')
-    header.remove()
-    // Nothing more is moved while it runs, or when it stops.
-    wait(5000)
-    fireEvent.click(stop)
-    expect(scrolledTo).toHaveLength(2)
+    header.getBoundingClientRect = at({ bottom: 125, height: 125 })
+    const dock = document.createElement('nav')
+    dock.className = 'bottom-nav'
+    dock.getBoundingClientRect = at({ top: 291, bottom: 376, height: 85 })
+    document.body.append(header, dock)
+    const height = window.innerHeight
+    window.innerHeight = 390
+    const rects = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains('breath-stop')) return at({ top: 260, bottom: 313 })()
+        if (this.classList.contains('breath-count-box')) return at({ top: 180, bottom: 237 })()
+        return at({})()
+      })
+    try {
+      renderView()
+      const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+      start()
+      const stop = screen.getByRole('button', { name: 'Stop' })
+      // Focus alone would centre Stop, which can take the count up under the
+      // header.
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+      expect(stop).toHaveFocus()
+      expect(scrollBy).toHaveBeenCalledExactlyOnceWith({ top: 30, behavior: 'instant' })
+      // Nothing more is moved while it runs, or when it stops.
+      wait(5000)
+      fireEvent.click(stop)
+      expect(scrollBy).toHaveBeenCalledTimes(1)
+    } finally {
+      rects.mockRestore()
+      window.innerHeight = height
+      header.remove()
+      dock.remove()
+    }
   })
 
   it('moves both wings on one Web Animations timeline, a transform only', () => {
