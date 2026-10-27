@@ -136,6 +136,17 @@ describe('a backup of a field book with photos', () => {
     expect(download).not.toHaveAttribute('aria-disabled')
   })
 
+  it('leaves no "getting it ready" behind when the share sheet is closed', async () => {
+    const sheet = stubShareSheet()
+    sheet.share.mockImplementation(() => Promise.reject(new DOMException('Closed', 'AbortError')))
+    const user = renderSettings(withPhotos)
+    await user.click(screen.getByRole('button', { name: 'Share backup…' }))
+    await waitFor(() => expect(sheet.share).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(screen.queryByText('Getting your backup ready, photos and all…')).toBeNull(),
+    )
+  })
+
   it('downloads instead of sharing once the tap that allowed a share has passed, and says so', async () => {
     const sheet = stubShareSheet()
     const click = stubDownload()

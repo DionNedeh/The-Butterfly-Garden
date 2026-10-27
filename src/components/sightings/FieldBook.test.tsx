@@ -193,6 +193,18 @@ describe('a sighting with a photo', LAZY_TEST, () => {
     expect(await screen.findByText('Saved to your field book.')).toBeInTheDocument()
   })
 
+  it('waits for a photo put back by Undo too, and says when it would not go in', async () => {
+    const results = [{ ok: true }, { ok: false }]
+    const stored = vi.fn(() => Promise.resolve(results.shift() ?? { ok: true }))
+    await logWithPhoto(stored)
+    expect(await screen.findByText('Saved to your field book.')).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /^Delete Monarch/ }))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(stored).toHaveBeenCalledTimes(2)
+    expect(await screen.findByText(PHOTO_NOT_KEPT)).toBeInTheDocument()
+  })
+
   it('says the photo was not kept when it would not go in', async () => {
     await logWithPhoto(() => Promise.resolve({ ok: false }))
     expect(await screen.findByText(PHOTO_NOT_KEPT)).toBeInTheDocument()

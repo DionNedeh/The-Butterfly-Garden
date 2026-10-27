@@ -93,6 +93,8 @@ describe('a copy of everything stored', () => {
     const { storedCopy } = await import('./storedCopy')
     const copy = await storedCopy()
     expect(copy.text).not.toContain('"photo": {}')
+    // And says so, for safe mode to tell the gardener what the copy lacks.
+    expect(copy.leftOut).toBe('2 photos could not be written into this copy, so it keeps the sightings without them.')
     const { inspectImportedState } = await import('../repository/gardenRepository')
     const restored = inspectImportedState(JSON.parse(copy.text))
     expect(restored.refused).toBeUndefined()

@@ -508,8 +508,12 @@ export function SettingsView({
         copy.text,
         'The Butterfly Garden backup',
       )
-      // Closing the share sheet is a choice, not a failure: nothing to say.
-      if (outcome === 'cancelled') return
+      // Closing the share sheet is a choice, not a failure: nothing to say,
+      // and "getting it ready" is over.
+      if (outcome === 'cancelled') {
+        setBackupNote('')
+        return
+      }
       backupMade(madeAt)
       setBackupNote(
         `Backup shared. Keep the file somewhere safe.${copy.leftOut ? ` ${copy.leftOut}` : ''}`,

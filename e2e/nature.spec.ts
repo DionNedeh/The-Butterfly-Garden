@@ -177,6 +177,25 @@ test('a sighting is changed, crossed out, and put back with Undo', async ({ page
   expect(await seriousViolations(page, 'Journal field book, after Undo')).toEqual([])
 })
 
+test('the sighting form opened on a plant far down its list shows it on screen as it opens', async ({
+  page,
+}) => {
+  // A phone at the usual text, where the list starts above the fold: the
+  // chosen plant is brought to the head of the list, not left at its foot
+  // below the visible dialog.
+  await page.setViewportSize({ width: 360, height: 740 })
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  await page.getByLabel('My region').selectOption('europe')
+  await goTo(page, 'Guide')
+  await monarchCard(page).getByRole('button', { name: 'Log a sighting of Milkweed' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
+  await expect(dialog.getByRole('heading', { name: 'Log a sighting' })).toBeFocused()
+  const milkweed = dialog.getByRole('radio', { name: /^Milkweed/ })
+  await expect(milkweed).toBeChecked()
+  await expect(milkweed).toBeInViewport()
+})
+
 test('the sighting form opened on a plant far down its list shows it chosen, a dot beside its name, at the largest text by night', async ({
   page,
 }) => {

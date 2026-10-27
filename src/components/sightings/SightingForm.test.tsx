@@ -197,12 +197,12 @@ describe('the sighting form', () => {
       renderForm(options)
       const chosen = screen.getByRole('radio', { name })
       expect(chosen).toBeChecked()
-      // Far down the list, which is moved just far enough to show its row
-      // whole at the foot of the window; nothing else is scrolled.
+      // Far down the list, which is moved to bring its row to the head of
+      // the window, under the question; nothing else is scrolled.
       const { index, inSight } = placeOf(chosen)
       expect(index).toBeGreaterThan(6)
       expect(inSight).toBe(true)
-      expect(chosen.closest('.sighting-choice-list')!.scrollTop).toBe(index * ROW + 4 + ROW - 256)
+      expect(chosen.closest('.sighting-choice-list')!.scrollTop).toBe(index * ROW + 4)
       expect(scrollIntoView).not.toHaveBeenCalled()
       expect(screen.getByRole('heading', { name: /sighting$/ })).toHaveFocus()
     } finally {
@@ -232,6 +232,24 @@ describe('the sighting form', () => {
       expect(admiral).toBeChecked()
       expect(placeOf(admiral)).toEqual({ index: 0, inSight: true })
       expect(screen.getByRole('radio', { name: 'A butterfly' })).toHaveFocus()
+    } finally {
+      restore()
+    }
+  })
+
+  it('shows the choice again once a search is cleared', async () => {
+    const restore = layOutChoiceList()
+    try {
+      const { user } = renderForm(milkweedCard)
+      const list = document.querySelector<HTMLElement>('.sighting-choice-list')!
+      const search = screen.getByRole('searchbox')
+      await user.type(search, 'nettle')
+      // Filtered, the list starts at its top, the choice first in it.
+      list.scrollTop = 0
+      await user.clear(search)
+      expect(placeOf(screen.getByRole('radio', { name: /^Milkweed/ })).inSight).toBe(true)
+      expect(list.scrollTop).toBeGreaterThan(0)
+      expect(search).toHaveFocus()
     } finally {
       restore()
     }

@@ -25,10 +25,13 @@ const KIND_WORDS: Record<Kind, { one: string; many: string }> = {
 }
 
 /**
- * Bring the choice made into sight within its own scrolling list, as little
- * as it takes, or start the list at its top when none is made. Measured and
- * scrolled by hand, because scrollIntoView would move the dialog and the page
- * too, taking the focused heading out of view on a short screen.
+ * Bring the choice made into sight within its own scrolling list, or start the
+ * list at its top when none is made. A row out of sight is brought to the head
+ * of the list's window, just under its question: at the foot it was often
+ * below the visible dialog on a phone, and on the shortest screens it is then
+ * the first row reached as the dialog is scrolled. Measured and scrolled by
+ * hand, because scrollIntoView would move the dialog and the page too, taking
+ * the focused heading out of view on a short screen.
  */
 function showChoiceIn(list: HTMLElement | null) {
   if (!list) return
@@ -41,10 +44,7 @@ function showChoiceIn(list: HTMLElement | null) {
   const top = list.getBoundingClientRect().top + list.clientTop
   const bottom = top + list.clientHeight
   const box = row.getBoundingClientRect()
-  if (box.top < top) list.scrollTop -= top - box.top
-  // On until its foot is in sight, though never past its head, so a row
-  // taller than the list (a long name at the largest text) shows its name.
-  else if (box.bottom > bottom) list.scrollTop += Math.min(box.bottom - bottom, box.top - top)
+  if (box.top < top || box.bottom > bottom) list.scrollTop += box.top - top
 }
 
 /**
@@ -110,9 +110,11 @@ export default function SightingForm({
   // Opened on a butterfly or plant, from its card or a sighting being
   // changed, the list shows it checked, wherever it sorts; and again when the
   // kind changes. After the effect above, so the dialog is open to measure.
+  // And once a search is cleared: filtered, the list started at its top.
+  const searching = query !== ''
   useEffect(() => {
-    showChoiceIn(choiceList.current)
-  }, [kind])
+    if (!searching) showChoiceIn(choiceList.current)
+  }, [kind, searching])
 
   const choices = useMemo(() => subjectChoices(kind, region), [kind, region])
   const words = searchWords(query)

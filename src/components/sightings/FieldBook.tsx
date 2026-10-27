@@ -112,8 +112,11 @@ export default function FieldBook({
         // The toast goes with its button: focus goes to the sighting put
         // back, or stays with the field book when there was no room.
         heading.current?.focus()
-        if (actions.restore(removed)) focusSighting(removed.sighting.id)
-        else setStatus('There is no room to put it back: the field book filled up meanwhile.')
+        if (actions.restore(removed)) {
+          focusSighting(removed.sighting.id)
+          // Its photo is written again, which a full device can refuse.
+          if (removed.sighting.photo) sayWhenSaved('Put back, photo and all.', removed.sighting.photo)
+        } else setStatus('There is no room to put it back: the field book filled up meanwhile.')
       },
     })
   }

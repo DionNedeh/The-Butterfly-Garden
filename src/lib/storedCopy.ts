@@ -13,12 +13,21 @@ export async function storedCopy(): Promise<FileCopy> {
   const raw = await gardenRepository.readRaw()
   return import('./sightingPhotos').then(
     ({ fileCopy }) => fileCopy(raw),
-    () => ({
-      text: JSON.stringify(
+    () => {
+      let left = 0
+      const text = JSON.stringify(
         raw,
-        (_key, value: unknown) => (value instanceof Blob ? { unreadable: true } : value),
+        (_key, value: unknown) => {
+          if (!(value instanceof Blob)) return value
+          left += 1
+          return { unreadable: true }
+        },
         2,
-      ),
-    }),
+      )
+      // Said, as the module would: the copy is not everything, by that much.
+      return left
+        ? { text, leftOut: `${left === 1 ? 'One photo' : `${left} photos`} could not be written into this copy, so it keeps the sightings without them.` }
+        : { text }
+    },
   )
 }
