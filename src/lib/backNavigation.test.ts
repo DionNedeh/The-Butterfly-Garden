@@ -242,3 +242,46 @@ describe('putBackAt, back from breathing', () => {
     expect(document.querySelector('a.breathe-link')).toHaveFocus()
   })
 })
+
+describe('putBackAt, back from the comfort plan', () => {
+  afterEach(() => {
+    document.body.replaceChildren()
+    vi.restoreAllMocks()
+  })
+
+  it('focuses the way into the plan on the page that offered it', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1>Settings</h1>
+        <a class="guide-link" href="#/guide/seeds">What does this do?</a>
+        <a class="comfort-link" href="#/comfort">Your comfort plan</a>
+      </main>`
+    putBackAt({ comfort: true, scrollY: 2400 })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2400, behavior: 'instant' })
+    expect(document.querySelector('a.comfort-link')).toHaveFocus()
+  })
+
+  it('focuses Today’s heading once the gentle day, and its line, are over', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1>Today</h1>
+        <a class="breathe-link" href="#/breathe">Breathe now</a>
+      </main>`
+    putBackAt({ comfort: true, scrollY: 640 })
+    expect(document.querySelector('h1')).toHaveFocus()
+  })
+
+  it('focuses the plan’s own way to support, back from the support page', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.body.innerHTML = `
+      <main id="main-content">
+        <h1 tabindex="-1">My comfort plan</h1>
+        <p class="card comfort-support">It is not a substitute for help.
+          <a class="comfort-link" href="#/support">If you need support now</a></p>
+      </main>`
+    putBackAt({ support: true, scrollY: 300 })
+    expect(document.querySelector('a[href="#/support"]')).toHaveFocus()
+  })
+})

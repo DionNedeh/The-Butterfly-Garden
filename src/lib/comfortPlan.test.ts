@@ -25,12 +25,14 @@ describe('a comfort plan’s words as they are kept', () => {
     expect(comfortText('x'.repeat(COMFORT_TEXT_LENGTH + 5))).toHaveLength(COMFORT_TEXT_LENGTH)
   })
 
-  it('keeps a number in digits, plus signs, spaces and dashes, with its groups', () => {
+  it('keeps a number as it was written, in the characters numbers are written with', () => {
     expect(phoneNumber('+44 7700 900123')).toBe('+44 7700 900123')
     expect(phoneNumber('  0161-496-0000 ')).toBe('0161-496-0000')
-    expect(phoneNumber('(555) 123.4567')).toBe('555 123 4567')
+    expect(phoneNumber('(555) 123.4567')).toBe('(555) 123.4567')
     expect(phoneNumber('555\t\n1234')).toBe('555 1234')
     expect(phoneNumber('call 999 now')).toBe('999')
+    // The bracketed 0 stays as written; it is left out only when dialled.
+    expect(phoneNumber('+44 (0)7700 900123')).toBe('+44 (0)7700 900123')
   })
 
   it('is no number at all without a digit, and no longer than a number may be', () => {

@@ -37,14 +37,16 @@ export function comfortText(text: string): string {
 }
 
 /**
- * A phone number as it is kept: digits, plus signs, single spaces and
- * dashes, no longer than PHONE_LENGTH. Anything else becomes a space, so
- * "(555) 123.4567" keeps its groups. Empty when no digit is left, since that
- * is no number at all.
+ * A phone number as it is kept: as the gardener wrote it, in the characters
+ * numbers are written with (digits, plus signs, brackets, dots, dashes and
+ * single spaces), no longer than PHONE_LENGTH. Anything else becomes a space.
+ * The brackets stay, so "+44 (0)7700 900123" is shown as it was written and
+ * the bracketed 0 can still be left out when it is dialled (telHref). Empty
+ * when no digit is left, since that is no number at all.
  */
 export function phoneNumber(text: string): string {
   const kept = text
-    .replace(/[^\d+ -]+/g, ' ')
+    .replace(/[^\d+ ().-]+/g, ' ')
     .replace(/ {2,}/g, ' ')
     .trim()
     .slice(0, PHONE_LENGTH)

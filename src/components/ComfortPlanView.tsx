@@ -184,7 +184,12 @@ export function ComfortPlanView({
   const heading = useRef<HTMLHeadingElement>(null)
   const pendingFocus = useRef<FocusTarget>(undefined)
   const [undo, setUndo] = useState<UndoOffer>()
-  const [said, setSaid] = useState('')
+  // What the page last said aloud, and how many times it has spoken: the
+  // same words said again (a second line added, a second "Saved.") are a
+  // fresh line in the live region, which is heard, not the same text left
+  // as it was, which is not.
+  const [said, setSaid] = useState({ text: '', count: 0 })
+  const say = (text: string) => setSaid((last) => ({ text, count: last.count + 1 }))
   const [editDraft, setEditDraft] = useDraft(EDIT_DRAFT, '')
   const editing = editingFrom(editDraft)
   const [editProblem, setEditProblem] = useState<Problem>()
@@ -223,7 +228,7 @@ export function ComfortPlanView({
   const add = (section: ComfortSection, words: ComfortWords) => {
     onChange((current) => addComfortItem(current, section, words))
     pendingFocus.current = { to: 'add', section }
-    setSaid(`Added to ${SECTIONS[section].title}.`)
+    say(`Added to ${SECTIONS[section].title}.`)
   }
 
   const openEditor = (section: ComfortSection, item: ComfortItem) => {
@@ -250,7 +255,7 @@ export function ComfortPlanView({
     }
     onChange((current) => changeComfortItem(current, editing.section, editing.id, words))
     closeEditor(editing.id)
-    setSaid('Saved.')
+    say('Saved.')
   }
 
   const move = (section: ComfortSection, items: readonly ComfortItem[], index: number, by: -1 | 1) => {
@@ -258,7 +263,7 @@ export function ComfortPlanView({
     if (to < 0 || to >= items.length) return
     onChange((current) => moveComfortItem(current, section, items[index].id, by))
     pendingFocus.current = { to: 'line', id: items[index].id, control: by < 0 ? 'up' : 'down' }
-    setSaid(`Moved ${by < 0 ? 'up' : 'down'}, now ${to + 1} of ${items.length}.`)
+    say(`Moved ${by < 0 ? 'up' : 'down'}, now ${to + 1} of ${items.length}.`)
   }
 
   const remove = (section: ComfortSection, item: ComfortItem, index: number) => {
@@ -429,7 +434,7 @@ export function ComfortPlanView({
       </p>
 
       <p className="sr-only" role="status">
-        {said}
+        <span key={said.count}>{said.text}</span>
       </p>
       <UndoToast offer={undo} onDone={() => setUndo(undefined)} />
     </div>

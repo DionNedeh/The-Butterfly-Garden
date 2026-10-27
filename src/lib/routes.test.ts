@@ -188,3 +188,31 @@ describe('the way back from breathing', () => {
     ).toBeUndefined()
   })
 })
+
+describe('the way back from the comfort plan', () => {
+  it('returns to the page that offered it, at its link', () => {
+    const fromPlace = { comfort: true, scrollY: 2400 }
+    expect(returnFrom({ view: 'comfort', from: 'settings', fromPlace })).toEqual({
+      view: 'settings',
+      companionId: undefined,
+      restore: fromPlace,
+    })
+    // Back to it from the support page it opened, it still knows the way.
+    expect(
+      returnFrom({
+        view: 'comfort',
+        from: 'today',
+        fromPlace: { comfort: true, scrollY: 640 },
+        restore: { support: true, scrollY: 300 },
+      }),
+    ).toEqual({ view: 'today', companionId: undefined, restore: { comfort: true, scrollY: 640 } })
+    // Where it was pressed stays out of the address, both ways.
+    expect(hashForRoute({ view: 'comfort', from: 'settings', fromPlace })).toBe('#/comfort')
+    expect(hashForRoute({ view: 'settings', restore: fromPlace })).toBe('#/settings')
+  })
+
+  it('offers none for a plan opened from its address', () => {
+    expect(returnFrom({ view: 'comfort' })).toBeUndefined()
+    expect(returnFrom({ view: 'comfort', from: 'comfort' })).toBeUndefined()
+  })
+})

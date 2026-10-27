@@ -41,15 +41,20 @@ export type BreatheWay = 'goal' | 'next-step' | 'support' | 'recap'
 
 /**
  * Where on a page a link to a page opened for a moment was pressed (a "What
- * does this do?" link to the Guide, or a way into breathing), so that leaving
- * that page puts the gardener back there, rather than at the top of a fresh
- * copy of the page with focus nowhere.
+ * does this do?" link to the Guide, a way into breathing or into the comfort
+ * plan, or the plan's own way to the support page), so that leaving that page
+ * puts the gardener back there, rather than at the top of a fresh copy of the
+ * page with focus nowhere.
  */
 export interface LinkPlace {
   /** A Guide link: the section it opened, which names the link on its page. */
   section?: string
   /** A way into breathing: which one, which names it on its page. */
   breathe?: BreatheWay
+  /** A way into the comfort plan: each page that offers one has one. */
+  comfort?: boolean
+  /** On the comfort plan, its way to the support page. */
+  support?: boolean
   /** How far down the page had been scrolled. */
   scrollY: number
   /** On Care, the companion whose link it was. */
@@ -84,10 +89,14 @@ export interface Route {
    * comfort plan, the page that opened them. Not part of the address.
    */
   from?: AppView
-  /** On the Guide or breathing, where on the page `from` its link was pressed. */
+  /**
+   * On the Guide, breathing or the comfort plan, where on the page `from` its
+   * link was pressed.
+   */
   fromPlace?: LinkPlace
   /**
-   * Back from the Guide or breathing: the place on this page to put the
+   * Back from the Guide, breathing or the comfort plan, or from the support
+   * page to the plan that opened it: the place on this page to put the
    * gardener at, as it was when they pressed the link. Not part of the
    * address.
    */
@@ -132,13 +141,13 @@ export function routeFromHash(hash: string): Route | undefined {
 
 /**
  * The way back from a page another page opened for a moment: the Guide, from
- * a "What does this do?" link, or breathing, from wherever it was offered.
- * It is the page left, for the same companion on Care, with the place to put
- * the gardener back at. Nothing for either opened any other way (a link, the
- * navigation), or for any other page.
+ * a "What does this do?" link, or breathing or the comfort plan, from
+ * wherever they were offered. It is the page left, for the same companion on
+ * Care, with the place to put the gardener back at. Nothing for any of them
+ * opened any other way (a link, the navigation), or for any other page.
  */
 export function returnFrom(route: Route): Route | undefined {
-  if (route.view !== 'guide' && route.view !== 'breathe') return undefined
+  if (route.view !== 'guide' && route.view !== 'breathe' && route.view !== 'comfort') return undefined
   if (!route.from || route.from === route.view) return undefined
   return { view: route.from, companionId: route.fromPlace?.companionId, restore: route.fromPlace }
 }
