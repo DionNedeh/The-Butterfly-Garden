@@ -24,7 +24,26 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(version),
     },
     base: android ? '/' : WEB_BASE,
-    build: android ? { outDir: 'dist-android' } : {},
+    build: android
+      ? {
+          outDir: 'dist-android',
+          rolldownOptions: {
+            output: {
+              // The garden's storage in a chunk of its own beside the entry,
+              // as the web build already splits it: it still loads with the
+              // app, but the entry stays under its cap (check-budgets.mjs).
+              codeSplitting: {
+                groups: [
+                  {
+                    name: 'repository',
+                    test: /[\\/]src[\\/]repository[\\/]|[\\/]node_modules[\\/]idb[\\/]/,
+                  },
+                ],
+              },
+            },
+          },
+        }
+      : {},
     // Scan only the application, not local review HTML or archived checkouts.
     optimizeDeps: {
       entries: ['index.html'],
@@ -43,11 +62,24 @@ export default defineConfig(({ mode }) => {
         },
         closeBundle() {
           rmSync(resolve(outDir, 'screenshots'), { recursive: true, force: true })
+          // The launcher's maskable icon and the shortcut icons are read only
+          // through the web manifest, which the app does not have.
+          for (const file of [
+            'icon-maskable-512.webp',
+            'shortcut-check-in.png',
+            'shortcut-today.png',
+            'shortcut-journal.png',
+          ]) {
+            rmSync(resolve(outDir, 'icons', file), { force: true })
+          }
         },
       },
       VitePWA({
         disable: android,
         registerType: 'prompt',
+        // The app's own icons are listed here; the manifest's others (the
+        // maskable and shortcut icons) are the launcher's, fetched at install.
+        includeManifestIcons: false,
         includeAssets: [
           'icons/icon-192.webp',
           'icons/icon-512.webp',
@@ -71,8 +103,12 @@ export default defineConfig(({ mode }) => {
             // basic latin is used, which the English interface never does. The
             // browser fetches them if a gardener types an accented character.
             '**/*-latin-ext-*.woff2',
-            // Only the install sheet shows these, and only before install.
+            // Only the install sheet shows these, and only before install;
+            // the launcher reads the maskable and shortcut icons once, at
+            // install, from the network.
             '**/screenshots/**',
+            '**/icons/icon-maskable-*',
+            '**/icons/shortcut-*',
           ],
           navigateFallback: 'index.html',
           runtimeCaching: [

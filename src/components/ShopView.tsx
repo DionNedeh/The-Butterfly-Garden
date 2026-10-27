@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { shopItems } from '../data/shopItems'
 import { flightPatterns } from '../data/flightPatterns'
 import { jarCharacters, jarColors, JAR_PRICE, JAR_CAPACITY } from '../data/jars'
@@ -82,6 +82,14 @@ export function ShopView({
   // sheet is put away then, so it does not spring open again on turning back.
   if (sheetOpen && !phone) setSheetOpen(false)
   const filterButton = useRef<HTMLButtonElement>(null)
+  const searchField = useRef<HTMLInputElement>(null)
+  // Put away by a turn of the phone rather than by the gardener, the sheet
+  // takes focus with it; the same search, now inline, has it back.
+  const sheetWasOpen = useRef(false)
+  useEffect(() => {
+    if (sheetWasOpen.current && !sheetOpen && !phone) searchField.current?.focus()
+    sheetWasOpen.current = sheetOpen
+  }, [sheetOpen, phone])
   const items = shopItems
     .filter((item) =>
       tab === 'supplies'
@@ -150,6 +158,7 @@ export function ShopView({
       <label className="shop-search">
         Find something lovely
         <input
+          ref={searchField}
           type="search"
           placeholder="Search the collection…"
           value={query}

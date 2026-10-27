@@ -38,8 +38,19 @@
   );
 }
 
-/* The app is a phone at every width, so its dock is always the five tabs
-   (garden-3.css has the phone dock itself). */
+/* The app is a phone at every width the dock shows at, so its dock is always
+   the five tabs, sharing the width (garden-3.css has the phone dock itself). */
+@media (max-width: 1180px) {
+  .android-app .bottom-nav {
+    display: grid;
+    position: fixed;
+    z-index: 30;
+    right: 0.7rem;
+    bottom: 0.7rem;
+    left: 0.7rem;
+  }
+}
+
 .android-app .bottom-nav {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }

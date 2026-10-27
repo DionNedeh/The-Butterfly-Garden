@@ -227,3 +227,25 @@ describe('arriving at an address', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     expect(window.location.hash).toBe('#/today/check-in')
   })
 })
+
+describe('the backup reminder in the navigation', () => {
+  it('marks Settings, quietly, once a fresh copy is due, and not before', async () => {
+    const seed = stored()
+    const longAgo = new Date(Date.now() - 40 * 86_400_000).toISOString()
+    await openGarden({ ...seed, profile: { ...seed.profile!, createdAt: longAgo } })
+    expect(
+      primaryNav().getByRole('button', { name: 'Settings, time for a fresh copy' }),
+    ).toBeInTheDocument()
+  }, WHOLE_APP_TIMEOUT_MS)
+
+  it('says nothing while the last copy is recent', async () => {
+    const seed = stored()
+    const longAgo = new Date(Date.now() - 40 * 86_400_000).toISOString()
+    const recently = new Date(Date.now() - 2 * 86_400_000).toISOString()
+    await openGarden({
+      ...seed,
+      profile: { ...seed.profile!, createdAt: longAgo, lastBackupAt: recently },
+    })
+    expect(primaryNav().getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+  }, WHOLE_APP_TIMEOUT_MS)
+})

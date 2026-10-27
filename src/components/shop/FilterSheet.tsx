@@ -45,6 +45,11 @@ export function FilterSheet({
         </button>
       </div>
       {children}
+      {/* Everything behind a modal sheet is out of reach, the count above the
+          collection included, so the sheet says how many pieces are left. */}
+      <p className="subtle-copy" role="status">
+        {counted(results, 'piece', 'pieces')} to explore
+      </p>
       <button className="primary-button shop-filter-done" onClick={close}>
         Show {counted(results, 'piece', 'pieces')}
       </button>

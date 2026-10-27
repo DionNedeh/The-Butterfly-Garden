@@ -1213,8 +1213,17 @@ textarea:focus {
 .bottom-nav .more-tab {
   display: none;
 }
-@media (max-width: 620px), (max-height: 520px) {
+@media (max-width: 620px), (max-height: 520px) and (max-width: 1180px) {
+  /* A grid, not the tablet's row of content-sized tabs: on a large phone on
+     its side the five share the width, each well over 44px. Fixed at the
+     foot at any width this applies to, as it is below 1080px. */
   .bottom-nav {
+    display: grid;
+    position: fixed;
+    z-index: 30;
+    right: 0.7rem;
+    bottom: 0.7rem;
+    left: 0.7rem;
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
   .bottom-nav .in-more {

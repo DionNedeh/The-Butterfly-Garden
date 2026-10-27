@@ -126,7 +126,9 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await expect(
     page.getByRole('button', { name: 'Filter 1 active' }),
   ).toBeFocused()
-  await expect(currentPage(page)).toHaveText('Shop')
+  // Still the shop, whose tab on a phone is More.
+  await expect(page).toHaveURL(/#\/shop$/)
+  await expect(currentPage(page)).toHaveText('More')
   await expect(page.locator('.boutique-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()

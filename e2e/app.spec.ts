@@ -70,6 +70,7 @@ interface GardenRecord {
     stage?: string
     sourcePlantId?: string
     emergeAt?: string
+    awaitingName?: boolean
   }>
 }
 
@@ -494,7 +495,13 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     delete state.profile.unlockedBackdropIds
   })
   await page.reload()
+  // A garden this old with no copy on record is reminded, quietly, on the
+  // way to Settings: on Settings itself, or on More on a phone.
+  await expect(
+    mainNav(page).getByRole('button', { name: /^(Settings|More), time for a fresh copy/ }),
+  ).toBeVisible()
   await goTo(page, 'Settings')
+  await expect(page.getByText('You have not saved a copy yet.', { exact: false })).toBeVisible()
 
   const conservatory = page
     .locator('.scene-card')
@@ -534,6 +541,9 @@ test('guide explains how plants grow and when eggs appear', async ({
 test('earns Nectar, purchases every tier, and persists a selected flight pattern', async ({
   page,
 }) => {
+  // Four pages, two accessibility sweeps, a reload and two settings: about
+  // thirty seconds in Safari on a GPU-less runner, the default budget's edge.
+  test.slow()
   await enterGarden(page)
   await goTo(page, 'Today')
   await page.getByRole('button', { name: /bright/i }).click()
@@ -719,6 +729,29 @@ test('keeps butterfly field notes collapsed until requested', async ({
   await expect(page.locator('.field-notes .species-grid')).toBeVisible()
 })
 
+test('a new egg is offered a name of its own on the Care page', async ({ page }) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // An egg just found on a host plant, as one arrives from now on.
+    state.creatures[0].stage = 'egg'
+    state.creatures[0].awaitingName = true
+  })
+  await page.reload()
+  await goTo(page, 'Care')
+  const arrival = page.getByRole('region', { name: /Would you like to name your .* egg\?/ })
+  await expect(arrival).toBeVisible()
+  expect(await seriousViolations(page, 'Care with a new arrival')).toEqual([])
+  await arrival.getByLabel('Name', { exact: true }).fill('Pip')
+  await arrival.getByRole('button', { name: 'Save name' }).click()
+  await expect(arrival).toHaveCount(0)
+
+  // Answered once, it is not asked again.
+  await reloadAfterSave(page)
+  await goTo(page, 'Care')
+  await expect(page.getByText('Pip').first()).toBeVisible()
+  await expect(page.getByRole('region', { name: /Would you like to name/ })).toHaveCount(0)
+})
+
 test('persists emergence and selects the new butterfly as companion', async ({
   page,
 }) => {
@@ -866,6 +899,20 @@ test('a phone has five tabs in one solid row, and More holds the other four', as
 
   await goTo(page, 'Today')
   await expect(more).not.toHaveAttribute('aria-current')
+
+  // On its side, a large phone still shares the width among the five.
+  await page.setViewportSize({ width: 915, height: 412 })
+  const sideways = await tabs.evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const box = button.getBoundingClientRect()
+      return { width: box.width, height: box.height, top: Math.round(box.top) }
+    }),
+  )
+  expect(new Set(sideways.map((box) => box.top)).size).toBe(1)
+  for (const box of sideways) {
+    expect(box.width).toBeGreaterThanOrEqual(150)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+  }
 })
 
 test('every shop tab is reachable and accessible', async ({ page }) => {

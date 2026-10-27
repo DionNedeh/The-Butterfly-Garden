@@ -149,6 +149,7 @@ export function SettingsView({
   onSelectBackdrop,
   onExportGarden,
   onBackupMade,
+  reminderAt,
   onImportGarden,
   onUndoRestore,
   onDownloadSetAside,
@@ -182,6 +183,8 @@ export function SettingsView({
   onExportGarden: () => string | undefined
   /** A backup reached the gardener; `madeAt` is when it was exported. */
   onBackupMade?: (madeAt: Date) => void
+  /** When the backup reminder is judged; the app passes noon of the day. */
+  reminderAt?: Date
   onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
   onUndoRestore?: (
     snapshotId: string,
@@ -226,12 +229,10 @@ export function SettingsView({
   const [undoDismissed, setUndoDismissed] = useState<string>()
   const [setAsideCount, setSetAsideCount] = useState(0)
   const [storage, setStorage] = useState<StorageStatus>()
-  /**
-   * The moment the backup reminder is worked out for: when the page opened,
-   * moved on whenever a backup is made here, so the copy just made is never
-   * mistaken for one from a clock running ahead.
-   */
-  const [reminderNow, setReminderNow] = useState(() => new Date())
+  // The moment the backup reminder is worked out for: the app's own (noon of
+  // the day, shared with the badge on Settings), or when the page opened.
+  const [openedAt] = useState(() => new Date())
+  const reminderNow = reminderAt ?? openedAt
   /**
    * Whether this browser can hand the backup file to another app. Asked once;
    * always false in the Android app, which has its own save screen.
@@ -261,7 +262,6 @@ export function SettingsView({
   }, [onCountSetAside, android])
 
   const backupMade = (madeAt: Date) => {
-    setReminderNow(new Date())
     onBackupMade?.(madeAt)
   }
 

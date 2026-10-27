@@ -14,20 +14,28 @@ export function moreSheet(page: Page) {
 }
 
 /**
+ * A navigation button by its label, with or without a badge after it:
+ * "Settings", or "Settings, time for a fresh copy" while a backup is due.
+ */
+function named(label: string): RegExp {
+  return new RegExp(`^${label}(,|$)`)
+}
+
+/**
  * Open a page from the navigation by its label, on any screen. On a phone
  * Shop, Flight, Guide and Settings wait behind More, so when the page has no
  * tab of its own on screen, More's sheet is opened and the page chosen there.
  */
 export async function goTo(page: Page, label: string) {
   const nav = mainNav(page)
-  const tab = nav.getByRole('button', { name: label, exact: true })
-  const more = nav.getByRole('button', { name: 'More', exact: true })
+  const tab = nav.getByRole('button', { name: named(label) })
+  const more = nav.getByRole('button', { name: named('More') })
   await expect(tab.or(more).first()).toBeVisible()
   if (await tab.isVisible()) {
     await tab.click()
     return
   }
   await more.click()
-  await moreSheet(page).getByRole('button', { name: label, exact: true }).click()
+  await moreSheet(page).getByRole('button', { name: named(label) }).click()
   await expect(moreSheet(page)).toHaveCount(0)
 }

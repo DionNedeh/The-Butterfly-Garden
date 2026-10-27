@@ -57,7 +57,10 @@ from the `play-release` environment's secrets. Never create, copy or commit a
 keystore in this repository, and never put key material in a chat.
 
 Launcher icons are generated: edit `public/icons/icon-512.webp`, then run
-`python3 scripts/generate-android-icons.py` (needs Pillow).
+`python3 scripts/generate-android-icons.py` (needs Pillow). It writes the
+Android launcher icons and the PWA's maskable icon
+(`public/icons/icon-maskable-512.webp`). The PWA's shortcut icons and install
+screenshots come from `node scripts/pwa-assets.mjs`.
 
 ## Playwright browsers
 

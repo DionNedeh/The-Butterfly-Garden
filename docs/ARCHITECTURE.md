@@ -43,6 +43,8 @@ tells other tabs which parts it wrote.
 | Concern | Where |
 | --- | --- |
 | The app shell, pages, hash routes, error boundaries | `App.tsx`, `lib/routes.ts` |
+| The navigation: header, dock, and on phones five tabs and More | `App.tsx` (the pages), `lib/navigation.ts` (dock order, badges) |
+| What a purchase did, or why it did not | `lib/purchase.ts`, beside the shop's rules in `lib/wardrobe.ts`, `lib/jars.ts`, `lib/flightPatterns.ts` |
 | The header's tabs, the phone's five-tab dock and its More sheet | `components/Navigation.tsx`, `lib/navigation.ts` |
 | Last-resort screens | `main.tsx` → `SafeMode` (nothing could draw); `RecoveryScreen` (stored garden unreadable); `ViewProblem` (one page failed) |
 | Types of everything stored | `types.ts` |

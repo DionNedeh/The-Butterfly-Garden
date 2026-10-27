@@ -38,7 +38,8 @@ function renderShop(state: AppState = garden(), initialTab?: Parameters<typeof S
 }
 
 const tabs = () => within(screen.getByRole('navigation', { name: 'Shop sections' }))
-const count = () => screen.getByText(/to explore/).textContent ?? ''
+// The sheet, when open, says the same count as the line behind it.
+const count = () => screen.getAllByText(/to explore/).at(-1)?.textContent ?? ''
 const card = (name: string) => screen.getByRole('heading', { name }).closest('article')!
 
 /**
@@ -253,6 +254,8 @@ describe('the filters on a phone', () => {
     const sheet = within(screen.getByRole('dialog', { name: 'Filter the collection' }))
     await user.type(sheet.getByRole('searchbox'), 'bow')
     await user.selectOptions(sheet.getByRole('combobox', { name: /^Currency/ }), 'nectar')
+    // Behind a modal sheet the count is out of reach, so the sheet says it.
+    expect(sheet.getByRole('status')).toHaveTextContent(/to explore/)
     const shown = count().match(/\d+/)?.[0]
     await user.click(sheet.getByRole('button', { name: `Show ${shown} ${shown === '1' ? 'piece' : 'pieces'}` }))
 
@@ -298,6 +301,8 @@ describe('the filters on a phone', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(screen.getByRole('searchbox')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Filter/ })).toBeNull()
+    // Focus went with the sheet; the same search, inline now, has it back.
+    expect(screen.getByRole('searchbox')).toHaveFocus()
   })
 })
 

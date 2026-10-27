@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
@@ -102,7 +102,8 @@ import {
   moonlightForDate,
   sunlightForDate,
 } from './lib/progression'
-import { addDaysToLocalDate, recapHoursOf } from './lib/date'
+import { addDaysToLocalDate, localDateToNoon, recapHoursOf } from './lib/date'
+import { isBackupDue } from './lib/backupReminder'
 import type { AppView } from './types'
 import { motionClass, motionPreference } from './lib/motion'
 import { isArrival, movedTo } from './lib/hosting'
@@ -147,6 +148,48 @@ function App() {
   const garden = useGardenState()
   const today = useLocalDate()
   const recap = useRecapWindow(recapHoursOf(garden.state?.profile))
+  // One quiet mark on Settings while a fresh copy of the garden is due, the
+  // same reminder Settings words in full (lib/backupReminder), asked at the
+  // same moment: noon of the day. By the day is close enough for a
+  // thirty-day rule, keeps the clock out of render, and lets a copy made any
+  // time today be believed.
+  const reminderAt = useMemo(() => localDateToNoon(today), [today])
+  // Only what the rule reads, so the count is not redone on every change.
+  const journalProfile = garden.state?.profile
+  const journalMoods = garden.state?.moods
+  const journalReflections = garden.state?.reflections
+  const journalRecaps = garden.state?.recaps
+  const backupDue = useMemo(
+    () =>
+      journalMoods && journalReflections && journalRecaps && !garden.persistence.readOnly
+        ? isBackupDue(
+            {
+              profile: journalProfile,
+              moods: journalMoods,
+              reflections: journalReflections,
+              recaps: journalRecaps,
+            },
+            reminderAt,
+          )
+        : false,
+    [
+      journalProfile,
+      journalMoods,
+      journalReflections,
+      journalRecaps,
+      garden.persistence.readOnly,
+      reminderAt,
+    ],
+  )
+  const navItems = useMemo(
+    () =>
+      backupDue
+        ? navigation.map((item) =>
+            item.id === 'settings' ? { ...item, badge: 'time for a fresh copy' } : item,
+          )
+        : navigation,
+    [backupDue],
+  )
   // The page lives in the address (lib/routes), so Back and Forward work, a
   // reload stays put, and a link or shortcut can open a page directly.
   const [route, setRoute] = useState<Route>(
@@ -398,7 +441,7 @@ function App() {
             <small>{profile.gardenName}</small>
           </span>
         </button>
-        <PrimaryNav items={navigation} current={activeView} onNavigate={setView} />
+        <PrimaryNav items={navItems} current={activeView} onNavigate={setView} />
         <div className="header-actions">
           <span className="header-sunlight" title="Sunlight earned today">
             <Icon name="sun" size={19} />
@@ -739,6 +782,7 @@ function App() {
               onSelectBackdrop={garden.selectBackdrop}
               onExportGarden={garden.exportGarden}
               onBackupMade={garden.recordBackup}
+              reminderAt={reminderAt}
               onImportGarden={garden.importGarden}
               onUndoRestore={garden.undoRestore}
               onDownloadSetAside={garden.quarantinedCopy}
@@ -769,7 +813,7 @@ function App() {
         </ErrorBoundary>
       </main>
 
-      <BottomNav items={navigation} current={activeView} onNavigate={setView} />
+      <BottomNav items={navItems} current={activeView} onNavigate={setView} />
       <UpdatePrompt />
     </div>
   )
