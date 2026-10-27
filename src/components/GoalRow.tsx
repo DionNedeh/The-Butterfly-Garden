@@ -134,6 +134,13 @@ export function GoalRow({
             close(true)
           }
         }}
+        // Tabbing on past the menu closes it, or it would sit over the rows
+        // below while focus moves through them unseen. A press on something
+        // that takes no focus (null) is left to the pointer listener above.
+        onBlur={(event) => {
+          const next = event.relatedTarget
+          if (open && next && !menu.current?.contains(next)) close()
+        }}
       >
         <button
           ref={toggle}

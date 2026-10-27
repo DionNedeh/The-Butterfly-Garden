@@ -58,6 +58,7 @@ export function GoalEditor({
   today,
   completedBefore,
   completedToday,
+  focusRequest = 0,
   onSave,
   onArchive,
   onDelete,
@@ -67,6 +68,8 @@ export function GoalEditor({
   today: string
   completedBefore: boolean
   completedToday: boolean
+  /** Changed by the page to take focus to the editor again. */
+  focusRequest?: number
   onSave: (edit: GoalEdit) => void
   onArchive: () => void
   onDelete: () => void
@@ -78,12 +81,15 @@ export function GoalEditor({
     goal.weekdays.length ? goal.weekdays : [1, 2, 3, 4, 5],
   )
   const [plannedFor, setPlannedFor] = useState(goal.scheduledDate ?? '')
+  // The date as the editor opened with it: unchanged here, the goal's own
+  // date is saved, so a snooze made from its row meanwhile is kept.
+  const [openedWith] = useState(goal.scheduledDate ?? '')
   // The editor opens below the list, away from the row that asked for it,
   // so focus (and a screen reader) is taken to it.
   const titleField = useRef<HTMLInputElement>(null)
   useEffect(() => {
     titleField.current?.focus()
-  }, [])
+  }, [focusRequest])
   const noDays = schedule === 'weekdays' && weekdays.length === 0
   const onceRefused = schedule === 'once' && goal.schedule !== 'once' && completedBefore
   const laterRefused =
@@ -113,7 +119,12 @@ export function GoalEditor({
           title: title.trim(),
           schedule,
           weekdays: schedule === 'weekdays' ? weekdays : [],
-          scheduledDate: schedule === 'once' && plannedFor ? plannedFor : undefined,
+          scheduledDate:
+            schedule !== 'once'
+              ? undefined
+              : plannedFor === openedWith && goal.schedule === 'once'
+                ? goal.scheduledDate
+                : plannedFor || undefined,
         })
       }}
     >

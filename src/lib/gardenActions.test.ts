@@ -247,7 +247,8 @@ describe('the evening recap', () => {
       NOW,
     )
     expect(closed.goals[0].title).toHaveLength(act.TOMORROW_NOTE_LENGTH)
-    expect(closed.recaps[0].forTomorrow).toHaveLength(act.TOMORROW_NOTE_LENGTH)
+    // The note itself is kept whole: nothing the gardener wrote is dropped.
+    expect(closed.recaps[0].forTomorrow).toBe(long)
     expect(act.TOMORROW_TEXT_LENGTH).toBe(3 * act.TOMORROW_NOTE_LENGTH + 2)
   })
 

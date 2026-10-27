@@ -3104,8 +3104,9 @@
 /* Goal rows: one line each, everything else behind the ⋯ menu */
 .goal-row {
   position: relative;
-  /* Sideways movement is a swipe (hooks/useSwipe.ts); vertical scrolls. */
-  touch-action: pan-y;
+  /* Sideways movement is a swipe (hooks/useSwipe.ts); vertical scrolls, and
+     two fingers still zoom. */
+  touch-action: pan-y pinch-zoom;
 }
 
 /* A row that moves or fades is its own stacking context, so the row with its

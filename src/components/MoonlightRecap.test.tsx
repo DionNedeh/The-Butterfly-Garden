@@ -324,7 +324,8 @@ describe('the Moonlight recap', () => {
 
     await userEvent.click(plan)
     expect(plan).toHaveAttribute('aria-pressed', 'true')
-    expect(plan).toHaveAccessibleName('Added to tomorrow’s goals: Book the appointment')
+    // The name stays; the pressed state is what changes.
+    expect(plan).toHaveAccessibleName('Add to tomorrow’s goals: Book the appointment')
     expect(screen.getByText(/They will be waiting on Wednesday/)).toBeInTheDocument()
 
     await userEvent.click(plan)

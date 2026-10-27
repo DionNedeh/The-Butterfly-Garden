@@ -331,16 +331,16 @@ export function collectMoonlight(
     draft.tomorrow ??
     (draft.forTomorrow ? [{ text: draft.forTomorrow, plan: draft.planForTomorrow === true }] : [])
   )
-    // A draft restored from an older build is not held to the field's limit,
-    // and a note that becomes a goal must fit a goal's title.
-    .map((note) => ({ text: note.text.trim().slice(0, TOMORROW_NOTE_LENGTH).trim(), plan: note.plan }))
+    .map((note) => ({ text: note.text.trim(), plan: note.plan }))
     .filter((note) => note.text)
     .slice(0, TOMORROW_NOTES)
   const plannedGoals: Goal[] = notes
     .filter((note) => note.plan)
     .map((note) => ({
       id: createId(),
-      title: note.text,
+      // A draft restored from an older build is not held to the field's
+      // limit; the note is kept whole, and its goal fits a goal's title.
+      title: note.text.slice(0, TOMORROW_NOTE_LENGTH).trim(),
       schedule: 'once',
       weekdays: [],
       createdDate: toLocalDate(now),

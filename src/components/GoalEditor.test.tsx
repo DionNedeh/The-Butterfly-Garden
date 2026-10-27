@@ -171,6 +171,46 @@ describe('GoalEditor', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it('keeps a date moved from the row while it was open, unless the gardener changed it', async () => {
+    // Planned for the 5th; snoozed from its row to the 12th while the editor was open.
+    const planned = goal({ schedule: 'once', scheduledDate: TODAY })
+    const handlers = {
+      onSave: vi.fn<(edit: GoalEdit) => void>(),
+      onArchive: vi.fn(),
+      onDelete: vi.fn(),
+      onCancel: vi.fn(),
+    }
+    const props = { today: TODAY, completedBefore: false, completedToday: false, ...handlers }
+    const { rerender } = render(<GoalEditor goal={planned} {...props} />)
+    rerender(<GoalEditor goal={{ ...planned, scheduledDate: '2026-09-12', snoozedUntil: '2026-09-12' }} {...props} />)
+    const user = userEvent.setup()
+    await user.type(titleField(), '!')
+    await user.click(save())
+    expect(handlers.onSave).toHaveBeenLastCalledWith(expect.objectContaining({ scheduledDate: '2026-09-12' }))
+
+    // A date the gardener picks still wins.
+    fireEvent.change(plannedFor()!, { target: { value: '2026-09-20' } })
+    await user.click(save())
+    expect(handlers.onSave).toHaveBeenLastCalledWith(expect.objectContaining({ scheduledDate: '2026-09-20' }))
+  })
+
+  it('takes focus again when asked to', () => {
+    const props = {
+      goal: goal(),
+      today: TODAY,
+      completedBefore: false,
+      completedToday: false,
+      onSave: vi.fn(),
+      onArchive: vi.fn(),
+      onDelete: vi.fn(),
+      onCancel: vi.fn(),
+    }
+    const { rerender } = render(<GoalEditor {...props} focusRequest={1} />)
+    save().focus()
+    rerender(<GoalEditor {...props} focusRequest={2} />)
+    expect(titleField()).toHaveFocus()
+  })
+
   it('puts itself away on Escape, and marks itself for Android’s back', () => {
     const { onCancel } = renderEditor()
     const form = titleField().closest('form')!

@@ -277,8 +277,9 @@ export function MoonlightRecap({
                     <button
                       className={`recap-plan-toggle ${planned[index] ? 'selected' : ''}`}
                       aria-pressed={planned[index] === true}
-                      // The visible words first, so a voice user can say what they see.
-                      aria-label={`${planned[index] ? 'Added' : 'Add'} to tomorrow’s goals: ${note.trim()}`}
+                      // One name whatever its state, which aria-pressed carries; the
+                      // visible words first, so a voice user can say what they see.
+                      aria-label={`Add to tomorrow’s goals: ${note.trim()}`}
                       onClick={() =>
                         setPlanned((current) => {
                           const next = [...current]
@@ -288,7 +289,9 @@ export function MoonlightRecap({
                       }
                     >
                       <Icon name="today" size={18} />
-                      {planned[index] ? 'Added to tomorrow’s goals' : 'Add to tomorrow’s goals'}
+                      {/* Pressed shows in more than colour. */}
+                      {planned[index] && <span aria-hidden="true">✓</span>}
+                      Add to tomorrow’s goals
                     </button>
                   )}
                 </div>

@@ -40,6 +40,22 @@ function plantName(plant: PlantInstance, index: number): string {
 /** How many goals a gentle day shows before "show the others". */
 const GENTLE_DAY_GOALS = 3
 
+/**
+ * The goals a gentle day shows: the few chosen when the day turned gentle
+ * (a list of ids, kept as a draft), or the first few due when the day was
+ * made gentle elsewhere, in another tab.
+ */
+function gentleGoals(dueGoals: readonly Goal[], chosen: string): Goal[] {
+  let ids: unknown
+  try {
+    ids = chosen ? JSON.parse(chosen) : undefined
+  } catch {
+    ids = undefined
+  }
+  if (!Array.isArray(ids)) return dueGoals.slice(0, GENTLE_DAY_GOALS)
+  return dueGoals.filter((goal) => ids.includes(goal.id))
+}
+
 export function TodayView({
   state,
   today,
@@ -176,20 +192,25 @@ export function TodayView({
   const sunlight = sunlightForDate(state, today)
   const nextPlant = nextPlantToTend(state)
   const isComplete = (goalId: string) => completed.has(completionKey(goalId, today))
-  // A gentle day shows a few goals still to do and no counts, until midnight.
+  // A gentle day shows a few goals and no counts, until midnight.
   const gentle = state.profile?.gentleDay === today
-  // Asked for once, the full list stays for the rest of that day.
-  const [showAllOn, setShowAllOn] = useState<string>()
-  const showAllGoals = showAllOn === today
-  // The first few due goals, done or not: completing one does not slide
-  // another into its place, so a gentle day's list never refills itself.
+  // Both kept as drafts for the day, so leaving Today and coming back (or a
+  // reload) does not change them: asked for once, the full list stays; and
+  // the few goals chosen when the day turned gentle stay the few, done,
+  // snoozed or set aside, so the list never refills itself.
+  const [showAll, setShowAll] = useDraft(`gentle-show-all:${today}`, '')
+  const showAllGoals = showAll !== ''
+  const [gentleGoalIds, setGentleGoalIds] = useDraft(`gentle-goals:${today}`, '')
   const shownGoals =
-    gentle && !showAllGoals ? dueGoals.slice(0, GENTLE_DAY_GOALS) : dueGoals
+    gentle && !showAllGoals ? gentleGoals(dueGoals, gentleGoalIds) : dueGoals
   const hiddenGoalCount = dueGoals.length - shownGoals.length
   const completedBefore = (goalId: string) =>
     state.completions.some((item) => item.goalId === goalId && item.localDate < today)
   const setGentle = (on: boolean) => {
-    setShowAllOn(undefined)
+    setShowAll('')
+    setGentleGoalIds(
+      on ? JSON.stringify(dueGoals.slice(0, GENTLE_DAY_GOALS).map((goal) => goal.id)) : '',
+    )
     onSetGentleDay?.(on)
   }
   // The goal open in the editor as it is now: a skip or snooze made from its
@@ -197,6 +218,14 @@ export function TodayView({
   const editing = editingId
     ? state.goals.find((goal) => goal.id === editingId && !goal.archived)
     : undefined
+  // One archived or deleted from its row, or in another tab, closes the
+  // editor for good, so restoring the goal later does not reopen it.
+  if (editingId && !editing) setEditingId(undefined)
+  // Bumped by every Edit, so choosing Edit again for the goal already open
+  // still takes focus to the editor.
+  const [editRequest, setEditRequest] = useState(0)
+  // The prompt showing before "Write freely", to return to when it is turned off.
+  const [beforeFreeWriting, setBeforeFreeWriting] = useState<string>()
   const focusAfterRedraw = (goalId = '') => {
     pendingFocus.current = goalId
   }
@@ -459,7 +488,10 @@ export function TodayView({
                   focusAfterRedraw()
                   onSnoozeGoal(goal.id, days)
                 }}
-                onEdit={() => setEditingId(goal.id)}
+                onEdit={() => {
+                  setEditingId(goal.id)
+                  setEditRequest((count) => count + 1)
+                }}
                 onArchive={() => archive(goal)}
               />
             )
@@ -469,7 +501,7 @@ export function TodayView({
               className="text-button goal-list-more"
               onClick={() => {
                 revealFrom.current = shownGoals.length
-                setShowAllOn(today)
+                setShowAll('shown')
               }}
             >
               Show the other {counted(hiddenGoalCount, 'goal', 'goals')}
@@ -522,6 +554,7 @@ export function TodayView({
           <GoalEditor
             key={editing.id}
             goal={editing}
+            focusRequest={editRequest}
             today={today}
             completedBefore={retired.has(editing.id) || completedBefore(editing.id)}
             completedToday={isComplete(editing.id)}
@@ -624,9 +657,19 @@ export function TodayView({
           <button
             className="text-button"
             aria-pressed={writingFreely}
-            onClick={() =>
-              setChosenPromptId(writingFreely ? promptForDay(today).id : freeWritingPrompt.id)
-            }
+            onClick={() => {
+              if (!writingFreely) {
+                setBeforeFreeWriting(prompt.id)
+                setChosenPromptId(freeWritingPrompt.id)
+                return
+              }
+              // Back to the prompt that was showing, so a reflection is never
+              // kept under a question it does not answer.
+              const back =
+                beforeFreeWriting ??
+                (answered && answered.id !== freeWritingPrompt.id ? answered.id : undefined)
+              setChosenPromptId(back ?? promptForDay(today).id)
+            }}
           >
             Write freely
           </button>

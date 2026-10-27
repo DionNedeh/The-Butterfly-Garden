@@ -307,6 +307,9 @@ test('a check-in can be unsure, a tap can be undone, and support is a link away'
 test('a goal row keeps everything behind its menu, and a gentle day asks for little', async ({
   page,
 }) => {
+  // A long walk through Today, with two accessibility sweeps and a reload:
+  // more than the default budget on a GPU-less runner's Safari.
+  test.slow()
   await enterGarden(page)
   await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
   for (const title of ['Water the fern', 'Stretch', 'Open a window', 'Step outside']) {

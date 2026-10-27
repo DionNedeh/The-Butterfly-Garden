@@ -324,6 +324,20 @@ describe('swiping a row', () => {
 })
 
 describe('the open menu', () => {
+  it('closes when focus tabs on past it, and stays for a press on its own padding', async () => {
+    const { user } = renderRow()
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    await user.click(toggle())
+    // Focus that goes nowhere in particular (a press on the panel) keeps it.
+    fireEvent.blur(option('Skip today'), { relatedTarget: null })
+    expect(options()).toBeInTheDocument()
+    // Moving on to the next thing on the page closes it.
+    fireEvent.blur(option('Skip today'), { relatedTarget: outside })
+    expect(options()).toBeNull()
+    outside.remove()
+  })
+
   it('lifts its row above the rows below it, and closes on Android’s back', async () => {
     const { user } = renderRow()
     await user.click(toggle())

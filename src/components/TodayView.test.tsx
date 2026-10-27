@@ -383,6 +383,8 @@ describe('undo on Today', () => {
 })
 
 describe('a gentle day on Today', () => {
+  // What a gentle day shows is kept as drafts for the day; none may leak.
+  afterEach(() => resetDrafts())
   const titles = ['Open a window', 'Drink some water', 'Three slow breaths', 'Water the fern', 'Step outside']
   /** Five daily goals, the first already done today. */
   const withGoals = (gentleDay?: string): AppState =>
@@ -446,6 +448,34 @@ describe('a gentle day on Today', () => {
     }
     rerender(<TodayView {...todayProps(after)} />)
     expect(shownGoals()).toEqual(before)
+  })
+
+  it('keeps its few goals when one of them is snoozed or archived', async () => {
+    const user = userEvent.setup()
+    const onSetGentleDay = vi.fn()
+    const { rerender } = render(<TodayView {...todayProps(withGoals(), { onSetGentleDay })} />)
+    await user.click(screen.getByRole('checkbox', { name: /gentle day/i }))
+    expect(onSetGentleDay).toHaveBeenCalledWith(true)
+    // The day turns gentle, and then the second goal is snoozed away.
+    const gentle = withGoals(TODAY)
+    const later = {
+      ...gentle,
+      goals: gentle.goals.map((item, index) =>
+        index === 1 ? { ...item, snoozedUntil: '2026-09-12' } : item,
+      ),
+    }
+    rerender(<TodayView {...todayProps(later, { onSetGentleDay })} />)
+    // No other goal slides into its place.
+    expect(shownGoals()).toEqual(['Open a window', 'Three slow breaths'])
+  })
+
+  it('remembers "show the others" after leaving Today and coming back', async () => {
+    const user = userEvent.setup()
+    renderToday(withGoals(TODAY))
+    await user.click(screen.getByRole('button', { name: 'Show the other 2 goals' }))
+    cleanup()
+    renderToday(withGoals(TODAY))
+    expect(shownGoals()).toEqual(titles)
   })
 
   it('takes focus to the first goal it revealed', async () => {
@@ -626,6 +656,39 @@ describe('reflection prompts on Today', () => {
     expect(promptHeading(todays.text)).toBeInTheDocument()
   })
 
+  it('returns from free writing to the prompt that was showing', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: 'Another prompt' }))
+    expect(promptHeading(another.text)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    expect(promptHeading(another.text)).toBeInTheDocument()
+  })
+
+  it('returns from free writing to the prompt already answered today', async () => {
+    const user = userEvent.setup()
+    renderToday({
+      ...createInitialState('Tester', 'Test Garden'),
+      reflections: [
+        { id: 'r', localDate: TODAY, promptId: another.id, body: 'Lighter.', createdAt: '', updatedAt: '' },
+      ],
+    })
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    cleanup()
+    // After a reload the prompt before free writing is no longer known; the
+    // one the reflection answered is.
+    renderToday({
+      ...createInitialState('Tester', 'Test Garden'),
+      reflections: [
+        { id: 'r', localDate: TODAY, promptId: another.id, body: 'Lighter.', createdAt: '', updatedAt: '' },
+      ],
+    })
+    expect(promptHeading('Write freely')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    expect(promptHeading(another.text)).toBeInTheDocument()
+  })
+
   it('keeps the chosen prompt with the words through a reload', async () => {
     const user = userEvent.setup()
     const { onSaveReflection } = renderToday(createInitialState('Tester', 'Test Garden'))
@@ -697,5 +760,62 @@ describe('reflection prompts on Today', () => {
 
     expect(promptHeading(todays.text)).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveValue('')
+  })
+})
+
+describe('the goal editor on Today', () => {
+  const withTwo = (): AppState => ({
+    ...createInitialState('Tester', 'Test Garden'),
+    goals: [
+      goal({ id: 'a', title: 'Alpha', schedule: 'daily' }),
+      goal({ id: 'b', title: 'Beta', schedule: 'daily' }),
+    ],
+  })
+
+  it('closes for good when its goal is archived from the row, so a restore does not reopen it', async () => {
+    const user = userEvent.setup()
+    const state = withTwo()
+    const props = todayProps(state)
+    const { rerender } = render(<TodayView {...props} />)
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('textbox', { name: /^Edit goal/ })).toBeInTheDocument()
+
+    const archived = { ...state, goals: state.goals.map((item) => (item.id === 'a' ? { ...item, archived: true } : item)) }
+    rerender(<TodayView {...props} state={archived} />)
+    expect(screen.queryByRole('textbox', { name: /^Edit goal/ })).toBeNull()
+    // Restored, by Undo or from the Archived list.
+    rerender(<TodayView {...props} state={state} />)
+    expect(screen.queryByRole('textbox', { name: /^Edit goal/ })).toBeNull()
+    expect(screen.getByLabelText('Add a goal')).toBeInTheDocument()
+  })
+
+  it('takes focus again when Edit is chosen for the goal already open', async () => {
+    const user = userEvent.setup()
+    renderToday(withTwo())
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('textbox', { name: /^Edit goal/ })).toHaveFocus()
+  })
+
+  it('keeps a skip made from the row while the editor is open', async () => {
+    const user = userEvent.setup()
+    const state = withTwo()
+    const props = todayProps(state)
+    const { rerender } = render(<TodayView {...props} />)
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const skipped = {
+      ...state,
+      goals: state.goals.map((item) => (item.id === 'a' ? { ...item, skippedDates: [TODAY] } : item)),
+    }
+    rerender(<TodayView {...props} state={skipped} />)
+    await user.type(screen.getByRole('textbox', { name: /^Edit goal/ }), '!')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onUpdateGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'a', title: 'Alpha!', skippedDates: [TODAY] }),
+    )
   })
 })
