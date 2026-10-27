@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -143,6 +143,49 @@ describe('my comfort plan', () => {
     await user.keyboard('{Enter}')
     expect(linesOf(PEOPLE)).toEqual(['Sam+44 7700-900 123', 'Nan, next door'])
     expect(list(PEOPLE).getAllByRole('link')).toHaveLength(1)
+  })
+
+  it('shows a number as it was written, and dials it without a bracketed 0 after its code', async () => {
+    const user = userEvent.setup()
+    const onGarden = vi.fn()
+    render(<Harness onGarden={onGarden} />)
+    await user.type(list(PEOPLE).getByRole('textbox', { name: 'Name' }), 'Mum')
+    await user.type(list(PEOPLE).getByRole('textbox', { name: 'Phone number (optional)' }), '+44 (0)7700 900123')
+    await user.click(list(PEOPLE).getByRole('button', { name: `Add to ${PEOPLE}` }))
+    expect(list(PEOPLE).getByRole('link', { name: 'Call Mum' })).toHaveAttribute('href', 'tel:+447700900123')
+    expect(list(PEOPLE).getByText('+44 (0)7700 900123')).toBeInTheDocument()
+    expect(onGarden.mock.lastCall?.[0].profile.comfortPlan).toEqual({
+      people: [{ id: expect.any(String), text: 'Mum', phone: '+44 (0)7700 900123' }],
+    })
+  })
+
+  it('says each change afresh, even in the same words as the last', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    // What a screen reader is given to say: words newly put in the live region.
+    const heard: string[] = []
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === 'characterData') heard.push(record.target.textContent ?? '')
+        for (const node of record.addedNodes) heard.push(node.textContent ?? '')
+      }
+    })
+    observer.observe(said(), { childList: true, characterData: true, subtree: true })
+    const field = list(HELPS).getByRole('textbox', { name: 'Something that helps' })
+    for (const words of ['A warm drink', 'A slow walk', 'Music']) {
+      await user.type(field, `${words}{Enter}`)
+    }
+    for (const [line, more] of [
+      ['A warm drink', ' with honey'],
+      ['Music', ', loud'],
+    ]) {
+      await user.click(list(HELPS).getByRole('button', { name: `Edit ${line}` }))
+      await user.type(list(HELPS).getByRole('textbox', { name: 'Your words' }), `${more}{Enter}`)
+    }
+    expect(linesOf(HELPS)).toEqual(['A warm drink with honey', 'A slow walk', 'Music, loud'])
+    const added = `Added to ${HELPS}.`
+    await waitFor(() => expect(heard).toEqual([added, added, added, 'Saved.', 'Saved.']))
+    observer.disconnect()
   })
 
   it('says why it cannot add, with focus on the field to change', async () => {

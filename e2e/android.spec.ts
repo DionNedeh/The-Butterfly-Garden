@@ -368,7 +368,9 @@ test('the back gesture leaves the comfort plan for the page that opened it', asy
 
   await pressBack(page)
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeVisible()
+  // At the link that opened it, as its Back button leaves it.
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeFocused()
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeInViewport()
   await pressBack(page)
   await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
   expect(errors).toEqual([])

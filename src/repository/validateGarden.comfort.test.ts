@@ -66,7 +66,7 @@ describe('a comfort plan in storage', () => {
     expect(
       planOf({
         people: [
-          { id: 'a', text: 'Ana', phone: '(555) 123.4567' },
+          { id: 'a', text: 'Ana', phone: '(555)\t123.4567 ☎' },
           { id: 'b', text: 'Bo', phone: 'call me' },
           { id: 'c', text: 'Cy', phone: 5551234 },
           { id: 'd', text: 'Di', phone: '' },
@@ -75,7 +75,7 @@ describe('a comfort plan in storage', () => {
       }),
     ).toEqual({
       people: [
-        { id: 'a', text: 'Ana', phone: '555 123 4567' },
+        { id: 'a', text: 'Ana', phone: '(555) 123.4567' },
         { id: 'b', text: 'Bo' },
         { id: 'c', text: 'Cy' },
         { id: 'd', text: 'Di' },

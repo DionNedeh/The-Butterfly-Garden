@@ -111,7 +111,8 @@ test('a comfort plan is written in the gardener’s own words and kept through a
   await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
   expect(await seriousViolations(page, 'Comfort plan at night')).toEqual([])
   await people.getByRole('button', { name: 'Edit Sam' }).click()
-  const phone = people.getByRole('textbox', { name: 'Phone number (optional)' })
+  // The line's own field, in the list, not the one for adding another below it.
+  const phone = people.getByRole('list').getByRole('textbox', { name: 'Phone number (optional)' })
   await expect(people.getByRole('textbox', { name: 'Their name' })).toBeFocused()
   await phone.fill('call me')
   await people.getByRole('button', { name: 'Save changes' }).click()
@@ -156,6 +157,13 @@ test('the comfort plan holds together at the largest text on a narrow phone', as
   expect(heights.length).toBe(5)
   for (const height of heights) expect(height).toBeGreaterThanOrEqual(44)
   expect(await seriousViolations(page, 'Comfort plan at the largest text')).toEqual([])
+
+  // Back on the long Settings page, at its link far down it, not at the top.
+  await page.getByRole('button', { name: 'Back to Settings' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  const link = page.getByRole('link', { name: 'Your comfort plan' })
+  await expect(link).toBeFocused()
+  await expect(link).toBeInViewport()
 })
 
 test('a gentle day offers the comfort plan, and the plan offers support first', async ({ page }) => {
@@ -167,7 +175,10 @@ test('a gentle day offers the comfort plan, and the plan offers support first', 
   await expect(page.getByRole('heading', { level: 1, name: 'My comfort plan' })).toBeVisible()
   await page.getByRole('link', { name: 'If you need support now' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'If you need support now' })).toBeVisible()
+  // Each way back puts focus on the link that was pressed to leave.
   await page.getByRole('button', { name: 'Back to your comfort plan' }).click()
+  await expect(page.getByRole('link', { name: 'If you need support now' })).toBeFocused()
   await page.getByRole('button', { name: 'Back to Today' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeFocused()
 })

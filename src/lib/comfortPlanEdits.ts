@@ -135,7 +135,14 @@ export function phoneProblem(text: string): string | undefined {
   return undefined
 }
 
-/** The address that hands a number to the phone's dialler: its digits, and any plus sign. */
+/**
+ * The address that hands a number to the phone's dialler: its digits, and
+ * any plus sign. A 0 in brackets straight after a country code, as in
+ * "+44 (0)7700 900123", is the 0 dialled only from inside the country, never
+ * after its code, so it is left out (+447700900123). Any other brackets, such
+ * as round an area code in "+1 (555) 010-0199", hold digits that are dialled.
+ */
 export function telHref(phone: string): string {
-  return `tel:${phone.replace(/[^\d+]/g, '')}`
+  const dialled = phone.replace(/^(\s*\+\s*\d{1,3})[\s.-]*\(\s*0\s*\)/, '$1')
+  return `tel:${dialled.replace(/[^\d+]/g, '')}`
 }

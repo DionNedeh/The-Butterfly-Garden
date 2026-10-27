@@ -149,4 +149,22 @@ describe('a number to call', () => {
     expect(telHref('0161-496-0000')).toBe('tel:01614960000')
     expect(telHref('999')).toBe('tel:999')
   })
+
+  it('leaves out a 0 in brackets after a country code, which is never dialled after it', () => {
+    // The United Kingdom, written the common ways.
+    expect(telHref('+44 (0)7700 900123')).toBe('tel:+447700900123')
+    expect(telHref('+44(0)20 7946 0018')).toBe('tel:+442079460018')
+    expect(telHref(' +44 ( 0 ) 161 496 0000')).toBe('tel:+441614960000')
+    // Ireland and Australia.
+    expect(telHref('+353 (0)85 123 4567')).toBe('tel:+353851234567')
+    expect(telHref('+61 (0)4 1234 5678')).toBe('tel:+61412345678')
+    // Digits in brackets round an area code are dialled.
+    expect(telHref('+1 (555) 010-0199')).toBe('tel:+15550100199')
+    expect(telHref('(555) 123-4567')).toBe('tel:5551234567')
+    // Without a country code the 0 is the one to dial at home.
+    expect(telHref('(0)161 496 0000')).toBe('tel:01614960000')
+    expect(telHref('(020) 7946 0018')).toBe('tel:02079460018')
+    // A 0 that is part of the number after its code, unbracketed, stays.
+    expect(telHref('+39 06 1234 5678')).toBe('tel:+390612345678')
+  })
 })
