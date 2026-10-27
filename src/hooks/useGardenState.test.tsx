@@ -386,6 +386,32 @@ describe('backups the garden cannot trust', () => {
     expect(result.current.exportGarden()).toBeUndefined()
   })
 
+  it('begins a garden with the starter goals chosen, as daily goals', async () => {
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() =>
+      result.current.onboard('Tester', 'With goals', [
+        { title: 'Drink a glass of water', tinyTitle: 'Take three sips' },
+        { title: 'Take three slow breaths' },
+      ]),
+    )
+    const goals = result.current.state!.goals
+    expect(goals).toHaveLength(2)
+    expect(goals[0]).toMatchObject({
+      title: 'Drink a glass of water',
+      tinyTitle: 'Take three sips',
+      schedule: 'daily',
+      weekdays: [],
+      archived: false,
+    })
+    expect(goals[1]).toMatchObject({ title: 'Take three slow breaths', schedule: 'daily' })
+    expect(goals[1]).not.toHaveProperty('tinyTitle')
+    expect(goals[0].id).not.toBe(goals[1].id)
+    // Nothing chosen is a garden with no goals, as it always was.
+    act(() => result.current.onboard('Tester', 'Without'))
+    expect(result.current.state!.goals).toEqual([])
+  })
+
   it('makes a restore undoable', async () => {
     const { result } = renderHook(() => useGardenState())
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -564,6 +590,9 @@ describe('every action, through the hook', () => {
     const garden = () => result.current.state!
     act(() => result.current.addGoal('Stretch', 'weekdays', [1, 2]))
     expect(garden().goals.at(-1)?.title).toBe('Stretch')
+    expect(garden().goals.at(-1)).not.toHaveProperty('tinyTitle')
+    act(() => result.current.addGoal('Walk', 'daily', [], 'Walk to the door'))
+    expect(garden().goals.at(-1)?.tinyTitle).toBe('Walk to the door')
     act(() => result.current.planGoal('  ', '2026-12-01'))
     act(() => result.current.planGoal('Post the letter', '2026-12-01'))
     expect(garden().goals.at(-1)).toMatchObject({ schedule: 'once', scheduledDate: '2026-12-01' })

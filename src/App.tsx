@@ -82,7 +82,7 @@ import {
 } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
 import { useFadeOut } from './hooks/useFadeOut'
-import { useGardenState } from './hooks/useGardenState'
+import { useGardenState, type StarterGoal } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
 import { useRecapWindow } from './hooks/useRecapWindow'
 import { usePassStatus } from './hooks/usePassStatus'
@@ -234,9 +234,13 @@ function App() {
   }, [route, hasGarden])
   /** Read once: whether this visit arrived from the old address (lib/hosting). */
   const [arriving] = useState(isArrival)
-  const finishOnboarding = (name: string, gardenName: string) => {
+  const finishOnboarding = (
+    name: string,
+    gardenName: string,
+    starterGoals?: readonly StarterGoal[],
+  ) => {
     navigate({ view: 'garden' }, { replace: true })
-    garden.onboard(name, gardenName)
+    garden.onboard(name, gardenName, starterGoals)
   }
   const [seedFocus, setSeedFocus] = useState<string>()
   /** The day the recap was actually opened for, so it is never re-entered. */

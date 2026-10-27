@@ -193,6 +193,7 @@ async function closeShopFilters(page: import('@playwright/test').Page) {
 async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
 }
 
@@ -236,6 +237,7 @@ test('onboards, completes care, and writes a private journal entry', async ({
   await page.getByLabel('Your name').fill('River')
   await page.getByLabel('Garden name').fill('Willowlight Garden')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await expect(
     page.getByRole('heading', { name: /how your sanctuary grows/i }),
   ).toBeVisible()
@@ -288,6 +290,46 @@ test('onboards, completes care, and writes a private journal entry', async ({
   await expect(
     page.getByText('I noticed sunlight on the kitchen table.'),
   ).toBeVisible()
+})
+
+test('starter goals chosen on the way in wait on Today, two-minute versions and all', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: /enter the garden/i }).click()
+  await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  const heading = page.getByRole('heading', { name: 'Anything to care for each day?' })
+  await expect(heading).toBeFocused()
+  // Nothing is chosen for the gardener, and skipping is offered alike.
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Skip for now' })).toBeVisible()
+  expect(await seriousViolations(page, 'Starter goals')).toEqual([])
+  await page.getByRole('checkbox', { name: /^Drink a glass of water/ }).check()
+  await page.getByRole('checkbox', { name: /^Take three slow breaths/ }).check()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+
+  // Where the garden lives, and the button that keeps a copy of it.
+  await expect(
+    page.getByText(/open Settings and choose Download a backup/),
+  ).toBeVisible()
+  await page.getByRole('button', { name: /plant my first seeds/i }).click()
+
+  await goTo(page, 'Today')
+  await expect(page.getByRole('button', { name: 'Care for Drink a glass of water' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Care for Take three slow breaths' })).toBeVisible()
+  await expect(page.locator('.goal-row')).toHaveCount(2)
+  // Neither is offered again as an idea.
+  const ideas = page.getByRole('group', { name: 'Ideas' })
+  await expect(ideas.getByRole('button', { name: 'Drink a glass of water' })).toHaveCount(0)
+  await expect(ideas.getByRole('button', { name: /^Other ideas/ })).toBeVisible()
+  expect(await seriousViolations(page, 'Today with ideas')).toEqual([])
+
+  // A gentle day leads with the two-minute version; doing it does the goal.
+  await page.getByRole('checkbox', { name: /gentle day/i }).check()
+  const tiny = page.getByRole('button', { name: 'Care for Take three sips' })
+  await expect(tiny).toBeVisible()
+  await tiny.click()
+  await expect(page.getByRole('button', { name: 'Done: Take three sips' })).toBeDisabled()
+  await expect(page.getByText('Drink a glass of water marked done.')).toBeVisible()
 })
 
 test('a check-in can be unsure, a tap can be undone, and support is a link away', async ({
@@ -977,6 +1019,12 @@ test('gradient headings leave room for their descenders', async ({ page }) => {
   await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
   await expect(
+    page.getByRole('heading', { name: /anything to care for each day/i }),
+  ).toBeVisible()
+  expect(await clipped()).toEqual([])
+
+  await page.getByRole('button', { name: 'Skip for now' }).click()
+  await expect(
     page.getByRole('heading', { name: /here is how your sanctuary grows/i }),
   ).toBeVisible()
   expect(await clipped()).toEqual([])
@@ -1005,6 +1053,7 @@ test('the guide card glow has no edge inside the card', async ({ page }) => {
   await page.getByLabel('Your name').fill('Gardener')
   await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
   await goTo(page, 'Guide')
   await expect(

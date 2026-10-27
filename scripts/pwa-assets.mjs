@@ -124,6 +124,7 @@ async function grownGarden(page) {
   await page.getByLabel('Your name').fill('River')
   await page.getByLabel('Garden name').fill('Willowlight Garden')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
   await page.waitForTimeout(600)
 

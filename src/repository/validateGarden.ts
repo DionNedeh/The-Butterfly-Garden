@@ -157,6 +157,15 @@ function checkGoal(raw: unknown, ctx: Context) {
       changed = true
     }
   }
+  // Optional, and only ever a few words beside the title: one that is not
+  // text, or is blank, is dropped rather than shown as an empty line.
+  if (
+    raw.tinyTitle !== undefined &&
+    (typeof raw.tinyTitle !== 'string' || !raw.tinyTitle.trim())
+  ) {
+    delete fix.tinyTitle
+    changed = true
+  }
   if (raw.skippedDates !== undefined) {
     const skipped = Array.isArray(raw.skippedDates)
       ? raw.skippedDates.filter(isLocalDate)

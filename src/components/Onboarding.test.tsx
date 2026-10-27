@@ -1,9 +1,19 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MAX_BACKUP_BYTES } from '../lib/backupFile'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
-import { Onboarding } from './Onboarding'
+import { MAX_STARTER_GOALS, Onboarding } from './Onboarding'
+
+/** From the welcome to the starter goals, with the garden's default name. */
+async function reachStarterGoals() {
+  const user = userEvent.setup()
+  const onComplete = vi.fn()
+  render(<Onboarding onComplete={onComplete} />)
+  await user.click(screen.getByRole('button', { name: 'Enter the garden' }))
+  await user.click(screen.getByRole('button', { name: 'Meet your garden guide' }))
+  return { user, onComplete }
+}
 
 describe('meeting the garden', () => {
   it('walks from the welcome, through naming, to the guide, and plants the garden', async () => {
@@ -21,12 +31,14 @@ describe('meeting the garden', () => {
     await user.clear(screen.getByLabelText('Garden name'))
     await user.type(screen.getByLabelText('Garden name'), 'Quiet Corner')
     await user.click(screen.getByRole('button', { name: 'Meet your garden guide' }))
+    expect(screen.getByRole('heading', { name: 'Anything to care for each day?' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }))
 
-    expect(screen.getByRole('heading', { name: 'Here is how your sanctuary grows' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Here is how your sanctuary grows' })).toHaveFocus()
     expect(screen.getByText(/Welcome, Robin! I will help you tend Quiet Corner/)).toBeInTheDocument()
     expect(screen.getByText(new RegExp(`${STARTER_COMPANION_NAME}, your monarch caterpillar`))).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Plant my first seeds' }))
-    expect(onComplete).toHaveBeenCalledWith('Robin', 'Quiet Corner')
+    expect(onComplete).toHaveBeenCalledWith('Robin', 'Quiet Corner', [])
   })
 
   it('calls a gardener with no name a Gardener, without inventing one for them', async () => {
@@ -36,9 +48,10 @@ describe('meeting the garden', () => {
     await user.click(screen.getByRole('button', { name: 'Enter the garden' }))
     await user.type(screen.getByLabelText('Your name'), '   ')
     await user.click(screen.getByRole('button', { name: 'Meet your garden guide' }))
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }))
     expect(screen.getByText(/Welcome, Gardener!/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Plant my first seeds' }))
-    expect(onComplete).toHaveBeenCalledWith('   ', 'Sunlit Sanctuary')
+    expect(onComplete).toHaveBeenCalledWith('   ', 'Sunlit Sanctuary', [])
   })
 
   it('will not go on without a garden name', async () => {
@@ -48,6 +61,97 @@ describe('meeting the garden', () => {
     await user.clear(screen.getByLabelText('Garden name'))
     await user.click(screen.getByRole('button', { name: 'Meet your garden guide' }))
     expect(screen.getByRole('heading', { name: 'What shall we call this place?' })).toBeInTheDocument()
+  })
+})
+
+describe('starter goals', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('offers one idea from each part of wellbeing, with nothing chosen', async () => {
+    await reachStarterGoals()
+    const offered = screen.getAllByRole('checkbox')
+    expect(offered).toHaveLength(6)
+    for (const box of offered) expect(box).not.toBeChecked()
+    expect(screen.getByRole('group', { name: 'Starter goals' })).toBeInTheDocument()
+    // Continuing and skipping are offered alike.
+    expect(screen.getByRole('button', { name: 'Continue' })).toHaveClass('primary-button')
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toHaveClass('primary-button')
+  })
+
+  it('begins the garden with the goals chosen, and their two-minute versions', async () => {
+    const { user, onComplete } = await reachStarterGoals()
+    await user.click(screen.getByRole('checkbox', { name: /^Drink a glass of water/ }))
+    await user.click(screen.getByRole('checkbox', { name: /^Take three slow breaths/ }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Plant my first seeds' }))
+    expect(onComplete).toHaveBeenCalledWith('', 'Sunlit Sanctuary', [
+      { title: 'Drink a glass of water', tinyTitle: 'Take three sips' },
+      { title: 'Take three slow breaths', tinyTitle: undefined },
+    ])
+  })
+
+  it('shows each idea’s two-minute version beside it', async () => {
+    await reachStarterGoals()
+    expect(
+      screen.getByRole('checkbox', { name: 'Drink a glass of water Two minutes: Take three sips' }),
+    ).toBeInTheDocument()
+  })
+
+  it('takes a choice back when it is unticked', async () => {
+    const { user, onComplete } = await reachStarterGoals()
+    const water = screen.getByRole('checkbox', { name: /^Drink a glass of water/ })
+    await user.click(water)
+    await user.click(water)
+    expect(water).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Plant my first seeds' }))
+    expect(onComplete).toHaveBeenCalledWith('', 'Sunlit Sanctuary', [])
+  })
+
+  it('stops at three, and says why the rest wait', async () => {
+    const { user, onComplete } = await reachStarterGoals()
+    const [first, second, third, fourth] = screen.getAllByRole('checkbox')
+    await user.click(first)
+    await user.click(second)
+    expect(screen.getByRole('status')).toHaveTextContent('')
+    await user.click(third)
+    expect(screen.getByRole('status')).toHaveTextContent('Three is plenty to begin with.')
+    expect(fourth).toBeDisabled()
+    expect(first).toBeEnabled()
+    // A fourth cannot slip in, even by a click the browser would refuse.
+    fourth.removeAttribute('disabled')
+    await user.click(fourth)
+    expect(fourth).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Plant my first seeds' }))
+    expect(onComplete.mock.calls[0][2]).toHaveLength(MAX_STARTER_GOALS)
+  })
+
+  it('lets go of anything ticked when the step is skipped', async () => {
+    const { user, onComplete } = await reachStarterGoals()
+    await user.click(screen.getByRole('checkbox', { name: /^Drink a glass of water/ }))
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }))
+    await user.click(screen.getByRole('button', { name: 'Plant my first seeds' }))
+    expect(onComplete).toHaveBeenCalledWith('', 'Sunlit Sanctuary', [])
+  })
+
+  it('says where the garden lives, and the button that keeps a copy', async () => {
+    const { user } = await reachStarterGoals()
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }))
+    expect(
+      screen.getByText(/lives only in this browser on this device.*choose Download a backup/),
+    ).toBeInTheDocument()
+  })
+
+  it('names the Android app’s own backup button there', async () => {
+    vi.stubEnv('VITE_PLATFORM', 'android')
+    const { user } = await reachStarterGoals()
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }))
+    expect(
+      screen.getByText(/lives only in this app on this phone.*choose Save a backup/),
+    ).toBeInTheDocument()
   })
 })
 

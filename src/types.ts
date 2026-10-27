@@ -215,6 +215,12 @@ export interface Goal {
   snoozedUntil?: string
   /** Local dates the user chose to skip — no pressure, no penalty. */
   skippedDates?: string[]
+  /**
+   * The same goal made small enough for two minutes ("Roll your shoulders"
+   * for "Stretch your shoulders"). A gentle day shows it in place of the
+   * title; completing it is completing the goal.
+   */
+  tinyTitle?: string
 }
 
 export interface DailyCompletion {

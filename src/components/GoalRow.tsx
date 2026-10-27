@@ -32,12 +32,18 @@ function scheduleLabel(goal: Goal): string {
  * Snoozing and archiving take the row away, so the page decides where focus
  * goes after them (`onSnooze`, `onArchive`); everything else that keeps the
  * row hands focus back to the ⋯ button it came from.
+ *
+ * On a gentle day, a goal with a two-minute version shows that version, with
+ * the full goal beneath it in quieter text. Caring for it is caring for the
+ * goal. On other days the row stays one line: the two-minute version lives
+ * in the editor.
  */
 export function GoalRow({
   goal,
   today,
   complete,
   skipped,
+  gentle = false,
   onComplete,
   onSkip,
   onSnooze,
@@ -48,6 +54,8 @@ export function GoalRow({
   today: string
   complete: boolean
   skipped: boolean
+  /** Today is a gentle day: show the two-minute version, if there is one. */
+  gentle?: boolean
   onComplete: () => void
   onSkip: () => void
   onSnooze: (days: number) => void
@@ -61,6 +69,8 @@ export function GoalRow({
   const menu = useRef<HTMLDivElement>(null)
   const toggle = useRef<HTMLButtonElement>(null)
   const settled = complete || skipped
+  const tiny = gentle ? goal.tinyTitle : undefined
+  const shownTitle = tiny ?? goal.title
   const swipe = useSwipe({
     onRight: settled ? undefined : onComplete,
     onLeft: settled ? undefined : onSkip,
@@ -114,14 +124,14 @@ export function GoalRow({
         onClick={onComplete}
         disabled={settled}
         // The visible word first, so "tap Care" works by voice.
-        aria-label={complete ? `Done: ${goal.title}` : `Care for ${goal.title}`}
+        aria-label={complete ? `Done: ${shownTitle}` : `Care for ${shownTitle}`}
       >
         {complete ? 'Done' : 'Care'}
       </button>
       <div className="goal-copy">
-        <strong>{goal.title}</strong>
+        <strong>{shownTitle}</strong>
         <small>
-          {scheduleLabel(goal)}
+          {tiny ? goal.title : scheduleLabel(goal)}
           {skipped && ' · skipped today'}
         </small>
       </div>

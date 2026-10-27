@@ -21,7 +21,12 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 }
 
 function renderRow(
-  overrides: { goal?: Partial<Goal>; complete?: boolean; skipped?: boolean } = {},
+  overrides: {
+    goal?: Partial<Goal>
+    complete?: boolean
+    skipped?: boolean
+    gentle?: boolean
+  } = {},
 ) {
   const handlers = {
     onComplete: vi.fn(),
@@ -36,6 +41,7 @@ function renderRow(
       today={TODAY}
       complete={overrides.complete ?? false}
       skipped={overrides.skipped ?? false}
+      gentle={overrides.gentle}
       {...handlers}
     />,
   )
@@ -348,5 +354,41 @@ describe('the open menu', () => {
     expect(options()).toBeNull()
     expect(screen.getByRole('article')).not.toHaveClass('menu-open')
     expect(toggle()).toHaveFocus()
+  })
+})
+
+describe('a two-minute version', () => {
+  const tiny = { tinyTitle: 'Water one fern' }
+
+  it('leads the row on a gentle day, with the goal itself beneath it', async () => {
+    const { onComplete, user } = renderRow({ goal: tiny, gentle: true })
+    expect(screen.getByText('Water one fern').tagName).toBe('STRONG')
+    expect(screen.getByText('Water the ferns').tagName).toBe('SMALL')
+    await user.click(screen.getByRole('button', { name: 'Care for Water one fern' }))
+    expect(onComplete).toHaveBeenCalledOnce()
+    // The menu still names the goal itself.
+    expect(toggle()).toBeInTheDocument()
+  })
+
+  it('says it is done by the name shown', () => {
+    renderRow({ goal: tiny, gentle: true, complete: true })
+    expect(screen.getByRole('button', { name: 'Done: Water one fern' })).toBeDisabled()
+  })
+
+  it('keeps a skip in view on a gentle day', () => {
+    renderRow({ goal: tiny, gentle: true, skipped: true })
+    expect(screen.getByText('Water the ferns · skipped today')).toBeInTheDocument()
+  })
+
+  it('stays out of the row on other days', () => {
+    renderRow({ goal: tiny })
+    expect(screen.queryByText('Water one fern')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Care for Water the ferns' })).toBeInTheDocument()
+  })
+
+  it('changes nothing on a gentle day for a goal without one', () => {
+    renderRow({ gentle: true })
+    expect(screen.getByText('Water the ferns').tagName).toBe('STRONG')
+    expect(screen.getByText('Every day')).toBeInTheDocument()
   })
 })

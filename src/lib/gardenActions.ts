@@ -39,12 +39,26 @@ import {
  * do, so the save effect sees no change and writes nothing.
  */
 
+/** The longest a goal's title is, and so its two-minute version too. */
+export const GOAL_TITLE_LENGTH = 120
+
+/**
+ * A goal's two-minute version as it is kept: trimmed, no longer than a
+ * title, and left out altogether when there is none, so a goal without one
+ * looks exactly as it did before there were any.
+ */
+function tinyTitleField(tinyTitle: string | undefined): Pick<Goal, 'tinyTitle'> {
+  const tiny = tinyTitle?.trim().slice(0, GOAL_TITLE_LENGTH).trim()
+  return tiny ? { tinyTitle: tiny } : {}
+}
+
 export function addGoal(
   state: AppState,
   title: string,
   schedule: GoalSchedule,
   weekdays: number[],
   today: string,
+  tinyTitle?: string,
 ): AppState {
   return {
     ...state,
@@ -57,15 +71,18 @@ export function addGoal(
         weekdays,
         createdDate: today,
         archived: false,
+        ...tinyTitleField(tinyTitle),
       },
     ],
   }
 }
 
 export function updateGoal(state: AppState, goal: Goal): AppState {
+  const { tinyTitle, ...rest } = goal
+  const saved: Goal = { ...rest, ...tinyTitleField(tinyTitle) }
   return {
     ...state,
-    goals: state.goals.map((item) => (item.id === goal.id ? goal : item)),
+    goals: state.goals.map((item) => (item.id === goal.id ? saved : item)),
   }
 }
 
