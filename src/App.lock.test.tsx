@@ -29,6 +29,16 @@ vi.mock('./lib/sealing', async (importOriginal) => {
   }
 })
 
+/** Each style asked of the Android app's system bars: true for night's light icons. */
+const bars = vi.hoisted(() => ({ asked: [] as boolean[] }))
+vi.mock('./lib/native', async (original) => ({
+  ...(await original<typeof import('./lib/native')>()),
+  setSystemBarsForTheme: (night: boolean) => {
+    bars.asked.push(night)
+    return Promise.resolve()
+  },
+}))
+
 /** How long a page loaded for the first time may take on a busy machine. */
 const LAZY_PAGE_MS = 8000
 const PASSCODE = 'thrush in the holly'
@@ -65,6 +75,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   cleanup()
+  bars.asked = []
   resetDrafts()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -189,5 +200,31 @@ describe('a locked garden in the app', { timeout: 30_000 }, () => {
     expect(screen.queryByRole('heading', { name: 'Settings' })).toBeNull()
     await act(() => Promise.resolve())
     expect(gardenRepository.lockState()).toBe('locked')
+  })
+
+  it('sets the Android system bars for the lock screen, and for the garden’s own theme once open', async () => {
+    // A night garden on a phone in its light setting.
+    await gardenRepository.save({ ...journal(), profile: { ...journal().profile!, theme: 'night' } })
+    await turnLockOn(PASSCODE, newRecoveryCode())
+    await lockGarden(false)
+    const user = userEvent.setup()
+    render(
+      <LockGate>
+        <App />
+      </LockGate>,
+    )
+    const field = await screen.findByLabelText('Passcode', {}, { timeout: LAZY_PAGE_MS })
+    // The lock screen is in the device's light: dark icons over it.
+    await waitFor(() => expect(bars.asked.at(-1)).toBe(false))
+
+    await user.type(field, PASSCODE)
+    await user.click(screen.getByRole('button', { name: 'Open my garden' }))
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: LAZY_PAGE_MS })
+    // The garden's own night: light icons again.
+    await waitFor(() => expect(bars.asked.at(-1)).toBe(true))
+
+    await act(() => lockGarden(true))
+    await screen.findByRole('heading', { name: 'Your garden is resting' }, { timeout: LAZY_PAGE_MS })
+    await waitFor(() => expect(bars.asked.at(-1)).toBe(false))
   })
 })

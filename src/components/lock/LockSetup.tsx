@@ -31,6 +31,8 @@ export function LockSetup({ onClose }: { onClose: () => void }) {
   const [words] = useState(newRecoveryCode)
   const [madeOn] = useState(() => new Date())
   const passcodeField = useRef<HTMLInputElement>(null)
+  // The app has no tabs: it is one window, open or not.
+  const android = import.meta.env.VITE_PLATFORM === 'android'
 
   const choosePasscode = (event: FormEvent) => {
     event.preventDefault()
@@ -153,7 +155,8 @@ export function LockSetup({ onClose }: { onClose: () => void }) {
         <>
           <p>
             Your garden is sealed now: it was stored again, sealed, and the unsealed copy
-            deleted. From now on it opens with your passcode. It stays open in this tab
+            deleted. From now on it opens with your passcode. It stays open{' '}
+            {android ? 'in the app' : 'in this tab'}{' '}
             until you lock it, or until it locks itself after a while out of sight, if you
             choose that in Settings.
           </p>

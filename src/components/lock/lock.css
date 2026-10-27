@@ -148,13 +148,11 @@
   line-height: 1.55;
 }
 
-.lock-dialog {
-  display: grid;
-  gap: 0.85rem;
-}
-
+/* Laid out only while open: a closed dialog stays hidden, as the browser
+   has it, should one ever be closed before it is taken away. */
 .lock-dialog[open] {
   display: grid;
+  gap: 0.85rem;
 }
 
 .lock-dialog form {

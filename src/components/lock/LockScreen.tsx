@@ -9,7 +9,7 @@ import {
   unlockWithPasskey,
 } from '../../lib/gardenLockActions'
 import { openLock, passcodeProblem, WrongSecretError, type LockRecord } from '../../lib/gardenLock'
-import { leaveApp, onBackButton } from '../../lib/native'
+import { leaveApp, onBackButton, setSystemBarsForTheme } from '../../lib/native'
 import { askPasskey, passkeysOffered } from '../../lib/passkey'
 import { gardenRepository, GardenDeletionPendingError } from '../../repository/gardenRepository'
 import './lock.css'
@@ -28,8 +28,9 @@ const OPENING = 'Opening your garden… this takes a moment.'
  * keeps guessing slow, here and on a copy of the stored garden alike.
  *
  * Shown in the device's own light or dark, since the garden's theme is part
- * of what the lock keeps sealed; and at the usual text size, for the same
- * reason. Android's back gesture leaves the app from here.
+ * of what the lock keeps sealed, with the Android app's system bars to match
+ * (the garden sets its own again once it is open); and at the usual text
+ * size, for the same reason. Android's back gesture leaves the app from here.
  */
 export function LockScreen() {
   const ids = useId()
@@ -54,8 +55,24 @@ export function LockScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteNote, setDeleteNote] = useState<string>()
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
+  const deleteButton = useRef<HTMLButtonElement>(null)
+  const keepButton = useRef<HTMLButtonElement>(null)
+  /** Asking to delete, or thinking better of it, moves focus to what replaces the button. */
+  const deleteAsked = useRef(false)
 
   useEffect(() => onBackButton(() => void leaveApp()), [])
+
+  useEffect(() => {
+    void setSystemBarsForTheme(night)
+  }, [night])
+
+  // The button pressed is taken away: focus goes to what stands in its
+  // place, the safe choice first. Not on arrival, when nothing was asked.
+  useEffect(() => {
+    if (!deleteAsked.current) return
+    deleteAsked.current = false
+    ;(confirmDelete ? keepButton : deleteButton).current?.focus()
+  }, [confirmDelete])
 
   // The lock turned off in another tab: nothing is left to open here, and
   // the garden comes back as it is (components/LockGate).
@@ -85,6 +102,11 @@ export function LockScreen() {
   useEffect(() => {
     field.current?.focus()
   }, [step])
+
+  const askToDelete = (asking: boolean) => {
+    deleteAsked.current = true
+    setConfirmDelete(asking)
+  }
 
   const show = (next: Step) => {
     setProblem(undefined)
@@ -372,7 +394,7 @@ export function LockScreen() {
             delete it from this device and start a new garden.
           </p>
           {!confirmDelete ? (
-            <button className="text-button danger-text" type="button" onClick={() => setConfirmDelete(true)}>
+            <button ref={deleteButton} className="text-button danger-text" type="button" onClick={() => askToDelete(true)}>
               Delete this garden…
             </button>
           ) : (
@@ -385,7 +407,7 @@ export function LockScreen() {
                 <button className="danger-button" type="button" onClick={() => void deleteGarden()}>
                   Delete it and start again
                 </button>
-                <button className="secondary-button" type="button" onClick={() => setConfirmDelete(false)}>
+                <button ref={keepButton} className="secondary-button" type="button" onClick={() => askToDelete(false)}>
                   Keep it
                 </button>
               </div>

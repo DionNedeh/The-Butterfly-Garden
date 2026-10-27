@@ -494,7 +494,16 @@ test('a locked garden opens to the lock screen, where the back gesture leaves th
     await field.fill(words[Number(/\d+/.exec(label)?.[0]) - 1])
   }
   await check.getByRole('button', { name: 'Lock my garden' }).click()
-  await page.getByRole('dialog', { name: 'Your garden is locked' }).getByRole('button', { name: 'Done' }).click(deriving)
+  const done = page.getByRole('dialog', { name: 'Your garden is locked' })
+  await expect(done).toBeVisible(deriving)
+  // The app is one window, with no tabs to speak of.
+  await expect(done.getByText(/It stays open in the app until you lock it/)).toBeVisible()
+  await expect(done).not.toContainText(/\btabs?\b/)
+  await done.getByRole('button', { name: 'Done' }).click()
+  await expect(done).toHaveCount(0)
+  await expect(lockSection.getByRole('heading', { name: 'The garden lock' })).toBeFocused()
+  await expect(lockSection.getByText(/It is open on this phone now\./)).toBeVisible()
+  await expect(lockSection).not.toContainText(/\btabs?\b/)
 
   await lockSection.getByRole('button', { name: 'Lock now' }).click()
   const resting = page.getByRole('heading', { level: 1, name: 'Your garden is resting' })
