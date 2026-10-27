@@ -4,12 +4,13 @@ import { openDB } from 'idb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeBroadcastChannel } from '../../test/fakeBroadcastChannel'
 import { LAZY_PAGE_MS } from '../../test/lazyPage'
-import { NO_WAY_BACK, openLock } from '../../lib/gardenLock'
-import { lockGarden, turnLockOn, unlockGarden } from '../../lib/gardenLockActions'
+import { NO_WAY_BACK, openLock, openLockWithPasskey, type LockRecord } from '../../lib/gardenLock'
+import { lockGarden, turnLockOn, unlockGarden, WAITING_FOR_WINDOWS } from '../../lib/gardenLockActions'
 import { createInitialState } from '../../lib/progression'
 import { newRecoveryCode } from '../../lib/recoveryCode'
 import { randomBytes } from '../../lib/sealing'
-import { gardenRepository, isSealed } from '../../repository/gardenRepository'
+import { DATABASE_VERSION, gardenRepository, isSealed } from '../../repository/gardenRepository'
+import { openValue } from '../../repository/sealedStores'
 import { LockSettings } from './LockSettings'
 
 vi.mock('../../lib/sealing', async (importOriginal) => {
@@ -69,6 +70,19 @@ async function lockedAndOpen() {
 
 function dialog() {
   return within(screen.getByRole('dialog'))
+}
+
+/** Whether a data key opens what is stored now: the garden sealed again under a new one, it does not. */
+async function opensStoredGarden(key: CryptoKey): Promise<boolean> {
+  const db = await openDB('butterfly-garden')
+  try {
+    return await openValue(key, 'moods', await db.get('moods', 'current')).then(
+      () => true,
+      () => false,
+    )
+  } finally {
+    db.close()
+  }
 }
 
 /** The words shown on the sheet, in order. */
@@ -150,6 +164,9 @@ describe('turning the lock on', { timeout: 30_000 }, () => {
     await user.click(dialog().getByRole('button', { name: 'Lock my garden' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Your garden is locked' })).toBeInTheDocument())
     expect(gardenRepository.lockState()).toBe('unlocked')
+    // Said as it is: stored again sealed, and the unsealed copy deleted.
+    expect(dialog().getByText(/Your garden is sealed now: it was stored again, sealed, and the unsealed copy deleted\./)).toBeInTheDocument()
+    expect(screen.getByText(/like any deleted file, traces of it can stay on the device’s disk/)).toBeInTheDocument()
 
     const db = await openDB('butterfly-garden')
     try {
@@ -223,8 +240,10 @@ describe('while the lock is on and open', { timeout: 30_000 }, () => {
     await waitFor(async () => expect((await gardenRepository.readLock())?.autoLockMinutes).toBeUndefined())
   })
 
-  it('changes the passcode, asking for the current one', async () => {
+  it('changes the passcode, asking for the current one, and seals the garden under a new key', async () => {
     const words = await lockedAndOpen()
+    const before = (await gardenRepository.readLock()) as LockRecord
+    const oldKey = await openLock(before, { slot: 'passcode', passcode: PASSCODE })
     const user = userEvent.setup()
     render(<LockSettings />)
     await user.click(screen.getByRole('button', { name: 'Change my passcode…' }))
@@ -240,6 +259,10 @@ describe('while the lock is on and open', { timeout: 30_000 }, () => {
     await user.type(dialog().getByLabelText('Current passcode'), PASSCODE)
     await user.click(dialog().getByRole('button', { name: 'Change my passcode' }))
     expect(await screen.findByRole('heading', { name: 'Your passcode is changed' })).toBeInTheDocument()
+    expect(dialog().getByText(/the old passcode opens\s+nothing stored here now/)).toBeInTheDocument()
+    // An old copy of the lock, with the old passcode, opens nothing stored now.
+    expect((await gardenRepository.readLock())?.id).not.toBe(before.id)
+    expect(await opensStoredGarden(oldKey)).toBe(false)
 
     await lockGarden(false)
     await expect(unlockGarden({ slot: 'passcode', passcode: PASSCODE })).rejects.toThrow()
@@ -251,6 +274,7 @@ describe('while the lock is on and open', { timeout: 30_000 }, () => {
 
   it('makes a new recovery code, after which the old one opens nothing', async () => {
     const old = await lockedAndOpen()
+    const before = (await gardenRepository.readLock()) as LockRecord
     const user = userEvent.setup()
     render(<LockSettings />)
     await user.click(screen.getByRole('button', { name: 'Make a new recovery code…' }))
@@ -269,6 +293,8 @@ describe('while the lock is on and open', { timeout: 30_000 }, () => {
     await confirmTwo(user, words)
     await user.click(dialog().getByRole('button', { name: 'Use the new code' }))
     expect(await screen.findByRole('heading', { name: 'Your new recovery code is in place' })).toBeInTheDocument()
+    expect(dialog().getByText(/still opens with the old code/)).toBeInTheDocument()
+    expect(await opensStoredGarden(await openLock(before, { slot: 'recovery', words: old }))).toBe(false)
 
     await lockGarden(false)
     await expect(unlockGarden({ slot: 'recovery', words: old })).rejects.toThrow()
@@ -311,15 +337,39 @@ describe('while the lock is on and open', { timeout: 30_000 }, () => {
     expect(await dialog().findByRole('alert')).toHaveTextContent('This device’s passkeys can’t open the garden, so nothing was added.')
     expect((await gardenRepository.readLock())?.passkey).toBeUndefined()
 
-    passkeys.made = { ok: true, credentialId: randomBytes(16), prfSalt: randomBytes(32), prfOutput: randomBytes(32) }
+    const made = { ok: true as const, credentialId: randomBytes(16), prfSalt: randomBytes(32), prfOutput: randomBytes(32) }
+    passkeys.made = made
     await user.click(dialog().getByRole('button', { name: 'Add a passkey' }))
     expect(await screen.findByRole('heading', { name: 'Your passkey can open the garden' })).toBeInTheDocument()
     expect((await gardenRepository.readLock())?.passkey).toBeDefined()
     await user.click(dialog().getByRole('button', { name: 'Done' }))
 
+    const withPasskey = (await gardenRepository.readLock()) as LockRecord
     await user.click(await screen.findByRole('button', { name: 'Remove the passkey' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('The passkey no longer opens the garden.')
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('The passkey no longer opens the garden.'),
+    )
     expect((await gardenRepository.readLock())?.passkey).toBeUndefined()
+    // Not even with the lock as it was: the garden is sealed under a new key.
+    const passkeyKey = await openLockWithPasskey(withPasskey, made.prfOutput)
+    expect(await opensStoredGarden(passkeyKey)).toBe(false)
+    expect(gardenRepository.lockState()).toBe('unlocked')
+  })
+
+  it('says so while another window holds the garden open, and finishes once it lets go', async () => {
+    await lockedAndOpen()
+    // A window of the garden that does not let go when asked.
+    const stuck = await openDB('butterfly-garden', DATABASE_VERSION)
+    const user = userEvent.setup()
+    render(<LockSettings />)
+    await user.click(screen.getByRole('button', { name: 'Turn the lock off…' }))
+    await screen.findByRole('heading', { name: 'Turn the lock off' }, { timeout: LAZY_PAGE_MS })
+    await user.type(dialog().getByLabelText('Your passcode'), PASSCODE)
+    await user.click(dialog().getByRole('button', { name: 'Turn the lock off' }))
+    await waitFor(() => expect(dialog().getByRole('status')).toHaveTextContent(WAITING_FOR_WINDOWS))
+    stuck.close()
+    expect(await screen.findByRole('heading', { name: 'The lock is off' })).toBeInTheDocument()
+    expect(await gardenRepository.readLock()).toBeUndefined()
   })
 
   it('closes a change on Escape (or Android’s back), focus back on the section', async () => {

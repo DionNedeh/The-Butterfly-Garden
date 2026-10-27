@@ -125,7 +125,8 @@ export function recoverySheet(words: readonly string[], madeOn: Date): string {
     'the garden: not you, not anyone else, and not the people who made the',
     'app. There is no other way in.',
     '',
-    'Making a new recovery code in Settings stops this one working.',
+    'Making a new recovery code in Settings stops this one opening the',
+    'garden, though not copies of the garden saved before then.',
     '',
   ].join('\n')
 }

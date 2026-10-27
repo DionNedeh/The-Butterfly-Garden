@@ -163,12 +163,40 @@ export type GardenPart = GardenCollection | 'meta'
  */
 const sealedStores = () => import('./sealedStores')
 
+/** Changing the lock, and settling a change cut off: loaded only for that. */
+const gardenSwitch = () => import('./gardenSwitch')
+
+/** Set-aside copies of a garden this build cannot read: loaded only for them. */
+const setAside = () => import('./setAside')
+
 /**
  * Whether a stored value is sealed under the garden lock. The one thing about
  * the lock every read has to know, so it is the one thing kept here.
  */
 export function isSealed(value: unknown): value is SealedValue {
   return isRecord(value) && value.sealed === 1
+}
+
+/**
+ * What stands where the lock is kept while the lock is being changed
+ * (repository/gardenSwitch). No tab holds a lock with its id, so every write
+ * is refused; reads go on under the lock it stands in for, `was`.
+ */
+export interface SwitchMark {
+  format: 'the-butterfly-garden-switch'
+  id: string
+  stamp: string
+  at: string
+  was?: LockRecord
+}
+
+export function isSwitchMark(value: unknown): value is SwitchMark {
+  return isRecord(value) && value.format === 'the-butterfly-garden-switch'
+}
+
+/** The lock as stored, or the one a switch mark stands in for. */
+function lockOf(stored: LockRecord | SwitchMark | undefined): LockRecord | undefined {
+  return isSwitchMark(stored) ? stored.was : stored
 }
 
 /**
@@ -353,10 +381,13 @@ export interface GardenDatabase extends DBSchema {
     key: 'current'
     value: Drafts
   }
-  /** The garden lock, while it is on (lib/gardenLock). Absent otherwise. */
+  /**
+   * The garden lock, while it is on (lib/gardenLock). Absent otherwise; a
+   * switch mark while the lock is being changed (repository/gardenSwitch).
+   */
   lock: {
     key: 'current'
-    value: LockRecord
+    value: LockRecord | SwitchMark
   }
 }
 
@@ -367,7 +398,7 @@ export interface GardenDatabase extends DBSchema {
  * copy stops naming the store a new collection needs, and the transaction that
  * reads the garden then fails for everyone at once.
  */
-const OBJECT_STORES: readonly StoreNames<GardenDatabase>[] = [
+export const OBJECT_STORES: readonly StoreNames<GardenDatabase>[] = [
   'state',
   'meta',
   ...GARDEN_COLLECTIONS.map((collection) => COLLECTION_STORES[collection]),
@@ -399,8 +430,6 @@ export const DATABASE_NAME = 'butterfly-garden'
  */
 export const DATABASE_VERSION = 8
 
-/** How many set-aside copies of an unreadable garden are kept. */
-const QUARANTINE_LIMIT = 3
 /** How many pre-restore snapshots are kept. */
 const SNAPSHOT_LIMIT = 2
 
@@ -622,22 +651,6 @@ export function inspectImportedState(value: unknown) {
   return validateGarden(payload)
 }
 
-/** A short hex fingerprint of a record, or undefined when one can't be made. */
-async function fingerprint(raw: unknown): Promise<string | undefined> {
-  try {
-    const subtle = globalThis.crypto?.subtle
-    if (!subtle) return undefined
-    const text = JSON.stringify(raw)
-    if (text === undefined) return undefined
-    const digest = await subtle.digest('SHA-256', new TextEncoder().encode(text))
-    return Array.from(new Uint8Array(digest).slice(0, 16), (byte) =>
-      byte.toString(16).padStart(2, '0'),
-    ).join('')
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * One garden store: everything the app reads and writes, against one database.
  *
@@ -680,6 +693,13 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
   /** Set when another tab deleted the database out from under this one. */
   let deletedElsewhere = false
 
+  /**
+   * Set when the database was deleted from elsewhere: by a deletion of the
+   * garden, or by a change of the lock, which writes it again at once
+   * (repository/gardenSwitch). The next open tells which.
+   */
+  let deletionSeen = false
+
   /** Set while the last read was withheld; saving is refused until cleared. */
   let withheld = false
 
@@ -704,7 +724,8 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
    * for, the garden it last read is forgotten. Returns whether this tab may
    * read the garden.
    */
-  function followLock(record: LockRecord | undefined): boolean {
+  function followLock(stored: LockRecord | SwitchMark | undefined): boolean {
+    const record = lockOf(stored)
     if (record === undefined) {
       unlocked = undefined
       setLockState('none')
@@ -720,8 +741,11 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     return false
   }
 
-  /** Whether the lock as stored is the one a write was made for (or none for none). */
-  function lockIs(record: LockRecord | undefined, lock: Unlocked | undefined): boolean {
+  /**
+   * Whether the lock as stored is the one a write was made for (or none for
+   * none). A switch mark is neither, so it refuses every write.
+   */
+  function lockIs(record: LockRecord | SwitchMark | undefined, lock: Unlocked | undefined): boolean {
     return record === undefined ? lock === undefined : lock?.lockId === record.id
   }
 
@@ -732,7 +756,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
    * part's place), or a sealed part is found with no lock to open it.
    */
   async function openParts(
-    record: LockRecord | undefined,
+    record: LockRecord | SwitchMark | undefined,
     parts: Array<[GardenPart, unknown]>,
   ): Promise<Array<[GardenPart, unknown]> | 'locked' | 'unreadable'> {
     if (!followLock(record)) return 'locked'
@@ -799,38 +823,59 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       reportBlocked = reject
     })
 
-    const opening = openDB<GardenDatabase>(databaseName, DATABASE_VERSION, {
-      upgrade(db) {
-        // Creating stores is all that happens here. Data is moved lazily on
-        // the first load instead, because a version-change transaction is an
-        // awkward place to do async work and a half-finished migration inside
-        // one is precisely the silent loss this repository exists to prevent.
-        for (const store of OBJECT_STORES) {
-          if (!db.objectStoreNames.contains(store)) {
-            db.createObjectStore(store)
+    const connect = async (): Promise<IDBPDatabase<GardenDatabase>> => {
+      let upgradedFrom: number | undefined
+      const db = await openDB<GardenDatabase>(databaseName, DATABASE_VERSION, {
+        upgrade(db, oldVersion) {
+          upgradedFrom = oldVersion
+          // Creating stores is all that happens here. Data is moved lazily on
+          // the first load instead, because a version-change transaction is an
+          // awkward place to do async work and a half-finished migration inside
+          // one is precisely the silent loss this repository exists to prevent.
+          for (const store of OBJECT_STORES) {
+            if (!db.objectStoreNames.contains(store)) {
+              db.createObjectStore(store)
+            }
           }
-        }
-      },
-      blocked() {
-        reportBlocked?.(
-          new Error(
-            'Another open tab of the garden is still using an older version. Close the other tabs and reopen the app.',
-          ),
-        )
-      },
-      blocking(_currentVersion, blockedVersion, event) {
-        ;(event.target as IDBDatabase | null)?.close()
-        databasePromise = undefined
-        if (blockedVersion === null) {
-          deletedElsewhere = true
-          persisted = undefined
-          persistedRevision = 0
-        }
-      },
-      terminated() {
-        databasePromise = undefined
-      },
-    })
+        },
+        blocked() {
+          reportBlocked?.(
+            new Error(
+              'Another open tab of the garden is still using an older version. Close the other tabs and reopen the app.',
+            ),
+          )
+        },
+        blocking(_currentVersion, blockedVersion, event) {
+          ;(event.target as IDBDatabase | null)?.close()
+          databasePromise = undefined
+          if (blockedVersion === null) {
+            deletedElsewhere = true
+            deletionSeen = true
+            persisted = undefined
+            persistedRevision = 0
+          }
+        },
+        terminated() {
+          databasePromise = undefined
+        },
+      })
+      // Just made, or an older build's upgraded: a change of the lock cut
+      // off while the database was being written again is settled first.
+      if (
+        upgradedFrom !== undefined &&
+        (await (await gardenSwitch()).settle(databaseName, db, upgradedFrom))
+      ) {
+        return connect()
+      }
+      // A database written again by a change of the lock still holds the
+      // garden: only one deleted with it is a deletion.
+      if (deletionSeen) {
+        deletionSeen = false
+        if ((await db.count('meta')) + (await db.count('state')) > 0) deletedElsewhere = false
+      }
+      return db
+    }
+    const opening = connect()
 
     // Whichever resolves first wins. A failure is not cached: the other tab
     // may close a moment later, and the next attempt should get a real
@@ -850,7 +895,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
   /** Read every part of the split garden in one transaction. */
   async function readParts(
     db: IDBPDatabase<GardenDatabase>,
-  ): Promise<{ meta: unknown; collections: unknown[]; lock: LockRecord | undefined }> {
+  ): Promise<{ meta: unknown; collections: unknown[]; lock: LockRecord | SwitchMark | undefined }> {
     // The lock is read with the parts, so the two can never disagree.
     const tx = db.transaction([...PART_STORES, 'lock'], 'readonly')
     const lock = tx.objectStore('lock').get('current')
@@ -874,7 +919,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
   async function readNamedParts(
     db: IDBPDatabase<GardenDatabase>,
     parts: GardenPart[],
-  ): Promise<{ values: Array<[GardenPart, unknown]>; lock: LockRecord | undefined }> {
+  ): Promise<{ values: Array<[GardenPart, unknown]>; lock: LockRecord | SwitchMark | undefined }> {
     const tx = db.transaction([...parts.map(storeFor), 'lock'], 'readonly')
     const lock = tx.objectStore('lock').get('current')
     const requests = parts.map((part) =>
@@ -893,16 +938,22 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
   /**
    * Write the whole garden across every part store, atomically and durably,
    * one revision past whatever is stored. Returns the revision written.
+   *
+   * With `snapshot`, the garden it replaces is copied aside first, in the
+   * same transaction and under the same check of the lock: exactly as
+   * stored, so sealed under the lock as its parts are, and never left in
+   * the clear under a lock another tab has just turned on.
    */
   async function writeAllParts(
     db: IDBPDatabase<GardenDatabase>,
     state: AppState,
+    snapshot?: SnapshotRecord['reason'],
   ): Promise<number> {
     // Sealed first: a transaction left waiting on anything but its own
     // requests commits early, so nothing slow may happen inside it.
     const lock = unlocked
     const values = await storedValues(['meta', ...GARDEN_COLLECTIONS], state, lock)
-    const tx = db.transaction([...PART_STORES, 'lock'], 'readwrite', STRICT)
+    const tx = db.transaction([...PART_STORES, 'lock', 'snapshots'], 'readwrite', STRICT)
     const metaStore = tx.objectStore('meta')
     const [stored, record] = await Promise.all([
       metaStore.get('current'),
@@ -912,6 +963,28 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       tx.abort()
       await tx.done.catch(() => undefined)
       throw new GardenLockedError()
+    }
+    // Nothing to copy is not an error: a first restore into an empty garden
+    // has nothing to undo.
+    if (snapshot && stored !== undefined) {
+      const collections = await Promise.all(
+        GARDEN_COLLECTIONS.map((collection) =>
+          (
+            tx.objectStore(COLLECTION_STORES[collection]) as {
+              get: (key: 'current') => Promise<unknown>
+            }
+          ).get('current'),
+        ),
+      )
+      const takenAt = new Date().toISOString()
+      const id = `${snapshot}-${takenAt}`
+      const snapshots = tx.objectStore('snapshots')
+      await snapshots.put({ id, reason: snapshot, takenAt, garden: assembleGarden(stored, collections) }, id)
+      const stale = (await snapshots.getAll())
+        .filter((kept) => kept.reason === snapshot)
+        .sort((a, b) => b.takenAt.localeCompare(a.takenAt))
+        .slice(SNAPSHOT_LIMIT)
+      for (const kept of stale) await snapshots.delete(kept.id)
     }
     const revision = revisionOf(stored) + 1
     const writes: Promise<unknown>[] = [
@@ -928,35 +1001,16 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
   }
 
   /**
-   * Set an unreadable record aside so it is never lost.
-   *
-   * Keyed by a fingerprint of its contents, so the same unreadable garden is
-   * kept once however many times it is loaded -- it used to gain a full copy,
-   * images and all, on every launch. At most a few distinct copies are kept,
-   * oldest discarded first.
+   * Set an unreadable record aside so it is never lost (repository/setAside,
+   * loaded only when a garden cannot be read), sealed under the lock this
+   * tab holds, if any.
    */
   async function quarantine(
     raw: unknown,
     reason: 'incompatible' | 'malformed',
   ): Promise<void> {
     try {
-      const db = await database()
-      const print = await fingerprint(raw)
-      const storedAt = new Date().toISOString()
-      const id = print ? `${reason}-${print}` : `${reason}-${storedAt}`
-      if (print && (await db.getKey('quarantine', id)) !== undefined) return
-      // Under the lock, what is set aside is sealed too: it may be journal.
-      const kept = unlocked
-        ? await (await sealedStores()).sealValue(unlocked.key, 'quarantine', raw)
-        : raw
-      await db.put('quarantine', { id, reason, storedAt, raw: kept }, id)
-      const all = await db.getAll('quarantine')
-      if (all.length > QUARANTINE_LIMIT) {
-        const oldest = all
-          .sort((a, b) => a.storedAt.localeCompare(b.storedAt))
-          .slice(0, all.length - QUARANTINE_LIMIT)
-        for (const record of oldest) await db.delete('quarantine', record.id)
-      }
+      await (await setAside()).setAside(database, raw, reason, unlocked)
     } catch {
       // Quarantining is best effort; never let it mask the original problem.
     }
@@ -1037,7 +1091,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
    */
   async function readGarden(): Promise<LoadResult> {
     let db: IDBPDatabase<GardenDatabase>
-    let parts: { meta: unknown; collections: unknown[]; lock: LockRecord | undefined }
+    let parts: { meta: unknown; collections: unknown[]; lock: LockRecord | SwitchMark | undefined }
     try {
       db = await database()
       parts = await readParts(db)
@@ -1056,6 +1110,14 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       }
     }
     deletedElsewhere = false
+
+    // The lock is being changed, or a change of it was cut off: settled if
+    // nobody is at it any more, and read again. While another tab is at it,
+    // the garden is read under the lock the mark stands in for.
+    if (isSwitchMark(parts.lock) && (await (await gardenSwitch()).settle(databaseName, db))) {
+      databasePromise = undefined
+      return readGarden()
+    }
 
     // Under the lock, every part is opened here, and nothing below this
     // point knows it was ever sealed.
@@ -1178,13 +1240,15 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
      */
     save(state: AppState): Promise<GardenPart[]> {
       return enqueue(async () => {
+        // Opened first: a database written again by a change of the lock in
+        // another tab is not a deletion (see database()).
+        const db = await database()
         if (deletedElsewhere) throw new GardenDeletedElsewhereError()
         if (withheld) throw new GardenWithheldError()
         const dirty = changedParts(persisted, state)
         if (dirty.length === 0) return []
         if (!dirty.includes('meta')) dirty.unshift('meta')
 
-        const db = await database()
         const base = persistedRevision
         // Sealed before the transaction opens (see writeAllParts), under the
         // lock this tab holds. The transaction then checks that lock is still
@@ -1256,8 +1320,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     ): Promise<GardenPart[]> {
       return enqueue(async () => {
         const db = await database()
-        if (options.snapshot) await takeSnapshot(db, 'restore')
-        persistedRevision = await writeAllParts(db, state)
+        persistedRevision = await writeAllParts(db, state, options.snapshot ? 'restore' : undefined)
         persisted = state
         deletedElsewhere = false
         withheld = false
@@ -1323,15 +1386,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     /** Records this build could not read, kept so they are never lost. */
     async quarantined(): Promise<QuarantineRecord[]> {
       try {
-        const all = await (await database()).getAll('quarantine')
-        // Opened when they can be; one that cannot stays as it is, sealed.
-        const readable = await Promise.all(
-          all.map(async (record) => ({
-            ...record,
-            raw: await opened(record.raw, 'quarantine').catch(() => record.raw),
-          })),
-        )
-        return readable.sort((a, b) => b.storedAt.localeCompare(a.storedAt))
+        return await (await setAside()).setAsideCopies(await database(), unlocked)
       } catch {
         return []
       }
@@ -1386,9 +1441,9 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
 
     /** Best effort: a draft that fails to save is still on screen. */
     async writeDrafts(drafts: Drafts): Promise<void> {
-      if (deletedElsewhere) return
       try {
         const db = await database()
+        if (deletedElsewhere) return
         // Under the lock, drafts are sealed like the garden; a tab holding
         // no key for the stored lock writes none at all, rather than leave
         // words in the clear.
@@ -1488,9 +1543,12 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       }
     },
 
-    /** The lock as stored, or undefined when the garden has none. */
+    /**
+     * The lock as stored, or undefined when the garden has none. While the
+     * lock is being changed, the one it is changed from.
+     */
     async readLock(): Promise<LockRecord | undefined> {
-      return (await database()).get('lock', 'current')
+      return lockOf(await (await database()).get('lock', 'current'))
     },
 
     /** Read the lock again, as another tab has changed it, and follow it. */
@@ -1535,25 +1593,48 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     },
 
     /**
-     * Turn the lock on (a new lock and its key) or off (undefined): every
-     * store that may hold the gardener's words is stored again, sealed or
-     * opened, in one transaction (repository/sealedStores). A switch that
-     * fails or is cut off part-way leaves everything as it was.
+     * Turn the lock on (a new lock and its key) or off (undefined), or seal
+     * the garden under a new key once a secret is replaced: every store is
+     * written again, sealed or opened, into a new database, and the old one
+     * deleted (repository/gardenSwitch). A switch that fails or is cut off
+     * part-way leaves the garden as it was, or finishes on the next open.
+     *
+     * `from` is the key the garden is under, when this tab only has it to
+     * hand (a forgotten passcode replaced from the lock screen); `madeFrom`
+     * the lock record a change was made from, refused if it has changed;
+     * `waiting` is told when another window holds the old database open.
      */
-    relock(next: { record: LockRecord; key: CryptoKey } | undefined): Promise<void> {
+    relock(
+      next: { record: LockRecord; key: CryptoKey } | undefined,
+      options: { from?: Unlocked; madeFrom?: LockRecord; waiting?: () => void } = {},
+    ): Promise<void> {
       return enqueue(async () => {
+        const db = await database()
         // Not over a garden this tab could not read, or one deleted elsewhere:
         // the switch would seal (or open) whatever is there, as saving would.
+        // A garden only locked here may be, with its key opened for this.
         if (deletedElsewhere) throw new GardenDeletedElsewhereError()
-        if (withheld) throw new GardenWithheldError()
-        const db = await database()
-        const { restoreAll } = await sealedStores()
-        const base = await restoreAll(db, unlocked, next)
+        if (withheld && !options.from) throw new GardenWithheldError()
+        const { base, unfinished } = await (await gardenSwitch()).switchGarden({
+          name: databaseName,
+          db,
+          release: () => {
+            db.close()
+            databasePromise = undefined
+          },
+          from: options.from ?? unlocked,
+          next,
+          madeFrom: options.madeFrom,
+          onWaiting: options.waiting,
+        })
         // Only a tab that was up to date stays so: one that was behind
         // another tab's write still has to find that out on its next save.
         if (persistedRevision === base) persistedRevision = base + 1
         unlocked = next && { key: next.key, lockId: next.record.id }
         setLockState(next ? 'unlocked' : 'none')
+        // Kept, and finished on the next open: this tab follows it already,
+        // and says why it is not finished yet.
+        if (unfinished) throw unfinished
       })
     },
 
@@ -1569,6 +1650,9 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       databasePromise = undefined
       persisted = undefined
       persistedRevision = 0
+      // A change of the lock's copy goes first: a garden deleted must never
+      // come back from it.
+      await (await gardenSwitch()).removeStaging(databaseName)
       await new Promise<void>((resolve, reject) => {
         const request = indexedDB.deleteDatabase(databaseName)
         request.onsuccess = () => {
@@ -1585,31 +1669,6 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         request.onblocked = () => reject(new GardenDeletionPendingError())
       })
     },
-  }
-
-  /**
-   * Copy the stored garden aside before it is replaced. Nothing to copy is
-   * not an error: a first restore into an empty garden has nothing to undo.
-   */
-  async function takeSnapshot(
-    db: IDBPDatabase<GardenDatabase>,
-    reason: SnapshotRecord['reason'],
-  ): Promise<void> {
-    const { meta, collections } = await readParts(db)
-    if (meta === undefined) return
-    const takenAt = new Date().toISOString()
-    const id = `${reason}-${takenAt}`
-    await db.put(
-      'snapshots',
-      { id, reason, takenAt, garden: assembleGarden(meta, collections) },
-      id,
-    )
-    const all = await db.getAll('snapshots')
-    const stale = all
-      .filter((record) => record.reason === reason)
-      .sort((a, b) => b.takenAt.localeCompare(a.takenAt))
-      .slice(SNAPSHOT_LIMIT)
-    for (const record of stale) await db.delete('snapshots', record.id)
   }
 
   return repository

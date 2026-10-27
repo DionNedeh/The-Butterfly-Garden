@@ -2,9 +2,11 @@ import { useId, useRef, useState, type FormEvent, type ReactNode, type RefObject
 import {
   addPasskey,
   changePasscode,
+  changeProblem,
   checkPasscode,
   replaceRecoveryCode,
   turnLockOff,
+  WAITING_FOR_WINDOWS,
 } from '../../lib/gardenLockActions'
 import { NO_WAY_BACK, passcodeProblem, WrongSecretError } from '../../lib/gardenLock'
 import { makePasskey } from '../../lib/passkey'
@@ -19,9 +21,7 @@ export type LockChangeKind = 'passcode' | 'recovery' | 'off' | 'passkey'
 const WRONG_PASSCODE = 'That isn’t your current passcode.'
 
 function problemOf(error: unknown, otherwise: string): string {
-  return error instanceof WrongSecretError
-    ? WRONG_PASSCODE
-    : `${otherwise} ${error instanceof Error && error.message ? error.message : ''}`.trim()
+  return error instanceof WrongSecretError ? WRONG_PASSCODE : changeProblem(error, otherwise)
 }
 
 /** A passcode field, the one every change asks for first. */
@@ -53,11 +53,21 @@ function CurrentPasscode({
   )
 }
 
-function Feedback({ busy, working, problem }: { busy: boolean; working: string; problem?: string }) {
+function Feedback({
+  busy,
+  working,
+  problem,
+  waiting = false,
+}: {
+  busy: boolean
+  working: string
+  problem?: string
+  waiting?: boolean
+}) {
   return (
     <>
       <p className="lock-progress" role="status">
-        {busy ? working : ''}
+        {busy ? (waiting ? WAITING_FOR_WINDOWS : working) : ''}
       </p>
       {problem && (
         <p className="settings-note error" role="alert">
@@ -81,13 +91,17 @@ function Done({ children, onClose }: { children: ReactNode; onClose: () => void 
   )
 }
 
-/** Change the passcode: the data key is wrapped again; nothing stored changes. */
+/**
+ * Change the passcode: the garden is sealed again under a new key, so the old
+ * passcode opens nothing stored here from then on.
+ */
 function ChangePasscode({ onClose }: { onClose: () => void }) {
   const ids = useId()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [again, setAgain] = useState('')
   const [busy, setBusy] = useState(false)
+  const [waiting, setWaiting] = useState(false)
   const [problem, setProblem] = useState<string>()
   const [done, setDone] = useState(false)
   const field = useRef<HTMLInputElement>(null)
@@ -103,13 +117,14 @@ function ChangePasscode({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setProblem(undefined)
     try {
-      await changePasscode(current, next)
+      await changePasscode(current, next, () => setWaiting(true))
       setDone(true)
     } catch (error) {
       setProblem(problemOf(error, 'Your passcode could not be changed, so the old one still stands.'))
       field.current?.focus()
     } finally {
       setBusy(false)
+      setWaiting(false)
     }
   }
 
@@ -122,7 +137,12 @@ function ChangePasscode({ onClose }: { onClose: () => void }) {
     >
       {done ? (
         <Done onClose={onClose}>
-          <p>From now on the garden opens with your new passcode. Your recovery code still works as before.</p>
+          <p>
+            From now on the garden opens with your new passcode, and your recovery code
+            still works as before. Your garden was sealed again, so the old passcode opens
+            nothing stored here now. Other windows with the garden open lock, and open with
+            the new passcode.
+          </p>
         </Done>
       ) : (
         <form onSubmit={(event) => void submit(event)} noValidate>
@@ -151,7 +171,12 @@ function ChangePasscode({ onClose }: { onClose: () => void }) {
               onChange={(event) => setAgain(event.target.value)}
             />
           </label>
-          <Feedback busy={busy} working="Changing your passcode… this takes a moment." problem={problem} />
+          <Feedback
+            busy={busy}
+            waiting={waiting}
+            working="Changing your passcode and sealing your garden again… this can take a few seconds."
+            problem={problem}
+          />
           <div className="form-actions">
             <button className="primary-button" type="submit" aria-disabled={busy}>
               Change my passcode
@@ -168,11 +193,15 @@ function ChangePasscode({ onClose }: { onClose: () => void }) {
 
 type RecoveryStep = 'passcode' | 'sheet' | 'confirm' | 'done'
 
-/** A new recovery code: the old one stops working the moment the new one is stored. */
+/**
+ * A new recovery code: the garden is sealed again under a new key, so the old
+ * code opens nothing stored here once the new one is.
+ */
 function NewRecoveryCode({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<RecoveryStep>('passcode')
   const [passcode, setPasscode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [waiting, setWaiting] = useState(false)
   const [problem, setProblem] = useState<string>()
   const [words] = useState(newRecoveryCode)
   const [madeOn] = useState(() => new Date())
@@ -202,13 +231,14 @@ function NewRecoveryCode({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setProblem(undefined)
     try {
-      await replaceRecoveryCode(passcode, words)
+      await replaceRecoveryCode(passcode, words, () => setWaiting(true))
       setPasscode('')
       setStep('done')
     } catch (error) {
       setProblem(problemOf(error, 'The new code could not be saved, so your old code still works.'))
     } finally {
       setBusy(false)
+      setWaiting(false)
     }
   }
 
@@ -224,8 +254,9 @@ function NewRecoveryCode({ onClose }: { onClose: () => void }) {
       {step === 'passcode' && (
         <form onSubmit={(event) => void prove(event)} noValidate>
           <p>
-            A new code replaces the one you have. As soon as it is saved, your old recovery
-            code stops working, so keep only the new sheet.
+            A new code replaces the one you have. As soon as it is saved, your garden is
+            sealed again and your old recovery code stops working, so keep only the new
+            sheet.
           </p>
           <CurrentPasscode field={field} value={passcode} onChange={setPasscode} busy={busy} />
           <Feedback busy={busy} working="Checking your passcode… this takes a moment." problem={problem} />
@@ -263,12 +294,21 @@ function NewRecoveryCode({ onClose }: { onClose: () => void }) {
             onConfirmed={() => void replace()}
             onBack={() => setStep('sheet')}
           />
-          <Feedback busy={busy} working="Saving your new code… this takes a moment." problem={problem} />
+          <Feedback
+            busy={busy}
+            waiting={waiting}
+            working="Saving your new code and sealing your garden again… this can take a few seconds."
+            problem={problem}
+          />
         </>
       )}
       {step === 'done' && (
         <Done onClose={onClose}>
-          <p>Your old recovery code no longer opens the garden; you can destroy that sheet.</p>
+          <p>
+            Your old recovery code no longer opens the garden; you can destroy that sheet.
+            A copy of the garden saved before now, such as one from “Download what’s
+            stored”, still opens with the old code, so keep any such copy private too.
+          </p>
         </Done>
       )}
     </LockDialog>
@@ -279,6 +319,7 @@ function NewRecoveryCode({ onClose }: { onClose: () => void }) {
 function TurnLockOff({ onClose }: { onClose: () => void }) {
   const [passcode, setPasscode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [waiting, setWaiting] = useState(false)
   const [problem, setProblem] = useState<string>()
   const [done, setDone] = useState(false)
   const field = useRef<HTMLInputElement>(null)
@@ -293,13 +334,14 @@ function TurnLockOff({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setProblem(undefined)
     try {
-      await turnLockOff(passcode)
+      await turnLockOff(passcode, () => setWaiting(true))
       setDone(true)
     } catch (error) {
       setProblem(problemOf(error, 'The lock could not be turned off, so it is still on.'))
       field.current?.focus()
     } finally {
       setBusy(false)
+      setWaiting(false)
     }
   }
 
@@ -321,7 +363,12 @@ function TurnLockOff({ onClose }: { onClose: () => void }) {
             lock, and anyone using this device could read it.
           </p>
           <CurrentPasscode field={field} value={passcode} onChange={setPasscode} busy={busy} />
-          <Feedback busy={busy} working="Unsealing your garden… this takes a moment." problem={problem} />
+          <Feedback
+            busy={busy}
+            waiting={waiting}
+            working="Unsealing your garden… this takes a moment."
+            problem={problem}
+          />
           <div className="form-actions">
             <button className="danger-button" type="submit" aria-disabled={busy}>
               Turn the lock off

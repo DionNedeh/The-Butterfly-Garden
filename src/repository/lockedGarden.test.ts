@@ -1,7 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer'
 import { openDB } from 'idb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLock, withAutoLock, type LockRecord } from '../lib/gardenLock'
+import { createLock, withAutoLock, withNewPasscode, type LockRecord } from '../lib/gardenLock'
 import { createInitialState } from '../lib/progression'
 import { newRecoveryCode } from '../lib/recoveryCode'
 import type { AppState } from '../types'
@@ -15,6 +15,7 @@ import {
   isSealed,
   RAW_EXPORT_FORMAT,
 } from './gardenRepository'
+import { openPart, sealPart, SetAsideSealedError } from './sealedStores'
 import { validateGarden } from './validateGarden'
 
 /*
@@ -467,59 +468,96 @@ describe('what the lock binds', () => {
   })
 })
 
+/** Every put to a store named `store` fails, as a full disk would. */
+function failPutsTo(store: string) {
+  const put = Reflect.get(IDBObjectStore.prototype, 'put') as (
+    this: IDBObjectStore,
+    ...args: Parameters<IDBObjectStore['put']>
+  ) => IDBRequest<IDBValidKey>
+  vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+    this: IDBObjectStore,
+    ...args: Parameters<IDBObjectStore['put']>
+  ) {
+    if (this.name === store) throw new DOMException('Disk full', 'QuotaExceededError')
+    return put.apply(this, args)
+  })
+}
+
+async function databaseNames(): Promise<string[]> {
+  return (await indexedDB.databases()).map((database) => database.name ?? '')
+}
+
 describe('an interrupted switch', () => {
-  it('leaves the garden as it was, readable and in the clear, when the lock does not finish turning on', async () => {
+  it('leaves the garden as it was, readable and in the clear, when the lock is cut off before its copy is whole', async () => {
     const name = freshName()
     const { repository, garden } = await storedEverywhere(name)
     const before = await clearTextIn(name)
-    const put = Reflect.get(IDBObjectStore.prototype, 'put') as (
-      this: IDBObjectStore,
-      ...args: Parameters<IDBObjectStore['put']>
-    ) => IDBRequest<IDBValidKey>
-    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
-      this: IDBObjectStore,
-      ...args: Parameters<IDBObjectStore['put']>
-    ) {
-      // Cut off part-way through the write.
-      if (this.name === 'reflections') throw new DOMException('Disk full', 'QuotaExceededError')
-      return put.apply(this, args)
-    })
+    // The staging copy cannot be written.
+    failPutsTo('entries')
     const { record, key } = await createLock(PASSCODE, newRecoveryCode(), FAST)
-    await expect(repository.relock({ record, key })).rejects.toThrow()
+    const refused = await repository.relock({ record, key }).catch((error: unknown) => error)
     vi.restoreAllMocks()
+    expect(refused).toBeInstanceOf(DOMException)
 
     expect(repository.lockState()).not.toBe('unlocked')
     expect(await clearTextIn(name)).toEqual(before)
+    expect(await databaseNames()).not.toContain(`${name}-switch`)
     const fresh = createGardenRepository(name)
     const loaded = await fresh.load()
     expect(loaded.status).toBe('loaded')
     expect(loaded.state.moods).toEqual(garden.moods)
     expect(fresh.lockState()).toBe('none')
-    // And the gardener can simply try again.
+    // And the gardener can simply try again; this tab writes as before too.
     await repository.load()
+    await repository.save({ ...loaded.state, nectar: loaded.state.nectar + 1 })
     await repository.relock({ record, key })
     expect(await clearTextIn(name)).toEqual([])
   })
 
-  it('leaves the garden locked and readable with its key when the lock does not finish turning off', async () => {
+  it('finishes turning the lock on at the next open when it is cut off writing the garden again', async () => {
+    const name = freshName()
+    const { repository, garden } = await storedEverywhere(name)
+    // The new database cannot be filled: the old one is already gone.
+    failPutsTo('reflections')
+    const { record, key } = await createLock(PASSCODE, newRecoveryCode(), FAST)
+    await expect(repository.relock({ record, key })).rejects.toThrow(
+      /finishes the next time the garden opens, and nothing is lost/,
+    )
+    vi.restoreAllMocks()
+    // The change is kept, and this tab follows it.
+    expect(repository.lockState()).toBe('unlocked')
+    expect(await databaseNames()).toContain(`${name}-switch`)
+
+    const loaded = await repository.load()
+    expect(loaded.status).toBe('loaded')
+    expect(loaded.state.reflections).toEqual(garden.reflections)
+    expect(await databaseNames()).not.toContain(`${name}-switch`)
+    expect(await clearTextIn(name)).toEqual([])
+    expect(await (otherTab(name)).load()).toMatchObject({ status: 'withheld', reason: 'locked' })
+  })
+
+  it('leaves the garden locked and readable with its key when the lock is cut off turning off before its copy is whole', async () => {
     const { name, repository, garden, key, record } = await lockedGarden()
-    const put = Reflect.get(IDBObjectStore.prototype, 'put') as (
-      this: IDBObjectStore,
-      ...args: Parameters<IDBObjectStore['put']>
-    ) => IDBRequest<IDBValidKey>
-    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
-      this: IDBObjectStore,
-      ...args: Parameters<IDBObjectStore['put']>
-    ) {
-      if (this.name === 'snapshots') throw new DOMException('Disk full', 'QuotaExceededError')
-      return put.apply(this, args)
-    })
+    failPutsTo('entries')
     await expect(repository.relock(undefined)).rejects.toThrow()
     vi.restoreAllMocks()
     expect(repository.lockState()).toBe('unlocked')
     expect(await clearTextIn(name)).toEqual([])
     const loaded = await (otherTab(name, { key, record })).load()
     expect(loaded.state.reflections).toEqual(garden.reflections)
+  })
+
+  it('finishes turning the lock off at the next open when it is cut off writing the garden again', async () => {
+    const { name, repository, garden } = await lockedGarden()
+    failPutsTo('snapshots')
+    await expect(repository.relock(undefined)).rejects.toThrow(/finishes the next time/)
+    vi.restoreAllMocks()
+    expect(repository.lockState()).toBe('none')
+    const fresh = createGardenRepository(name)
+    const loaded = await fresh.load()
+    expect(loaded.status).toBe('loaded')
+    expect(loaded.state.reflections).toEqual(garden.reflections)
+    expect(await fresh.readLock()).toBeUndefined()
   })
 
   it('starts again when another tab writes during the switch, keeping that write', async () => {
@@ -577,6 +615,83 @@ describe('turning the lock off', () => {
     const stranger = await createLock(PASSCODE, newRecoveryCode(), FAST)
     const tab = otherTab(name, stranger)
     await expect(tab.relock(undefined)).rejects.toBeInstanceOf(GardenLockedError)
+  })
+})
+
+describe('set-aside copies under the lock', () => {
+  it('sets a garden with a photo this build cannot read aside so it opens again, and the lock still turns off', async () => {
+    const { name, key, record, garden } = await lockedGarden()
+    // A newer build's garden, properly sealed: this build cannot read it.
+    const db = await openDB(name)
+    try {
+      const stored = (await db.get('meta', 'current')) as unknown as Record<string, unknown>
+      const fields: Record<string, unknown> = {
+        ...((await openPart(key, 'meta', stored)) as Record<string, unknown>),
+        version: 99,
+      }
+      delete fields.revision
+      const newer = (await sealPart(key, 'meta', fields)) as Record<string, unknown>
+      await db.put('meta', { ...newer, revision: stored.revision }, 'current')
+    } finally {
+      db.close()
+    }
+    const tab = otherTab(name, { key, record })
+    expect(await tab.load()).toMatchObject({ status: 'withheld', reason: 'incompatible' })
+    const setAside = (await tab.quarantined()).find((copy) => copy.reason === 'incompatible')
+    // Opened, photo and all: the photo was sealed again for its new place.
+    expect(isSealed(setAside?.raw)).toBe(false)
+    const raw = setAside?.raw as AppState
+    expect(raw.moods[0].note).toBe(PHRASE)
+    expect(await bytesOf(raw.sightings[0].photo)).toEqual(PHOTO_BYTES)
+
+    // Started afresh, the lock can still be turned off, the copy kept open.
+    await tab.prepareFreshStart()
+    await tab.replace({ ...garden, seeds: 1 })
+    await tab.relock(undefined)
+    expect(await tab.readLock()).toBeUndefined()
+    const kept = (await createGardenRepository(name).quarantined()).find((copy) => copy.reason === 'incompatible')
+    expect(await bytesOf((kept?.raw as AppState).sightings[0].photo)).toEqual(PHOTO_BYTES)
+  })
+
+  it('keeps the lock on while a set-aside copy has a part that will not open, saying why, and keeps open what does', async () => {
+    const { name, key, record, garden } = await lockedGarden()
+    const db = await openDB(name)
+    try {
+      const stored = (await db.get('moods', 'current')) as unknown as { data: Uint8Array }
+      const data = new Uint8Array(stored.data)
+      data[3] ^= 1
+      await db.put('moods', { ...stored, data }, 'current')
+    } finally {
+      db.close()
+    }
+    const tab = otherTab(name, { key, record })
+    expect(await tab.load()).toMatchObject({ status: 'withheld', reason: 'malformed' })
+    const setAside = (await tab.quarantined()).find((copy) => copy.id !== 'malformed-x')
+    const raw = setAside?.raw as Record<string, unknown>
+    // Each part opened on its own: only the damaged one stays sealed.
+    expect(raw.reflections).toEqual(garden.reflections)
+    expect(raw.profile).toEqual(garden.profile)
+    expect(await bytesOf((raw.sightings as AppState['sightings'])[0].photo)).toEqual(PHOTO_BYTES)
+    expect(isSealed(raw.moods)).toBe(true)
+
+    await tab.prepareFreshStart()
+    await tab.replace({ ...garden, seeds: 1 })
+    // Turning the lock off would take away the only key the damaged part
+    // could ever open with: refused, and said why.
+    const refused = await tab.relock(undefined).catch((error: unknown) => error)
+    expect(refused).toBeInstanceOf(SetAsideSealedError)
+    expect((refused as Error).message).toMatch(/Download the set-aside copy/)
+    expect((await tab.readLock())?.id).toBe(record.id)
+    expect(tab.lockState()).toBe('unlocked')
+    // So would a new key.
+    const next = await withNewPasscode(record, { slot: 'passcode', passcode: PASSCODE }, 'another passphrase', FAST)
+    await expect(tab.relock(next, { madeFrom: record })).rejects.toBeInstanceOf(SetAsideSealedError)
+    expect((await tab.quarantined()).find((copy) => copy.id === setAside?.id)).toBeDefined()
+
+    // Once the gardener has kept it, or let it go, the lock turns off.
+    await tab.clearQuarantine()
+    await tab.relock(undefined)
+    expect(await tab.readLock()).toBeUndefined()
   })
 })
 

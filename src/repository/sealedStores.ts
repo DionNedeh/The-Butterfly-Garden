@@ -1,11 +1,10 @@
-import type { IDBPDatabase, StoreNames } from 'idb'
+import type { IDBPDatabase } from 'idb'
 import type { LockRecord } from '../lib/gardenLock'
 import { fromBase64, open, seal, toBase64 } from '../lib/sealing'
 import { CURRENT_STATE_VERSION } from './validateGarden'
 import {
   COLLECTION_STORES,
   GARDEN_COLLECTIONS,
-  GardenConflictError,
   GardenLockedError,
   isSealed,
   revisionOf,
@@ -15,7 +14,8 @@ import {
 
 /*
  * The garden lock at rest: how each stored value is sealed and opened, and
- * the switch that stores everything again when the lock is turned on or off.
+ * how a switch of the lock stores each one again (repository/gardenSwitch
+ * writes them all into a new database).
  *
  * The repository loads this only once a garden has a lock (see `sealedStores`
  * there), so a garden without one never downloads it. Everything above the
@@ -66,18 +66,29 @@ const decoder = new TextDecoder()
 const BYTES_MARK = JSON.stringify(BYTES)
 
 /**
- * Photos already sealed, by data key and photo. A Blob never changes, so a
- * field book saved again reuses each photo's sealed copy (and its IV: the
- * same bytes sealed once, stored again) rather than sealing every photo on
- * every save. A new key starts afresh.
+ * Photos already sealed, by data key, by the place they were sealed for, and
+ * by photo. A Blob never changes, so a field book saved again reuses each
+ * photo's sealed copy (and its IV: the same bytes sealed once, stored again)
+ * rather than sealing every photo on every save. A new key starts afresh, and
+ * so does another place: a photo's sealed copy is bound to its place
+ * (`sightings/photo`), and the same photo set aside in `quarantine` must be
+ * sealed for there, or it would never open again.
  */
-const sealedPhotos = new WeakMap<CryptoKey, WeakMap<Blob, { iv: Uint8Array; sealed: Blob }>>()
+const sealedPhotos = new WeakMap<
+  CryptoKey,
+  Map<string, WeakMap<Blob, { iv: Uint8Array; sealed: Blob }>>
+>()
 
-function photosFor(key: CryptoKey) {
-  let photos = sealedPhotos.get(key)
+function photosFor(key: CryptoKey, label: string) {
+  let places = sealedPhotos.get(key)
+  if (!places) {
+    places = new Map()
+    sealedPhotos.set(key, places)
+  }
+  let photos = places.get(label)
   if (!photos) {
     photos = new WeakMap()
-    sealedPhotos.set(key, photos)
+    places.set(label, photos)
   }
   return photos
 }
@@ -101,7 +112,7 @@ export async function sealValue(
 ): Promise<SealedValue> {
   const blobs = new Map<Blob, number>()
   collectBlobs(value, blobs)
-  const cache = photosFor(key)
+  const cache = photosFor(key, label)
   const photoLabel = encoder.encode(`${label}/photo`)
   const sealedBlobs: Blob[] = []
   const places = new Map<Blob, PhotoPlace>()
@@ -186,7 +197,8 @@ export async function openValue(
   const value: unknown = JSON.parse(text)
   // Most values hold neither photos nor bytes, and are not walked at all.
   if (!sealed.blobs?.length && !text.includes(BYTES_MARK)) return value
-  const cache = photosFor(key)
+  // Each photo opened is remembered as sealed for this place, and only this one.
+  const cache = photosFor(key, label)
   const photoLabel = encoder.encode(`${label}/photo`)
   return revive(value, async (place) => {
     const stored = sealed.blobs?.[place[PHOTO]]
@@ -314,17 +326,14 @@ export async function openGarden(key: CryptoKey, garden: unknown): Promise<Recor
 }
 
 /** Every store that can hold the gardener's words, and so is sealed under the lock. */
-const SEALED_STORES = [
+const SEALED_STORES = new Set<string>([
   'meta',
   ...GARDEN_COLLECTIONS.map((collection) => COLLECTION_STORES[collection]),
   'state',
   'quarantine',
   'snapshots',
   'drafts',
-] as const satisfies readonly StoreNames<GardenDatabase>[]
-
-type SealedStore = (typeof SEALED_STORES)[number]
-type Records = Map<SealedStore, Array<[IDBValidKey, unknown]>>
+])
 
 /** Which part of the garden a store holds, for the label its values are sealed under. */
 const PART_OF_STORE = new Map<string, GardenPart>([
@@ -335,13 +344,78 @@ const PART_OF_STORE = new Map<string, GardenPart>([
   ]),
 ])
 
-/** One stored value, opened with `from` (if it is sealed) and sealed with `to` (if any). */
-async function restoreValue(
-  store: SealedStore,
+/**
+ * A set-aside garden that would not open under the lock is kept as its
+ * stored parts, still sealed. Each part is opened on its own here: what opens
+ * is kept open, and only a part that will not open stays sealed, so one
+ * damaged part never keeps the rest of the garden sealed with it.
+ */
+export async function openSetAside(key: CryptoKey, raw: unknown): Promise<unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const record = raw as Record<string, unknown>
+  let whole: Record<string, unknown> = { ...record }
+  if (isSealed(record)) {
+    const meta = await openValue(key, 'meta', sealedOf(record)).catch(() => undefined)
+    if (meta && typeof meta === 'object') {
+      const collections = Object.fromEntries(
+        GARDEN_COLLECTIONS.filter((collection) => collection in record).map((collection) => [
+          collection,
+          record[collection],
+        ]),
+      )
+      whole = { ...(meta as Record<string, unknown>), ...collections }
+    }
+  }
+  for (const collection of GARDEN_COLLECTIONS) {
+    const value = whole[collection]
+    if (isSealed(value)) {
+      whole[collection] = await openValue(key, collection, value).catch(() => value)
+    }
+  }
+  return whole
+}
+
+/** A set-aside record's garden, opened as far as it opens (see openSetAside). */
+export async function openQuarantined(key: CryptoKey, raw: unknown): Promise<unknown> {
+  return openSetAside(key, isSealed(raw) ? await openValue(key, 'quarantine', raw) : raw)
+}
+
+/** Whether anything of a set-aside garden is still sealed. */
+function stillSealed(raw: unknown): boolean {
+  if (isSealed(raw)) return true
+  if (!raw || typeof raw !== 'object') return false
+  const record = raw as Record<string, unknown>
+  return GARDEN_COLLECTIONS.some((collection) => isSealed(record[collection]))
+}
+
+/**
+ * A set-aside copy of the garden holds something that will not open with the
+ * garden's key. Changing the lock would take that key away, and with it the
+ * only chance of ever opening what is left, so the lock is left as it is.
+ */
+export class SetAsideSealedError extends Error {
+  constructor() {
+    super(
+      'A copy of your garden set aside on this device has parts that could not be opened, and changing the lock now would leave them sealed for good, so nothing was changed. Download the set-aside copy under Backup and restore in Settings; once you have it, or if you no longer need it, discard it there and try again.',
+    )
+    this.name = 'SetAsideSealedError'
+  }
+}
+
+/**
+ * One stored value as a switch stores it again: opened with the key the
+ * garden is under now (`from`, if it is sealed), and sealed with the new one
+ * (`to`, if any). Throws if anything sealed will not open, and
+ * SetAsideSealedError if a set-aside copy would be left sealed under a key
+ * about to be gone; either way the switch changes nothing.
+ */
+export async function restoreValue(
+  store: string,
   value: unknown,
   from: CryptoKey | undefined,
   to: CryptoKey | undefined,
 ): Promise<unknown> {
+  if (!SEALED_STORES.has(store)) return value
   const part = PART_OF_STORE.get(store)
   if (part) {
     const plain = from ? await openPart(from, part, value) : value
@@ -351,16 +425,25 @@ async function restoreValue(
     const sealed = await sealPart(to, part, part === 'meta' ? fields : plain)
     return part === 'meta' ? { ...(sealed as object), revision } : sealed
   }
-  if (store === 'quarantine' || store === 'snapshots') {
+  if (store === 'quarantine') {
     const record = value as Record<string, unknown>
-    if (store === 'quarantine') {
-      let raw = record.raw
-      if (from && isSealed(raw)) raw = await openValue(from, 'quarantine', raw)
+    let raw = record.raw
+    if (from) {
+      if (isSealed(raw)) {
+        raw = await openValue(from, 'quarantine', raw).catch(() => {
+          throw new SetAsideSealedError()
+        })
+      }
       // A garden set aside because it would not open under the lock may be
-      // its sealed parts; opened now if they open at all, or kept sealed.
-      if (from && isSealed(raw)) raw = await openGarden(from, raw).catch(() => raw)
-      return { ...record, raw: to ? await sealValue(to, 'quarantine', raw) : raw }
+      // its sealed parts: each opened that will open. Anything left sealed
+      // would be sealed for good once this key is gone, so nothing changes.
+      raw = await openSetAside(from, raw)
+      if (stillSealed(raw)) throw new SetAsideSealedError()
     }
+    return { ...record, raw: to ? await sealValue(to, 'quarantine', raw) : raw }
+  }
+  if (store === 'snapshots') {
+    const record = value as Record<string, unknown>
     let garden = record.garden
     if (from && isSealed(garden)) garden = await openGarden(from, garden)
     return { ...record, garden: to ? await sealGarden(to, garden) : garden }
@@ -368,108 +451,4 @@ async function restoreValue(
   // The pre-split record and the drafts: one value each, sealed by name.
   const plain = from && isSealed(value) ? await openValue(from, store, value) : value
   return to ? await sealValue(to, store, plain) : plain
-}
-
-/** Every record of the stores that hold words, read in one transaction. */
-async function readRecords(
-  db: IDBPDatabase<GardenDatabase>,
-): Promise<{ records: Records; lock: LockRecord | undefined }> {
-  const tx = db.transaction([...SEALED_STORES, 'lock'], 'readonly')
-  const lock = tx.objectStore('lock').get('current')
-  const records: Records = new Map(
-    await Promise.all(
-      SEALED_STORES.map(async (name): Promise<[SealedStore, Array<[IDBValidKey, unknown]>]> => {
-        const store = tx.objectStore(name)
-        const [keys, values] = await Promise.all([store.getAllKeys(), store.getAll()])
-        return [name, keys.map((key, index): [IDBValidKey, unknown] => [key, values[index]])]
-      }),
-    ),
-  )
-  const record = await lock
-  await tx.done
-  return { records, lock: record }
-}
-
-/** How many times the switch starts again when another tab writes during it. */
-const SWITCH_ATTEMPTS = 3
-
-/**
- * Turn the lock on or off: every store that may hold the gardener's words is
- * read, opened with the key the garden is under now (`from`, if any), sealed
- * with the new lock's (`next`, if any), and written back with the lock record
- * in one transaction. Returns the revision it replaced.
- *
- * All the work is done between the read and the write, never inside a
- * transaction, which would commit early while it waited. So the write checks
- * that nothing changed meanwhile, and starts again if another tab wrote; a
- * failure anywhere aborts it, and an interrupted switch leaves the garden
- * exactly as it was, readable as before.
- */
-export async function restoreAll(
-  db: IDBPDatabase<GardenDatabase>,
-  from: { key: CryptoKey; lockId: string } | undefined,
-  next: { record: LockRecord; key: CryptoKey } | undefined,
-): Promise<number> {
-  for (let attempt = 1; ; attempt += 1) {
-    const { records, lock } = await readRecords(db)
-    if (lock?.id !== from?.lockId) throw new GardenLockedError()
-    const meta = records.get('meta')?.find(([key]) => key === 'current')?.[1]
-    if (meta === undefined) throw new Error('There is no garden stored here to lock yet.')
-    const base = revisionOf(meta)
-
-    const restored: Records = new Map()
-    for (const [store, entries] of records) {
-      restored.set(
-        store,
-        await Promise.all(
-          entries.map(async ([key, value]): Promise<[IDBValidKey, unknown]> => [
-            key,
-            await restoreValue(store, value, from?.key, next?.key),
-          ]),
-        ),
-      )
-    }
-
-    const tx = db.transaction([...SEALED_STORES, 'lock'], 'readwrite', { durability: 'strict' })
-    const writes: Promise<unknown>[] = []
-    try {
-      const [stored, storedLock] = await Promise.all([
-        tx.objectStore('meta').get('current'),
-        tx.objectStore('lock').get('current'),
-      ])
-      if (revisionOf(stored) !== base || storedLock?.id !== from?.lockId) {
-        throw new GardenConflictError()
-      }
-      for (const [store, entries] of restored) {
-        const target = tx.objectStore(store) as unknown as {
-          put: (value: unknown, key: IDBValidKey) => Promise<unknown>
-        }
-        for (const [key, value] of entries) {
-          writes.push(
-            target.put(store === 'meta' ? { ...(value as object), revision: base + 1 } : value, key),
-          )
-        }
-      }
-      writes.push(
-        next
-          ? tx.objectStore('lock').put(next.record, 'current')
-          : tx.objectStore('lock').delete('current'),
-      )
-      await Promise.all([...writes, tx.done])
-      return base
-    } catch (error) {
-      // Nothing of a failed switch may be kept: a store sealed beside one
-      // left in the clear is exactly what this must never leave behind.
-      try {
-        tx.abort()
-      } catch {
-        // Already finished or aborted.
-      }
-      // Each write already asked for now fails with the abort; that is the point.
-      for (const write of writes) write.catch(() => undefined)
-      await tx.done.catch(() => undefined)
-      if (error instanceof GardenConflictError && attempt < SWITCH_ATTEMPTS) continue
-      throw error
-    }
-  }
 }

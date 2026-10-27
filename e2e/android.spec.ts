@@ -474,6 +474,7 @@ test('a locked garden opens to the lock screen, where the back gesture leaves th
   await goTo(page, 'Settings')
   const lockSection = page.getByRole('region', { name: 'The garden lock' })
   await expect(lockSection.getByText(/software that already controls this phone/)).toBeVisible()
+  await expect(lockSection.getByText(/traces of it can stay on the phone’s storage/)).toBeVisible()
   // No passkeys in the app's WebView.
   await expect(lockSection.getByRole('button', { name: 'Add a passkey…' })).toHaveCount(0)
   await lockSection.getByRole('button', { name: 'Lock my garden…' }).click()
@@ -506,6 +507,26 @@ test('a locked garden opens to the lock screen, where the back gesture leaves th
   await expect(mainNav(page)).toHaveCount(0)
 
   await page.getByLabel('Passcode', { exact: true }).fill(passcode)
+  await page.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused(deriving)
+
+  // A new passcode seals the garden again in the app's own storage: the old
+  // one opens nothing from then on, and no copy is left behind.
+  await lockSection.getByRole('button', { name: 'Change my passcode…' }).click()
+  const change = page.getByRole('dialog', { name: 'Change my passcode' })
+  await change.getByLabel('Current passcode').fill(passcode)
+  await change.getByLabel('New passcode', { exact: true }).fill('kestrel above the field')
+  await change.getByLabel('The new passcode again').fill('kestrel above the field')
+  await change.getByRole('button', { name: 'Change my passcode' }).click()
+  await page.getByRole('dialog', { name: 'Your passcode is changed' }).getByRole('button', { name: 'Done' }).click(deriving)
+  expect(
+    await page.evaluate(async () => (await indexedDB.databases()).map((database) => database.name)),
+  ).not.toContain('butterfly-garden-switch')
+  await lockSection.getByRole('button', { name: 'Lock now' }).click()
+  await page.getByLabel('Passcode', { exact: true }).fill(passcode)
+  await page.getByRole('button', { name: 'Open my garden' }).click()
+  await expect(page.getByRole('alert')).toHaveText('That passcode didn’t open your garden. Please try again.', deriving)
+  await page.getByLabel('Passcode', { exact: true }).fill('kestrel above the field')
   await page.getByRole('button', { name: 'Open my garden' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused(deriving)
 })
