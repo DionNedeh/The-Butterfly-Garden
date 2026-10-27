@@ -43,6 +43,7 @@ tells other tabs which parts it wrote.
 | Concern | Where |
 | --- | --- |
 | The app shell, pages, hash routes, error boundaries | `App.tsx`, `lib/routes.ts` |
+| The header's tabs, the phone's five-tab dock and its More sheet | `components/Navigation.tsx`, `lib/navigation.ts` |
 | Last-resort screens | `main.tsx` → `SafeMode` (nothing could draw); `RecoveryScreen` (stored garden unreadable); `ViewProblem` (one page failed) |
 | Types of everything stored | `types.ts` |
 | Reading, writing, conflicts, quarantine, snapshots | `repository/gardenRepository.ts` |

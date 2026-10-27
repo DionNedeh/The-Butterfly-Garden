@@ -76,6 +76,23 @@ describe('the app shell', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     expect(window.location.hash).toBe('')
   })
 
+  it("reaches the pages behind the dock's More, and More stands for them", async () => {
+    const user = await openGarden()
+    const dock = within(screen.getByRole('navigation', { name: 'Mobile navigation' }))
+    const more = dock.getByRole('button', { name: 'More' })
+    await user.click(more)
+    await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Settings' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' }, { timeout: 3000 })).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/settings')
+    expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull()
+    expect(more).toHaveAttribute('aria-current', 'page')
+    expect(more).toHaveFocus()
+
+    await user.click(dock.getByRole('button', { name: 'Today' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Today' }, { timeout: 3000 })).toBeInTheDocument()
+    expect(more).not.toHaveAttribute('aria-current')
+  })
+
   it('follows Back to the page before', async () => {
     const user = await openGarden()
     await user.click(primaryNav().getByRole('button', { name: 'Journal' }))

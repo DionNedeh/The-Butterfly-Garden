@@ -6,6 +6,7 @@ import './android.css'
 import { currentRelease, hasUnseenRelease, releaseName } from './data/releases'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
+import { BottomNav, PrimaryNav } from './components/Navigation'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { RecoveryScreen } from './components/RecoveryScreen'
 import { ViewProblem } from './components/ViewProblem'
@@ -94,6 +95,7 @@ import {
   onBackButton,
   setSystemBarsForTheme,
 } from './lib/native'
+import type { NavItem } from './lib/navigation'
 import { isAndroidApp } from './lib/platform'
 import {
   DAILY_SUNLIGHT_CAP,
@@ -125,27 +127,20 @@ interface InstallPromptEvent extends Event {
  */
 const SPLASH_MINIMUM_MS = 700
 
-const navigation: Array<{
-  id: AppView
-  label: string
-  icon:
-    | 'garden'
-    | 'care'
-    | 'today'
-    | 'journal'
-    | 'shop'
-    | 'flight'
-    | 'flower'
-    | 'settings'
-}> = [
+/**
+ * Every page in the navigation, in the header's order. On a phone the dock
+ * holds the first four and More, and More's sheet holds the pages marked
+ * `inMore`. A page's `badge` (lib/navigation) shows on its button and on More.
+ */
+const navigation: readonly NavItem[] = [
   { id: 'garden', label: 'Garden', icon: 'garden' },
   { id: 'care', label: 'Care', icon: 'care' },
   { id: 'today', label: 'Today', icon: 'today' },
   { id: 'journal', label: 'Journal', icon: 'journal' },
-  { id: 'shop', label: 'Shop', icon: 'shop' },
-  { id: 'flight-patterns', label: 'Flight', icon: 'flight' },
-  { id: 'guide', label: 'Guide', icon: 'flower' },
-  { id: 'settings', label: 'Settings', icon: 'settings' },
+  { id: 'shop', label: 'Shop', icon: 'shop', inMore: true },
+  { id: 'flight-patterns', label: 'Flight', icon: 'flight', inMore: true },
+  { id: 'guide', label: 'Guide', icon: 'flower', inMore: true },
+  { id: 'settings', label: 'Settings', icon: 'settings', inMore: true },
 ]
 
 function App() {
@@ -403,19 +398,7 @@ function App() {
             <small>{profile.gardenName}</small>
           </span>
         </button>
-        <nav aria-label="Primary navigation">
-          {navigation.map((item) => (
-            <button
-              key={item.id}
-              className={activeView === item.id ? 'active' : ''}
-              onClick={() => setView(item.id)}
-              aria-current={activeView === item.id ? 'page' : undefined}
-            >
-              <Icon name={item.icon} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <PrimaryNav items={navigation} current={activeView} onNavigate={setView} />
         <div className="header-actions">
           <span className="header-sunlight" title="Sunlight earned today">
             <Icon name="sun" size={19} />
@@ -784,19 +767,7 @@ function App() {
         </ErrorBoundary>
       </main>
 
-      <nav className="bottom-nav" aria-label="Mobile navigation">
-        {navigation.map((item) => (
-          <button
-            key={item.id}
-            className={activeView === item.id ? 'active' : ''}
-            onClick={() => setView(item.id)}
-            aria-current={activeView === item.id ? 'page' : undefined}
-          >
-            <Icon name={item.icon} />
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
+      <BottomNav items={navigation} current={activeView} onNavigate={setView} />
       <UpdatePrompt />
     </div>
   )
