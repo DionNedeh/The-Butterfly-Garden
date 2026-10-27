@@ -1,30 +1,44 @@
 import { SUPPORT_CHECKED_ON, supportLines } from '../data/support'
 import { pacerFor } from '../lib/breathing'
 import { formatJournalDate } from '../lib/date'
-import type { AppState } from '../types'
+import type { AppState, AppView } from '../types'
 import { BreatheLink } from './BreatheLink'
+import { ComfortLink } from './ComfortLink'
+
+/** What the page's own back button says, for the page that opened it. */
+const BACK_LABELS: Partial<Record<AppView, string>> = {
+  settings: 'Back to Settings',
+  today: 'Back to Today',
+  guide: 'Back to the Guide',
+  comfort: 'Back to your comfort plan',
+}
 
 /**
  * "If you need support now": people to talk to, never the app pretending to
- * be one. Reached from Settings, the Guide, and quietly after a stormy
- * check-in. Every link hands off to the phone's own dialler, messages or
- * browser; nothing is fetched or sent from here.
+ * be one. Reached from Settings, the Guide, the top of the comfort plan, and
+ * quietly after a stormy check-in. Every link hands off to the phone's own
+ * dialler, messages or browser; nothing is fetched or sent from here.
  *
  * Below the people, one quiet line offers breathing with a butterfly, as a
- * calming exercise and never in their place.
+ * calming exercise and never in their place, and another the gardener's own
+ * comfort plan.
  */
 export function SupportView({
   onBack,
-  backLabel,
+  from,
   state,
   onBreathe,
+  onOpenComfort,
 }: {
   onBack: () => void
-  backLabel: string
+  /** The page that opened this one, which its back button returns to. */
+  from?: AppView
   /** The garden, for whose wings would pace the breath. */
   state?: Pick<AppState, 'creatures' | 'profile'>
   /** Breathe with a butterfly; offered only when given. */
   onBreathe?: () => void
+  /** The comfort plan; offered when given, unless the plan opened this page. */
+  onOpenComfort?: () => void
 }) {
   return (
     <div className="view support-view">
@@ -38,7 +52,7 @@ export function SupportView({
           </p>
         </div>
         <button className="secondary-button" onClick={onBack}>
-          {backLabel}
+          {(from && BACK_LABELS[from]) ?? 'Back to the garden'}
         </button>
       </header>
 
@@ -79,6 +93,16 @@ export function SupportView({
           If a quiet minute would help, you can{' '}
           <BreatheLink onOpen={onBreathe}>{`breathe with ${pacerFor(state).name}`}</BreatheLink>. It
           is a calming exercise, not a substitute for the people above.
+        </p>
+      )}
+
+      {/* Not when the plan opened this page: its back button is the way there. */}
+      {onOpenComfort && from !== 'comfort' && (
+        <p className="support-link-note">
+          <ComfortLink onOpen={onOpenComfort}>
+            {state?.profile?.comfortPlan ? 'Your comfort plan' : 'Write a comfort plan'}
+          </ComfortLink>
+          : your own words for the harder days, kept for you alone.
         </p>
       )}
 

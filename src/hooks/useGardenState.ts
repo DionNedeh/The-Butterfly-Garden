@@ -27,12 +27,12 @@ import {
   type RecycledJar,
   type RecycleOutcome,
 } from '../lib/jars'
+import { changeComfortPlan } from '../lib/comfortPlan'
 import { adoptGoal, performCare } from '../lib/lifecycle'
 import type { MotionPreference } from '../lib/motion'
 import type { ThemeChoice } from '../lib/theme'
 import * as looks from '../lib/outfitPresets'
 import { removePlant } from '../lib/plantManagement'
-import { isAndroidApp } from '../lib/platform'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
 import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
@@ -61,6 +61,7 @@ import type {
   AppearanceTheme,
   AppState,
   CheckInDetails,
+  ComfortPlan,
   CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
@@ -399,9 +400,11 @@ export function useGardenState() {
         if (!hasGardenPassFeature('custom-backdrops'))
           return {
             ok: false,
-            message: isAndroidApp()
-              ? 'Your own backdrops come with the Garden Pass.'
-              : 'Custom backdrops are not available in this release.',
+            // Inline, so each build carries only its own wording.
+            message:
+              import.meta.env.VITE_PLATFORM === 'android'
+                ? 'Your own backdrops come with the Garden Pass.'
+                : 'Custom backdrops are not available in this release.',
           }
         const current = stateRef.current
         if (!current) return { ok: false, message: 'Open your garden first.' }
@@ -494,6 +497,12 @@ export function useGardenState() {
       /** Star a check-in's note or a reflection for letters to quote, or not. */
       setStarred: (kind: StarredKind, id: string, starred: boolean) =>
         update((current) => setStarred(current, kind, id, starred)),
+      /**
+       * Change the comfort plan by one of its edits (lib/comfortPlanEdits),
+       * which its page brings with it, so the first load carries none of them.
+       */
+      changeComfortPlan: (change: (plan: ComfortPlan) => ComfortPlan) =>
+        update((current) => changeComfortPlan(current, change)),
       updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
         update((current) => act.updateProfile(current, name, gardenName, motion)),
       /**

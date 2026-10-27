@@ -46,6 +46,7 @@ import { GuideLink } from './GuideLink'
 import { RegionSetting } from './RegionSetting'
 import { ReminderSetting } from './ReminderSetting'
 import { LetterSetting } from './LetterSetting'
+import { ComfortLink } from './ComfortLink'
 import { letterQuotesOf, type LetterQuotes } from '../lib/letters'
 import './settings.css'
 
@@ -249,6 +250,7 @@ export function SettingsView({
   onOpenPrivacy,
   onOpenNotices,
   onOpenSupport,
+  onOpenComfort,
   onSetDayCountsHidden,
   onSetRecapHours,
   onChooseTheme,
@@ -301,6 +303,8 @@ export function SettingsView({
   onOpenPrivacy?: () => void
   onOpenNotices?: () => void
   onOpenSupport?: () => void
+  /** The comfort plan, offered beside the support page. */
+  onOpenComfort?: () => void
   onSetDayCountsHidden?: (hidden: boolean) => void
   onSetRecapHours?: (hours: RecapHours) => void
   /** Sunlight or Night by hand, or follow the device or the evening. */
@@ -1247,6 +1251,11 @@ export function SettingsView({
             <button className="text-button" onClick={onOpenSupport}>
               If you need support now
             </button>
+          )}
+          {onOpenComfort && (
+            <ComfortLink onOpen={onOpenComfort}>
+              {state.profile?.comfortPlan ? 'Your comfort plan' : 'Write a comfort plan'}
+            </ComfortLink>
           )}
         </div>
       </section>

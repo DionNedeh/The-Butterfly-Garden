@@ -348,6 +348,32 @@ test('the back gesture leaves breathing for the page that offered it, mid-sessio
   expect(errors).toEqual([])
 })
 
+test('the back gesture leaves the comfort plan for the page that opened it', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  await page.getByRole('link', { name: 'Write a comfort plan' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'My comfort plan' })).toBeVisible()
+  const people = page.getByRole('region', { name: 'People I can reach' })
+  await people.getByRole('textbox', { name: 'Name' }).fill('Sam')
+  await people.getByRole('textbox', { name: 'Phone number (optional)' }).fill('0161 496 0000')
+  await people.getByRole('button', { name: 'Add to People I can reach' }).click()
+  // The phone's dialler takes the number, as it does on the support page.
+  await expect(people.getByRole('link', { name: 'Call Sam' })).toHaveAttribute(
+    'href',
+    'tel:01614960000',
+  )
+  expect(await seriousViolations(page, 'Comfort plan in the Android app')).toEqual([])
+
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeVisible()
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('a calendar reminder goes through the app, which carries no calendar files of its own', async ({
   page,
 }) => {

@@ -16,6 +16,7 @@ const EVERY_VIEW: AppView[] = [
   'notices',
   'support',
   'breathe',
+  'comfort',
 ]
 
 describe('pages in the address bar', () => {
@@ -55,6 +56,11 @@ describe('pages in the address bar', () => {
   it('gives breathing with a butterfly an address of its own, without where it came from', () => {
     expect(hashForRoute({ view: 'breathe', from: 'today' })).toBe('#/breathe')
     expect(routeFromHash('#/breathe')).toEqual({ view: 'breathe' })
+  })
+
+  it('gives the comfort plan an address of its own, without where it came from', () => {
+    expect(hashForRoute({ view: 'comfort', from: 'today' })).toBe('#/comfort')
+    expect(routeFromHash('#/comfort')).toEqual({ view: 'comfort' })
   })
 
   it('sends a reloaded recap to Today, where tonight’s is offered', () => {

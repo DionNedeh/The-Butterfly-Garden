@@ -75,6 +75,15 @@ describe('backAction', () => {
     expect(backAction('breathe', document, 'breathe')).toEqual({ kind: 'view', view: 'garden' })
   })
 
+  it('returns the comfort plan to the page that opened it, or else the garden', () => {
+    expect(backAction('comfort', document, 'today')).toEqual({ kind: 'view', view: 'today' })
+    expect(backAction('comfort', document, 'settings')).toEqual({ kind: 'view', view: 'settings' })
+    expect(backAction('comfort', document, 'support')).toEqual({ kind: 'view', view: 'support' })
+    // Opened from a link or a reload, it knows of no page before it.
+    expect(backAction('comfort')).toEqual({ kind: 'view', view: 'garden' })
+    expect(backAction('comfort', document, 'comfort')).toEqual({ kind: 'view', view: 'garden' })
+  })
+
   it('returns any other page to the garden', () => {
     for (const view of ['care', 'today', 'journal', 'settings'] as const)
       expect(backAction(view)).toEqual({ kind: 'view', view: 'garden' })

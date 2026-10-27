@@ -24,6 +24,7 @@ const PATHS: Record<AppView, string> = {
   notices: 'notices',
   support: 'support',
   breathe: 'breathe',
+  comfort: 'comfort',
 }
 
 const VIEWS = new Map<string, AppView>(
@@ -66,8 +67,8 @@ export interface Route {
   section?: string
   /**
    * The page a "What does this do?" link left, which the Guide offers a way
-   * back to and Android's back gesture returns to; for breathing, the page
-   * that offered it. Not part of the address.
+   * back to and Android's back gesture returns to; for breathing and the
+   * comfort plan, the page that opened them. Not part of the address.
    */
   from?: AppView
   /** On the Guide, where on the page `from` its link was pressed. */

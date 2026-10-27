@@ -3,7 +3,6 @@ import type { PersistenceStatus } from '../hooks/useGardenState'
 import { readBackupFile } from '../lib/backupFile'
 import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
-import { isAndroidApp } from '../lib/platform'
 
 /**
  * Shown instead of onboarding when a garden is stored but could not be read.
@@ -27,11 +26,12 @@ export function RecoveryScreen({
   const [confirmFresh, setConfirmFresh] = useState(false)
   const unavailable = reason === 'unavailable'
 
+  // The platform is checked inline, so each build carries only its own words.
   const explanation =
     reason === 'incompatible'
       ? 'It was written by a newer version of the app. Nothing has been changed or deleted. Updating the app is the simplest fix.'
       : unavailable
-        ? isAndroidApp()
+        ? import.meta.env.VITE_PLATFORM === 'android'
           ? 'The app could not open its storage on this phone. Your garden is still here. Closing and reopening the app usually fixes this.'
           : 'This browser would not open its storage just now. Your garden is still on this device. Reopening the app usually fixes this.'
         : 'Part of it could not be read, so a copy has been set aside untouched. You can download that copy, put a backup back, or start a new garden.'

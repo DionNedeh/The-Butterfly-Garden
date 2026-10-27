@@ -14,8 +14,9 @@ export type BackAction =
  * editor; each carries `data-dismiss-on-back`), then a page that
  * was opened from another page back to it (the Moonlight recap to Today; the
  * privacy policy, the notices and the support page to Settings; the Guide,
- * opened by a "What does this do?" link, and breathing with a butterfly, to
- * the page `from` that opened them), then any other page back to the garden.
+ * opened by a "What does this do?" link, breathing with a butterfly and the
+ * comfort plan, to the page `from` that opened them), then any other page
+ * back to the garden.
  * Only from the garden itself does it leave the app.
  */
 export function backAction(
@@ -29,7 +30,7 @@ export function backAction(
   const layer = root.querySelector<HTMLElement>('[data-dismiss-on-back]')
   if (layer) return { kind: 'dismiss', element: layer }
   if (view === 'recap') return { kind: 'view', view: 'today' }
-  if ((view === 'guide' || view === 'breathe') && from && from !== view)
+  if ((view === 'guide' || view === 'breathe' || view === 'comfort') && from && from !== view)
     return { kind: 'view', view: from }
   if (view === 'privacy' || view === 'notices' || view === 'support')
     return { kind: 'view', view: 'settings' }
