@@ -46,6 +46,9 @@ import { usePersistence } from './usePersistence'
 
 export type { PersistenceStatus } from './usePersistence'
 
+/** A goal chosen while the garden is made: a title, and perhaps its two-minute version. */
+export type StarterGoal = Pick<Goal, 'title' | 'tinyTitle'>
+
 /**
  * The garden and everything that can be done to it.
  *
@@ -121,17 +124,34 @@ export function useGardenState() {
       return result.outcome
     }
     return {
-      onboard: (name: string, gardenName: string) => {
-        setState(createInitialState(name, gardenName))
+      /**
+       * Make the garden, with any starter goals chosen on the way in. They
+       * are added by the same reducer as a goal added on Today, as daily
+       * goals, in the one write that makes the garden.
+       */
+      onboard: (name: string, gardenName: string, starterGoals: readonly StarterGoal[] = []) => {
+        const today = toLocalDate()
+        setState(
+          starterGoals.reduce(
+            (garden, goal) =>
+              act.addGoal(garden, goal.title, 'daily', [], today, goal.tinyTitle),
+            createInitialState(name, gardenName),
+          ),
+        )
         setPersistence((current) =>
           current.notice ? { ...current, notice: undefined } : current,
         )
         // A new garden is the moment to ask the browser to keep it.
         void requestPersistentStorage()
       },
-      addGoal: (title: string, schedule: GoalSchedule, weekdays: number[] = []) => {
+      addGoal: (
+        title: string,
+        schedule: GoalSchedule,
+        weekdays: number[] = [],
+        tinyTitle?: string,
+      ) => {
         const today = toLocalDate()
-        update((current) => act.addGoal(current, title, schedule, weekdays, today))
+        update((current) => act.addGoal(current, title, schedule, weekdays, today, tinyTitle))
       },
       updateGoal: (goal: Goal) => update((current) => act.updateGoal(current, goal)),
       setGoalArchived: (goalId: string, archived: boolean) =>

@@ -45,6 +45,26 @@ const save = () => screen.getByRole('button', { name: 'Save' })
 const plannedFor = () => screen.queryByLabelText('Planned for')
 
 describe('GoalEditor', () => {
+  const tinyField = () =>
+    screen.getByRole('textbox', { name: 'A two-minute version (optional)' })
+
+  it('edits the two-minute version, trimmed', async () => {
+    const { user, onSave } = renderEditor()
+    expect(tinyField()).toHaveValue('')
+    await user.type(tinyField(), '  Three sips  ')
+    await user.click(save())
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ tinyTitle: 'Three sips' }))
+  })
+
+  it('opens on the two-minute version the goal has, and can take it away', async () => {
+    const { user, onSave } = renderEditor(goal({ tinyTitle: 'Three sips' }))
+    expect(tinyField()).toHaveValue('Three sips')
+    await user.clear(tinyField())
+    await user.type(tinyField(), '   ')
+    await user.click(save())
+    expect(onSave.mock.calls[0][0].tinyTitle).toBeUndefined()
+  })
+
   it('takes focus to the title field when it opens', () => {
     renderEditor()
     expect(titleField()).toHaveFocus()

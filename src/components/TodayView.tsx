@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { freeWritingPrompt, moodLevels, plants, suggestedGoals } from '../data/content'
+import { freeWritingPrompt, moodLevels, plants } from '../data/content'
+import { goalSuggestions, type GoalSuggestion } from '../data/goalSuggestions'
 import {
   completionKey,
   formatJournalDate,
@@ -20,6 +21,7 @@ import {
 } from '../lib/progression'
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
+import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
 import {
   checkInDetails,
   feelingsFromDraft,
@@ -41,7 +43,14 @@ import type {
 import { CheckInExtras } from './checkin/CheckInExtras'
 import { NextStepOffer } from './checkin/NextStepOffer'
 import { Icon } from './Icons'
-import { GoalEditor, NO_DAYS_CHOSEN, WeekdayPicker, type GoalEdit } from './GoalEditor'
+import {
+  GoalEditor,
+  NO_DAYS_CHOSEN,
+  TINY_TITLE_LABEL,
+  WeekdayPicker,
+  type GoalEdit,
+} from './GoalEditor'
+import { GoalIdeas } from './GoalIdeas'
 import { GoalRow } from './GoalRow'
 import { MonthPlanner } from './MonthPlanner'
 import { UndoToast, type UndoOffer } from './UndoToast'
@@ -102,7 +111,12 @@ export function TodayView({
   today: string
   onSaveMood: (choice: MoodChoice, note: string, details?: CheckInDetails) => void
   onSaveReflection: (promptId: string, body: string) => void
-  onAddGoal: (title: string, schedule: GoalSchedule, weekdays?: number[]) => void
+  onAddGoal: (
+    title: string,
+    schedule: GoalSchedule,
+    weekdays?: number[],
+    tinyTitle?: string,
+  ) => void
   onUpdateGoal: (goal: Goal) => void
   onDeleteGoal: (goalId: string) => void
   onCompleteGoal: (goalId: string) => void
@@ -158,6 +172,8 @@ export function TodayView({
   // Said once a check-in has been saved on this visit, never on arrival.
   const [savedNow, setSavedNow] = useState(false)
   const [goalTitle, setGoalTitle] = useState('')
+  const [goalTinyTitle, setGoalTinyTitle] = useState('')
+  const goalTitleField = useRef<HTMLInputElement>(null)
   const [schedule, setSchedule] = useState<GoalSchedule>('daily')
   const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
   const [reflection, setReflection] = useDraft(
@@ -224,6 +240,17 @@ export function TodayView({
     () => state.goals.filter((goal) => goal.archived),
     [state.goals],
   )
+  // Snoozed goals count: an idea already among them is not new to anyone.
+  const activeGoalTitles = useMemo(
+    () => state.goals.filter((goal) => !goal.archived).map((goal) => goal.title),
+    [state.goals],
+  )
+  /** An idea fills the form; the gardener still chooses how often, and adds it. */
+  const chooseIdea = (idea: GoalSuggestion) => {
+    setGoalTitle(idea.title)
+    setGoalTinyTitle(idea.tinyTitle ?? '')
+    goalTitleField.current?.focus()
+  }
   const sunlight = sunlightForDate(state, today)
   const nextPlant = nextPlantToTend(state)
   const isComplete = (goalId: string) => completed.has(completionKey(goalId, today))
@@ -548,6 +575,7 @@ export function TodayView({
                 today={today}
                 complete={complete}
                 skipped={skipped}
+                gentle={gentle}
                 onComplete={() => {
                   onCompleteGoal(goal.id)
                   setUndoOffer({
@@ -672,27 +700,46 @@ export function TodayView({
           />
         ) : (
           <form
-            className="goal-form"
+            className="goal-form add-goal-form"
             onSubmit={(event) => {
               event.preventDefault()
               if (!goalTitle.trim() || (schedule === 'weekdays' && weekdays.length === 0)) return
-              onAddGoal(goalTitle, schedule, schedule === 'weekdays' ? weekdays : [])
+              onAddGoal(
+                goalTitle,
+                schedule,
+                schedule === 'weekdays' ? weekdays : [],
+                goalTinyTitle.trim() || undefined,
+              )
               setGoalTitle('')
+              setGoalTinyTitle('')
             }}
           >
-            <label>
+            <GoalIdeas activeGoalTitles={activeGoalTitles} onChoose={chooseIdea} />
+            <label className="goal-title-field">
               Add a goal
               <input
+                ref={goalTitleField}
                 list="suggested-goals"
                 value={goalTitle}
                 onChange={(event) => setGoalTitle(event.target.value)}
                 placeholder="One small act of care"
-                maxLength={120}
+                maxLength={GOAL_TITLE_LENGTH}
                 required
               />
               <datalist id="suggested-goals">
-                {suggestedGoals.map((goal) => <option key={goal} value={goal} />)}
+                {goalSuggestions.map((idea) => (
+                  <option key={idea.title} value={idea.title} />
+                ))}
               </datalist>
+            </label>
+            <label>
+              {TINY_TITLE_LABEL}
+              <input
+                value={goalTinyTitle}
+                onChange={(event) => setGoalTinyTitle(event.target.value)}
+                placeholder="For days that ask for less"
+                maxLength={GOAL_TITLE_LENGTH}
+              />
             </label>
             <label>
               Repeat

@@ -422,21 +422,6 @@ export const moodLevels: Array<{
 /** Just the names, in level order, for places that only label a level. */
 export const moodNames = moodLevels.map((mood) => mood.name)
 
-export const suggestedGoals = [
-  'Drink a glass of water',
-  'Step outside for two minutes',
-  'Take three slow breaths',
-  'Eat something nourishing',
-  'Stretch your shoulders',
-  'Put away one small thing',
-  'Send a kind message',
-  'Take prescribed medication',
-  'Rest without multitasking',
-  'Write down one thought',
-  'Prepare for tomorrow',
-  'Notice something beautiful',
-]
-
 const observationTexts: Array<[string, string]> = [
   ['monarch', 'The milkweed leaves are warm in the morning light.'],
   ['monarch', 'A monarch tastes the air with its antennae.'],

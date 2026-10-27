@@ -34,6 +34,33 @@ describe('goals', () => {
     })
   })
 
+  it('keeps a two-minute version trimmed, no longer than a title, and only when there is one', () => {
+    const tinyOf = (tinyTitle?: string) =>
+      act.addGoal(garden(), 'Stretch', 'daily', [], TODAY, tinyTitle).goals.at(-1)!
+    expect(tinyOf('  Roll your shoulders  ').tinyTitle).toBe('Roll your shoulders')
+    expect(tinyOf('a'.repeat(act.GOAL_TITLE_LENGTH + 30)).tinyTitle).toHaveLength(
+      act.GOAL_TITLE_LENGTH,
+    )
+    for (const none of [undefined, '', '   ']) {
+      expect(tinyOf(none)).not.toHaveProperty('tinyTitle')
+    }
+  })
+
+  it('edits a two-minute version, and takes one away when it is cleared', () => {
+    const before = garden({ goals: [goal({ tinyTitle: 'Water one plant' })] })
+    const edited = act.updateGoal(before, goal({ tinyTitle: '  Water one leaf ' }))
+    expect(edited.goals[0].tinyTitle).toBe('Water one leaf')
+    for (const cleared of [undefined, ' ']) {
+      expect(act.updateGoal(before, goal({ tinyTitle: cleared })).goals[0]).not.toHaveProperty(
+        'tinyTitle',
+      )
+    }
+    // The goal it was given is left as it was.
+    const given = goal({ tinyTitle: ' padded ' })
+    act.updateGoal(before, given)
+    expect(given.tinyTitle).toBe(' padded ')
+  })
+
   it('plans a one-off goal, and ignores a blank one', () => {
     const before = garden()
     expect(act.planGoal(before, '   ', '2026-10-27', TODAY)).toBe(before)

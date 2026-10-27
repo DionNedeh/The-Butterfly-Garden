@@ -1,8 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { GoalSuggestion } from '../data/goalSuggestions'
+import type { StarterGoal } from '../hooks/useGardenState'
 import { ARRIVAL_HASH } from '../lib/hosting'
 import { Butterfly } from './Butterfly'
 import { readBackupFile } from '../lib/backupFile'
+import { balancedSuggestions } from '../lib/goalSuggestions'
+import { isAndroidApp } from '../lib/platform'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
+import './goals/goals.css'
+
+/** The most starter goals a new garden begins with: a few, never a list. */
+export const MAX_STARTER_GOALS = 3
+
+/** One idea from each part of wellbeing, so the choice is a mix. */
+const STARTER_IDEAS = balancedSuggestions([], 0, 6)
+
+/**
+ * Where the garden lives and how to keep a copy, in one sentence, naming the
+ * Settings button exactly as it reads on this platform.
+ */
+function whereItLives(): string {
+  return isAndroidApp()
+    ? 'Your garden lives only in this app on this phone, so now and then open Settings and choose Save a backup to keep a copy somewhere safe.'
+    : 'Your garden lives only in this browser on this device, so now and then open Settings and choose Download a backup to keep a copy somewhere safe.'
+}
 
 export function Onboarding({
   onComplete,
@@ -10,7 +31,8 @@ export function Onboarding({
   arriving = false,
   movedTo,
 }: {
-  onComplete: (name: string, gardenName: string) => void
+  /** Make the garden, with the starter goals chosen (none, if skipped). */
+  onComplete: (name: string, gardenName: string, starterGoals: StarterGoal[]) => void
   /** Bring a garden in from a backup instead of starting a new one. */
   onRestore?: (text: string) => Promise<{ ok: boolean; message: string }>
   /** Opened from the old address to receive a garden (lib/hosting). */
@@ -23,6 +45,22 @@ export function Onboarding({
   const [gardenName, setGardenName] = useState('Sunlit Sanctuary')
   const [restoreOpen, setRestoreOpen] = useState(arriving)
   const [restoreNote, setRestoreNote] = useState<string>()
+  const [starters, setStarters] = useState<GoalSuggestion[]>([])
+  const startersFull = starters.length >= MAX_STARTER_GOALS
+  // Each step replaces the one before, button and all, so focus is taken to
+  // the new step's heading rather than left to fall to the page.
+  const heading = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (step > 0) heading.current?.focus()
+  }, [step])
+  const toggleStarter = (idea: GoalSuggestion) =>
+    setStarters((chosen) =>
+      chosen.includes(idea)
+        ? chosen.filter((item) => item !== idea)
+        : chosen.length < MAX_STARTER_GOALS
+          ? [...chosen, idea]
+          : chosen,
+    )
 
   const restore = async (file: File) => {
     if (!onRestore) return
@@ -48,7 +86,7 @@ export function Onboarding({
   return (
     <main className="onboarding-shell">
       <section
-        className={`onboarding-card ${step === 2 ? 'lesson-card' : ''}`}
+        className={`onboarding-card ${step === 3 ? 'lesson-card' : ''}`}
         aria-labelledby="welcome-title"
       >
         <div className="onboarding-art">
@@ -119,7 +157,9 @@ export function Onboarding({
             }}
           >
             <p className="eyebrow">Make it yours</p>
-            <h1 id="welcome-title">What shall we call this place?</h1>
+            <h1 id="welcome-title" ref={heading} tabIndex={-1}>
+              What shall we call this place?
+            </h1>
             <label>
               Your name
               <input
@@ -143,10 +183,67 @@ export function Onboarding({
               Meet your garden guide
             </button>
           </form>
+        ) : step === 2 ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              setStep(3)
+            }}
+          >
+            <p className="eyebrow">A small start</p>
+            <h1 id="welcome-title" ref={heading} tabIndex={-1}>
+              Anything to care for each day?
+            </h1>
+            <p>
+              Choose up to three small things to do each day, if any appeal.
+              Each has a two-minute version for days that ask for less. You can
+              change them, or add your own, on Today.
+            </p>
+            <fieldset className="starter-goals" aria-describedby="starter-goals-note">
+              <legend>Starter goals</legend>
+              {STARTER_IDEAS.map((idea) => {
+                const chosen = starters.includes(idea)
+                return (
+                  <label key={idea.title} className="starter-goal">
+                    <input
+                      type="checkbox"
+                      checked={chosen}
+                      disabled={!chosen && startersFull}
+                      onChange={() => toggleStarter(idea)}
+                    />
+                    <span>
+                      {idea.title}{' '}
+                      {idea.tinyTitle && <small>Two minutes: {idea.tinyTitle}</small>}
+                    </span>
+                  </label>
+                )
+              })}
+            </fieldset>
+            <p className="starter-goals-note" id="starter-goals-note" role="status">
+              {startersFull ? 'Three is plenty to begin with.' : ''}
+            </p>
+            <div className="onboarding-choices">
+              <button className="primary-button" type="submit">
+                Continue
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => {
+                  setStarters([])
+                  setStep(3)
+                }}
+              >
+                Skip for now
+              </button>
+            </div>
+          </form>
         ) : (
           <div className="garden-lesson">
             <p className="eyebrow">Marigold’s garden guide</p>
-            <h1 id="welcome-title">Here is how your sanctuary grows</h1>
+            <h1 id="welcome-title" ref={heading} tabIndex={-1}>
+              Here is how your sanctuary grows
+            </h1>
             <p className="marigold-speech">
               Welcome, {name.trim() || 'Gardener'}! I will help you tend{' '}
               {gardenName}. Three gentle things work together here:
@@ -201,9 +298,16 @@ export function Onboarding({
                 satchel.
               </p>
             </div>
+            <p className="onboarding-data-note">{whereItLives()}</p>
             <button
               className="primary-button"
-              onClick={() => onComplete(name, gardenName)}
+              onClick={() =>
+                onComplete(
+                  name,
+                  gardenName,
+                  starters.map(({ title, tinyTitle }) => ({ title, tinyTitle })),
+                )
+              }
             >
               Plant my first seeds
             </button>

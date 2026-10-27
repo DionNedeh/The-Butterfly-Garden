@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { isLocalDate, LATEST_LOCAL_DATE } from '../lib/date'
+import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
 import type { Goal, GoalSchedule } from '../types'
+import './goals/goals.css'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -39,7 +41,13 @@ export function WeekdayPicker({
 export const NO_DAYS_CHOSEN = 'Choose at least one day, or the goal would never come round.'
 
 /** What the editor changes; everything else about the goal is left as it is. */
-export type GoalEdit = Pick<Goal, 'title' | 'schedule' | 'weekdays' | 'scheduledDate'>
+export type GoalEdit = Pick<
+  Goal,
+  'title' | 'schedule' | 'weekdays' | 'scheduledDate' | 'tinyTitle'
+>
+
+/** The label of a goal's two-minute version, wherever it is written. */
+export const TINY_TITLE_LABEL = 'A two-minute version (optional)'
 
 /**
  * Edit everything about a goal, not only its title: how often it repeats,
@@ -76,6 +84,7 @@ export function GoalEditor({
   onCancel: () => void
 }) {
   const [title, setTitle] = useState(goal.title)
+  const [tinyTitle, setTinyTitle] = useState(goal.tinyTitle ?? '')
   const [schedule, setSchedule] = useState<GoalSchedule>(goal.schedule)
   const [weekdays, setWeekdays] = useState<number[]>(
     goal.weekdays.length ? goal.weekdays : [1, 2, 3, 4, 5],
@@ -117,6 +126,7 @@ export function GoalEditor({
         if (!title.trim() || refused) return
         onSave({
           title: title.trim(),
+          tinyTitle: tinyTitle.trim() || undefined,
           schedule,
           weekdays: schedule === 'weekdays' ? weekdays : [],
           scheduledDate:
@@ -128,14 +138,23 @@ export function GoalEditor({
         })
       }}
     >
-      <label>
+      <label className="goal-title-field">
         Edit goal
         <input
           ref={titleField}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          maxLength={120}
+          maxLength={GOAL_TITLE_LENGTH}
           required
+        />
+      </label>
+      <label>
+        {TINY_TITLE_LABEL}
+        <input
+          value={tinyTitle}
+          onChange={(event) => setTinyTitle(event.target.value)}
+          placeholder="For days that ask for less"
+          maxLength={GOAL_TITLE_LENGTH}
         />
       </label>
       <label>

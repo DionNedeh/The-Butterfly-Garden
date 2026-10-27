@@ -366,6 +366,35 @@ describe('validating a garden', () => {
     expect(validateGarden(garden()).state?.profile).not.toHaveProperty('lastBackupAt')
   })
 
+  it('keeps a goal’s two-minute version only when it is words', () => {
+    const base = {
+      id: 'g1',
+      title: 'Stretch your shoulders',
+      schedule: 'daily',
+      weekdays: [],
+      createdDate: '2026-01-01',
+      archived: false,
+    }
+    const kept = garden({ goals: [{ ...base, tinyTitle: 'Roll your shoulders' }] })
+    const result = validateGarden(JSON.parse(JSON.stringify(kept)))
+    expect(result.state?.goals[0].tinyTitle).toBe('Roll your shoulders')
+    expect(result.repaired).toBe(0)
+    // Untouched, so the repository writes nothing for it.
+    expect(validateGarden(kept).state?.goals).toBe(kept.goals)
+
+    for (const odd of [42, null, {}, ['Roll'], true, '', '   ']) {
+      const repaired = validateGarden(garden({ goals: [{ ...base, tinyTitle: odd }] }))
+      const [goal] = repaired.state!.goals
+      expect(goal).not.toHaveProperty('tinyTitle')
+      expect(goal.title).toBe('Stretch your shoulders')
+      expect(repaired.repaired).toBe(1)
+    }
+    // An older goal simply has none, and gains none.
+    const older = validateGarden(garden({ goals: [base] }))
+    expect(older.state?.goals[0]).not.toHaveProperty('tinyTitle')
+    expect(older.repaired).toBe(0)
+  })
+
   it('keeps every goal a recap’s notes became, through a save and a backup', () => {
     const recap = {
       id: 'recap',

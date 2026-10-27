@@ -135,6 +135,7 @@ async function screenshots() {
   await page.getByLabel('Your name').fill('River')
   await page.getByLabel('Garden name').fill('Willowlight Garden')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
   await page.waitForTimeout(600)
 
@@ -191,7 +192,7 @@ async function screenshots() {
     await page.getByLabel('Add a goal').fill(goal)
     await page.getByRole('button', { name: 'Add goal' }).click()
   }
-  await page.getByRole('button', { name: /complete drink some water/i }).click()
+  await page.getByRole('button', { name: /care for drink some water/i }).click()
   await scrollToSection(page, '#mood-title')
   await settle(page)
   await page.screenshot({ path: new URL('02-today.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
