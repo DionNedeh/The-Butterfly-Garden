@@ -43,7 +43,7 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       short: 'Sunlight',
       title: 'Sunlight — care for yourself first',
       paragraphs: [
-        `Everything begins with your own self-care. Checking in with your mood, completing a goal, or writing a reflection each earn one Sunlight, up to ${DAILY_SUNLIGHT_CAP} per day.`,
+        `Everything begins with your own self-care. Checking in with your mood, completing a goal, or writing a reflection each earn one Sunlight, up to ${DAILY_SUNLIGHT_CAP} per day. So does breathing with a butterfly to the end of a session, once a day.`,
         `Every Sunlight converts into ${NECTAR_PER_SUNLIGHT} Nectar for the shop, grows one of your plants a step, and your first Sunlight each day adds ${DAILY_SEED_REWARD} seed to your tray. Nothing is ever lost on a hard day — the garden simply waits.`,
       ],
     },

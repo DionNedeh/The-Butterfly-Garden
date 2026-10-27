@@ -8,6 +8,7 @@ import {
   LATEST_LOCAL_DATE,
 } from '../lib/date'
 import type { Goal } from '../types'
+import { BreatheLink } from './BreatheLink'
 
 /** The snooze lengths offered before "pick a date". */
 const SNOOZE_CHOICES: ReadonlyArray<[label: string, days: number]> = [
@@ -49,6 +50,7 @@ export function GoalRow({
   onSnooze,
   onEdit,
   onArchive,
+  onBreathe,
 }: {
   goal: Goal
   today: string
@@ -61,6 +63,8 @@ export function GoalRow({
   onSnooze: (days: number) => void
   onEdit: () => void
   onArchive: () => void
+  /** "Take three slow breaths" can be done right here, with a butterfly. */
+  onBreathe?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [snoozing, setSnoozing] = useState(false)
@@ -134,6 +138,7 @@ export function GoalRow({
           {tiny ? goal.title : scheduleLabel(goal)}
           {skipped && ' · skipped today'}
         </small>
+        {onBreathe && !settled && <BreatheLink onOpen={onBreathe}>Breathe now</BreatheLink>}
       </div>
       <div
         className="goal-menu"

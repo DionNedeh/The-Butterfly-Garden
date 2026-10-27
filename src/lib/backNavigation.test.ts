@@ -67,6 +67,14 @@ describe('backAction', () => {
     expect(backAction('journal', document, 'care')).toEqual({ kind: 'view', view: 'garden' })
   })
 
+  it('returns breathing to the page that offered it, or else the garden', () => {
+    expect(backAction('breathe', document, 'today')).toEqual({ kind: 'view', view: 'today' })
+    expect(backAction('breathe', document, 'support')).toEqual({ kind: 'view', view: 'support' })
+    // Opened from a link or a reload, it knows of no page before it.
+    expect(backAction('breathe')).toEqual({ kind: 'view', view: 'garden' })
+    expect(backAction('breathe', document, 'breathe')).toEqual({ kind: 'view', view: 'garden' })
+  })
+
   it('returns any other page to the garden', () => {
     for (const view of ['care', 'today', 'journal', 'settings'] as const)
       expect(backAction(view)).toEqual({ kind: 'view', view: 'garden' })

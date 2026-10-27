@@ -15,6 +15,7 @@ const EVERY_VIEW: AppView[] = [
   'privacy',
   'notices',
   'support',
+  'breathe',
 ]
 
 describe('pages in the address bar', () => {
@@ -49,6 +50,11 @@ describe('pages in the address bar', () => {
     expect(hashForRoute({ view: 'flight-patterns' })).toBe('#/flight')
     expect(hashForRoute({ view: 'journal' })).toBe('#/journal')
     expect(routeFromHash('#/journal/')).toEqual({ view: 'journal' })
+  })
+
+  it('gives breathing with a butterfly an address of its own, without where it came from', () => {
+    expect(hashForRoute({ view: 'breathe', from: 'today' })).toBe('#/breathe')
+    expect(routeFromHash('#/breathe')).toEqual({ view: 'breathe' })
   })
 
   it('sends a reloaded recap to Today, where tonight’s is offered', () => {

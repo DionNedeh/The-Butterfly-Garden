@@ -3,7 +3,7 @@ import type { NextStep } from '../../lib/nextStep'
 import type { MoodEntry } from '../../types'
 import './checkin.css'
 
-const STEP_NAMES: Readonly<Record<NextStep, string>> = {
+const STEP_NAMES: Readonly<Record<Exclude<NextStep, 'breathe'>, string>> = {
   'gentle-day': 'Make today a gentle day',
   'write-one-line': 'Write one line',
   'visit-companion': 'Visit your companion',
@@ -29,11 +29,14 @@ function leadFor(checkIn: Pick<MoodEntry, 'level' | 'unsure' | 'energy'>): strin
 export function NextStepOffer({
   checkIn,
   steps,
+  breatheWith = 'a butterfly',
   onChoose,
   onDismiss,
 }: {
   checkIn: Pick<MoodEntry, 'level' | 'unsure' | 'energy'>
   steps: readonly NextStep[]
+  /** Who paces the breath, by name: the active companion, or Marigold. */
+  breatheWith?: string
   onChoose: (step: NextStep) => void
   onDismiss: () => void
 }) {
@@ -51,7 +54,7 @@ export function NextStepOffer({
             className="secondary-button"
             onClick={() => onChoose(step)}
           >
-            {STEP_NAMES[step]}
+            {step === 'breathe' ? `Breathe with ${breatheWith}` : STEP_NAMES[step]}
           </button>
         ))}
         <button type="button" className="text-button next-step-dismiss" onClick={onDismiss}>

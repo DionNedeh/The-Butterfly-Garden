@@ -324,3 +324,26 @@ test('the Garden Pass speaks of Google Play, and says when Play cannot be reache
   ).toBeVisible()
   expect(errors).toEqual([])
 })
+
+test('the back gesture leaves breathing for the page that offered it, mid-session', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  await page.getByRole('button', { name: 'If you need support now' }).click()
+  await page.getByRole('link', { name: 'breathe with Marigold' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Breathe with Marigold' })).toBeVisible()
+  await page.getByRole('button', { name: 'Start breathing' }).click()
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeFocused()
+  expect(await seriousViolations(page, 'Breathing in the Android app')).toEqual([])
+
+  await pressBack(page)
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'If you need support now' }),
+  ).toBeVisible()
+  await pressBack(page)
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  expect(errors).toEqual([])
+})

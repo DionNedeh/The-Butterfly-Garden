@@ -662,3 +662,62 @@ describe('the garden pace', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
     )
   })
 })
+
+describe('breathing with a butterfly', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  it('opens from the support page, and goes back there by its button or Escape', async () => {
+    const user = await openGarden()
+    await user.click(primaryNav().getByRole('button', { name: 'Guide' }))
+    await user.click(await screen.findByRole('button', { name: 'If you need support now' }, { timeout: 3000 }))
+    await user.click(await screen.findByRole('link', { name: 'breathe with Marigold' }, { timeout: 3000 }))
+    const heading = await screen.findByRole(
+      'heading',
+      { level: 1, name: 'Breathe with Marigold' },
+      { timeout: 3000 },
+    )
+    expect(window.location.hash).toBe('#/breathe')
+    await waitFor(() => expect(heading).toHaveFocus())
+    await user.click(screen.getByRole('button', { name: 'Back to support' }))
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'If you need support now' }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('link', { name: 'breathe with Marigold' }))
+    await screen.findByRole('heading', { level: 1, name: 'Breathe with Marigold' })
+    await user.keyboard('{Escape}')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'If you need support now' }),
+    ).toBeInTheDocument()
+    // Support still knows the page it came from.
+    expect(screen.getByRole('button', { name: 'Back to the Guide' })).toBeInTheDocument()
+  })
+
+  it('opens from a link, with the garden to go back to', async () => {
+    window.history.replaceState(null, '', '/#/breathe')
+    await openGardenAt('Breathe with Marigold')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the garden' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })).toBeInTheDocument()
+  })
+
+  it('is offered after a stormy check-in, and comes back to Today', async () => {
+    const seed = stored()
+    const stormy = {
+      ...seed,
+      moods: [
+        {
+          id: 'm',
+          localDate: toLocalDate(),
+          level: 1 as const,
+          note: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    }
+    const user = await openGarden(stormy)
+    await user.click(primaryNav().getByRole('button', { name: 'Today' }))
+    await user.click(await screen.findByRole('button', { name: 'Breathe with Marigold' }, { timeout: 3000 }))
+    await screen.findByRole('heading', { level: 1, name: 'Breathe with Marigold' }, { timeout: 3000 })
+    await user.click(screen.getByRole('button', { name: 'Back to Today' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
+  })
+})

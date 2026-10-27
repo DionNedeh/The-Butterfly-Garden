@@ -8,6 +8,7 @@ import {
   sunlightForDate,
 } from '../lib/progression'
 import { describeDay } from '../lib/daySummary'
+import { pacerFor } from '../lib/breathing'
 import { TOMORROW_NOTE_LENGTH, TOMORROW_NOTES, type TomorrowNote } from '../lib/gardenActions'
 import type { AppState, MoodEntry } from '../types'
 import { GuideLink } from './GuideLink'
@@ -79,6 +80,7 @@ export function MoonlightRecap({
   onClose,
   onFadeToNight,
   onOpenGuide,
+  onBreathe,
 }: {
   state: AppState
   /** The day being closed out, which after midnight is yesterday. */
@@ -94,6 +96,11 @@ export function MoonlightRecap({
   onFadeToNight?: () => void
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
+  /**
+   * A last, optional step: once the night is collected, breathe with a
+   * butterfly before bed. Offered only when given.
+   */
+  onBreathe?: () => void
 }) {
   const [step, setStep] = useState(0)
   const [level, setLevel] = useState<MoodEntry['level']>()
@@ -367,6 +374,13 @@ export function MoonlightRecap({
             {onFadeToNight && (
               <button className="secondary-button" onClick={() => collect(onFadeToNight)}>
                 Fade the garden to night and close
+              </button>
+            )}
+            {/* Collected the same way first: the answers here are not drafts,
+                so leaving before collecting would lose them. */}
+            {onBreathe && (
+              <button className="text-button recap-breathe" onClick={() => collect(onBreathe)}>
+                Collect Moonlight and breathe with {pacerFor(state).name}
               </button>
             )}
           </div>

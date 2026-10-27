@@ -337,6 +337,18 @@ export function deleteReflection(state: AppState, id: string): AppState {
   return { ...state, reflections: state.reflections.filter((item) => item.id !== id) }
 }
 
+/** The Sunlight a finished breathing session earns, one a day. */
+export const breathSource = (localDate: string) => `breath:${localDate}`
+
+/**
+ * A breathing session run to its end (plan c.1): an act of care, counted
+ * once a day through the same Sunlight as any other and within the daily
+ * cap. Stopping early never comes here.
+ */
+export function finishBreathing(state: AppState, now: Date): AppState {
+  return awardSunlight(state, breathSource(toLocalDate(now)), now)
+}
+
 /** Whether an answer is one the check-in offers. */
 function isMoodChoice(choice: unknown): choice is MoodChoice {
   return choice === 'unsure' || (typeof choice === 'number' && [1, 2, 3, 4, 5].includes(choice))
