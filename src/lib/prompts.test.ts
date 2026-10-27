@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { freeWritingPrompt, reflectionPrompts } from '../data/content'
+import { freeWritingPrompt } from '../data/content'
+import { reflectionPrompts } from '../data/prompts'
 import type { ReflectionPromptFamily } from '../types'
 import { addDaysToLocalDate } from './date'
 import { promptAfter, promptById, promptForDay } from './prompts'

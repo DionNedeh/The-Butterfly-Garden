@@ -3,7 +3,6 @@ import type {
   Observation,
   PlantDefinition,
   ReflectionPrompt,
-  ReflectionPromptFamily,
   SpeciesDefinition,
 } from '../types'
 
@@ -313,84 +312,6 @@ export const plants: PlantDefinition[] = plantRows.map(
     color,
     description,
   }),
-)
-
-/**
- * Reflection prompts, in families.
- *
- * Kept to concrete "what" and "how" questions, which help people process a
- * day; abstract "why do I always…" questions feed rumination instead
- * (Watkins). No affirmations of character either: positive self-statements
- * can backfire for people with low self-esteem (Wood et al. 2009). The ids
- * are stored with every reflection, so an id is never reused or removed.
- */
-const reflectionPromptRows: ReadonlyArray<
-  readonly [id: string, text: string, family: ReflectionPromptFamily]
-> = [
-  ['notice', 'What is one small thing you noticed today?', 'noticing'],
-  ['kindness', 'What would kindness toward yourself look like right now?', 'self-compassion'],
-  ['lighter', 'What made today feel a little lighter?', 'savouring'],
-  ['weather', 'If your inner weather could speak, what would it say?', 'processing'],
-  ['enough', 'What was enough for today?', 'self-compassion'],
-  ['release', 'What can you set down until tomorrow?', 'rest'],
-  ['body', 'What is your body asking for?', 'rest'],
-  ['care', 'Where did you offer care today?', 'connection'],
-  ['support', 'What support would feel welcome?', 'connection'],
-  ['steady', 'What helped you feel steady?', 'processing'],
-  ['tiny-win', 'Name a tiny win that deserves to be remembered.', 'savouring'],
-  ['curious', 'What are you curious about today?', 'noticing'],
-  ['rest', 'What kind of rest might restore you?', 'rest'],
-  ['boundary', 'What boundary protected your energy?', 'processing'],
-  ['gratitude', 'What ordinary thing are you grateful for?', 'gratitude'],
-  ['tomorrow', 'What gentle intention can you carry into tomorrow?', 'processing'],
-  ['comfort', 'What brought you comfort recently?', 'savouring'],
-  ['courage', 'Where did you show quiet courage?', 'self-compassion'],
-  ['connection', 'When did you feel connected today?', 'connection'],
-  ['pace', 'What would it mean to move at your own pace?', 'rest'],
-  ['learned', 'What did today teach you about yourself?', 'processing'],
-  ['begin', 'What is one easy place to begin?', 'processing'],
-  ['protected', 'What deserves your attention, and what can wait?', 'processing'],
-  ['garden', 'What would you like to nurture in your inner garden?', 'noticing'],
-  ['sky', 'What did the sky look like the last time you looked up?', 'noticing'],
-  ['outside-sound', 'What could you hear outside today?', 'noticing'],
-  ['living-thing', 'Which living thing caught your eye today, and what was it doing?', 'noticing'],
-  ['season', 'What tells you which season it is, right where you are?', 'noticing'],
-  ['texture', 'What was the most pleasant thing you touched today?', 'noticing'],
-  ['light', 'Where did the light fall nicely today?', 'noticing'],
-  ['replay', 'Which moment from today would you happily live again?', 'savouring'],
-  ['taste', 'What did you eat or drink today that you enjoyed?', 'savouring'],
-  ['laughed', 'What made you smile or laugh, even a little?', 'savouring'],
-  ['looking-forward', 'What is one small thing you are looking forward to?', 'savouring'],
-  ['slowly', 'What did you do slowly today, on purpose or not?', 'savouring'],
-  ['someone-helped', 'Who made something easier for you lately, and how?', 'gratitude'],
-  ['place', 'What place are you glad exists?', 'gratitude'],
-  ['tool', 'What everyday object made today a little easier?', 'gratitude'],
-  ['past-self', 'What did a past version of you do that helps you now?', 'gratitude'],
-  ['friend-words', 'If a friend had your day, what would you say to them?', 'self-compassion'],
-  ['hard-thing', 'What felt hard today, and how did you get through it?', 'self-compassion'],
-  ['allowed', 'What are you allowed to leave unfinished today?', 'self-compassion'],
-  ['tried', 'What did you try today, whatever the result?', 'self-compassion'],
-  ['soften', 'Where could you be a little softer with yourself this week?', 'self-compassion'],
-  ['what-happened', 'What happened today, in three plain sentences?', 'processing'],
-  ['next-step', 'What is the next small step on something that matters to you?', 'processing'],
-  ['how-handled', 'How did you handle a moment that did not go to plan?', 'processing'],
-  ['energy-gave', 'What gave you energy today, and what took it?', 'processing'],
-  ['changed-mind', 'What did you see differently by the end of the day?', 'processing'],
-  ['sleep-ready', 'What would help tonight feel restful?', 'rest'],
-  ['pause', 'When did you pause today, even for a moment?', 'rest'],
-  ['no-thanks', 'What could you say no to, kindly, to make room for rest?', 'rest'],
-  ['quiet', 'Where did you find a little quiet today?', 'rest'],
-  ['heard-from', 'Who did you hear from today, and how did it feel?', 'connection'],
-  ['reach-out', 'Who would be glad to hear from you this week?', 'connection'],
-  ['shared', 'What did you share with someone recently?', 'connection'],
-  ['kind-act', 'What kind thing did you see someone do?', 'connection'],
-  ['belong', 'Where do you feel you belong?', 'connection'],
-  ['learn-small', 'What is one small thing you learned or would like to learn?', 'noticing'],
-  ['made', 'What did you make, tidy or mend today?', 'savouring'],
-]
-
-export const reflectionPrompts: ReflectionPrompt[] = reflectionPromptRows.map(
-  ([id, text, family]) => ({ id, text, family }),
 )
 
 /** The prompt shown when the gardener chooses to write without one. */
