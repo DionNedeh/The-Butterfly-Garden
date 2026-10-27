@@ -1,0 +1,12 @@
+/* Settings' own rules. SettingsView imports this file, so it arrives with
+   Settings rather than in the stylesheet every page waits for. */
+
+/* How the garden looks: the theme and the text size, one group under the
+   other, each a column of the same choice rows as Garden motion. */
+.look-settings fieldset + fieldset {
+  margin-top: 1.4rem;
+}
+
+.look-settings .subtle-copy {
+  margin: 0.25rem 0 0;
+}

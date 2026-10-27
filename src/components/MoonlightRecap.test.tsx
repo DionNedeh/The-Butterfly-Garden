@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetDrafts, setDraft } from '../lib/drafts'
+import { getDraft, resetDrafts, setDraft } from '../lib/drafts'
 import { createInitialState } from '../lib/progression'
 import type { AppState } from '../types'
 import { MoonlightRecap } from './MoonlightRecap'
@@ -11,7 +11,12 @@ const TODAY = '2026-09-08'
 const YESTERDAY = '2026-09-07'
 
 function renderRecap(
-  overrides: { targetDate?: string; today?: string; state?: AppState } = {},
+  overrides: {
+    targetDate?: string
+    today?: string
+    state?: AppState
+    onFadeToNight?: () => void
+  } = {},
 ) {
   const onCollect = vi.fn()
   const onClose = vi.fn()
@@ -22,6 +27,7 @@ function renderRecap(
       today={overrides.today ?? TODAY}
       onCollect={onCollect}
       onClose={onClose}
+      onFadeToNight={overrides.onFadeToNight}
     />,
   )
   return { onCollect, onClose, unmount }
@@ -61,6 +67,47 @@ describe('the Moonlight recap', () => {
       tomorrow: [{ text: '', plan: false }],
     })
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('can end by fading the garden to night, collected exactly as the ordinary finish', async () => {
+    const onFadeToNight = vi.fn()
+    const { onCollect, onClose } = renderRecap({ onFadeToNight })
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(screen.getByRole('button', { name: /Bright/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.type(screen.getByRole('textbox'), 'Tea in the garden.')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.type(screen.getByRole('textbox'), 'The long meeting.')
+    for (let step = 0; step < 2; step += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+
+    // Collect Moonlight stays the first choice; the quieter one follows it.
+    const collect = screen.getByRole('button', { name: 'Collect Moonlight' })
+    const fade = screen.getByRole('button', { name: 'Fade the garden to night and close' })
+    expect(collect.compareDocumentPosition(fade) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(collect).toHaveClass('primary-button')
+
+    await userEvent.click(fade)
+    expect(onCollect).toHaveBeenCalledOnce()
+    expect(onCollect).toHaveBeenCalledWith({
+      level: 4,
+      wentWell: 'Tea in the garden.',
+      settingDown: 'The long meeting.',
+      tomorrow: [{ text: '', plan: false }],
+    })
+    expect(onFadeToNight).toHaveBeenCalledOnce()
+    // It leaves its own way, not by the ordinary close to Today.
+    expect(onClose).not.toHaveBeenCalled()
+    // The drafts are spent, as after the ordinary finish.
+    expect(getDraft(`recap:${TODAY}:wentWell`)).toBeUndefined()
+  })
+
+  it('offers only the ordinary finish when there is no other way to end', async () => {
+    renderRecap()
+    await skipToEnd()
+    expect(screen.getByRole('button', { name: 'Collect Moonlight' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /fade the garden/i })).not.toBeInTheDocument()
   })
 
   it('carries the answers it was given', async () => {

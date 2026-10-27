@@ -1,7 +1,8 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { resetDrafts } from './lib/drafts'
 import { createInitialState } from './lib/progression'
 import { gardenRepository } from './repository/gardenRepository'
 import type { AppState } from './types'
@@ -248,4 +249,179 @@ describe('the backup reminder in the navigation', () => {
     })
     expect(primaryNav().getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   }, WHOLE_APP_TIMEOUT_MS)
+})
+
+/** A device whose dark setting a test can change, as matchMedia reports it. */
+function stubDevice(dark: boolean) {
+  const listeners = new Set<() => void>()
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return query === '(prefers-color-scheme: dark)' && dark
+    },
+    media: query,
+    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+  }))
+  return (next: boolean) => {
+    dark = next
+    act(() => listeners.forEach((listener) => listener()))
+  }
+}
+
+/** A stored garden with these profile choices. */
+function storedWith(profile: Partial<NonNullable<AppState['profile']>>): AppState {
+  const seed = stored()
+  return { ...seed, profile: { ...seed.profile!, ...profile } }
+}
+
+const shell = () => document.querySelector('.app-shell')!
+
+describe('a theme that follows', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    document.head.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.remove())
+  })
+
+  it('turns to night when the evening starts, and the switch then stops following', async () => {
+    // The clock runs, so the splash and the page's own waits pass as ever;
+    // the test moves it on to six o'clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 9, 27, 17, 59, 30))
+    const user = await openGarden(storedWith({ themeFollows: 'evening' }))
+    expect(shell()).toHaveClass('theme-sunlight')
+    expect(
+      screen.getByRole('button', { name: 'Switch to night mode and stop following your evening' }),
+    ).toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(31_000)
+    })
+    expect(shell()).toHaveClass('theme-night')
+
+    await user.click(
+      screen.getByRole('button', { name: 'Switch to sunlight mode and stop following your evening' }),
+    )
+    expect(shell()).toHaveClass('theme-sunlight')
+    // Chosen by hand now: the switch says only what it does.
+    expect(screen.getByRole('button', { name: 'Switch to night mode' })).toBeInTheDocument()
+  })
+
+  it('follows the device, and colours the browser’s bars to match', async () => {
+    document.head.insertAdjacentHTML(
+      'beforeend',
+      '<meta name="theme-color" content="#f7f3e8" media="(prefers-color-scheme: light)">' +
+        '<meta name="theme-color" content="#07131f" media="(prefers-color-scheme: dark)">',
+    )
+    const bars = () =>
+      [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')].map(
+        (meta) => meta.content,
+      )
+    const setDark = stubDevice(false)
+    await openGarden(storedWith({ theme: 'night', themeFollows: 'device' }))
+    expect(shell()).toHaveClass('theme-sunlight')
+    expect(bars()).toEqual(['#f7f3e8', '#f7f3e8'])
+
+    setDark(true)
+    expect(shell()).toHaveClass('theme-night')
+    expect(bars()).toEqual(['#07131f', '#07131f'])
+    expect(
+      screen.getByRole('button', { name: 'Switch to sunlight mode and stop following your device' }),
+    ).toBeInTheDocument()
+    setDark(false)
+    expect(shell()).toHaveClass('theme-sunlight')
+  })
+
+  it('is chosen in Settings, and a hand-chosen night stays night whatever the device', async () => {
+    const setDark = stubDevice(true)
+    const user = await openGarden()
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: 3000 })
+    await user.click(within(themes).getByRole('radio', { name: /^Follow device/ }))
+    expect(shell()).toHaveClass('theme-night')
+    await user.click(within(themes).getByRole('radio', { name: /^Sunlight/ }))
+    expect(shell()).toHaveClass('theme-sunlight')
+    await user.click(within(themes).getByRole('radio', { name: /^Night/ }))
+    setDark(false)
+    expect(shell()).toHaveClass('theme-night')
+  })
+})
+
+describe('the text size', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  it('scales the root while a garden is open, and the usual size sets nothing', async () => {
+    const root = document.documentElement
+    const user = await openGarden(storedWith({ textSize: 'largest' }))
+    expect(root.style.fontSize).toBe('125%')
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    const sizes = await screen.findByRole('group', { name: 'Text size' }, { timeout: 3000 })
+    await user.click(within(sizes).getByRole('radio', { name: /^Larger/ }))
+    expect(root.style.fontSize).toBe('112.5%')
+    await user.click(within(sizes).getByRole('radio', { name: /^Comfortable/ }))
+    expect(root.style.fontSize).toBe('')
+    await user.click(within(sizes).getByRole('radio', { name: /^Largest/ }))
+    expect(root.style.fontSize).toBe('125%')
+  })
+
+  it('goes with the garden', async () => {
+    await openGarden(storedWith({ textSize: 'larger' }))
+    expect(document.documentElement.style.fontSize).toBe('112.5%')
+    cleanup()
+    expect(document.documentElement.style.fontSize).toBe('')
+  })
+})
+
+describe('ending the recap by fading the garden to night', { timeout: WHOLE_APP_TIMEOUT_MS }, () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    resetDrafts()
+  })
+
+  /** Open tonight's recap from Today and walk to its last screen. */
+  async function walkToTheEnd(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(primaryNav().getByRole('button', { name: 'Today' }))
+    await user.click(await screen.findByRole('button', { name: 'Begin' }, { timeout: 3000 }))
+    await screen.findByRole('heading', { name: 'Here is your day.' }, { timeout: 3000 })
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    for (let step = 0; step < 4; step += 1) {
+      await user.click(screen.getByRole('button', { name: 'Skip this one' }))
+    }
+  }
+
+  it('collects the night, turns to night, fades the sound and goes back to the garden', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 9, 27, 21, 0))
+    const user = await openGarden(storedWith({ ambientSound: true }))
+    await walkToTheEnd(user)
+    await user.click(screen.getByRole('button', { name: 'Fade the garden to night and close' }))
+
+    const title = await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
+    expect(title).toHaveFocus()
+    expect(window.location.hash).toBe('')
+    expect(shell()).toHaveClass('theme-night')
+    expect(screen.getByTitle('Stardust balance')).toHaveTextContent('1 Stardust')
+
+    // The fade-out runs, as if it had been chosen in Settings.
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    expect(await screen.findByText(/The sound fades away at/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByLabelText('Fade out after')).toHaveValue('15')
+    expect(within(screen.getByRole('group', { name: 'Theme' })).getByRole('radio', { name: /^Night/ })).toBeChecked()
+  })
+
+  it('leaves a followed night and a silent garden as they are', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 9, 27, 21, 0))
+    const user = await openGarden(storedWith({ themeFollows: 'evening' }))
+    expect(shell()).toHaveClass('theme-night')
+    await walkToTheEnd(user)
+    await user.click(screen.getByRole('button', { name: 'Fade the garden to night and close' }))
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' })
+    expect(shell()).toHaveClass('theme-night')
+
+    await user.click(primaryNav().getByRole('button', { name: 'Settings' }))
+    const themes = await screen.findByRole('group', { name: 'Theme' }, { timeout: 3000 })
+    expect(within(themes).getByRole('radio', { name: /^Follow evening/ })).toBeChecked()
+    // No sound was playing, so no fade was started.
+    expect(screen.getByLabelText('Fade out after')).toHaveValue('')
+  })
 })

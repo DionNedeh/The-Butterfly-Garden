@@ -1,5 +1,6 @@
 import type {
   AmbientTrackId,
+  AppearanceTheme,
   AppState,
   GardenBackdropId,
   Goal,
@@ -8,6 +9,7 @@ import type {
   MoodEntry,
   RecapEntry,
   ReflectionEntry,
+  TextSize,
 } from '../types'
 import { availableBackdropIds } from './appearance'
 import {
@@ -21,6 +23,7 @@ import {
 import { createId } from './id'
 import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
+import type { ThemeChoice } from './theme'
 import {
   awardMoonlight,
   awardSunlight,
@@ -526,15 +529,41 @@ export function selectAmbientTrack(state: AppState, ambientTrack: AmbientTrackId
   return { ...state, profile: { ...state.profile, ambientTrack } }
 }
 
-export function toggleTheme(state: AppState): AppState {
-  if (!state.profile) return state
-  return {
-    ...state,
-    profile: {
-      ...state.profile,
-      theme: state.profile.theme === 'night' ? 'sunlight' : 'night',
-    },
+/**
+ * The theme Settings offers: Sunlight or Night by hand, or follow the device
+ * or the evening (lib/theme).
+ *
+ * Choosing by hand stops following. Following leaves the hand-chosen theme
+ * where it was, so an older build, which knows nothing of following, still
+ * opens on the gardener's last choice rather than on a guess.
+ */
+export function chooseTheme(state: AppState, choice: ThemeChoice): AppState {
+  const profile = state.profile
+  if (!profile) return state
+  if (choice === 'device' || choice === 'evening') {
+    if (profile.themeFollows === choice) return state
+    return { ...state, profile: { ...profile, themeFollows: choice } }
   }
+  if (profile.theme === choice && profile.themeFollows === undefined) return state
+  return { ...state, profile: { ...profile, theme: choice, themeFollows: undefined } }
+}
+
+/**
+ * The header's quick switch: the opposite of what is `showing`, chosen by
+ * hand. What is showing may come from following rather than from `theme`, so
+ * the shell says which; pressing it stops following, since a switch the next
+ * evening quietly undid would feel broken.
+ */
+export function toggleTheme(state: AppState, showing?: AppearanceTheme): AppState {
+  if (!state.profile) return state
+  const current = showing ?? state.profile.theme
+  return chooseTheme(state, current === 'night' ? 'sunlight' : 'night')
+}
+
+/** Text larger than usual, or the usual size again (undefined). */
+export function setTextSize(state: AppState, size: TextSize | undefined): AppState {
+  if (!state.profile || state.profile.textSize === size) return state
+  return { ...state, profile: { ...state.profile, textSize: size } }
 }
 
 export function updateProfile(

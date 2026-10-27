@@ -523,6 +523,8 @@ const AMBIENT_TRACK_IDS = new Set<string>(
   ambientTracks.map((track) => track.id),
 )
 const THEMES = new Set(['sunlight', 'night'])
+const THEME_FOLLOWS = new Set(['device', 'evening'])
+const TEXT_SIZES = new Set(['larger', 'largest'])
 
 function checkProfile(
   value: unknown,
@@ -591,6 +593,14 @@ function checkProfile(
   }
   if (value.lastBackupAt !== undefined && !isTimestamp(value.lastBackupAt)) {
     delete profile.lastBackupAt
+  }
+  // Dropped, not repaired, when unknown: the hand-chosen theme is still there
+  // underneath, and the usual text size is always readable.
+  if (value.themeFollows !== undefined && !THEME_FOLLOWS.has(value.themeFollows as string)) {
+    delete profile.themeFollows
+  }
+  if (value.textSize !== undefined && !TEXT_SIZES.has(value.textSize as string)) {
+    delete profile.textSize
   }
   return profile
 }

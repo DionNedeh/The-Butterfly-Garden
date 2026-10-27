@@ -324,10 +324,62 @@ describe('the gardener and their companions', () => {
     expect(act.toggleAmbientSound(before).profile?.ambientSound).toBe(!before.profile?.ambientSound)
   })
 
+  it('chooses a theme by hand, which ends following', () => {
+    const following = act.chooseTheme(garden(), 'evening')
+    const night = act.chooseTheme(following, 'night')
+    expect(night.profile).toMatchObject({ theme: 'night', themeFollows: undefined })
+    expect(act.chooseTheme(night, 'sunlight').profile?.theme).toBe('sunlight')
+    // The same choice again changes nothing, so nothing is written.
+    expect(act.chooseTheme(night, 'night')).toBe(night)
+    // Back to the hand-chosen theme it already had: only the following ends.
+    const sunlitFollowing = act.chooseTheme(garden(), 'device')
+    const sunlit = act.chooseTheme(sunlitFollowing, 'sunlight')
+    expect(sunlit).not.toBe(sunlitFollowing)
+    expect(sunlit.profile).toMatchObject({ theme: 'sunlight', themeFollows: undefined })
+  })
+
+  it('follows the device or the evening, keeping the theme chosen by hand beneath', () => {
+    const night = act.chooseTheme(garden(), 'night')
+    const device = act.chooseTheme(night, 'device')
+    expect(device.profile).toMatchObject({ theme: 'night', themeFollows: 'device' })
+    const evening = act.chooseTheme(device, 'evening')
+    expect(evening.profile).toMatchObject({ theme: 'night', themeFollows: 'evening' })
+    expect(act.chooseTheme(evening, 'evening')).toBe(evening)
+    expect(night.profile?.themeFollows).toBeUndefined()
+  })
+
+  it('switches from the theme on screen, and stops following', () => {
+    const before = garden()
+    // Following the evening, at night: the switch turns the garden to sunlight.
+    const evening = act.chooseTheme(before, 'evening')
+    const switched = act.toggleTheme(evening, 'night')
+    expect(switched.profile).toMatchObject({ theme: 'sunlight', themeFollows: undefined })
+    // Following the device in daylight, with night chosen by hand beneath:
+    // the switch turns it to night by hand.
+    const device = act.chooseTheme(act.chooseTheme(before, 'night'), 'device')
+    expect(act.toggleTheme(device, 'sunlight').profile).toMatchObject({
+      theme: 'night',
+      themeFollows: undefined,
+    })
+  })
+
+  it('sets a larger text size, and the usual one again', () => {
+    const before = garden()
+    const largest = act.setTextSize(before, 'largest')
+    expect(largest.profile?.textSize).toBe('largest')
+    expect(act.setTextSize(largest, 'larger').profile?.textSize).toBe('larger')
+    expect(act.setTextSize(largest, undefined).profile?.textSize).toBeUndefined()
+    expect(act.setTextSize(largest, 'largest')).toBe(largest)
+    expect(act.setTextSize(before, undefined)).toBe(before)
+    expect(before.profile?.textSize).toBeUndefined()
+  })
+
   it('leaves a garden with no gardener yet untouched', () => {
     const empty = garden({ profile: undefined })
     expect(act.selectCompanion(empty, 'c1')).toBe(empty)
     expect(act.toggleTheme(empty)).toBe(empty)
+    expect(act.chooseTheme(empty, 'device')).toBe(empty)
+    expect(act.setTextSize(empty, 'larger')).toBe(empty)
     expect(act.updateProfile(empty, 'A', 'B', 'calm')).toBe(empty)
     expect(act.markReleaseSeen(empty, 'r')).toBe(empty)
   })

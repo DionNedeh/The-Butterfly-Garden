@@ -64,7 +64,9 @@
 }
 
 .android-app .bottom-nav button {
-  font-size: 0.7rem;
+  /* As garden-3.css's phone dock: room for a larger label in each tab. */
+  font-size: min(0.7rem, 3.6vw);
+  padding-inline: 0.15rem;
 }
 
 @media (max-width: 1080px) {

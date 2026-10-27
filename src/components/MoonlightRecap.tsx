@@ -11,6 +11,7 @@ import { describeDay } from '../lib/daySummary'
 import { TOMORROW_NOTE_LENGTH, TOMORROW_NOTES, type TomorrowNote } from '../lib/gardenActions'
 import type { AppState, MoodEntry } from '../types'
 import { Icon } from './Icons'
+import './recap.css'
 
 /**
  * The draft for tomorrow as notes, a line each. A draft left by an older
@@ -75,6 +76,7 @@ export function MoonlightRecap({
   today,
   onCollect,
   onClose,
+  onFadeToNight,
 }: {
   state: AppState
   /** The day being closed out, which after midnight is yesterday. */
@@ -82,6 +84,12 @@ export function MoonlightRecap({
   today: string
   onCollect: (submission: RecapSubmission) => void
   onClose: () => void
+  /**
+   * The other way to finish: once the night is collected, turn the garden to
+   * night, let the sound fade, and go back to the garden. Offered only when
+   * given.
+   */
+  onFadeToNight?: () => void
 }) {
   const [step, setStep] = useState(0)
   const [level, setLevel] = useState<MoodEntry['level']>()
@@ -148,7 +156,8 @@ export function MoonlightRecap({
     next()
   }
 
-  const collect = () => {
+  /** Collect the night, then leave the way the gardener chose. */
+  const collect = (leave: () => void) => {
     onCollect({
       level,
       wentWell,
@@ -164,7 +173,7 @@ export function MoonlightRecap({
       `recap:${targetDate}:settingDown`,
       `recap:${targetDate}:forTomorrow`,
     )
-    onClose()
+    leave()
   }
 
   return (
@@ -340,9 +349,18 @@ export function MoonlightRecap({
             Continue
           </button>
         ) : (
-          <button className="primary-button" onClick={collect}>
-            Collect Moonlight
-          </button>
+          // The ordinary finish comes first; putting the phone down is the
+          // quieter second choice, collected exactly the same way.
+          <div className="recap-finish">
+            <button className="primary-button" onClick={() => collect(onClose)}>
+              Collect Moonlight
+            </button>
+            {onFadeToNight && (
+              <button className="secondary-button" onClick={() => collect(onFadeToNight)}>
+                Fade the garden to night and close
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

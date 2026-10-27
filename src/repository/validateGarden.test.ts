@@ -253,6 +253,37 @@ describe('validating a garden', () => {
     expect(odd).not.toHaveProperty('recapGraceEndsHour')
   })
 
+  it('keeps what the theme follows only when it is the device or the evening', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const followsOf = (themeFollows: unknown) =>
+      validateGarden(garden({ profile: { ...base, theme: 'night', themeFollows } })).state
+        ?.profile
+    expect(followsOf('device')?.themeFollows).toBe('device')
+    expect(followsOf('evening')?.themeFollows).toBe('evening')
+    for (const odd of ['sunset', 'Device', 'night', 1, true, {}, null, '']) {
+      const profile = followsOf(odd)
+      expect(profile).not.toHaveProperty('themeFollows')
+      // The theme chosen by hand is still there underneath.
+      expect(profile?.theme).toBe('night')
+    }
+    expect(validateGarden(garden()).state?.profile).not.toHaveProperty('themeFollows')
+  })
+
+  it('keeps a text size only when it is one the garden offers', () => {
+    const base = createInitialState('Tester', 'Test Garden').profile!
+    const sizeOf = (textSize: unknown) =>
+      validateGarden(garden({ profile: { ...base, textSize } })).state?.profile
+    expect(sizeOf('larger')?.textSize).toBe('larger')
+    expect(sizeOf('largest')?.textSize).toBe('largest')
+    // "Comfortable" is the usual size, which is stored as no size at all.
+    for (const odd of ['comfortable', 'huge', '125%', 1.25, false, [], null, '']) {
+      const profile = sizeOf(odd)
+      expect(profile).not.toHaveProperty('textSize')
+      expect(profile?.gardenName).toBe('Test Garden')
+    }
+    expect(validateGarden(garden()).state?.profile).not.toHaveProperty('textSize')
+  })
+
   it('keeps the time of the last backup only when it is a real moment', () => {
     const base = createInitialState('Tester', 'Test Garden').profile!
     const lastBackupOf = (lastBackupAt: unknown) =>

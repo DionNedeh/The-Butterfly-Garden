@@ -27,10 +27,12 @@ import { readBackupFile } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
 import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
-import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
+import type { AmbientTrackId, AppState, GardenBackdropId, TextSize } from '../types'
 import { motionPreference, type MotionPreference } from '../lib/motion'
+import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
 import { releaseName } from '../data/releases'
+import './settings.css'
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
 function passSummary(status: PassStatus): string {
@@ -106,6 +108,59 @@ const MOTION_CHOICES: ReadonlyArray<{
   },
 ]
 
+/** The text sizes, from the usual one up; the usual one stores nothing. */
+const TEXT_SIZE_CHOICES: ReadonlyArray<{
+  value: TextSize | undefined
+  label: string
+  description: string
+  /** The label itself is shown at the size it chooses, as a preview. */
+  scale: string
+}> = [
+  {
+    value: undefined,
+    label: 'Comfortable',
+    description: 'The garden’s usual size.',
+    scale: '1em',
+  },
+  {
+    value: 'larger',
+    label: 'Larger',
+    description: 'A little larger, everywhere.',
+    scale: '1.125em',
+  },
+  {
+    value: 'largest',
+    label: 'Largest',
+    description: 'Larger again, for easier reading.',
+    scale: '1.25em',
+  },
+]
+
+/** The theme choices, with what each does in words. */
+function themeChoices(
+  android: boolean,
+  evening: { from: number; until: number },
+): ReadonlyArray<{ value: ThemeChoice; label: string; description: string }> {
+  return [
+    {
+      value: 'sunlight',
+      label: 'Sunlight',
+      description: 'The bright garden, day and night.',
+    },
+    { value: 'night', label: 'Night', description: 'The starry garden, day and night.' },
+    {
+      value: 'device',
+      label: 'Follow device',
+      description: `Night whenever this ${android ? 'phone' : 'device'} is set to dark.`,
+    },
+    {
+      value: 'evening',
+      label: 'Follow evening',
+      description: `Night from ${formatHour(evening.from)}, when your evening starts, until ${formatHour(evening.until)}.`,
+    },
+  ]
+}
+
 /**
  * What the restore picker offers. On Android the system file picker filters
  * by the type each storage app reports, and some report a .json file as plain
@@ -162,6 +217,8 @@ export function SettingsView({
   onOpenSupport,
   onSetDayCountsHidden,
   onSetRecapHours,
+  onChooseTheme,
+  onSetTextSize,
   fadeOutMinutes,
   fadeOutEndsAt,
   onChooseFadeOut,
@@ -201,6 +258,10 @@ export function SettingsView({
   onOpenSupport?: () => void
   onSetDayCountsHidden?: (hidden: boolean) => void
   onSetRecapHours?: (hours: RecapHours) => void
+  /** Sunlight or Night by hand, or follow the device or the evening. */
+  onChooseTheme?: (choice: ThemeChoice) => void
+  /** A larger text size, or undefined for the usual one. */
+  onSetTextSize?: (size: TextSize | undefined) => void
   /** The soundscape's fade-out length for this visit, if one is chosen. */
   fadeOutMinutes?: FadeOutMinutes
   /** When the fade-out timer runs out, while it is running. */
@@ -408,6 +469,7 @@ export function SettingsView({
       : undefined
   const profile = state.profile
   const recapHours = recapHoursOf(profile)
+  const themeChoice = themeChoiceOf(profile)
   // Nothing to suggest about a garden that cannot be saved right now.
   const reminder = persistence.readOnly
     ? undefined
@@ -478,6 +540,61 @@ export function SettingsView({
           </button>
         </form>
       </section>
+
+      {(onChooseTheme || onSetTextSize) && (
+        // Beside motion, but a card of its own: motion waits for Save
+        // settings, while these change the page at once, so they can be seen.
+        <section className="card look-settings" aria-labelledby="look-settings-title">
+          <p className="eyebrow">Light and lettering</p>
+          <h2 id="look-settings-title">How the garden looks</h2>
+          <p className="section-explainer">These change straight away.</p>
+          {onChooseTheme && (
+            <fieldset className="motion-options">
+              <legend>Theme</legend>
+              {themeChoices(android, eveningNightHours(profile)).map((choice) => (
+                <label className="toggle-row" key={choice.value}>
+                  <span>
+                    <strong>{choice.label}</strong>
+                    <small>{choice.description}</small>
+                  </span>
+                  <input
+                    type="radio"
+                    name="garden-theme"
+                    value={choice.value}
+                    checked={themeChoice === choice.value}
+                    onChange={() => onChooseTheme(choice.value)}
+                  />
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {onSetTextSize && (
+            <fieldset className="motion-options">
+              <legend>Text size</legend>
+              {TEXT_SIZE_CHOICES.map((choice) => (
+                <label className="toggle-row" key={choice.label}>
+                  <span>
+                    <strong style={{ fontSize: choice.scale }}>{choice.label}</strong>
+                    <small>{choice.description}</small>
+                  </span>
+                  <input
+                    type="radio"
+                    name="text-size"
+                    value={choice.value ?? 'comfortable'}
+                    checked={profile?.textSize === choice.value}
+                    onChange={() => onSetTextSize(choice.value)}
+                  />
+                </label>
+              ))}
+              {android && (
+                <p className="subtle-copy">
+                  Your phone’s own text size applies as well, so the two add up.
+                </p>
+              )}
+            </fieldset>
+          )}
+        </section>
+      )}
 
       <section
         className="card sound-settings-card"
