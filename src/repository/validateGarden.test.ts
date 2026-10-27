@@ -202,6 +202,51 @@ describe('validating a garden', () => {
       // A dropped offer is not damage worth telling the gardener about.
       expect(result.repaired).toBe(0)
     })
+
+    it('keeps a companion\'s own flight pattern only when it names a known one', () => {
+      const flyer = {
+        ...createInitialState('Tester', 'Test Garden').creatures[0],
+        stage: 'butterfly',
+      }
+      const result = validateGarden(
+        garden({
+          // Owned or not: whether it is flown is decided when the garden is
+          // drawn, so a pattern the garden does not own yet is kept.
+          ownedFlightPatternIds: ['gentle-drift'],
+          creatures: [
+            { ...flyer, id: 'own', flightPatternId: 'petal-hop' },
+            { ...flyer, id: 'unowned', flightPatternId: 'canopy-dance' },
+            { ...flyer, id: 'unknown', flightPatternId: 'loop-the-loop' },
+            { ...flyer, id: 'number', flightPatternId: 3 },
+            { ...flyer, id: 'empty', flightPatternId: '' },
+            { ...flyer, id: 'none', flightPatternId: null },
+            { ...flyer, id: 'older' },
+          ],
+        }),
+      )
+      const [own, unowned, ...rest] = result.state!.creatures
+      expect(own.flightPatternId).toBe('petal-hop')
+      expect(unowned.flightPatternId).toBe('canopy-dance')
+      for (const creature of rest) expect(creature).not.toHaveProperty('flightPatternId')
+      // Flying the garden's pattern instead is no damage to report.
+      expect(result.repaired).toBe(0)
+    })
+
+    it('carries a companion\'s own flight pattern through a backup unchanged', () => {
+      const flyer = {
+        ...createInitialState('Tester', 'Test Garden').creatures[0],
+        stage: 'butterfly',
+        flightPatternId: 'ribbon-loop',
+      }
+      const stored = garden({
+        ownedFlightPatternIds: ['gentle-drift', 'ribbon-loop'],
+        creatures: [flyer],
+      })
+      const once = validateGarden(JSON.parse(JSON.stringify(stored)) as unknown)
+      const twice = validateGarden(JSON.parse(JSON.stringify(once.state)) as unknown)
+      expect(twice.state!.creatures[0].flightPatternId).toBe('ribbon-loop')
+      expect(twice.state!.creatures).toEqual(once.state!.creatures)
+    })
   })
 
   describe('the feelings and energy of a check-in', () => {

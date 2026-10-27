@@ -72,6 +72,7 @@ interface GardenRecord {
     emergeAt?: string
     awaitingName?: boolean
   }>
+  ownedFlightPatternIds?: string[]
 }
 
 /**
@@ -256,17 +257,19 @@ test('onboards, completes care, and writes a private journal entry', async ({
     page.getByRole('heading', { name: 'Willowlight Garden' }),
   ).toBeVisible()
   const marigold = page.getByRole('button', {
-    name: /pet marigold, your monarch garden guide/i,
+    name: /meet marigold, your monarch garden guide/i,
   })
   await marigold.focus()
   // Butterflies never stop flying, so Playwright's stability check can never
   // pass here; the click still lands on the element's live position.
   await marigold.click({ force: true })
-  await expect(
-    page.getByText(
-      /marigold, your monarch garden guide enjoyed that gentle hello/i,
-    ),
-  ).toBeVisible()
+  // A tap introduces her; a hello is the card's own button.
+  const card = page.getByRole('dialog', { name: 'Marigold' })
+  await card.getByRole('button', { name: 'Pet Marigold' }).click()
+  await expect(card.getByText('Marigold enjoyed that gentle hello.')).toBeVisible()
+  await card.getByRole('button', { name: 'Close' }).click()
+  await expect(card).toHaveCount(0)
+  await expect(marigold).toBeFocused()
   await goTo(page, 'Today')
   await page.getByRole('button', { name: /bright/i }).click()
   await page.getByLabel('A note, if you want').fill('A little more spacious.')
@@ -1575,8 +1578,15 @@ test.describe('the garden in flight', () => {
     await marigold.hover({ force: true })
     await stillFlying('while hovered')
 
-    // A tap pets the butterfly and leaves focus on it; neither may stop flight.
+    // A tap opens the butterfly's card; closing it leaves focus on the
+    // butterfly. None of it may stop flight.
     await marigold.click({ force: true })
+    const card = page.getByRole('dialog', { name: 'Marigold' })
+    await expect(card).toBeVisible()
+    await stillFlying('with its card open')
+    await page.keyboard.press('Escape')
+    await expect(card).toHaveCount(0)
+    await expect(marigold).toBeFocused()
     await stillFlying('after a tap')
 
     await page.mouse.move(4, 4)
@@ -1590,6 +1600,54 @@ test.describe('the garden in flight', () => {
     await page.evaluate(() => window.scrollTo(0, 0))
     await expect.poll(async () => (await flightState()).paused).toBe(false)
   })
+})
+
+test('a butterfly in the garden opens a card, and Care gives it a flight of its own', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // The starter companion has emerged, and a second pattern is owned.
+    state.creatures[0].stage = 'butterfly'
+    state.ownedFlightPatternIds = ['gentle-drift', 'petal-hop']
+  })
+  await page.reload()
+  const sol = page.getByRole('button', { name: /^Meet Sol,/ })
+  await sol.focus()
+  await page.keyboard.press('Enter')
+  const card = page.getByRole('dialog', { name: 'Sol' })
+  await expect(card).toBeVisible()
+  await expect(card.getByText('Bond level 1')).toBeVisible()
+  expect(await seriousViolations(page, 'A butterfly\'s card')).toEqual([])
+  await card.getByRole('button', { name: 'Pet Sol' }).click()
+  await expect(card.getByText('Sol enjoyed that gentle hello.')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(card).toHaveCount(0)
+  await expect(sol).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await card.getByRole('button', { name: 'Care for Sol' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Care & nurture' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /Sol/ })).toBeFocused()
+  // By role: the navigation's Flight button carries the same name.
+  const flight = page.getByRole('combobox', { name: 'Flight', exact: true })
+  await expect(flight).toHaveValue('')
+  await flight.selectOption({ label: 'Petal Hop' })
+  expect(await seriousViolations(page, 'Care with a flight of its own')).toEqual([])
+
+  await reloadAfterSave(page)
+  await goTo(page, 'Garden')
+  await expect(page.locator('[data-flyer="marigold-guide"]')).toHaveAttribute(
+    'data-pattern',
+    'gentle-drift',
+  )
+  await expect(
+    page.locator('.flight-traveller', { has: page.getByRole('button', { name: /^Meet Sol,/ }) }),
+  ).toHaveAttribute('data-pattern', 'petal-hop')
+  await goTo(page, 'Flight')
+  await expect(
+    page.getByRole('button', { name: /Petal Hop/ }).getByText('Flown by Sol'),
+  ).toBeVisible()
 })
 
 test('a garden that cannot be read opens recovery, never onboarding', async ({

@@ -372,6 +372,13 @@ export interface CreatureInstance {
    * one that hatches without an answer simply leaves the offer behind.
    */
   awaitingName?: boolean
+  /**
+   * A flight pattern of its own, chosen in Care; without one it flies the
+   * garden's. Read through flightPatternFor (lib/flightPatterns): a pattern
+   * the garden no longer owns is kept here but not flown, so it returns if
+   * the pattern is owned again.
+   */
+  flightPatternId?: FlightPatternId
 }
 
 export interface SunlightAward {

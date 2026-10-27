@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { species } from '../data/content'
+import { backAction, requestDialogClose } from '../lib/backNavigation'
 import { CALM_AIRBORNE } from '../lib/motion'
 import { createInitialState } from '../lib/progression'
 import type { AppState, CreatureInstance } from '../types'
@@ -31,6 +32,7 @@ function renderGarden(overrides: Partial<AppState> = {}) {
     onSelectCompanion: vi.fn(),
     onRenameCreature: vi.fn(),
     onOpenCare: vi.fn(),
+    onCareFor: vi.fn(),
   }
   const state: AppState = {
     ...createInitialState('Tester', 'Test Garden'),
@@ -53,8 +55,8 @@ describe('GardenView flight scene', () => {
       profile: { ...seed.profile!, activeCompanionId: 'emerged-19' },
     })
 
-    // Every flyer is pettable, and only flyers are.
-    const flyers = screen.getAllByRole('button', { name: /^Pet / })
+    // Every flyer can be met, and only flyers.
+    const flyers = screen.getAllByRole('button', { name: /^Meet / })
     expect(flyers).toHaveLength(12)
   })
 
@@ -69,10 +71,10 @@ describe('GardenView flight scene', () => {
     })
 
     expect(
-      screen.getByRole('button', { name: /Pet Marigold/ }),
+      screen.getByRole('button', { name: /Meet Marigold/ }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /Pet Flyer 19/ }),
+      screen.getByRole('button', { name: /Meet Flyer 19/ }),
     ).toBeInTheDocument()
   })
 
@@ -83,7 +85,7 @@ describe('GardenView flight scene', () => {
     renderGarden({ creatures: emerged })
 
     // Three companions plus Marigold, with no rotation needed.
-    expect(screen.getAllByRole('button', { name: /^Pet / })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: /^Meet / })).toHaveLength(4)
   })
 
   it('in calm motion keeps everyone in the scene but only a few in the air', () => {
@@ -100,7 +102,7 @@ describe('GardenView flight scene', () => {
       },
     })
 
-    const flyers = screen.getAllByRole('button', { name: /^Pet / })
+    const flyers = screen.getAllByRole('button', { name: /^Meet / })
     expect(flyers).toHaveLength(12)
     const flapping = flyers.filter((flyer) =>
       flyer.querySelector('.butterfly-sprite.flapping'),
@@ -108,8 +110,134 @@ describe('GardenView flight scene', () => {
     expect(flapping).toHaveLength(CALM_AIRBORNE)
     // The guide and the chosen companion are among those still flying.
     const flyingNames = flapping.map((flyer) => flyer.getAttribute('aria-label') ?? '')
-    expect(flyingNames.some((name) => name.startsWith('Pet Marigold'))).toBe(true)
-    expect(flyingNames.some((name) => name.startsWith('Pet Flyer 19'))).toBe(true)
+    expect(flyingNames.some((name) => name.startsWith('Meet Marigold'))).toBe(true)
+    expect(flyingNames.some((name) => name.startsWith('Meet Flyer 19'))).toBe(true)
+  })
+
+  it('flies each companion its own pattern while it is owned, and the garden\'s otherwise', () => {
+    renderGarden({
+      ownedFlightPatternIds: ['gentle-drift', 'petal-hop', 'ribbon-loop'],
+      selectedFlightPatternId: 'ribbon-loop',
+      creatures: [
+        { ...butterfly('monarch', 0), flightPatternId: 'petal-hop' },
+        butterfly('monarch', 1),
+        // A pattern the garden does not own is kept, and not flown.
+        { ...butterfly('monarch', 2), flightPatternId: 'canopy-dance' },
+      ],
+    })
+    const flown = Object.fromEntries(
+      Array.from(document.querySelectorAll<HTMLElement>('[data-flyer]')).map((flyer) => [
+        flyer.dataset.flyer,
+        flyer.dataset.pattern,
+      ]),
+    )
+    expect(flown).toEqual({
+      'marigold-guide': 'ribbon-loop',
+      'emerged-0': 'petal-hop',
+      'emerged-1': 'ribbon-loop',
+      'emerged-2': 'ribbon-loop',
+    })
+  })
+})
+
+describe('meeting a butterfly in the garden', () => {
+  function gardenWithSol() {
+    return renderGarden({
+      creatures: [{ ...butterfly('monarch', 0), name: 'Sol', bond: 17 }],
+    })
+  }
+
+  it('opens a card saying who it is, rather than petting it', async () => {
+    const user = userEvent.setup()
+    gardenWithSol()
+    const flyer = screen.getByRole('button', { name: 'Meet Sol, Monarch' })
+    expect(flyer).toHaveAttribute('aria-haspopup', 'dialog')
+    await user.click(flyer)
+
+    const card = await screen.findByRole('dialog', { name: 'Sol' })
+    expect(within(card).getByText('Monarch · Butterfly')).toBeInTheDocument()
+    expect(within(card).getByText('Bond level 2')).toBeInTheDocument()
+    // Focus moves into the card, onto its first action.
+    expect(within(card).getByRole('button', { name: 'Care for Sol' })).toHaveFocus()
+    // The tap that opened it did not also pet.
+    expect(document.querySelector('.heart-burst')).toBeNull()
+  })
+
+  it('pets from the card, with hearts and a hello read out, and stays open', async () => {
+    const user = userEvent.setup()
+    gardenWithSol()
+    await user.click(screen.getByRole('button', { name: 'Meet Sol, Monarch' }))
+    const card = await screen.findByRole('dialog', { name: 'Sol' })
+
+    await user.click(within(card).getByRole('button', { name: 'Pet Sol' }))
+    expect(card.querySelector('.heart-burst')).not.toBeNull()
+    expect(within(card).getByText('Sol enjoyed that gentle hello.')).toBeInTheDocument()
+    expect(card).toHaveAttribute('open')
+  })
+
+  it('closes with Close and hands focus back to the butterfly', async () => {
+    const user = userEvent.setup()
+    gardenWithSol()
+    const flyer = screen.getByRole('button', { name: 'Meet Sol, Monarch' })
+    await user.click(flyer)
+    const card = await screen.findByRole('dialog', { name: 'Sol' })
+
+    await user.click(within(card).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(flyer).toHaveFocus()
+  })
+
+  it('opens from the keyboard, and Escape or Android\'s back gesture closes it to the butterfly', async () => {
+    const user = userEvent.setup()
+    gardenWithSol()
+    const flyer = screen.getByRole('button', { name: 'Meet Sol, Monarch' })
+    for (const key of ['{Enter}', ' ']) {
+      flyer.focus()
+      await user.keyboard(key)
+      const card = await screen.findByRole('dialog', { name: 'Sol' })
+      // Back finds the open card before anything else on the page.
+      const action = backAction('garden')
+      expect(action).toEqual({ kind: 'close-dialog', dialog: card })
+      // Escape and the back gesture both arrive as the dialog's cancel.
+      requestDialogClose(card as HTMLDialogElement)
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(flyer).toHaveFocus()
+    }
+  })
+
+  it('closes on a tap outside the card, and not on one inside it', async () => {
+    const user = userEvent.setup()
+    gardenWithSol()
+    await user.click(screen.getByRole('button', { name: 'Meet Sol, Monarch' }))
+    const card = await screen.findByRole('dialog', { name: 'Sol' })
+
+    fireEvent.click(within(card).getByText('Bond level 2'))
+    expect(card).toHaveAttribute('open')
+    // Only the backdrop lands on the dialog element itself.
+    fireEvent.click(card)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('opens Care for that companion', async () => {
+    const user = userEvent.setup()
+    const { handlers } = gardenWithSol()
+    await user.click(screen.getByRole('button', { name: 'Meet Sol, Monarch' }))
+    const card = await screen.findByRole('dialog', { name: 'Sol' })
+
+    await user.click(within(card).getByRole('button', { name: 'Care for Sol' }))
+    expect(handlers.onCareFor).toHaveBeenCalledWith('emerged-0')
+  })
+
+  it('introduces Marigold as the garden\'s guide, with nothing to care for', async () => {
+    const user = userEvent.setup()
+    gardenWithSol()
+    await user.click(
+      screen.getByRole('button', { name: 'Meet Marigold, your monarch garden guide' }),
+    )
+    const card = await screen.findByRole('dialog', { name: 'Marigold' })
+    expect(within(card).getByText(/Your garden guide/)).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /^Care for/ })).toBeNull()
+    expect(within(card).getByRole('button', { name: 'Pet Marigold' })).toHaveFocus()
   })
 })
 
