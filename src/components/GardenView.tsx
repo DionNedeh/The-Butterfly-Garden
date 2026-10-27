@@ -28,7 +28,7 @@ import {
   MAX_PLANT_GROWTH,
   PLANT_SEED_COST,
 } from '../lib/progression'
-import type { AppState, OutfitSlot } from '../types'
+import type { AppState, AppearanceTheme, OutfitSlot } from '../types'
 import {
   PLANT_CAPACITY,
   plantBloomNote,
@@ -108,6 +108,7 @@ export function GardenView({
   seedFocus,
   onOpenGuide,
   onPutAwayWelcomeBack,
+  theme,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
@@ -123,6 +124,8 @@ export function GardenView({
   onOpenGuide?: () => void
   /** Put away the welcome back after a few days away (lib/visits). */
   onPutAwayWelcomeBack?: () => void
+  /** The theme on screen, chosen or followed: night shows the night's image. */
+  theme?: AppearanceTheme
 }) {
   const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
   const seedTray = useRef<HTMLElement>(null)
@@ -295,6 +298,7 @@ export function GardenView({
   const customBackdrop = activeCustomBackdrop(
     state,
     hasGardenPassFeature('custom-backdrops'),
+    theme,
   )
   const [failedImage, setFailedImage] = useState<string>()
   const sceneId = state.profile
@@ -488,7 +492,9 @@ export function GardenView({
             : 'This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.'}
         </p>
       )}
-      {state.profile?.selectedCustomBackdropId && !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
+      {(state.profile?.selectedCustomBackdropId ||
+        (theme === 'night' && state.profile?.nightCustomBackdropId)) &&
+        !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
       {failedImage && (
         <p role="status">
           Your image could not be displayed. The built-in scene is shown; your

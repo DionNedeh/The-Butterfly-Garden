@@ -162,6 +162,13 @@ export interface Profile {
    * built-in selection stays underneath as the fallback.
    */
   selectedCustomBackdropId?: string
+  /**
+   * One of the gardener's images to show while the garden is at night (the
+   * theme on screen, chosen or followed). Optional: without it, or while it
+   * names no image that is there, the night shows what the day does. An older
+   * build ignores it and shows `selectedCustomBackdropId` day and night.
+   */
+  nightCustomBackdropId?: string
   /** The newest release notes this gardener has already seen. */
   lastSeenReleaseId?: string
   /**
@@ -271,6 +278,12 @@ export interface CustomBackdrop {
   /** Base64, without a data-URL prefix. */
   imageData: string
   crop: CustomBackdropCrop
+  /**
+   * Lighter or darker, in percent from -40 to +20, so the garden's heading
+   * reads well on it. Applied as the image is drawn, never baked into
+   * `imageData`, so it can be changed back. Optional: without it, as taken.
+   */
+  brightness?: number
 }
 
 export interface Goal {

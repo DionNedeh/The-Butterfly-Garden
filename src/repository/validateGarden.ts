@@ -5,7 +5,7 @@ import { closetSlots } from '../data/closet'
 import { MAX_OUTFIT_PRESETS, MAX_OUTFITS_WORN, presetName } from '../lib/companionDiary'
 import { jarCharacters, jarColors } from '../data/jars'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
-import { isValidCustomBackdropCollection } from '../lib/customBackdrops'
+import { isValidBrightness, isValidCustomBackdropCollection } from '../lib/customBackdrops'
 import { cleanFeelings, isEnergyLevel } from '../lib/feelings'
 import { createId } from '../lib/id'
 import { isLocalDate, RECAP_GRACE_CHOICES, RECAP_OPENS_CHOICES, toLocalDate } from '../lib/date'
@@ -699,6 +699,26 @@ function imagesChecked(value: unknown): boolean {
   return typeof value === 'object' && value !== null && checkedImageCollections.has(value)
 }
 
+/**
+ * An image's brightness that is not a number in range is dropped, not
+ * refused: the picture itself is sound, and showing it as taken loses
+ * nothing. The same list comes back when nothing was dropped, so an image
+ * collection is not rewritten for want of a change.
+ */
+function withBrightnessInRange(value: unknown): unknown {
+  if (!Array.isArray(value) || imagesChecked(value)) return value
+  let dropped = false
+  const records = value.map((record: unknown) => {
+    if (!isRecord(record) || record.brightness === undefined || isValidBrightness(record.brightness))
+      return record
+    dropped = true
+    const copy = { ...record }
+    delete copy.brightness
+    return copy
+  })
+  return dropped ? records : value
+}
+
 const AMBIENT_TRACK_IDS = new Set<string>(
   ambientTracks.map((track) => track.id),
 )
@@ -766,6 +786,10 @@ function checkProfile(
     !RECAP_GRACE_CHOICES.includes(value.recapGraceEndsHour as number)
   ) {
     delete profile.recapGraceEndsHour
+  }
+  // The night's image: dropped when it is not an id, and the day's shows.
+  if (value.nightCustomBackdropId !== undefined && typeof value.nightCustomBackdropId !== 'string') {
+    delete profile.nightCustomBackdropId
   }
   if (value.theme !== undefined && !THEMES.has(value.theme as string)) {
     ctx.repaired += 1
@@ -959,7 +983,7 @@ export function validateGarden(value: unknown): GardenValidation {
    * dropped them. Refusing sends it down the withheld path instead, which
    * leaves the stored garden untouched and says so.
    */
-  const storedCustomBackdrops = candidate.customBackdrops
+  const storedCustomBackdrops = withBrightnessInRange(candidate.customBackdrops)
   if (storedCustomBackdrops !== undefined && !imagesChecked(storedCustomBackdrops)) {
     if (!isValidCustomBackdropCollection(storedCustomBackdrops)) {
       return { repaired: 0, refused: 'One of its images is damaged.' }

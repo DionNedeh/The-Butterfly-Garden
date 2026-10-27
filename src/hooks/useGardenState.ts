@@ -3,6 +3,7 @@ import { announce } from '../lib/announcer'
 import {
   canAddCustomBackdrop,
   checkCustomBackdropRecord,
+  chooseNightCustomBackdrop,
   putCustomBackdrop,
   removeCustomBackdrop,
   selectCustomBackdrop as selectCustomBackdropIn,
@@ -337,7 +338,8 @@ export function useGardenState() {
        * persistence. The answer comes once that record reaches disk (see
        * useMediaSaves).
        */
-      saveCustomBackdrop: async (record: CustomBackdrop): Promise<MediaResult> => {
+      /** Saves an image, and chooses it for the day unless `select` is false. */
+      saveCustomBackdrop: async (record: CustomBackdrop, select = true): Promise<MediaResult> => {
         if (readOnlyRef.current)
           return {
             ok: false,
@@ -365,7 +367,7 @@ export function useGardenState() {
         }
         return media.waitFor(record, (notCarried) => {
           update((state) => {
-            const next = putCustomBackdrop(state, record)
+            const next = putCustomBackdrop(state, record, select)
             if (!next.customBackdrops.includes(record)) notCarried()
             return next
           })
@@ -376,6 +378,11 @@ export function useGardenState() {
       selectCustomBackdrop: (id: string | undefined) => {
         if (id === undefined || hasGardenPassFeature('custom-backdrops'))
           update((current) => selectCustomBackdropIn(current, id))
+      },
+      /** One of the gardener's images for the night, or undefined for the day's. */
+      chooseNightBackdrop: (id: string | undefined) => {
+        if (id === undefined || hasGardenPassFeature('custom-backdrops'))
+          update((current) => chooseNightCustomBackdrop(current, id))
       },
       markReleaseSeen: (releaseId: string) =>
         update((current) => act.markReleaseSeen(current, releaseId)),

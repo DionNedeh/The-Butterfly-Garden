@@ -254,6 +254,7 @@ export function SettingsView({
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
   onSelectCustomBackdrop,
+  onChooseNightBackdrop,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -309,6 +310,7 @@ export function SettingsView({
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
   onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
+  onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -828,6 +830,7 @@ export function SettingsView({
             onSaveCustomBackdrop={onSaveCustomBackdrop}
             onDeleteCustomBackdrop={onDeleteCustomBackdrop}
             onSelectCustomBackdrop={onSelectCustomBackdrop}
+            onChooseNightBackdrop={onChooseNightBackdrop}
           />
         )}
       <section className="card">

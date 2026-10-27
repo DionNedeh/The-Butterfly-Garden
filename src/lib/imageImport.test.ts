@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  checkDecodedSize,
+  checkSourceFile,
+  fitWithinMaxEdge,
   imageHeader,
   prepareBackdrop,
+  quarterTurnTransform,
+  turnBackdrop,
   verifyBackdropImages,
 } from './imageImport'
 import { CUSTOM_BACKDROP_LIMITS } from './customBackdrops'
@@ -24,6 +29,44 @@ const file = (bytes: Uint8Array, type = 'image/png') =>
   }) as File
 
 afterEach(() => vi.unstubAllGlobals())
+
+describe('accepting a file from the device', () => {
+  it('takes JPEG, PNG and WebP and refuses everything else', () => {
+    for (const type of ['image/jpeg', 'image/png', 'image/webp']) {
+      expect(checkSourceFile({ type, size: 1000 }).ok).toBe(true)
+    }
+    // SVG can carry script, GIF is animated, HTML is not an image at all.
+    for (const type of ['image/svg+xml', 'image/gif', 'text/html', '']) {
+      const check = checkSourceFile({ type, size: 1000 })
+      expect(check.ok).toBe(false)
+      expect(check.reason).toBe('unsupported-type')
+    }
+  })
+
+  it('refuses an oversized file before decoding it', () => {
+    const check = checkSourceFile({
+      type: 'image/jpeg',
+      size: CUSTOM_BACKDROP_LIMITS.maxSourceBytes + 1,
+    })
+    expect(check.reason).toBe('too-large')
+    expect(check.message).toContain('10 MB')
+  })
+
+  it('refuses an image with too many pixels', () => {
+    // 24 megapixels exactly is allowed; past it is not.
+    expect(checkDecodedSize(6000, 4000).ok).toBe(true)
+    expect(checkDecodedSize(7000, 4000).reason).toBe('too-many-pixels')
+    expect(checkDecodedSize(0, 100).reason).toBe('invalid')
+    expect(checkDecodedSize(Number.NaN, 100).reason).toBe('invalid')
+  })
+
+  it('resizes only what is bigger than the limit', () => {
+    expect(fitWithinMaxEdge(1000, 500)).toEqual({ width: 1000, height: 500 })
+    // Aspect ratio preserved, longest edge brought to the limit.
+    expect(fitWithinMaxEdge(4096, 2048)).toEqual({ width: 2048, height: 1024 })
+    expect(fitWithinMaxEdge(2048, 4096)).toEqual({ width: 1024, height: 2048 })
+  })
+})
 
 describe('image intake boundaries', () => {
   it('rejects non-images and truncated headers', () => {
@@ -271,5 +314,162 @@ describe('preparing an image', () => {
     } as CustomBackdrop
     await expect(verifyBackdropImages([record])).resolves.toBeUndefined()
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  describe('turning a picture', () => {
+    /** A canvas that notes its own size at the moment it is drawn on. */
+    function turningCanvas() {
+      const canvases: HTMLCanvasElement[] = []
+      const drawnAt: Array<{ width: number; height: number }> = []
+      const context = {
+        fillStyle: '',
+        fillRect: vi.fn(),
+        setTransform: vi.fn(),
+        getImageData: vi.fn(),
+        putImageData: vi.fn(),
+        drawImage: vi.fn(function (this: { canvas: HTMLCanvasElement }) {
+          drawnAt.push({ width: this.canvas.width, height: this.canvas.height })
+        }),
+        canvas: undefined as unknown as HTMLCanvasElement,
+      }
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+        this: HTMLCanvasElement,
+      ) {
+        canvases.push(this)
+        context.canvas = this
+        return context as unknown as CanvasRenderingContext2D
+      })
+      const toBlob = vi
+        .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+        .mockImplementation((callback, type) =>
+          callback(new Blob([new Uint8Array(900)], { type: type ?? 'image/webp' })),
+        )
+      return { canvases, context, drawnAt, toBlob }
+    }
+
+    const stored = (overrides: Partial<CustomBackdrop> = {}): CustomBackdrop => ({
+      id: 'kept',
+      name: 'Saved image',
+      createdAt: '2026-10-01T00:00:00.000Z',
+      updatedAt: '2026-10-01T00:00:00.000Z',
+      imageData: btoa(String.fromCharCode(...png(2048, 1536))),
+      mimeType: 'image/png',
+      width: 2048,
+      height: 1536,
+      byteLength: 32,
+      crop: { x: 0.5, y: 0.5, zoom: 1 },
+      ...overrides,
+    })
+
+    it('maps each corner of the picture to the corner a turn to the right takes it to', () => {
+      // A 4 by 2 picture. Turned once or three times the canvas is 2 by 4.
+      const corners = [
+        [0, 0],
+        [4, 0],
+        [4, 2],
+        [0, 2],
+      ]
+      const place = (turns: number, width: number, height: number) => {
+        const [a, b, c, d, e, f] = quarterTurnTransform(turns, width, height)
+        return corners.map(([x, y]) => [a * x + c * y + e, b * x + d * y + f])
+      }
+      expect(place(0, 4, 2)).toEqual([[0, 0], [4, 0], [4, 2], [0, 2]])
+      // Clockwise: the top-left corner goes to the top right.
+      expect(place(1, 2, 4)).toEqual([[2, 0], [2, 4], [0, 4], [0, 0]])
+      expect(place(2, 4, 2)).toEqual([[4, 2], [0, 2], [0, 0], [4, 0]])
+      expect(place(3, 2, 4)).toEqual([[0, 4], [0, 0], [2, 0], [2, 4]])
+    })
+
+    it('turns a large photo within the one resize, in no more memory than leaving it as it is', async () => {
+      const close = stubDecode(4096, 3072)
+      const { canvases, context, drawnAt } = turningCanvas()
+      const create = vi.spyOn(document, 'createElement')
+      const prepared = await prepareBackdrop(named('Tall.png', png(4096, 3072)), 1)
+
+      // Only the one canvas the resize needs, already at the capped size,
+      // the other way round: 2048 by 1536 turned is 1536 by 2048.
+      expect(create.mock.calls.filter(([tag]) => tag === 'canvas')).toHaveLength(1)
+      expect(drawnAt).toEqual([{ width: 1536, height: 2048 }])
+      expect(context.setTransform).toHaveBeenCalledWith(0, 1, -1, 0, 1536, 0)
+      expect(context.drawImage).toHaveBeenCalledOnce()
+      expect(context.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 2048, 1536)
+      // No pass over the pixels in script, which would hold the main thread.
+      expect(context.getImageData).not.toHaveBeenCalled()
+      expect(context.putImageData).not.toHaveBeenCalled()
+      expect(prepared).toMatchObject({ width: 1536, height: 2048, byteLength: 900 })
+      // The canvas and the decoded photo are both let go.
+      expect(canvases[0].width).toBe(0)
+      expect(close).toHaveBeenCalledOnce()
+    })
+
+    it('leaves a picture with no turn exactly as before, with no transform', async () => {
+      stubDecode(300, 200)
+      const { context } = turningCanvas()
+      const prepared = await prepareBackdrop(named('Wide.png', png(300, 200)))
+      expect(context.setTransform).not.toHaveBeenCalled()
+      expect(prepared).toMatchObject({ width: 300, height: 200 })
+    })
+
+    it('turns a stored image from its own bytes, letting go of it after', async () => {
+      const close = stubDecode(2048, 1536)
+      const { context } = turningCanvas()
+      const record = stored()
+      const half = await turnBackdrop(record, 2)
+      // Encoded afresh, as WebP, whatever it was stored as.
+      expect(half).toMatchObject({ width: 2048, height: 1536, mimeType: 'image/webp' })
+      expect(context.setTransform).toHaveBeenCalledWith(-1, 0, 0, -1, 2048, 1536)
+      const decoded = vi.mocked(createImageBitmap).mock.calls[0][0] as Blob
+      expect(decoded.type).toBe('image/png')
+      expect(new Uint8Array(await decoded.arrayBuffer())).toEqual(png(2048, 1536))
+
+      const left = await turnBackdrop(record, 3)
+      expect(left).toMatchObject({ width: 1536, height: 2048 })
+      // Only the picture comes back; the name and framing are the editor's.
+      expect(Object.keys(left).sort()).toEqual(['byteLength', 'height', 'imageData', 'mimeType', 'width'])
+      expect(close).toHaveBeenCalledTimes(2)
+    })
+
+    it('turns a chosen file only after the same checks as choosing it', async () => {
+      const decode = vi.fn()
+      vi.stubGlobal('createImageBitmap', decode)
+      await expect(turnBackdrop(file(png(100, 100), 'image/jpeg'), 1)).rejects.toThrow(/do not match/)
+      await expect(turnBackdrop(file(png(7000, 5000)), 1)).rejects.toThrow(/too many pixels/)
+      expect(decode).not.toHaveBeenCalled()
+
+      stubDecode(100, 80)
+      turningCanvas()
+      expect(await turnBackdrop(file(png(100, 80)), 1)).toMatchObject({ width: 80, height: 100 })
+    })
+
+    it('lets a tap through while it works: decoding and encoding are waited on, not held', async () => {
+      const order: string[] = []
+      vi.stubGlobal(
+        'createImageBitmap',
+        vi.fn(
+          () =>
+            new Promise((resolve) =>
+              setTimeout(() => {
+                order.push('decoded')
+                resolve({ width: 2048, height: 1536, close: vi.fn() })
+              }),
+            ),
+        ),
+      )
+      const { context, toBlob } = turningCanvas()
+      toBlob.mockImplementation((callback, type) =>
+        setTimeout(() => {
+          order.push('encoded')
+          callback(new Blob([new Uint8Array(900)], { type: type ?? 'image/webp' }))
+        }),
+      )
+      const working = turnBackdrop(stored(), 1)
+      // A tap that arrives while the picture is decoding.
+      setTimeout(() => order.push('tap'))
+      await working
+      // The tap is handled between decoding and encoding, and the only work
+      // in between is one draw.
+      expect(order).toEqual(['decoded', 'tap', 'encoded'])
+      expect(context.drawImage).toHaveBeenCalledOnce()
+    })
   })
 })

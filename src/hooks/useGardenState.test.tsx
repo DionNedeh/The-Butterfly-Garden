@@ -1270,6 +1270,28 @@ describe('saving one of the gardener’s images', () => {
     expect(result.current.state?.profile?.selectedCustomBackdropId).toBeUndefined()
   })
 
+  it('chooses an image for the night, and goes back to the day’s', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a'), image('b')] })
+    act(() => result.current.selectCustomBackdrop('a'))
+    act(() => result.current.chooseNightBackdrop('b'))
+    expect(result.current.state?.profile?.nightCustomBackdropId).toBe('b')
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBe('a')
+    act(() => result.current.chooseNightBackdrop(undefined))
+    expect(result.current.state?.profile?.nightCustomBackdropId).toBeUndefined()
+  })
+
+  it('saves an image without choosing it for the day, when asked', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a'), image('b')] })
+    act(() => result.current.selectCustomBackdrop('a'))
+    let saved: Promise<{ ok: boolean }> | undefined
+    act(() => {
+      saved = result.current.saveCustomBackdrop({ ...image('b'), brightness: -20 }, false)
+    })
+    expect(await saved).toEqual({ ok: true })
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBe('a')
+    expect(result.current.state?.customBackdrops.find((entry) => entry.id === 'b')?.brightness).toBe(-20)
+  })
+
   it('clears a notice when a new garden begins', async () => {
     const { result } = await renderWith()
     const other = new BroadcastChannel('butterfly-garden-sync')
