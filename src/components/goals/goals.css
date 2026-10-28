@@ -1,0 +1,183 @@
+/* Ideas for goals, two-minute versions, and the starter goals offered while
+   a garden is made. Imported by the components that use these rules, so
+   they arrive with Today and onboarding rather than in the stylesheet every
+   page waits for. Colours come from the theme's tokens, which the night
+   theme redefines; the colours named outright are tints with a night
+   counterpart of their own. Nothing here moves, so there is no motion to
+   reduce. */
+
+/* Today's add form: the ideas and the title across the top, then the
+   two-minute version beside how often. */
+.goal-form.add-goal-form {
+  grid-template-columns: 1fr 190px;
+}
+.goal-form > .goal-ideas,
+.goal-form > .goal-title-field,
+.goal-form.add-goal-form > .form-hint,
+.goal-form.add-goal-form > button[type='submit'] {
+  grid-column: 1 / -1;
+}
+.goal-form.add-goal-form > button[type='submit'] {
+  justify-self: start;
+}
+@media (max-width: 620px) {
+  .goal-form.add-goal-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A small row of ideas. Each is a full 44px target. */
+.goal-ideas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.6rem;
+}
+.goal-ideas-label {
+  color: var(--forest-dark);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+/* A list of its own, not display: contents, which some browsers read as no
+   list at all. */
+.goal-ideas ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.goal-idea {
+  min-height: 44px;
+  border: 1px solid var(--sage);
+  border-radius: 999px;
+  background: var(--paper);
+  padding: 0.45rem 0.9rem;
+  color: var(--forest-dark);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: left;
+}
+.goal-idea:hover {
+  border-color: var(--forest);
+}
+.theme-night .goal-idea {
+  border-color: rgba(140, 201, 171, 0.45);
+}
+.theme-night .goal-idea:hover {
+  border-color: var(--forest);
+}
+.goal-ideas-more {
+  min-height: 44px;
+}
+
+/* The companions a goal is grown alongside, named in a small badge after
+   the row's quieter line. Where both fit, they share one line; where they do
+   not (a narrow phone, larger text), the badge moves to a line of its own.
+   The schedule and "skipped today" always wrap as they did before and are
+   never cut short; only a badge too long even for its own line gives way,
+   with an ellipsis (the whole of it is still read out). */
+.goal-copy > small.with-companions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 0.4rem;
+  min-width: 0;
+}
+.goal-schedule {
+  min-width: 0;
+}
+.goal-companions {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(49, 92, 75, 0.1);
+  padding: 0 0.45rem;
+  color: var(--forest-dark);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.goal-companions svg {
+  margin-right: 0.2rem;
+  vertical-align: -0.1em;
+}
+.theme-night .goal-companions {
+  background: rgba(140, 201, 171, 0.16);
+}
+
+/* Onboarding: up to three starter goals, each with its two-minute version. */
+.starter-goals {
+  display: grid;
+  gap: 0.5rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.starter-goals legend {
+  margin-bottom: 0.5rem;
+  padding: 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+.starter-goal {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+}
+.starter-goal:has(input:checked) {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 1px var(--forest);
+}
+.starter-goal:has(input:disabled) {
+  cursor: default;
+}
+.starter-goal input {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--forest);
+}
+.starter-goal span {
+  display: grid;
+}
+.starter-goal small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.starter-goals-note {
+  min-height: 1.65em;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Continuing and skipping weigh the same: neither is the expected answer. */
+.onboarding-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+@media (max-width: 420px) {
+  .onboarding-choices {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Where the garden lives, said once before it begins. */
+.onboarding-data-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  text-align: center;
+}

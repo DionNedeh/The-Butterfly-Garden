@@ -9,27 +9,38 @@ vi.mock('../lib/native', () => ({ saveTextDocument: vi.fn() }))
  * SettingsView as the Android app renders it. Loaded fresh after the platform
  * is set, because what the restore picker accepts is decided at load time.
  */
-async function renderAndroidSettings() {
+async function renderAndroidSettings(
+  state = createInitialState('Tester', 'Test Garden'),
+  extra: {
+    onChooseTheme?: () => void
+    onSetTextSize?: () => void
+    onSetSoundInBackground?: () => void
+    onListEarlierCopies?: () => Promise<{ copies: []; bytes: number }>
+  } = {},
+) {
   vi.stubEnv('VITE_PLATFORM', 'android')
   vi.resetModules()
   const { SettingsView } = await import('./SettingsView')
   const native = await import('../lib/native')
-  const onExportGarden = vi.fn(() => '{"format":"the-butterfly-garden"}')
+  const onExportGarden = vi.fn(() => ({ text: '{"format":"the-butterfly-garden"}' }))
+  const onBackupMade = vi.fn()
   render(
     <SettingsView
-      state={createInitialState('Tester', 'Test Garden')}
+      state={state}
       persistence={{ readOnly: false }}
       onUpdateProfile={vi.fn()}
       onSelectAmbientTrack={vi.fn()}
       onSelectBackdrop={vi.fn()}
       onExportGarden={onExportGarden}
+      onBackupMade={onBackupMade}
       onImportGarden={vi.fn(() =>
         Promise.resolve({ ok: true, message: 'Restored.' }),
       )}
       onDeleteAll={vi.fn(() => Promise.resolve({ ok: true }))}
+      {...extra}
     />,
   )
-  return { save: vi.mocked(native.saveTextDocument), onExportGarden }
+  return { save: vi.mocked(native.saveTextDocument), onExportGarden, onBackupMade }
 }
 
 describe('SettingsView in the Android app', () => {
@@ -43,7 +54,7 @@ describe('SettingsView in the Android app', () => {
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => undefined)
-    const { save, onExportGarden } = await renderAndroidSettings()
+    const { save, onExportGarden, onBackupMade } = await renderAndroidSettings()
     save.mockResolvedValueOnce(true)
 
     await user.click(screen.getByRole('button', { name: 'Save a backup' }))
@@ -57,14 +68,51 @@ describe('SettingsView in the Android app', () => {
     expect(await screen.findByText(/backup saved/i)).toBeInTheDocument()
     // Android's WebView ignores download links; none is used.
     expect(click).not.toHaveBeenCalled()
+    expect(onBackupMade).toHaveBeenCalledOnce()
+  })
+
+  it('keeps its own save screen, never a file kept up to date, whatever the WebView has', async () => {
+    vi.stubGlobal('showSaveFilePicker', vi.fn())
+    try {
+      await renderAndroidSettings(undefined, {
+        onListEarlierCopies: () => Promise.resolve({ copies: [], bytes: 2 * 1024 * 1024 }),
+      })
+      expect(screen.getByRole('button', { name: 'Save a backup' })).toBeInTheDocument()
+      // The earlier copies say what room they take here, where there is no storage line.
+      expect(await screen.findByText('The copies kept in this app take about 2.0 MB.')).toBeInTheDocument()
+      expect(screen.getByText(/cannot help if the app is uninstalled or its storage cleared/)).toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: 'Keep a backup file up to date' }),
+      ).not.toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('says nothing was saved when the gardener backs out', async () => {
     const user = userEvent.setup()
-    const { save } = await renderAndroidSettings()
+    const { save, onBackupMade } = await renderAndroidSettings()
     save.mockResolvedValueOnce(false)
     await user.click(screen.getByRole('button', { name: 'Save a backup' }))
     expect(await screen.findByText('No backup was saved.')).toBeInTheDocument()
+    expect(onBackupMade).not.toHaveBeenCalled()
+  })
+
+  it('suggests a copy as the browser does, but leaves sharing to the save screen', async () => {
+    // Even where the WebView would answer yes: Android's own "Save to…"
+    // screen already reaches every app a share sheet would.
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true })
+    Object.defineProperty(navigator, 'share', { value: vi.fn(), configurable: true })
+    try {
+      const old = createInitialState('Tester', 'Test Garden', new Date(Date.now() - 60 * 86_400_000))
+      await renderAndroidSettings(old)
+      expect(screen.getByText(/You have not saved a copy yet\./)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /share backup/i })).not.toBeInTheDocument()
+      expect(screen.queryByText(/handed to an app/)).not.toBeInTheDocument()
+    } finally {
+      Reflect.deleteProperty(navigator, 'canShare')
+      Reflect.deleteProperty(navigator, 'share')
+    }
   })
 
   it('says so when the chosen place could not be written', async () => {
@@ -75,6 +123,57 @@ describe('SettingsView in the Android app', () => {
     expect(
       await screen.findByText(/could not be saved there/i),
     ).toBeInTheDocument()
+  })
+
+  it('speaks of the phone when following its dark setting, and of its own text size', async () => {
+    await renderAndroidSettings(undefined, { onChooseTheme: vi.fn(), onSetTextSize: vi.fn() })
+    expect(screen.getByText('Night whenever this phone is set to dark.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Your phone’s own text size applies as well, so the two add up.'),
+    ).toBeInTheDocument()
+  })
+
+  it('says the sound rests in the background, rather than offering to keep it playing', async () => {
+    await renderAndroidSettings(undefined, { onSetSoundInBackground: vi.fn() })
+    expect(
+      screen.getByText(/The sound rests while the app is in the background/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('saves a protected backup through the app’s own save screen, and says plainly what happened', async () => {
+    const user = userEvent.setup()
+    const { save, onExportGarden, onBackupMade } = await renderAndroidSettings()
+    expect(screen.queryByRole('button', { name: /^Download a protected/ })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Save a protected backup…' }))
+    await screen.findByRole('dialog', { name: 'Save a protected backup' })
+    await user.type(screen.getByLabelText('Passphrase'), 'quiet meadow lantern')
+    await user.type(screen.getByLabelText('Passphrase again'), 'quiet meadow lantern')
+    await user.click(screen.getByRole('button', { name: 'Lock the backup' }))
+    const button = await screen.findByRole('button', { name: 'Save protected backup' }, { timeout: 10_000 })
+
+    // Backing out of the save screen saves nothing, and says so.
+    save.mockResolvedValueOnce(false)
+    await user.click(button)
+    expect(await screen.findByText('Nothing was saved. Choose Save again to pick a place.')).toBeInTheDocument()
+    expect(onBackupMade).not.toHaveBeenCalled()
+
+    save.mockResolvedValueOnce(true)
+    await user.click(button)
+    expect(
+      await screen.findByText('Protected backup saved. Keep its passphrase somewhere safe, apart from the file.'),
+    ).toBeInTheDocument()
+    expect(onExportGarden).toHaveBeenCalledOnce()
+    const [fileName, mimeType, text] = save.mock.lastCall!
+    expect(fileName).toMatch(/^butterfly-garden-protected-\d{4}-\d{2}-\d{2}\.json$/)
+    expect(mimeType).toBe('application/json')
+    const { sealedKind } = await import('../lib/backupFile')
+    expect(sealedKind(text)).toBe('backup')
+    // Written at the full count: nothing in the app asks for fewer.
+    expect((JSON.parse(text) as { kdf: { iterations: number } }).kdf.iterations).toBe(600_000)
+    expect(onBackupMade).toHaveBeenCalledOnce()
   })
 
   it('lets the restore picker see backups however a storage app labels them', async () => {

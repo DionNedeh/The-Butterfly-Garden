@@ -3,6 +3,7 @@ package io.github.dionnedeh.butterflygarden;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -16,7 +17,8 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Saves a garden backup where the gardener chooses, through Android's own
- * "Save to…" screen.
+ * "Save to…" screen; and, the same way, an image the gardener made, such as
+ * the year's postcard.
  *
  * Android's WebView ignores the web version's download link, so the backup
  * button would otherwise do nothing. The Storage Access Framework needs no
@@ -36,6 +38,9 @@ public class GardenFilesPlugin extends Plugin {
      */
     private String pendingText;
 
+    /** An image waiting the same way, as the bytes to write. */
+    private byte[] pendingBytes;
+
     @PluginMethod
     public void saveDocument(PluginCall call) {
         String fileName = call.getString("fileName");
@@ -46,7 +51,38 @@ public class GardenFilesPlugin extends Plugin {
             return;
         }
         pendingText = text;
+        pendingBytes = null;
         call.getData().remove("text");
+        chooseDocument(call, fileName, mimeType);
+    }
+
+    /**
+     * Saves bytes the page sends as base64 (the one way bytes cross the
+     * bridge), such as the year's postcard, through the same screen.
+     */
+    @PluginMethod
+    public void saveBinaryDocument(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String mimeType = call.getString("mimeType");
+        String base64 = call.getString("base64");
+        if (fileName == null || mimeType == null || base64 == null) {
+            call.reject("fileName, mimeType and base64 are required.");
+            return;
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(base64, Base64.DEFAULT);
+        } catch (IllegalArgumentException error) {
+            call.reject("The file's contents could not be read.", error);
+            return;
+        }
+        pendingBytes = bytes;
+        pendingText = null;
+        call.getData().remove("base64");
+        chooseDocument(call, fileName, mimeType);
+    }
+
+    private void chooseDocument(PluginCall call, String fileName, String mimeType) {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType(mimeType);
@@ -57,14 +93,16 @@ public class GardenFilesPlugin extends Plugin {
     @ActivityCallback
     private void documentChosen(PluginCall call, ActivityResult result) {
         String text = pendingText;
+        byte[] bytes = pendingBytes;
         pendingText = null;
+        pendingBytes = null;
         // Null if Android recreated the app while the picker was open: the
-        // page that asked has gone, and the backup with it, so there is no
-        // one to answer.
+        // page that asked has gone, and the file with it, so there is no one
+        // to answer.
         if (call == null) return;
         Intent data = result.getData();
         Uri target = data == null ? null : data.getData();
-        if (text == null || result.getResultCode() != Activity.RESULT_OK || target == null) {
+        if ((text == null && bytes == null) || result.getResultCode() != Activity.RESULT_OK || target == null) {
             finish(call, false);
             return;
         }
@@ -72,11 +110,11 @@ public class GardenFilesPlugin extends Plugin {
         getBridge().execute(() -> {
             try (OutputStream stream = getContext().getContentResolver().openOutputStream(target, "w")) {
                 if (stream == null) throw new IOException("The chosen location gave no stream to write to.");
-                stream.write(text.getBytes(StandardCharsets.UTF_8));
+                stream.write(text != null ? text.getBytes(StandardCharsets.UTF_8) : bytes);
                 stream.flush();
                 finish(call, true);
             } catch (IOException | SecurityException error) {
-                call.reject("The backup could not be written to that location.", error);
+                call.reject("The file could not be written to that location.", error);
                 getBridge().releaseCall(call);
             }
         });

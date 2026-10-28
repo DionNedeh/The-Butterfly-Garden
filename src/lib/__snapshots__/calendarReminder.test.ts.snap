@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`a daily garden visit as a calendar file > reads, line by line, as it always has 1`] = `
+[
+  "BEGIN:VCALENDAR",
+  "PRODID:-//The Butterfly Garden//Garden time//EN",
+  "VERSION:2.0",
+  "CALSCALE:GREGORIAN",
+  "METHOD:PUBLISH",
+  "BEGIN:VEVENT",
+  "UID:0b8f4f6e-6c39-4a8e-9d3c-2f0e3c1a7b55",
+  "DTSTAMP:20261028T013005Z",
+  "DTSTART:20261027T081500",
+  "DURATION:PT10M",
+  "RRULE:FREQ=DAILY",
+  "SUMMARY:Garden time 🦋",
+  "DESCRIPTION:Open The Butterfly Garden: https://dionnedeh.github.io/The-Butt",
+  " erfly-Garden/\\nTo stop these reminders\\, delete the event from your calend",
+  " ar.",
+  "URL:https://dionnedeh.github.io/The-Butterfly-Garden/",
+  "TRANSP:TRANSPARENT",
+  "BEGIN:VALARM",
+  "ACTION:DISPLAY",
+  "DESCRIPTION:Garden time 🦋",
+  "TRIGGER:PT0M",
+  "END:VALARM",
+  "END:VEVENT",
+  "END:VCALENDAR",
+  "",
+]
+`;

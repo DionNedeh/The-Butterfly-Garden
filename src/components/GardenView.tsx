@@ -1,8 +1,15 @@
 import { effectiveBackdropId } from '../lib/appearance'
-import { useEffect, useRef, useMemo, useState, type CSSProperties } from 'react'
-import { observations, plants, species } from '../data/content'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from 'react'
+import { plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
-import { jarColors } from '../data/jars'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
 import { distinctSpeciesRaised } from '../lib/speciesAcquisition'
 import { FlyingButterfly } from './FlyingButterfly'
@@ -10,21 +17,17 @@ import { JarSprite } from './sprites/JarSprite'
 import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
 import { activeCustomBackdrop } from '../lib/customBackdrops'
 import { hasGardenPassFeature } from '../lib/gardenPass'
+import { flightPatternFor } from '../lib/flightPatterns'
 import { CustomBackdropImage } from './CustomBackdropImage'
-import { isAndroidApp } from '../lib/platform'
-import { availableJars, jarForPlant } from '../lib/jars'
+import { jarForPlant, jarSpokenName } from '../lib/jars'
 import {
   DAILY_SEED_REWARD,
   EMERGENCE_SEED_REWARD,
   MAX_PLANT_GROWTH,
   PLANT_SEED_COST,
 } from '../lib/progression'
-import type { AppState, OutfitSlot } from '../types'
-import {
-  PLANT_CAPACITY,
-  plantRemovalBlocker,
-  remainingPlantGrowth,
-} from '../lib/plantManagement'
+import type { AppState, AppearanceTheme, OutfitSlot } from '../types'
+import { PLANT_CAPACITY, plantingBlocker } from '../lib/plantManagement'
 import {
   careDaysCompleted,
   hasCaredToday,
@@ -36,18 +39,63 @@ import { Butterfly } from './Butterfly'
 import { CreatureSprite } from './sprites/CreatureSprite'
 import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
+import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
+import { currentSeason, hemisphereOf } from '../lib/seasons'
+import { welcomeBackToday } from '../lib/visits'
+import { homeScreenAdvice, isHomeScreenGuidePutAway, putAwayHomeScreenGuide } from '../lib/install'
+
+/** Only on a return after a few days away, so the first load carries none of it. */
+const WelcomeBack = lazy(() =>
+  import('./garden/WelcomeBack').then((m) => ({ default: m.WelcomeBack })),
+)
+/** Only on an iPhone or iPad in a browser, until put away. */
+const HomeScreenGuide = lazy(() =>
+  import('./garden/HomeScreenGuide').then((m) => ({ default: m.HomeScreenGuide })),
+)
+/**
+ * Marigold's letter, while one waits. It decides that for itself, so none of
+ * the letters' timing is in the first load.
+ */
+const LetterCard = lazy(() =>
+  import('./garden/LetterCard').then((m) => ({ default: m.LetterCard })),
+)
+/** The seed tray, once it is first opened. */
+const SeedTray = lazy(() =>
+  import('./garden/SeedTray').then((m) => ({ default: m.SeedTray })),
+)
+/** A plant's field guide and its jars, only once a plant is chosen. */
+const PlantPanel = lazy(() =>
+  import('./garden/PlantPanel').then((m) => ({ default: m.PlantPanel })),
+)
+const Moth = lazy(() => import('./garden/Moth').then((m) => ({ default: m.Moth })))
+const SeasonArt = lazy(() => import('./garden/SeasonArt').then((m) => ({ default: m.SeasonArt })))
+/** At night, with full motion, in place of the day's petals. */
+const Fireflies = lazy(() =>
+  import('./garden/Fireflies').then((m) => ({ default: m.Fireflies })),
+)
+/**
+ * The line under the garden's name, by day, by night and by season
+ * (lib/gardenLines): its words are the garden's alone, so they are not in the
+ * first load. Should they fail to load (an update half-arrived, say), the
+ * garden's quiet line stands in.
+ */
+const GardenLine = lazy(() =>
+  import('./garden/GardenLine').then(
+    (m) => ({ default: m.GardenLine }),
+    () => ({ default: () => 'The garden is finding its rhythm.' }),
+  ),
+)
 
 /** Catalogs are static, so index them once at module load instead of scanning
  *  them inside every render loop. */
 const plantsById = new Map(plants.map((plant) => [plant.id, plant]))
 const speciesById = new Map(species.map((item) => [item.id, item]))
-const jarColorsById = new Map<string, (typeof jarColors)[number]>(
-  jarColors.map((color) => [color.id, color]),
+/** Marigold flies with the companions but is the garden's guide, not one. */
+const GUIDE_ID = 'marigold-guide'
+/** Only asked for once a butterfly is tapped, so it is not in the first load. */
+const ButterflyCard = lazy(() =>
+  import('./ButterflyCard').then((m) => ({ default: m.ButterflyCard })),
 )
-/** Built once; constructing an Intl formatter per render is not free. */
-const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-})
 
 /**
  * Rendered width of a plant sprite in the scene.
@@ -60,16 +108,6 @@ const plantedDateFormat = new Intl.DateTimeFormat(undefined, {
  */
 const PLANT_SPRITE_SIZE = 84
 
-function jarStyle(colorId: string): CSSProperties {
-  const color = jarColorsById.get(colorId) ?? jarColors[0]
-  return {
-    '--jar-fill': color.fill,
-    '--jar-text': color.text,
-    '--jar-border': color.border,
-    '--jar-highlight': color.highlight,
-  } as CSSProperties
-}
-
 export function GardenView({
   state,
   onPlant,
@@ -79,8 +117,13 @@ export function GardenView({
   onSelectCompanion,
   onRenameCreature,
   onOpenCare,
+  onCareFor,
   seedFocus,
   onOpenGuide,
+  onPutAwayWelcomeBack,
+  onOpenLetter,
+  onReadLetter,
+  theme,
 }: {
   state: AppState
   onPlant: (plantId: string) => void
@@ -90,14 +133,20 @@ export function GardenView({
   onSelectCompanion: (creatureId: string) => void
   onRenameCreature: (creatureId: string, name: string) => void
   onOpenCare: () => void
+  /** Opens Care with one companion chosen, from its card in the scene. */
+  onCareFor?: (creatureId: string) => void
   seedFocus?: string
   onOpenGuide?: () => void
+  /** Put away the welcome back after a few days away (lib/visits). */
+  onPutAwayWelcomeBack?: () => void
+  /** Open Marigold's newest letter in the Journal (lib/letters). */
+  onOpenLetter?: () => void
+  /** Note the letter for the week ending on this Sunday as read, or put away. */
+  onReadLetter?: (sunday: string) => void
+  /** The theme on screen, chosen or followed: night shows the night's image. */
+  theme?: AppearanceTheme
 }) {
   const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
-  const seedTray = useRef<HTMLElement>(null)
-  useEffect(() => {
-    if (seedFocus) seedTray.current?.scrollIntoView({ block: 'start' })
-  }, [seedFocus])
   const [selectedPlantId, setSelectedPlantId] = useState<string>()
   const [confirmPlantRemoval, setConfirmPlantRemoval] = useState(false)
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
@@ -123,30 +172,38 @@ export function GardenView({
   const active = emerged.find(
     (creature) => creature.id === state.profile?.activeCompanionId,
   )
+  const selectedPattern =
+    flightPatterns.find(
+      (pattern) => pattern.id === state.selectedFlightPatternId,
+    ) ?? flightPatterns[0]
   const allGardenButterflies = [
     {
-      id: 'marigold-guide',
+      id: GUIDE_ID,
       speciesId: 'monarch',
       label: 'Marigold, your monarch garden guide',
       // Marigold is the garden's guide, not a companion, so she wears nothing.
       outfit: undefined as Partial<Record<OutfitSlot, string>> | undefined,
+      pattern: selectedPattern.id,
     },
     ...emerged.map((creature) => ({
       id: creature.id,
       speciesId: creature.speciesId,
       label: `${creature.name}, ${speciesById.get(creature.speciesId)?.commonName ?? 'butterfly'}`,
       outfit: outfitByCreature.get(creature.id),
+      // Its own pattern while the garden owns it, otherwise the garden's.
+      pattern: flightPatternFor(state, creature),
     })),
   ]
   // Keep the scene smooth on modest devices: at most 12 butterflies fly at
   // once. Marigold and the active companion always fly; the rest rotate
   // daily so every butterfly gets regular time in the air.
   const MAX_VISIBLE_FLYERS = 12
+  const motion = motionPreference(state.profile)
   let gardenButterflies = allGardenButterflies
   if (allGardenButterflies.length > MAX_VISIBLE_FLYERS) {
     const always = allGardenButterflies.filter(
       (butterfly) =>
-        butterfly.id === 'marigold-guide' ||
+        butterfly.id === GUIDE_ID ||
         butterfly.id === state.profile?.activeCompanionId,
     )
     const rest = allGardenButterflies.filter(
@@ -161,105 +218,130 @@ export function GardenView({
       ),
     ]
   }
-  const observationChoices = observations.filter(
-    (item) => item.speciesId === 'all' || item.speciesId === active?.speciesId,
-  )
-  const observation =
-    observationChoices[
-      getDailyPromptIndex(toLocalDate(), observationChoices.length)
-    ]
+  // How many share the sky. In calm motion only the first few fly and the
+  // others settle, so the flyers spread out as if they were alone.
+  const aloft =
+    motion === 'calm'
+      ? Math.min(CALM_AIRBORNE, gardenButterflies.length)
+      : gardenButterflies.length
+  /**
+   * The butterfly whose card is open, by id, and which opening this is. A
+   * dialog's close event comes a moment after it closes, by which time the
+   * browser has already handed focus back to the butterfly; a key pressed in
+   * that moment opens the card again, and the late event must not close the
+   * new one. So each opening has a number, and a close ends only its own.
+   */
+  const [meeting, setMeeting] = useState<{ id: string; opening: number }>()
+  const openings = useRef(0)
+  const meet = (id: string) => {
+    openings.current += 1
+    setMeeting({ id, opening: openings.current })
+  }
+  const meetingCreature = emerged.find((creature) => creature.id === meeting?.id)
+  const flightSpace = useRef<HTMLDivElement>(null)
+  // The card has closed, however it was closed: focus goes back to the
+  // butterfly it was about, rather than falling to the page.
+  const closeCard = (closed: { id: string; opening: number }) => {
+    if (openings.current !== closed.opening) return
+    setMeeting((current) => (current?.opening === closed.opening ? undefined : current))
+    const flyer = Array.from(
+      flightSpace.current?.querySelectorAll<HTMLElement>('[data-flyer]') ?? [],
+    ).find((element) => element.dataset.flyer === closed.id)
+    flyer?.querySelector<HTMLElement>('[role="button"]')?.focus()
+  }
+  const today = toLocalDate()
+  const night = theme === 'night'
+  const region = state.profile?.region
+  // By the gardener's half of the world, or the north's when that is not
+  // known: only the scene reads it (its art's season, and fireflies), never
+  // words about the gardener's own season.
+  const season = currentSeason(today, hemisphereOf(region))
   const selectedPlant = state.plants.find(
     (plant) => plant.id === selectedPlantId,
   )
   const selectedPlantDefinition = selectedPlant
     ? plantsById.get(selectedPlant.plantId)
     : undefined
-  const removalBlocker = selectedPlant
-    ? plantRemovalBlocker(state, selectedPlant.id)
-    : undefined
   const visiblePlants = state.plants.slice(0, PLANT_CAPACITY)
+  const mothPlants = new Set(visiblePlants.filter(
+    (plant) => plant.growth === MAX_PLANT_GROWTH && plantsById.get(plant.plantId)?.kind === 'nectar',
+  ).slice(0, 3).map((plant) => plant.id))
   const visiblePlantIds = new Set(visiblePlants.map((plant) => plant.id))
   const selectedPlantIsVisible = selectedPlant
     ? visiblePlantIds.has(selectedPlant.id)
     : false
-  const selectedPlantJar = selectedPlant
-    ? jarForPlant(state, selectedPlant.id)
-    : undefined
-  // What the grid below actually offers: every jar except the one already on
-  // this plant. Jars sitting on another plant move here when chosen.
-  const placeableJars = state.jars.filter(
-    (jar) => jar.id !== selectedPlantJar?.id,
-  )
-  const unplacedJarCount = availableJars(state).length
-  /** Which plant each placed jar is sitting on, by jar id. */
-  const plantNameByJarId = useMemo(() => {
-    const gardenPlantsById = new Map(
-      state.plants.map((plant) => [plant.id, plant]),
-    )
-    const names = new Map<string, string>()
-    for (const placement of state.jarPlacements) {
-      const plant = gardenPlantsById.get(placement.plantId)
-      const definition = plant ? plantsById.get(plant.plantId) : undefined
-      names.set(placement.jarId, definition?.name ?? 'another spot')
-    }
-    return names
-  }, [state.jarPlacements, state.plants])
-
-  const placedJarSummaries = useMemo(() => {
-    const jarsById = new Map(state.jars.map((jar) => [jar.id, jar]))
-    const gardenPlantsById = new Map(
-      state.plants.map((plant) => [plant.id, plant]),
-    )
-    return state.jarPlacements
-      .map((placement) => {
-        const jar = jarsById.get(placement.jarId)
-        const plant = gardenPlantsById.get(placement.plantId)
-        const plantDefinition = plant
-          ? plantsById.get(plant.plantId)
-          : undefined
-        const color = jar ? jarColorsById.get(jar.colorId) : undefined
-        if (!jar || !plant || !plantDefinition || !color) return undefined
-        return {
-          placement,
-          jar,
-          label: `${color.label} ${jar.character} on ${plantDefinition.name}`,
-        }
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item))
-  }, [state.jarPlacements, state.jars, state.plants])
-  const selectedPattern =
-    flightPatterns.find(
-      (pattern) => pattern.id === state.selectedFlightPatternId,
-    ) ?? flightPatterns[0]
   const customBackdrop = activeCustomBackdrop(
     state,
     hasGardenPassFeature('custom-backdrops'),
+    theme,
   )
   const [failedImage, setFailedImage] = useState<string>()
   const sceneId = state.profile
     ? effectiveBackdropId(state.profile)
     : 'sunlit-meadow'
-  const [displayedScene, setDisplayedScene] = useState<typeof sceneId>('sunlit-meadow')
+  // The chosen scene from the first frame. Starting from Sunlit Meadow and
+  // swapping once the chosen one loaded flashed the wrong garden on every
+  // visit. A scene changed while the garden is open swaps only once decoded.
+  const [displayedScene, setDisplayedScene] = useState({ id: sceneId, night })
   const [sceneUnavailable, setSceneUnavailable] = useState(false)
   useEffect(() => {
     let active = true
-    void loadBackdrop(sceneId).then(() => {
-      if (active) { setDisplayedScene(sceneId); setSceneUnavailable(false) }
-    }).catch(() => {
-      if (active) { setDisplayedScene('sunlit-meadow'); setSceneUnavailable(true) }
-    })
-    return () => { active = false }
-  }, [sceneId])
+    void loadBackdrop(sceneId, undefined, night).then(
+      () => {
+        if (active) {
+          setDisplayedScene({ id: sceneId, night })
+          setSceneUnavailable(false)
+        }
+      },
+      async () => {
+        // A night painting not yet downloaded can fall back to this scene's
+        // day painting. Keep the previous decoded image until it is ready.
+        if (night) {
+          try {
+            await loadBackdrop(sceneId)
+            if (active) {
+              setDisplayedScene({ id: sceneId, night: false })
+              setSceneUnavailable(true)
+            }
+            return
+          } catch { /* The free meadow remains the final offline fallback. */ }
+        }
+        if (active) {
+          setDisplayedScene({ id: 'sunlit-meadow', night: false })
+          setSceneUnavailable(true)
+        }
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [sceneId, night])
 
   const gardenFull = state.plants.length >= PLANT_CAPACITY
+  const plantBlocker = plantingBlocker(state, PLANT_SEED_COST)
+  const gardenTitle = useRef<HTMLHeadingElement>(null)
+  const welcomeBack =
+    onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
+  // On an iPhone or iPad in a browser, how to keep the garden on the Home
+  // Screen (lib/install), until put away. The answer cannot change while the
+  // page is open, so it is asked once. Put away is remembered by this browser
+  // alone: a backup carried to another iPhone still offers it there.
+  const [homeScreen] = useState(homeScreenAdvice)
+  const [homeScreenGuidePutAway, setHomeScreenGuidePutAway] = useState(isHomeScreenGuidePutAway)
 
   return (
     <div className="view garden-view">
       <section
-        className={`garden-hero backdrop-${state.profile?.selectedBackdropId ?? 'sunlit-meadow'}`}
-        style={{ backgroundImage: `url(${backdropAssets[displayedScene].image})` }}
+        className={`garden-hero backdrop-${displayedScene.id}`}
+        style={{ backgroundImage: `url(${backdropAssets[displayedScene.id][displayedScene.night ? 'night' : 'image']})` }}
+        data-night-art={displayedScene.night && !customBackdrop ? '' : undefined}
         aria-labelledby="garden-title"
+        // A hook for the seasons' art (data/seasons): CSS and images alone can
+        // dress the scene by season, and by night with .theme-night around it.
+        data-season={season}
+        data-personal-art={customBackdrop ? '' : undefined}
       >
+        <Suspense fallback={null}><SeasonArt /></Suspense>
         {customBackdrop && failedImage !== customBackdrop.id && (
           <div className="custom-scene-layer">
             <CustomBackdropImage
@@ -269,32 +351,58 @@ export function GardenView({
           </div>
         )}
         <div className="hero-petals" aria-hidden="true">
-          {Array.from({ length: 7 }, (_, index) => (
-            <span key={index} className={`hero-petal petal-${index + 1}`} />
-          ))}
+          {!night &&
+            Array.from({ length: 7 }, (_, index) => (
+              <span key={index} className={`hero-petal petal-${index + 1}`} />
+            ))}
         </div>
+        {/* Fireflies in place of petals by night, never in winter, and only
+            with full motion: none with reduced or calm motion. */}
+        {night && motion === 'full' && season !== 'winter' && (
+          <Suspense fallback={null}>
+            <Fireflies />
+          </Suspense>
+        )}
         <div className="garden-heading">
           <p className="eyebrow">Your living sanctuary</p>
-          <h1 id="garden-title">{state.profile?.gardenName}</h1>
+          {/* Focusable by script only: the recap's fade to night lands here. */}
+          <h1 id="garden-title" tabIndex={-1} ref={gardenTitle}>
+            {state.profile?.gardenName}
+          </h1>
           <p className="garden-observation">
-            {observation?.text ?? 'The garden is finding its rhythm.'}
+            {/* A space holds the line's place while its words load. */}
+            <Suspense fallback={'\u00a0'}>
+              <GardenLine
+                localDate={today}
+                speciesId={active?.speciesId}
+                night={night}
+                region={region}
+              />
+            </Suspense>
           </p>
         </div>
 
         <div
           className="garden-flight-space"
           aria-label="Butterflies flying in the garden"
+          ref={flightSpace}
         >
           {gardenButterflies.map((butterfly, index) => (
             <FlyingButterfly
               key={butterfly.id}
               id={butterfly.id}
-              pattern={selectedPattern.id}
+              pattern={butterfly.pattern}
               index={index}
+              aloft={aloft}
+              onMeet={() => meet(butterfly.id)}
               speciesId={butterfly.speciesId}
               label={butterfly.label}
               outfit={butterfly.outfit}
-              reduced={state.profile?.reducedMotion}
+              reduced={motion === 'reduce'}
+              calm={motion === 'calm'}
+              // The first few keep flying; the rest settle, which is most
+              // of what makes calm motion lighter on an old phone.
+              settled={motion === 'calm' && index >= CALM_AIRBORNE}
             />
           ))}
         </div>
@@ -309,13 +417,11 @@ export function GardenView({
           {visiblePlants.map((plant, index) => {
             const definition = plantsById.get(plant.plantId)
             const placedJar = jarForPlant(state, plant.id)
-            const placedJarColor = placedJar
-              ? jarColorsById.get(placedJar.colorId)
-              : undefined
-            const jarLabel =
-              placedJar && placedJarColor
-                ? ` with ${placedJarColor.label} ${placedJar.character} jar`
-                : ''
+            // Said, not shown: a mark by its name (lib/jars), so plants with
+            // a "!" jar and a "?" jar do not sound alike.
+            const jarLabel = placedJar
+              ? ` with ${jarSpokenName(placedJar.colorId, placedJar.character)}`
+              : ''
             return (
               <button
                 type="button"
@@ -341,12 +447,12 @@ export function GardenView({
                   size={PLANT_SPRITE_SIZE}
                   swayDelay={index * -0.7}
                 />
+                {night && motion === 'full' && season !== 'winter' &&
+                  mothPlants.has(plant.id) && (
+                    <Suspense fallback={null}><Moth resting={index % 2 === 1} /></Suspense>
+                  )}
                 {placedJar && (
-                  <span
-                    className="jar-display plant-jar"
-                    style={jarStyle(placedJar.colorId)}
-                    aria-hidden="true"
-                  >
+                  <span className="jar-display plant-jar" aria-hidden="true">
                     <JarSprite
                       character={placedJar.character}
                       colorId={placedJar.colorId}
@@ -358,15 +464,82 @@ export function GardenView({
           })}
         </div>
       </section>
+      {/* Outside the scene, so nothing styled for the scene reaches the card. */}
+      {meeting && (meeting.id === GUIDE_ID || meetingCreature) && (
+        <Suspense fallback={null}>
+          <ButterflyCard
+            key={meeting.opening}
+            creature={meetingCreature}
+            outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
+            region={region}
+            onCareFor={
+              meetingCreature && onCareFor
+                ? () => onCareFor(meetingCreature.id)
+                : undefined
+            }
+            onClose={() => closeCard(meeting)}
+          />
+        </Suspense>
+      )}
+
+      {/* Always here, so the welcome is heard, politely, as it arrives. */}
+      <div className="welcome-back-region" role="status">
+        {welcomeBack && (
+          <Suspense fallback={null}>
+            <WelcomeBack
+              garden={state}
+              returnedOn={today}
+              onPutAway={() => {
+                // The card leaves with its button; focus goes to the garden's name.
+                gardenTitle.current?.focus()
+                onPutAwayWelcomeBack()
+              }}
+            />
+          </Suspense>
+        )}
+      </div>
+
+      {homeScreen && !homeScreenGuidePutAway && (
+        <Suspense fallback={null}>
+          <HomeScreenGuide
+            advice={homeScreen}
+            onPutAway={() => {
+              // The card leaves with its button; focus goes to the garden's name.
+              gardenTitle.current?.focus()
+              putAwayHomeScreenGuide()
+              setHomeScreenGuidePutAway(true)
+            }}
+          />
+        </Suspense>
+      )}
+
+      {/* From Sunday evening, Marigold's letter about the week (lib/letters),
+          until it is read or put away, or the next Sunday's replaces it. */}
+      {onOpenLetter && onReadLetter && (
+        <Suspense fallback={null}>
+          <LetterCard
+            profile={state.profile}
+            onRead={onOpenLetter}
+            onPutAway={(sunday) => {
+              // The card leaves with its button; focus goes to the garden's name.
+              gardenTitle.current?.focus()
+              onReadLetter(sunday)
+            }}
+          />
+        </Suspense>
+      )}
 
       {sceneUnavailable && (
         <p role="status">
-          {isAndroidApp()
-            ? 'This scene could not be opened. Sunlit Meadow is shown instead.'
-            : 'This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.'}
+          {/* Inline, so each build carries only its own wording. */}
+          {import.meta.env.VITE_PLATFORM === 'android'
+            ? 'This scene could not be opened. An available painting is shown instead.'
+            : 'This scene is not available offline yet. An available painting is shown until you reconnect.'}
         </p>
       )}
-      {state.profile?.selectedCustomBackdropId && !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
+      {(state.profile?.selectedCustomBackdropId ||
+        (theme === 'night' && state.profile?.nightCustomBackdropId)) &&
+        !customBackdrop && <p role="status">Your personal backdrop is currently unavailable. Your built-in scene is shown and your saved images remain in Settings.</p>}
       {failedImage && (
         <p role="status">
           Your image could not be displayed. The built-in scene is shown; your
@@ -401,16 +574,16 @@ export function GardenView({
         <button
           className="secondary-button compact"
           onClick={() => setShowSeedTray((value) => !value)}
-          disabled={state.seeds < 1 || gardenFull}
+          disabled={Boolean(plantBlocker)}
+          aria-describedby={plantBlocker ? 'planting-blocker' : undefined}
           aria-expanded={showSeedTray}
         >
           Plant a seed
         </button>
       </section>
-      {gardenFull && (
-        <p className="capacity-note" role="status">
-          Your garden has all {PLANT_CAPACITY} plant spaces filled. Select an
-          eligible plant below and remove it before planting another seed.
+      {plantBlocker && (
+        <p className="capacity-note" id="planting-blocker">
+          {plantBlocker}
         </p>
       )}
       <p className="seed-economy-note">
@@ -460,277 +633,43 @@ export function GardenView({
           })}
         </div>
         {selectedPlant && selectedPlantDefinition ? (
-          <article className="plant-detail">
-            <div>
-              <p className="eyebrow">
-                {selectedPlantDefinition.kind === 'host'
-                  ? 'Host plant'
-                  : 'Nectar plant'}
-              </p>
-              <h3>{selectedPlantDefinition.name}</h3>
-              <em>{selectedPlantDefinition.scientificName}</em>
-              <p>{selectedPlantDefinition.description}</p>
-            </div>
-            <dl>
-              <div>
-                <dt>Growth stage</dt>
-                <dd>
-                  {selectedPlant.growth === 0
-                    ? 'Seed waiting'
-                    : selectedPlant.growth === 1
-                      ? 'Small sprout'
-                      : selectedPlant.growth === 2
-                        ? 'Growing with buds'
-                        : 'Mature and blooming'}
-                </dd>
-              </div>
-              <div>
-                <dt>Care remaining</dt>
-                <dd>
-                  {remainingPlantGrowth(selectedPlant, MAX_PLANT_GROWTH) === 0
-                    ? 'Fully grown'
-                    : `${remainingPlantGrowth(selectedPlant, MAX_PLANT_GROWTH)} eligible Sunlight`}
-                </dd>
-              </div>
-              <div>
-                <dt>Supports</dt>
-                <dd>
-                  {selectedPlantDefinition.speciesIds.length
-                    ? selectedPlantDefinition.speciesIds
-                        .map((id) => speciesById.get(id)?.commonName)
-                        .filter(Boolean)
-                        .join(' and ')
-                    : 'Adult butterflies visiting for nectar'}
-                </dd>
-              </div>
-              <div>
-                <dt>Planted</dt>
-                <dd>
-                  {plantedDateFormat.format(new Date(selectedPlant.plantedAt))}
-                </dd>
-              </div>
-            </dl>
-            <div className="jar-manager" aria-labelledby="jar-manager-title">
-              <div className="section-heading compact-heading">
-                <div>
-                  <p className="eyebrow">Jar inventory</p>
-                  <h3 id="jar-manager-title">Decorate this plant spot</h3>
-                </div>
-                <span className="count-badge">
-                  {placeableJars.length} to place
-                </span>
-              </div>
-              {!selectedPlantIsVisible ? (
-                <p className="empty-copy">
-                  Jars can be placed on the eight visible garden spots. Remove
-                  plants above the limit to bring this plant into the scene.
-                </p>
-              ) : (
-                <>
-                  <div className="current-jar-card">
-                    {selectedPlantJar ? (
-                      <>
-                        <span
-                          className="jar-display"
-                          style={jarStyle(selectedPlantJar.colorId)}
-                          aria-hidden="true"
-                        >
-                          <JarSprite
-                            character={selectedPlantJar.character}
-                            colorId={selectedPlantJar.colorId}
-                          />
-                        </span>
-                        <div>
-                          <strong>
-                            {jarColorsById.get(selectedPlantJar.colorId)
-                              ?.label ?? 'Custom'}{' '}
-                            {selectedPlantJar.character} jar
-                          </strong>
-                          <small>Placed on this plant spot.</small>
-                        </div>
-                        <button
-                          type="button"
-                          className="secondary-button compact"
-                          onClick={() => onRemoveJarPlacement(selectedPlant.id)}
-                        >
-                          Return to inventory
-                        </button>
-                      </>
-                    ) : (
-                      <p className="empty-copy">
-                        This plant spot is empty. Choose a jar below to cover
-                        the base — {unplacedJarCount} of your jars{' '}
-                        {unplacedJarCount === 1 ? 'is' : 'are'} not on a plant
-                        yet.
-                      </p>
-                    )}
-                  </div>
-
-                  <div
-                    className="jar-inventory-grid"
-                    aria-label="Available jars"
-                  >
-                    {placeableJars.length === 0 ? (
-                      <p className="empty-copy">
-                        {selectedPlantJar
-                          ? 'No other jars are ready to place here.'
-                          : 'No jars are waiting in inventory. Buy letters and numbers in the Shop with Nectar.'}
-                      </p>
-                    ) : (
-                      placeableJars.map((jar) => {
-                        const color = jarColorsById.get(jar.colorId)
-                        const colorLabel = color?.label ?? 'Custom'
-                        const heldBy = plantNameByJarId.get(jar.id)
-                        const action = heldBy ? `Move from ${heldBy}` : 'Place'
-                        return (
-                          <button
-                            type="button"
-                            key={jar.id}
-                            className="jar-inventory-button"
-                            onClick={() => onPlaceJar(jar.id, selectedPlant.id)}
-                            aria-label={`${action} ${colorLabel} ${jar.character} jar on ${selectedPlantDefinition.name}`}
-                          >
-                            <span
-                              className="jar-display"
-                              style={jarStyle(jar.colorId)}
-                              aria-hidden="true"
-                            >
-                              <JarSprite
-                                character={jar.character}
-                                colorId={jar.colorId}
-                              />
-                            </span>
-                            <span>{colorLabel}</span>
-                            <small>{action}</small>
-                          </button>
-                        )
-                      })
-                    )}
-                  </div>
-                </>
-              )}
-              {placedJarSummaries.length > 0 && (
-                <details className="placed-jars-list">
-                  <summary>Placed jars ({placedJarSummaries.length})</summary>
-                  <ul>
-                    {placedJarSummaries.map(({ placement, jar, label }) => (
-                      <li key={placement.jarId}>
-                        <span
-                          className="jar-display small"
-                          style={jarStyle(jar.colorId)}
-                          aria-hidden="true"
-                        >
-                          <JarSprite
-                            character={jar.character}
-                            colorId={jar.colorId}
-                          />
-                        </span>
-                        {label}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
-            <div className="plant-removal">
-              {removalBlocker && (
-                <p className="protected-plant-note">
-                  {removalBlocker} It cannot be removed yet.
-                </p>
-              )}
-              {!confirmPlantRemoval ? (
-                <button
-                  className="text-button danger-text"
-                  disabled={Boolean(removalBlocker)}
-                  onClick={() => setConfirmPlantRemoval(true)}
-                >
-                  Remove this plant
-                </button>
-              ) : (
-                <div className="delete-confirmation" role="alert">
-                  <strong>Remove this plant without a seed refund?</strong>
-                  <div className="form-actions">
-                    <button
-                      className="danger-button"
-                      onClick={() => {
-                        onRemovePlant(selectedPlant.id)
-                        setSelectedPlantId(undefined)
-                        setConfirmPlantRemoval(false)
-                      }}
-                    >
-                      Yes, remove plant
-                    </button>
-                    <button
-                      className="secondary-button"
-                      onClick={() => setConfirmPlantRemoval(false)}
-                    >
-                      Keep plant
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </article>
+          // Its own boundary: the App's would put the whole page away while
+          // the plant's panel loads.
+          <Suspense fallback={null}>
+            <PlantPanel
+              state={state}
+              plant={selectedPlant}
+              definition={selectedPlantDefinition}
+              visible={selectedPlantIsVisible}
+              confirmingRemoval={confirmPlantRemoval}
+              onConfirmRemoval={setConfirmPlantRemoval}
+              onRemove={() => {
+                onRemovePlant(selectedPlant.id)
+                setSelectedPlantId(undefined)
+                setConfirmPlantRemoval(false)
+              }}
+              onPlaceJar={onPlaceJar}
+              onRemoveJarPlacement={onRemoveJarPlacement}
+            />
+          </Suspense>
         ) : (
           <p className="empty-copy">Choose a plant to open its field guide.</p>
         )}
       </section>
 
       {showSeedTray && (
-        <section
-          ref={seedTray}
-          className="card seed-tray"
-          aria-labelledby="seed-tray-title"
-        >
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Choose a new beginning</p>
-              <h2 id="seed-tray-title">Seed tray</h2>
-            </div>
-            <button
-              className="text-button"
-              onClick={() => setShowSeedTray(false)}
-            >
-              Close
-            </button>
-          </div>
-          <p className="section-explainer">
-            Spend {PLANT_SEED_COST} seed to add a plant. Host plants can welcome
-            the listed caterpillars after growing; nectar plants add flowers for
-            the butterflies already visiting. The garden has {PLANT_CAPACITY}{' '}
-            spaces.
-          </p>
-          <div className="catalog-grid">
-            {plants.map((plant) => (
-              <button
-                className={`plant-choice ${seedFocus === plant.id ? 'seed-highlight' : ''}`}
-                disabled={state.seeds < PLANT_SEED_COST || gardenFull}
-                key={plant.id}
-                onClick={() => {
-                  onPlant(plant.id)
-                  if (state.seeds <= 1) setShowSeedTray(false)
-                }}
-              >
-                <span
-                  className="plant-dot"
-                  style={{ backgroundColor: plant.color }}
-                  aria-hidden="true"
-                />
-                <strong>{plant.name}</strong>
-                <small>
-                  {plant.kind === 'host'
-                    ? `Host for ${plant.speciesIds
-                        .map(
-                          (speciesId) => speciesById.get(speciesId)?.commonName,
-                        )
-                        .filter(Boolean)
-                        .join(' and ')}`
-                    : 'Nectar plant for visiting butterflies'}
-                </small>
-              </button>
-            ))}
-          </div>
-        </section>
+        <Suspense fallback={null}>
+          <SeedTray
+            seeds={state.seeds}
+            gardenFull={gardenFull}
+            seedFocus={seedFocus}
+            onPlant={(plantId) => {
+              onPlant(plantId)
+              if (state.seeds <= 1) setShowSeedTray(false)
+            }}
+            onClose={() => setShowSeedTray(false)}
+          />
+        </Suspense>
       )}
 
       <section className="content-grid">
@@ -794,7 +733,9 @@ export function GardenView({
           </div>
           {emerged.length === 0 ? (
             <p className="empty-copy">
-              Sol is still changing. The garden will be ready when they emerge.
+              {developing[0]
+                ? `${developing[0].name} is still changing. The garden will be ready when they emerge.`
+                : 'Your companions are still changing. The garden will be ready when they emerge.'}
             </p>
           ) : (
             <div className="companion-grid">

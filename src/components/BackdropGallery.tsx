@@ -1,8 +1,11 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useId, useState, type CSSProperties } from 'react'
 import type { AppState, CustomBackdrop, GardenBackdropId } from '../types'
 import {
   availableBackdropIds,
+  backdropUnlockDays,
   daysUntilBackdrop,
+  DEFAULT_BACKDROP_ID,
+  effectiveBackdropId,
   gardenBackdrops,
 } from '../lib/appearance'
 import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
@@ -10,15 +13,31 @@ import { hasGardenPassFeature } from '../lib/gardenPass'
 import { CUSTOM_BACKDROP_SLOTS } from '../lib/customBackdrops'
 import { CustomBackdropImage } from './CustomBackdropImage'
 import { isAndroidApp } from '../lib/platform'
+import { counted } from '../lib/plural'
+import './backdrops/backdrops.css'
 
 const Editor = lazy(() => import('./CustomBackdropEditor'))
 export interface BackdropActions {
   onSelectBackdrop: (id: GardenBackdropId) => void
+  /** Saves the image, and chooses it for the day unless `select` is false. */
   onSaveCustomBackdrop: (
     image: CustomBackdrop,
+    select?: boolean,
   ) => Promise<{ ok: boolean; message?: string }>
   onSelectCustomBackdrop: (id: string | undefined) => void
   onDeleteCustomBackdrop: (id: string) => void
+  /** One of the gardener's images for the night, or undefined for the day's. */
+  onChooseNightBackdrop?: (id: string | undefined) => void
+}
+
+/** What the garden shows by day: the gardener's chosen image, or the scene. */
+function dayBackdropName(state: AppState): string {
+  const image = state.customBackdrops.find(
+    (entry) => entry.id === state.profile?.selectedCustomBackdropId,
+  )
+  if (image) return image.name
+  const sceneId = state.profile ? effectiveBackdropId(state.profile) : DEFAULT_BACKDROP_ID
+  return gardenBackdrops.find((entry) => entry.id === sceneId)?.name ?? ''
 }
 
 export function BackdropGallery({
@@ -27,13 +46,25 @@ export function BackdropGallery({
   onSaveCustomBackdrop,
   onSelectCustomBackdrop,
   onDeleteCustomBackdrop,
+  onChooseNightBackdrop,
 }: { state: AppState } & BackdropActions) {
   const [editor, setEditor] = useState<CustomBackdrop | 'new'>()
+  const nightChoiceName = useId()
   const [removing, setRemoving] = useState<string>()
   const [loading, setLoading] = useState<GardenBackdropId>()
   const [message, setMessage] = useState('')
   const available = state.profile ? availableBackdropIds(state.profile) : []
   const customAllowed = hasGardenPassFeature('custom-backdrops')
+  const nightImage = state.customBackdrops.find(
+    (image) => image.id === state.profile?.nightCustomBackdropId,
+  )
+  // The night's own image, edited, stays the night's: saving it does not
+  // also make it the day's, as saving any other image does.
+  const editingNightImage =
+    editor !== undefined &&
+    editor !== 'new' &&
+    editor.id === nightImage?.id &&
+    editor.id !== state.profile?.selectedCustomBackdropId
   return (
     <section className="backdrop-gallery" aria-label="Garden backdrops">
       <div className="section-heading">
@@ -54,6 +85,11 @@ export function BackdropGallery({
             state.profile?.selectedBackdropId === scene.id &&
             !state.profile.selectedCustomBackdropId
           const allowed = available.includes(scene.id)
+          // A scene that grows with the garden shows how far along it is.
+          const waitDays = backdropUnlockDays(scene)
+          const daysLeft =
+            state.profile && waitDays > 0 ? daysUntilBackdrop(state.profile, scene.id) : 0
+          const ripeness = waitDays > 0 ? Math.round((100 * (waitDays - daysLeft)) / waitDays) : 0
           return (
             <article
               className={`scene-card ${selected ? 'selected' : ''}`}
@@ -111,7 +147,16 @@ export function BackdropGallery({
                           ? isAndroidApp()
                             ? 'With the Garden Pass'
                             : 'Garden Pass unavailable'
-                          : `Opens in ${state.profile ? daysUntilBackdrop(state.profile, scene.id) : 0} days`}
+                          : (
+                              <>
+                                <span
+                                  className="unlock-ring"
+                                  style={{ '--ripeness': `${ripeness}%` } as CSSProperties}
+                                  aria-hidden="true"
+                                />
+                                {`Opens in ${counted(daysLeft, 'day', 'days')}`}
+                              </>
+                            )}
                 </button>
               </div>
             </article>
@@ -163,7 +208,7 @@ export function BackdropGallery({
                   disabled={!customAllowed}
                   onClick={() => setEditor(image)}
                 >
-                  Edit crop
+                  Edit image
                 </button>
               </div>
               {removing === image.id ? (
@@ -219,11 +264,40 @@ export function BackdropGallery({
           </small>
         </button>
       </div>
+      {onChooseNightBackdrop && state.customBackdrops.length > 0 && (
+        <fieldset className="motion-options night-backdrop-choice">
+          <legend>By night</legend>
+          <p className="subtle-copy">
+            When your garden turns to night, it can show another of your
+            images.
+          </p>
+          {[undefined, ...state.customBackdrops].map((image) => (
+            <label className="toggle-row" key={image?.id ?? 'day'}>
+              <span>
+                <strong>{image ? image.name : 'The same as by day'}</strong>
+                {!image && <small>{dayBackdropName(state)}</small>}
+              </span>
+              <input
+                type="radio"
+                name={nightChoiceName}
+                checked={nightImage === image}
+                disabled={!customAllowed}
+                onChange={() => onChooseNightBackdrop(image?.id)}
+              />
+            </label>
+          ))}
+        </fieldset>
+      )}
       {editor && (
         <Suspense fallback={<p role="status">Opening your image studio…</p>}>
           <Editor
             initial={editor === 'new' ? undefined : editor}
-            onSave={onSaveCustomBackdrop}
+            onSave={
+              editingNightImage
+                ? (image) => onSaveCustomBackdrop(image, false)
+                : onSaveCustomBackdrop
+            }
+            saveLabel={editingNightImage ? 'Save night image' : undefined}
             onClose={() => setEditor(undefined)}
           />
         </Suspense>

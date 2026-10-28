@@ -1,0 +1,20 @@
+.plant-moth {
+  position: absolute;
+  left: 50%;
+  bottom: 55px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.moth-wing-left { transform-origin: 49% 47%; }
+.moth-wing-right { transform-origin: 51% 47%; }
+.moth-hovering .moth-wing-left { animation: moth-left .24s ease-in-out infinite alternate; }
+.moth-hovering .moth-wing-right { animation: moth-right .24s ease-in-out infinite alternate; }
+.moth-resting .sprite-layer { animation: moth-rest 5s ease-in-out infinite alternate; }
+@keyframes moth-left { to { transform: scaleX(.6) rotate(-6deg); } }
+@keyframes moth-right { to { transform: scaleX(.6) rotate(6deg); } }
+@keyframes moth-rest { to { transform: translateY(-2px); } }
+.page-hidden .moth-sprite .sprite-layer,
+.moth-sprite[data-offscreen] .sprite-layer { animation-play-state: paused; }
+.reduce-motion .plant-moth,
+.calm-motion .plant-moth { display: none; }
+@media (prefers-reduced-motion: reduce) { .plant-moth { display: none; } }

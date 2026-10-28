@@ -1,0 +1,7 @@
+/* A fact still to come is a gentle aside, not a task. Colour from the theme's
+   own muted text, so night needs nothing more. */
+.fact-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}

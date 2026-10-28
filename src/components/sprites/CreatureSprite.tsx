@@ -2,14 +2,21 @@ import { memo } from 'react'
 import { getSpecies } from '../../lib/progression'
 import type { CreatureStage, OutfitSlot } from '../../types'
 import { ButterflySprite } from './ButterflySprite'
-import { OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
+import { AuraLayer, OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
+import { SpriteFrame, SpriteLayer } from './SpriteFrame'
 
 /**
  * Renders a creature at any life stage. Eggs rest on a leaf, caterpillars
  * inch along a twig, chrysalises hang from a branch, butterflies fly free.
  * Species colors tint every stage so each companion feels like itself
  * from the very first day.
+ *
+ * Each stage is drawn as layers: the scenery holds still, and the egg,
+ * caterpillar or chrysalis moves on a layer of its own, which keeps the
+ * motion on the compositor (see `SpriteFrame`).
  */
+const VIEW_BOX = '0 0 120 110'
+
 /** Fixed per life stage; literals in the JSX would be new objects each render. */
 const EGG_ANCHOR: OutfitAnchor = {
   headX: 60,
@@ -74,36 +81,36 @@ export const CreatureSprite = memo(function CreatureSprite({
 
   if (stage === 'egg') {
     return (
-      <svg
-        viewBox="0 0 120 110"
+      <SpriteFrame
         width={size}
         height={size * (110 / 120)}
         className={`creature-sprite egg-sprite ${className}`}
-        role="img"
-        aria-label={`${name} egg`}
+        label={`${name} egg`}
       >
-        {/* host leaf */}
-        <path
-          d="M14 78 C20 52 48 40 96 46 C96 74 70 94 38 92 C26 91 17 86 14 78 Z"
-          fill="#6f9d5c"
-          stroke="#4c7040"
-          strokeWidth="2"
-        />
-        <path
-          d="M18 77 C40 68 68 58 92 49"
-          stroke="#4c7040"
-          strokeWidth="1.6"
-          fill="none"
-        />
-        {[
-          'M34 72 C42 68 50 64 58 60',
-          'M46 76 C56 70 66 64 76 57',
-          'M30 66 C38 62 46 58 52 55',
-        ].map((d) => (
-          <path key={d} d={d} stroke="#5d8450" strokeWidth="1" fill="none" />
-        ))}
+        <SpriteLayer viewBox={VIEW_BOX}>
+          {/* host leaf */}
+          <path
+            d="M14 78 C20 52 48 40 96 46 C96 74 70 94 38 92 C26 91 17 86 14 78 Z"
+            fill="#6f9d5c"
+            stroke="#4c7040"
+            strokeWidth="2"
+          />
+          <path
+            d="M18 77 C40 68 68 58 92 49"
+            stroke="#4c7040"
+            strokeWidth="1.6"
+            fill="none"
+          />
+          {[
+            'M34 72 C42 68 50 64 58 60',
+            'M46 76 C56 70 66 64 76 57',
+            'M30 66 C38 62 46 58 52 55',
+          ].map((d) => (
+            <path key={d} d={d} stroke="#5d8450" strokeWidth="1" fill="none" />
+          ))}
+        </SpriteLayer>
         {/* the egg */}
-        <g className="egg-wobble">
+        <SpriteLayer viewBox={VIEW_BOX} className="egg-wobble">
           <ellipse
             cx="60"
             cy="47"
@@ -141,9 +148,9 @@ export const CreatureSprite = memo(function CreatureSprite({
             opacity="0.8"
           />
           <circle cx="60" cy="47" r="2.6" fill={secondary} opacity="0.35" />
-        </g>
-        <OutfitOverlay outfit={outfit} anchor={EGG_ANCHOR} layer="ambient" />
-      </svg>
+        </SpriteLayer>
+        <AuraLayer viewBox={VIEW_BOX} outfit={outfit} anchor={EGG_ANCHOR} />
+      </SpriteFrame>
     )
   }
 
@@ -157,29 +164,29 @@ export const CreatureSprite = memo(function CreatureSprite({
       { cx: 27, cy: 68, r: 9 },
     ]
     return (
-      <svg
-        viewBox="0 0 120 110"
+      <SpriteFrame
         width={size}
         height={size * (110 / 120)}
         className={`creature-sprite caterpillar-sprite ${className}`}
-        role="img"
-        aria-label={`${name} caterpillar`}
+        label={`${name} caterpillar`}
       >
-        {/* twig */}
-        <path
-          d="M6 82 C40 76 82 76 114 80"
-          stroke="#8a6238"
-          strokeWidth="5"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <path
-          d="M30 79 C34 74 40 72 46 72"
-          stroke="#8a6238"
-          strokeWidth="2.4"
-          fill="none"
-        />
-        <g className="caterpillar-inch">
+        <SpriteLayer viewBox={VIEW_BOX}>
+          {/* twig */}
+          <path
+            d="M6 82 C40 76 82 76 114 80"
+            stroke="#8a6238"
+            strokeWidth="5"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M30 79 C34 74 40 72 46 72"
+            stroke="#8a6238"
+            strokeWidth="2.4"
+            fill="none"
+          />
+        </SpriteLayer>
+        <SpriteLayer viewBox={VIEW_BOX} className="caterpillar-inch">
           {/* body segments, tail to head */}
           {segments.map((segment, index) => (
             <g key={segment.cx}>
@@ -264,41 +271,41 @@ export const CreatureSprite = memo(function CreatureSprite({
             anchor={CATERPILLAR_ANCHOR}
             layer="attached"
           />
-        </g>
-        <OutfitOverlay
+        </SpriteLayer>
+        <AuraLayer
+          viewBox={VIEW_BOX}
           outfit={outfit}
           anchor={CATERPILLAR_ANCHOR}
-          layer="ambient"
         />
-      </svg>
+      </SpriteFrame>
     )
   }
 
   // chrysalis
   return (
-    <svg
-      viewBox="0 0 120 110"
+    <SpriteFrame
       width={size}
       height={size * (110 / 120)}
       className={`creature-sprite chrysalis-sprite ${className}`}
-      role="img"
-      aria-label={`${name} chrysalis`}
+      label={`${name} chrysalis`}
     >
-      {/* branch */}
-      <path
-        d="M10 16 C42 10 80 10 112 18"
-        stroke="#8a6238"
-        strokeWidth="5"
-        fill="none"
-        strokeLinecap="round"
-      />
-      <path
-        d="M70 15 C74 20 76 24 76 28"
-        stroke="#7c5a30"
-        strokeWidth="2.4"
-        fill="none"
-      />
-      <g className="chrysalis-sway">
+      <SpriteLayer viewBox={VIEW_BOX}>
+        {/* branch */}
+        <path
+          d="M10 16 C42 10 80 10 112 18"
+          stroke="#8a6238"
+          strokeWidth="5"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <path
+          d="M70 15 C74 20 76 24 76 28"
+          stroke="#7c5a30"
+          strokeWidth="2.4"
+          fill="none"
+        />
+      </SpriteLayer>
+      <SpriteLayer viewBox={VIEW_BOX} className="chrysalis-sway">
         {/* silk pad + cremaster */}
         <path d="M60 14 L60 26" stroke="#cbb98e" strokeWidth="2.4" />
         <circle cx="60" cy="15" r="3" fill="#e4d6b0" />
@@ -351,12 +358,12 @@ export const CreatureSprite = memo(function CreatureSprite({
           layer="attached"
         />
         <ellipse cx="54" cy="50" rx="3" ry="9" fill="#fffdf4" opacity="0.35" />
-      </g>
-      <OutfitOverlay
+      </SpriteLayer>
+      <AuraLayer
+        viewBox={VIEW_BOX}
         outfit={outfit}
         anchor={CHRYSALIS_ANCHOR}
-        layer="ambient"
       />
-    </svg>
+    </SpriteFrame>
   )
 })

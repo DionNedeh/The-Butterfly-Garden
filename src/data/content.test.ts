@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { observations, plants, species } from './content'
+import { plants, species } from './content'
+import { observations } from './observations'
 
 describe('butterfly collection content', () => {
   it('offers twenty-five butterflies including blue morpho and glasswing', () => {

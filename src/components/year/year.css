@@ -1,0 +1,125 @@
+/* "Your garden's year" (YearView) and its postcard. YearView imports this
+   file, so it arrives with the page rather than in the stylesheet every
+   page waits for. Colours come from the theme's tokens, which the night
+   theme redefines, so nothing here needs a .theme-night twin. Nothing here
+   moves. */
+
+.year-view {
+  max-width: 820px;
+}
+
+/* The years on offer: each a full touch target. The chosen one keeps its
+   colours and gains a heavier edge, as the letters' weeks do, so its
+   contrast is the same as every other year's in both themes. */
+.year-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.year-choice {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  background: transparent;
+  color: var(--forest-dark);
+  font-weight: 600;
+}
+
+.year-choice[aria-pressed='true'] {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 1px var(--forest);
+  font-weight: 800;
+}
+
+.year-view h2 {
+  margin-bottom: 0.6rem;
+}
+
+.year-words {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.year-words:last-child,
+.year-note {
+  margin-bottom: 0;
+}
+
+.year-note {
+  color: var(--muted);
+}
+
+/* The month names are words here, not buttons to open a month. */
+.year-calendar span.cal-year-month {
+  color: var(--forest-dark);
+  font-weight: 800;
+}
+
+/* The gardener's own lines, on a quiet rule like a letter's quote. */
+.year-quotes {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.year-quote {
+  margin: 0;
+  border-left: 3px solid var(--line);
+  padding-left: 1rem;
+}
+
+.year-quote figcaption {
+  color: var(--muted);
+}
+
+.year-quote blockquote {
+  margin: 0.3rem 0 0;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.year-quote blockquote p {
+  margin: 0;
+}
+
+/* The postcard: its preview at the card's width, never wider. */
+.postcard-preview {
+  margin: 1rem 0 0;
+}
+
+.postcard-preview img {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.postcard .form-actions {
+  flex-wrap: wrap;
+}
+
+.postcard-actions {
+  margin-top: 1rem;
+}
+
+.postcard-status {
+  margin: 0.75rem 0 0;
+}
+
+.postcard-status:empty {
+  margin: 0;
+}
+
+.postcard [aria-disabled='true'] {
+  opacity: 0.7;
+  cursor: progress;
+}

@@ -1,0 +1,61 @@
+/* Existing painted scenes keep their day treatment. Only decoded night art
+   receives the lighter wash; personal images retain the familiar contrast veil. */
+.theme-night .garden-hero[data-night-art]::before {
+  background: linear-gradient(110deg, rgba(3, 14, 28, .72), rgba(3, 14, 28, .2) 65%, rgba(3, 14, 28, .08));
+}
+.theme-night .garden-hero .hero-petals::after {
+  background: radial-gradient(ellipse at 82% 18%, rgba(190, 214, 255, .14), transparent 52%);
+}
+.garden-hero[data-season="spring"] .hero-petal {
+  background: linear-gradient(130deg, #ffe5ee, #e3aacb);
+  border-radius: 70% 20% 65% 30%;
+}
+.garden-hero[data-season="summer"] .hero-petal {
+  background: linear-gradient(130deg, #ffebac, #e6b96e);
+  border-radius: 65% 25% 70% 30%;
+}
+.garden-hero[data-season="summer"] .hero-petal:nth-child(3n) {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f9e8a7;
+}
+.garden-hero[data-season="autumn"] .hero-petal {
+  width: 15px;
+  height: 11px;
+  border-radius: 85% 5% 85% 5%;
+  background: linear-gradient(135deg, #e5b55f 40%, #bc6947 42%, #d38d49 52%);
+}
+.garden-hero[data-season="autumn"] .hero-petal:nth-child(even) {
+  background: linear-gradient(135deg, #c88f51, #a64f4a);
+}
+.garden-hero[data-season="winter"] .hero-petal {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f3f8fb;
+  box-shadow: 0 0 3px rgba(230, 245, 255, .35);
+}
+/* A still frost frame remains available with motion reduced. Keep it off
+   personal photos: decorating those is an unresolved owner decision. */
+.garden-hero[data-season="winter"]:not([data-personal-art]) .hero-petals::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 0 100%, rgba(221, 240, 247, .38), transparent 35%),
+    radial-gradient(ellipse at 100% 100%, rgba(221, 240, 247, .32), transparent 32%),
+    linear-gradient(0deg, rgba(227, 242, 248, .18), transparent 20%);
+  pointer-events: none;
+}
+.theme-night .garden-hero[data-season="winter"]:not([data-personal-art]) .hero-petals::before {
+  opacity: .45;
+}
+/* New seasonal motion is absent in Calm and reduced motion, including the
+   system preference. This does not change the existing butterfly behavior. */
+.calm-motion .garden-hero[data-season] .hero-petal,
+.reduce-motion .garden-hero[data-season] .hero-petal { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .garden-hero[data-season] .hero-petal { display: none; }
+}

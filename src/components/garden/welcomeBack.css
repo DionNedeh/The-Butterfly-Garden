@@ -1,0 +1,59 @@
+/* The garden's welcome back after a few days away (WelcomeBack.tsx). The
+   component imports this file, so it arrives only on such a day, never with
+   the garden's first load. Colours come from the theme's tokens, which the
+   night theme redefines, so nothing here needs a .theme-night twin. It
+   rises in like every card (theme-aurora's card-rise, only opacity and
+   transform), which reduced motion already stills. */
+
+.welcome-back {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin: 1rem 0 0;
+  padding: 0.9rem 1.1rem;
+}
+
+.welcome-back-spark {
+  flex: none;
+  /* The forest ink, not gold: AA against the card in both themes. */
+  color: var(--forest);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.welcome-back-words {
+  flex: 1;
+  min-width: 0;
+}
+
+.welcome-back-words .eyebrow {
+  margin-bottom: 0.2rem;
+  color: var(--muted);
+}
+
+.welcome-back-line {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.welcome-back-dismiss {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* On a phone the button goes under the words rather than squeezing them. */
+@media (max-width: 520px) {
+  .welcome-back {
+    flex-wrap: wrap;
+  }
+
+  .welcome-back-words {
+    flex-basis: calc(100% - 2.5rem);
+  }
+
+  .welcome-back-dismiss {
+    margin-left: auto;
+  }
+}

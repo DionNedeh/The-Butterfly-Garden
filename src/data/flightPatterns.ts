@@ -7,7 +7,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Easy garden loops with quiet pauses near the flowers.',
     cost: 0,
     currency: 'nectar',
-    animationClass: 'pattern-gentle-drift',
   },
   {
     id: 'petal-hop',
@@ -15,7 +14,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Short flower-to-flower movements with frequent little rests.',
     cost: 9,
     currency: 'nectar',
-    animationClass: 'pattern-petal-hop',
   },
   {
     id: 'figure-eight',
@@ -23,7 +21,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Smooth crossing loops with a gentle hover through the center.',
     cost: 18,
     currency: 'nectar',
-    animationClass: 'pattern-figure-eight',
   },
   {
     id: 'sunbeam-swoop',
@@ -31,7 +28,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'High sunny arcs followed by low pauses over the blooms.',
     cost: 27,
     currency: 'nectar',
-    animationClass: 'pattern-sunbeam-swoop',
   },
   {
     id: 'spiral-rise',
@@ -39,7 +35,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Climbing circles that settle into a slow, graceful descent.',
     cost: 7,
     currency: 'stardust',
-    animationClass: 'pattern-spiral-rise',
   },
   {
     id: 'garden-waltz',
@@ -47,7 +42,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Broad alternating loops with several flower-side rests.',
     cost: 10,
     currency: 'stardust',
-    animationClass: 'pattern-garden-waltz',
   },
   {
     id: 'clover-meander',
@@ -55,7 +49,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Low wandering arcs that pause unevenly among the clover.',
     cost: 12,
     currency: 'nectar',
-    animationClass: 'pattern-clover-meander',
   },
   {
     id: 'breeze-glide',
@@ -63,7 +56,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Long shallow glides carried on a steady, unhurried breeze.',
     cost: 21,
     currency: 'nectar',
-    animationClass: 'pattern-breeze-glide',
   },
   {
     id: 'blossom-bounce',
@@ -71,7 +63,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Short soft arcs that settle between one bloom and the next.',
     cost: 24,
     currency: 'nectar',
-    animationClass: 'pattern-blossom-bounce',
   },
   {
     id: 'ribbon-loop',
@@ -79,7 +70,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Wide flowing loops whose crossing point drifts as it goes.',
     cost: 6,
     currency: 'stardust',
-    animationClass: 'pattern-ribbon-loop',
   },
   {
     id: 'moonbeam-float',
@@ -87,7 +77,6 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Slow vertical waves rising into a long, quiet hover.',
     cost: 8,
     currency: 'stardust',
-    animationClass: 'pattern-moonbeam-float',
   },
   {
     id: 'canopy-dance',
@@ -95,6 +84,5 @@ export const flightPatterns: FlightPatternDefinition[] = [
     description: 'Broad arcs near the treetops easing down to lower rests.',
     cost: 12,
     currency: 'stardust',
-    animationClass: 'pattern-canopy-dance',
   },
 ]

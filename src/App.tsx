@@ -1,15 +1,15 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import './theme-aurora.css'
 import './garden-3.css'
 import './android.css'
-import { currentRelease, hasUnseenRelease } from './data/releases'
+import { currentRelease, hasUnseenRelease, releaseName } from './data/currentRelease'
 import { GardenView } from './components/GardenView'
 import { Icon } from './components/Icons'
-import { Onboarding } from './components/Onboarding'
+import { BottomNav, PrimaryNav } from './components/Navigation'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { ViewProblem } from './components/ViewProblem'
 import { SplashScreen } from './components/SplashScreen'
-import { TodayView } from './components/TodayView'
-import { UpdatePrompt } from './components/UpdatePrompt'
 
 /**
  * The garden and Today are what the app opens on; everything else is fetched
@@ -53,30 +53,126 @@ const PrivacyPolicyView = lazy(() =>
     default: m.PrivacyPolicyView,
   })),
 )
+// Today and onboarding load with the rest of the pages rather than with the
+// garden: a returning gardener lands on the garden and may never need them.
+const TodayView = lazy(() =>
+  import('./components/TodayView').then((m) => ({ default: m.TodayView })),
+)
+const Onboarding = lazy(() =>
+  import('./components/Onboarding').then((m) => ({ default: m.Onboarding })),
+)
+// Only for a stored garden that could not be read, which is rare. Should its
+// chunk not load either, the shell's last resort, safe mode, offers the same
+// copy and restore.
+const RecoveryScreen = lazy(() =>
+  import('./components/RecoveryScreen').then((m) => ({ default: m.RecoveryScreen })),
+)
 const NoticesView = lazy(() =>
   import('./components/NoticesView').then((m) => ({ default: m.NoticesView })),
 )
-import {
-  ambientTrackName,
-  DEFAULT_AMBIENT_TRACK_ID,
-} from './data/ambientTracks'
+const SupportView = lazy(() =>
+  import('./components/SupportView').then((m) => ({ default: m.SupportView })),
+)
+const BreathingView = lazy(() =>
+  import('./components/BreathingView').then((m) => ({ default: m.BreathingView })),
+)
+const YearView = lazy(() =>
+  import('./components/YearView').then((m) => ({ default: m.YearView })),
+)
+const ComfortPlanView = lazy(() =>
+  import('./components/ComfortPlanView').then((m) => ({ default: m.ComfortPlanView })),
+)
+// Only ever shown on the address the garden moved from, never in the app.
+const MovedBanner = lazy(() =>
+  import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
+)
+// The offer of a new version, and the hourly look for one, arrive once the
+// garden is on screen. A chunk that cannot be fetched shows nothing, rather
+// than taking the garden down with it.
+const UpdatePrompt = lazy(() =>
+  import('./components/UpdatePrompt').then(
+    (m) => ({ default: m.UpdatePrompt }),
+    () => ({ default: () => null }),
+  ),
+)
+// The backup file kept up to date, where the browser can keep a file: it
+// arrives after the garden, and does nothing until a file has been chosen.
+// Never in the Android app, whose bundle leaves it out altogether.
+const AutoBackupKeeper =
+  import.meta.env.VITE_PLATFORM === 'android'
+    ? undefined
+    : lazy(() =>
+        import('./components/backup/AutoBackupKeeper').then(
+          (m) => ({ default: m.AutoBackupKeeper }),
+          () => ({ default: () => null }),
+        ),
+      )
+import { ambientTrackName } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
-import { useGardenState } from './hooks/useGardenState'
+import { useEffectiveTheme } from './hooks/useEffectiveTheme'
+import { useFadeOut, type FadeOutMinutes } from './hooks/useFadeOut'
+import { useGardenState, type StarterGoal } from './hooks/useGardenState'
 import { useLocalDate } from './hooks/useLocalDate'
+import { useWhatsNewOnce } from './hooks/useWhatsNewOnce'
+import { followUpdates } from './lib/appUpdate'
 import { useRecapWindow } from './hooks/useRecapWindow'
 import { usePassStatus } from './hooks/usePassStatus'
 import { setPassStatus, trackPassStatus } from './lib/passEntitlement'
 import { dismissPassLapseNotice } from './lib/playBilling'
-import { backAction, requestDialogClose } from './lib/backNavigation'
+import {
+  backAction,
+  putBackAt,
+  requestDialogClose,
+  requestDismiss,
+} from './lib/backNavigation'
 import {
   leaveApp,
   onAppActiveChange,
   onBackButton,
   setSystemBarsForTheme,
 } from './lib/native'
+import type { NavItem } from './lib/navigation'
 import { isAndroidApp } from './lib/platform'
-import { moonlightForDate, sunlightForDate } from './lib/progression'
+import {
+  DAILY_SUNLIGHT_CAP,
+  moonlightForDate,
+  sunlightForDate,
+} from './lib/progression'
+import { addDaysToLocalDate, localDateToNoon, recapHoursOf } from './lib/date'
+import { isBackupDue } from './lib/backupReminder'
 import type { AppView } from './types'
+import { motionClass, motionPreference } from './lib/motion'
+import { applyTextSize } from './lib/textSize'
+import { nextMorning, paintBrowserBars } from './lib/theme'
+import { useDraft } from './lib/drafts'
+import { heardTrack, soundVolumeOf } from './lib/sound'
+import { isArrival, movedTo } from './lib/hosting'
+import {
+  returnFrom,
+  routeFromHash,
+  urlForRoute,
+  type BreatheWay,
+  type LinkPlace,
+  type Route,
+} from './lib/routes'
+import { Celebrations } from './components/Celebrations'
+
+function currentUrl(): string {
+  const { pathname, search, hash } = window.location
+  return `${pathname}${search}${hash}`
+}
+
+/**
+ * Puts the gardener back where they pressed a "What does this do?" link, a
+ * way into breathing or into the comfort plan, or the plan's way to support,
+ * once the page they return to is drawn. Rendered after the page, inside the
+ * same Suspense, so it runs after the page's own first focus (Care's chip,
+ * the plan's heading) and never before the page is there.
+ */
+function PutBack({ place }: { place: LinkPlace }) {
+  useEffect(() => putBackAt(place), [place])
+  return null
+}
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -90,44 +186,150 @@ interface InstallPromptEvent extends Event {
  */
 const SPLASH_MINIMUM_MS = 700
 
-const navigation: Array<{
-  id: AppView
-  label: string
-  icon:
-    | 'garden'
-    | 'care'
-    | 'today'
-    | 'journal'
-    | 'shop'
-    | 'flight'
-    | 'flower'
-    | 'settings'
-}> = [
+/**
+ * How long the sound takes to fade when the recap ends by fading the garden
+ * to night and no fade-out was chosen in Settings: the shortest one offered,
+ * since the gardener has just said they are putting the phone down.
+ */
+const FADE_TO_NIGHT_MINUTES: FadeOutMinutes = 15
+
+/** The draft that holds night until the morning after the recap's ending. */
+const NIGHT_UNTIL_DRAFT = 'night-until'
+
+/**
+ * Every page in the navigation, in the header's order. On a phone the dock
+ * holds the first four and More, and More's sheet holds the pages marked
+ * `inMore`. A page's `badge` (lib/navigation) shows on its button and on More.
+ */
+const navigation: readonly NavItem[] = [
   { id: 'garden', label: 'Garden', icon: 'garden' },
   { id: 'care', label: 'Care', icon: 'care' },
   { id: 'today', label: 'Today', icon: 'today' },
   { id: 'journal', label: 'Journal', icon: 'journal' },
-  { id: 'shop', label: 'Shop', icon: 'shop' },
-  { id: 'flight-patterns', label: 'Flight', icon: 'flight' },
-  { id: 'guide', label: 'Guide', icon: 'flower' },
-  { id: 'settings', label: 'Settings', icon: 'settings' },
+  { id: 'shop', label: 'Shop', icon: 'shop', inMore: true },
+  { id: 'flight-patterns', label: 'Flight', icon: 'flight', inMore: true },
+  { id: 'guide', label: 'Guide', icon: 'flower', inMore: true },
+  { id: 'settings', label: 'Settings', icon: 'settings', inMore: true },
 ]
 
 function App() {
   const garden = useGardenState()
   const today = useLocalDate()
-  const recap = useRecapWindow()
-  const [view, changeView] = useState<AppView>('garden')
+  const recap = useRecapWindow(recapHoursOf(garden.state?.profile))
+  // One quiet mark on Settings while a fresh copy of the garden is due, the
+  // same reminder Settings words in full (lib/backupReminder), asked at the
+  // same moment: noon of the day. By the day is close enough for a
+  // thirty-day rule, keeps the clock out of render, and lets a copy made any
+  // time today be believed.
+  const reminderAt = useMemo(() => localDateToNoon(today), [today])
+  // Only what the rule reads, so the count is not redone on every change.
+  const journalProfile = garden.state?.profile
+  const journalMoods = garden.state?.moods
+  const journalReflections = garden.state?.reflections
+  const journalRecaps = garden.state?.recaps
+  const backupDue = useMemo(
+    () =>
+      journalMoods && journalReflections && journalRecaps && !garden.persistence.readOnly
+        ? isBackupDue(
+            {
+              profile: journalProfile,
+              moods: journalMoods,
+              reflections: journalReflections,
+              recaps: journalRecaps,
+            },
+            reminderAt,
+          )
+        : false,
+    [
+      journalProfile,
+      journalMoods,
+      journalReflections,
+      journalRecaps,
+      garden.persistence.readOnly,
+      reminderAt,
+    ],
+  )
+  const navItems = useMemo(
+    () =>
+      backupDue
+        ? navigation.map((item) =>
+            item.id === 'settings' ? { ...item, badge: 'time for a fresh copy' } : item,
+          )
+        : navigation,
+    [backupDue],
+  )
+  // The page lives in the address (lib/routes), so Back and Forward work, a
+  // reload stays put, and a link or shortcut can open a page directly.
+  const [route, setRoute] = useState<Route>(
+    () => routeFromHash(window.location.hash) ?? { view: 'garden' },
+  )
+  const view = route.view
   /** Set only when something asks for the shop's Garden Pass tab. */
-  const [shopOpensOnPass, setShopOpensOnPass] = useState(false)
-  const setView = (next: AppView, options: { onPass?: boolean } = {}) => {
-    window.scrollTo({ top: 0, behavior: 'instant' })
-    setShopOpensOnPass(options.onPass ?? false)
-    changeView(next)
+  const shopOpensOnPass = route.view === 'shop' && route.onPass === true
+  const navigate = (next: Route, options: { replace?: boolean } = {}) => {
+    // A page opens at its top, except one being returned to, which PutBack
+    // scrolls back to where it was.
+    if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
+    const url = urlForRoute(next)
+    if (url !== currentUrl()) {
+      if (options.replace) window.history.replaceState(null, '', url)
+      else window.history.pushState(null, '', url)
+    }
+    setRoute(next)
   }
-  const finishOnboarding = (name: string, gardenName: string) => {
-    window.scrollTo({ top: 0, behavior: 'instant' })
-    garden.onboard(name, gardenName)
+  const setView = (next: AppView, options: { onPass?: boolean } = {}) =>
+    navigate({ view: next, onPass: options.onPass })
+  /** The page "If you need support now" was opened from, to return to. */
+  const [supportFrom, setSupportFrom] = useState<AppView>('garden')
+  /**
+   * The comfort plan as it was when it opened the support page, to come back
+   * to: the page that opened the plan and the place on it, and the place of
+   * the plan's own way to support, so that the support page's Back and then
+   * the plan's put the gardener back at each in turn.
+   */
+  const [planLeft, setPlanLeft] = useState<Route>({ view: 'comfort' })
+  const openSupport = () => {
+    // Out of a comfort plan the support page opened, back to that support
+    // page as it was, so the two never send the gardener round in a loop.
+    if (route.view !== 'comfort' || route.from !== 'support') {
+      setSupportFrom(route.view)
+      if (route.view === 'comfort') {
+        setPlanLeft({
+          view: 'comfort',
+          from: route.from,
+          fromPlace: route.fromPlace,
+          restore: { support: true, scrollY: window.scrollY },
+        })
+      }
+    }
+    setView('support')
+  }
+  useEffect(() => {
+    const follow = () => {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      setRoute(routeFromHash(window.location.hash) ?? { view: 'garden' })
+    }
+    window.addEventListener('popstate', follow)
+    return () => window.removeEventListener('popstate', follow)
+  }, [])
+  // With a garden open, the address always names the page on screen: an
+  // unknown or spent hash (an old link, a recap from last night, the move's
+  // #/arrive) is quietly replaced. Not before: onboarding still needs #/arrive.
+  const hasGarden = Boolean(garden.state?.profile)
+  useEffect(() => {
+    if (!hasGarden) return
+    const wanted = urlForRoute(route)
+    if (wanted !== currentUrl()) window.history.replaceState(null, '', wanted)
+  }, [route, hasGarden])
+  /** Read once: whether this visit arrived from the old address (lib/hosting). */
+  const [arriving] = useState(isArrival)
+  const finishOnboarding = (
+    name: string,
+    gardenName: string,
+    starterGoals?: readonly StarterGoal[],
+  ) => {
+    navigate({ view: 'garden' }, { replace: true })
+    garden.onboard(name, gardenName, starterGoals)
   }
   const [seedFocus, setSeedFocus] = useState<string>()
   /** The day the recap was actually opened for, so it is never re-entered. */
@@ -135,10 +337,8 @@ function App() {
   // Always true in the PWA. In the Android app, false while the app is in the
   // background, so the soundscape does not keep playing from a pocket.
   const [appActive, setAppActive] = useState(true)
-  useAmbientSound(
-    Boolean(garden.state?.profile?.ambientSound) && appActive,
-    garden.state?.profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID,
-  )
+  const { setAmbientSound } = garden
+  const fadeOut = useFadeOut(useCallback(() => setAmbientSound(false), [setAmbientSound]))
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
   const [splashDone, setSplashDone] = useState(false)
@@ -173,19 +373,35 @@ function App() {
   // Android's back gesture walks back through the app the way a gardener
   // would expect: the open dialog first, then the recap to Today, then any
   // page to the garden, and only then out of the app. The handler is
-  // registered once and reads the current page from a ref.
-  const viewRef = useRef(view)
+  // registered once and reads the current page from a ref, with the page a
+  // "What does this do?" link or a way into breathing or the comfort plan
+  // left, which back returns the Guide, breathing or the plan to.
+  const routeRef = useRef(route)
   useEffect(() => {
-    viewRef.current = view
-  }, [view])
+    routeRef.current = route
+  }, [route])
   useEffect(
     () =>
       onBackButton(() => {
-        const action = backAction(viewRef.current)
+        const current = routeRef.current
+        const action = backAction(current.view, document, current.from)
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
+        else if (action.kind === 'dismiss') requestDismiss(action.element)
         else if (action.kind === 'view') {
-          window.scrollTo({ top: 0, behavior: 'instant' })
-          changeView(action.view)
+          // Out of the Guide, breathing or the comfort plan, back does what
+          // its Back button does: the same companion on Care, and the
+          // gardener where they were on the page.
+          const back = returnFrom(current)
+          const next: Route = back?.view === action.view ? back : { view: action.view }
+          // Out of a year looked back on, the Journal puts focus back on the
+          // link that opened it, as the page's own Back button does.
+          if (current.view === 'year') next.from = 'year'
+          // Android's back walks up a fixed ladder (lib/backNavigation), not
+          // through history, so each step replaces the address.
+          if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
+          const url = urlForRoute(next)
+          if (url !== currentUrl()) window.history.replaceState(null, '', url)
+          setRoute(next)
         } else void leaveApp()
       }),
     [],
@@ -193,14 +409,59 @@ function App() {
 
   // The Android app follows Google Play's answer about the Garden Pass; reading
   // it here re-renders the whole garden whenever that answer changes, so
-  // every Pass check below sees it at once.
+  // every Pass check below sees it at once. The platform checks in this file
+  // that only the app needs are inline, rather than isAndroidApp(), so the web
+  // build leaves out what only the app says and does.
   const pass = usePassStatus()
-  useEffect(() => (isAndroidApp() ? trackPassStatus() : undefined), [])
+  useEffect(
+    () => (import.meta.env.VITE_PLATFORM === 'android' ? trackPassStatus() : undefined),
+    [],
+  )
 
-  const night = garden.state?.profile?.theme === 'night'
+  // The theme on screen, chosen or followed (lib/theme). Everything that
+  // matches the theme reads this, never profile.theme, which is only the
+  // choice made by hand.
+  //
+  // The recap's "Fade the garden to night and close" holds night until the
+  // morning without touching that choice, so following the device, or a
+  // sunlight chosen by hand, is back after it. A draft, so a reload keeps it.
+  const [nightUntilDraft, setNightUntil] = useDraft(NIGHT_UNTIL_DRAFT, '')
+  const nightUntil = Number(nightUntilDraft) || undefined
+  const chosenTheme = useEffectiveTheme(garden.state?.profile)
+  const theme = useEffectiveTheme(garden.state?.profile, nightUntil)
+  const night = theme === 'night'
+  const nightHeld = theme !== chosenTheme
+  // The soundscape follows the theme on screen when night brings the piano.
+  const soundProfile = garden.state?.profile
+  const heardTrackId = heardTrack(soundProfile, theme)
+  const ambient = useAmbientSound({
+    enabled: Boolean(soundProfile?.ambientSound) && appActive,
+    trackId: heardTrackId,
+    volume: soundVolumeOf(soundProfile),
+    fadeEndsAt: fadeOut.endsAt,
+    pauseWhenHidden: soundProfile?.soundInBackground === false,
+  })
   useEffect(() => {
     void setSystemBarsForTheme(night)
   }, [night])
+  // The browser's own bars follow the garden while one is open, and the
+  // device's dark setting again (as index.html has it) once none is.
+  useEffect(() => (hasGarden ? paintBrowserBars(theme) : undefined), [hasGarden, theme])
+
+  // Text size scales the root, which every rem in the stylesheets reads. It
+  // goes with the garden: onboarding and the recovery screen are always at
+  // the usual size.
+  const textSize = garden.state?.profile?.textSize
+  useEffect(() => applyTextSize(textSize), [textSize])
+
+  // The recap's "Fade the garden to night and close" hands focus to the
+  // garden's name when the garden arrives, rather than leaving it nowhere.
+  const focusGardenTitle = useRef(false)
+  useEffect(() => {
+    if (view !== 'garden' || !focusGardenTitle.current) return
+    focusGardenTitle.current = false
+    document.getElementById('garden-title')?.focus()
+  }, [view])
 
   useEffect(() => {
     const handleOnline = () => setOnline(true)
@@ -211,27 +472,92 @@ function App() {
     }
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
-    window.addEventListener('beforeinstallprompt', handleInstall)
+    // The Android app is installed already and is never offered an install;
+    // the check is inline so its build leaves the prompt out.
+    if (import.meta.env.VITE_PLATFORM !== 'android') {
+      window.addEventListener('beforeinstallprompt', handleInstall)
+    }
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
-      window.removeEventListener('beforeinstallprompt', handleInstall)
+      if (import.meta.env.VITE_PLATFORM !== 'android') {
+        window.removeEventListener('beforeinstallprompt', handleInstall)
+      }
     }
   }, [])
+
+  // When another tab applies an update, this one reloads with it, whatever
+  // it shows (lib/appUpdate). The Android app has one window and no service
+  // worker; the check is inline so its build leaves all of this out.
+  useEffect(
+    () => (import.meta.env.VITE_PLATFORM === 'android' ? undefined : followUpdates()),
+    [],
+  )
+
+  // After an update, What's new opens by itself once (hooks/useWhatsNewOnce).
+  useWhatsNewOnce({
+    screen:
+      garden.loading || !splashDone ? 'loading' : garden.state?.profile ? 'garden' : 'no-garden',
+    readOnly: garden.persistence.readOnly,
+    lastSeenReleaseId: garden.state?.profile?.lastSeenReleaseId,
+    onOpen: () => {
+      garden.markReleaseSeen(currentRelease.id)
+      setView('whats-new')
+    },
+  })
 
   if (garden.loading || !splashDone) {
     return <SplashScreen />
   }
 
   if (!garden.state?.profile) {
-    return <Onboarding onComplete={finishOnboarding} />
+    // A garden is stored but could not be read: never greet its gardener as
+    // a newcomer. The recovery screen says what happened and what to do.
+    if (garden.persistence.readOnly) {
+      return (
+        <Suspense fallback={<SplashScreen />}>
+          <RecoveryScreen
+            reason={garden.persistence.reason}
+            onRestore={garden.importGarden}
+            onDownloadSetAside={garden.quarantinedCopy}
+            onStartFresh={garden.startFresh}
+          />
+        </Suspense>
+      )
+    }
+    return (
+      <>
+        {garden.persistence.notice && (
+          <div className="persistence-banner notice-banner" role="status">
+            <span>{garden.persistence.notice}</span>
+            <button
+              className="notice-dismiss"
+              aria-label="Dismiss notice"
+              onClick={garden.dismissNotice}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <Suspense fallback={<SplashScreen />}>
+          <Onboarding
+            onComplete={finishOnboarding}
+            onRestore={garden.importGarden}
+            arriving={arriving}
+            movedTo={movedTo()}
+          />
+        </Suspense>
+      </>
+    )
   }
 
   const state = garden.state
   const profile = state.profile
-  if (!profile) return <Onboarding onComplete={finishOnboarding} />
+  const newAddress = movedTo()
+  // Unreachable after the check above; it narrows the type for what follows.
+  if (!profile) return null
   const sunlight = sunlightForDate(state, today)
-  const activeTrackName = ambientTrackName(profile.ambientTrack)
+  const activeTrackName = ambientTrackName(heardTrackId)
   const recapCollected = recap.targetDate
     ? Boolean(moonlightForDate(state, recap.targetDate))
     : false
@@ -244,21 +570,90 @@ function App() {
   /**
    * The recap is the one view that can stop being available while the gardener
    * is standing in it: four o'clock arrives, or another tab collects the night
-   * first. Falling back to Today is derived rather than corrected after the
-   * fact, so the flow is never briefly rendered against a day already closed.
+   * first.
    *
-   * It is tied to the day it was opened for, not merely to the recap being
-   * available. Otherwise a tab left open overnight would fall back to Today at
-   * four in the morning while still holding 'recap', and then walk itself back
-   * into the flow the moment the next evening opened -- with nobody having
-   * asked for it.
+   * A recap already opened stays open for the day it was opened for, until it
+   * is collected or left -- four o'clock arriving mid-answer used to drop the
+   * gardener back on Today with their words gone. It is bounded to that day or
+   * the one after, so a tab left in the recap does not keep offering a night
+   * from days ago. Another tab collecting the night still closes it, derived
+   * here rather than corrected after the fact, so the flow is never rendered
+   * against a day already closed.
    */
-  const inRecap = view === 'recap' && recapOpenedFor === recapTarget
+  const openedRecapDate =
+    recapOpenedFor &&
+    !garden.persistence.readOnly &&
+    !moonlightForDate(state, recapOpenedFor) &&
+    addDaysToLocalDate(recapOpenedFor, 1) >= today
+      ? recapOpenedFor
+      : undefined
+  const inRecap = view === 'recap' && openedRecapDate !== undefined
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
+  /**
+   * The Guide at one of its sections, remembering the page to return to and
+   * where on it the link was: how far down, and on Care, whose link it was.
+   */
+  const openGuideAt = (section: string, companionId?: string) =>
+    navigate({
+      view: 'guide',
+      section,
+      from: activeView,
+      fromPlace: { section, scrollY: window.scrollY, companionId },
+    })
+  /**
+   * Breathing with a butterfly, remembering the page that offered it and
+   * where on it, as a Guide link does, so that leaving puts the gardener back
+   * at the way in they took. The recap is collected on the way in and is not
+   * there to come back to, so from it the way back is Today, at its top.
+   */
+  const openBreathe = (way: BreatheWay, goalId?: string) => {
+    const fromRecap = way === 'recap'
+    navigate({
+      view: 'breathe',
+      from: fromRecap ? 'today' : activeView,
+      fromPlace: { breathe: way, goalId, scrollY: fromRecap ? 0 : window.scrollY },
+    })
+  }
+  /**
+   * My comfort plan, remembering the page that offered it and where on it, as
+   * breathing does, so that leaving puts the gardener back at its link.
+   */
+  const openComfort = () =>
+    navigate({
+      view: 'comfort',
+      from: activeView,
+      fromPlace: { comfort: true, scrollY: window.scrollY },
+    })
+  // The header's switch says what pressing it does, following included: it
+  // chooses the other theme by hand, which ends following. A night held by
+  // the recap simply ends, and what was chosen or followed is back.
+  const themeSwitchLabel = `${night ? 'Switch to sunlight mode' : 'Switch to night mode'}${
+    nightHeld
+      ? ''
+      : profile.themeFollows === 'device'
+      ? ' and stop following your device'
+      : profile.themeFollows === 'evening'
+        ? ' and stop following your evening'
+        : ''
+  }`
+  /**
+   * The recap's other ending: put the phone down. The night is collected as
+   * ever (MoonlightRecap does that first); then the garden turns to night
+   * until the morning, unless it is already night, without changing the
+   * theme chosen or followed; and a sound that is playing starts to fade, as
+   * Settings' timer would, unless a fade is already on its way.
+   */
+  const fadeToNight = () => {
+    if (!night) setNightUntil(String(nextMorning(profile, new Date()).getTime()))
+    if (profile.ambientSound && fadeOut.endsAt === undefined)
+      fadeOut.choose(fadeOut.minutes ?? FADE_TO_NIGHT_MINUTES, true)
+    focusGardenTitle.current = true
+    setView('garden')
+  }
 
   return (
     <div
-      className={`app-shell theme-${profile.theme ?? 'sunlight'} ${profile.reducedMotion ? 'reduce-motion' : ''}`}
+      className={`app-shell theme-${theme} ${motionClass(motionPreference(profile))}`}
     >
       <header className="app-header">
         <button
@@ -279,35 +674,22 @@ function App() {
             <small>{profile.gardenName}</small>
           </span>
         </button>
-        <nav aria-label="Primary navigation">
-          {navigation.map((item) => (
-            <button
-              key={item.id}
-              className={activeView === item.id ? 'active' : ''}
-              onClick={() => setView(item.id)}
-              aria-current={activeView === item.id ? 'page' : undefined}
-            >
-              <Icon name={item.icon} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <PrimaryNav items={navItems} current={activeView} onNavigate={setView} />
         <div className="header-actions">
           <span className="header-sunlight" title="Sunlight earned today">
             <Icon name="sun" size={19} />
-            {sunlight} / 5
+            {sunlight} / {DAILY_SUNLIGHT_CAP}
+            <span className="sr-only"> Sunlight today</span>
           </span>
           <span className="nectar-wallet" title="Nectar balance">
             <Icon name="nectar" size={19} />
-            <strong>{state.nectar}</strong>
-            <span>Nectar</span>
+            <strong>{state.nectar}</strong> <span>Nectar</span>
           </span>
           <span className="stardust-wallet" title="Stardust balance">
             <Icon name="stardust" size={19} />
-            <strong>{state.stardust}</strong>
-            <span>Stardust</span>
+            <strong>{state.stardust}</strong> <span>Stardust</span>
           </span>
-          {installPrompt && (
+          {import.meta.env.VITE_PLATFORM !== 'android' && installPrompt && (
             <button
               className="install-button"
               onClick={() => {
@@ -323,7 +705,10 @@ function App() {
           )}
           <button
             className={`theme-toggle sound-toggle ${profile.ambientSound ? 'sound-on' : ''}`}
-            onClick={garden.toggleAmbientSound}
+            onClick={() => {
+              fadeOut.soundSwitched(!profile.ambientSound)
+              garden.toggleAmbientSound()
+            }}
             aria-pressed={profile.ambientSound ?? false}
             aria-label={
               profile.ambientSound
@@ -340,19 +725,14 @@ function App() {
           </button>
           <button
             className="theme-toggle"
-            onClick={garden.toggleTheme}
-            aria-label={
-              profile.theme === 'night'
-                ? 'Switch to sunlight mode'
-                : 'Switch to night mode'
-            }
-            title={
-              profile.theme === 'night'
-                ? 'Switch to sunlight mode'
-                : 'Switch to night mode'
-            }
+            onClick={() => {
+              setNightUntil('')
+              if (!nightHeld) garden.toggleTheme(theme)
+            }}
+            aria-label={themeSwitchLabel}
+            title={themeSwitchLabel}
           >
-            <Icon name={profile.theme === 'night' ? 'sun' : 'moon'} />
+            <Icon name={night ? 'sun' : 'moon'} />
           </button>
         </div>
       </header>
@@ -364,14 +744,23 @@ function App() {
         </div>
       )}
 
-      {garden.persistence.readOnly && (
+      {garden.persistence.readOnly &&
+        garden.persistence.reason === 'deleting' && (
+          <div className="persistence-banner" role="alert">
+            <strong>This garden is being deleted in another tab.</strong>
+            <span>Saving is paused here so nothing can be written back.</span>
+          </div>
+        )}
+
+      {garden.persistence.readOnly &&
+        garden.persistence.reason !== 'deleting' && (
         <div className="persistence-banner" role="alert">
           <strong>Your saved garden could not be opened.</strong>
           <span>
             {garden.persistence.reason === 'incompatible'
               ? 'It was written by a newer version of the app. Nothing has been changed or deleted — update the app, or restore a backup from Settings.'
               : garden.persistence.reason === 'unavailable'
-                ? isAndroidApp()
+                ? import.meta.env.VITE_PLATFORM === 'android'
                   ? 'The app could not open its storage on this phone. Your garden is still here; try closing and reopening the app.'
                   : 'This browser would not open its local storage. Your garden is still on this device; try reopening the app.'
                 : 'The stored garden could not be read, so a copy has been set aside untouched. Restore a backup from Settings, or start fresh.'}
@@ -382,24 +771,47 @@ function App() {
         </div>
       )}
 
+      {garden.persistence.notice && (
+        <div className="persistence-banner notice-banner" role="status">
+          <span>{garden.persistence.notice}</span>
+          <button
+            className="notice-dismiss"
+            aria-label="Dismiss notice"
+            onClick={garden.dismissNotice}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {garden.persistence.writeError && (
         <div className="persistence-banner" role="alert">
           <strong>Your last change could not be saved.</strong>
           <span>{garden.persistence.writeError}</span>
           <span>
-            {isAndroidApp()
+            {import.meta.env.VITE_PLATFORM === 'android'
               ? 'Recent edits are only held in memory. Save a backup from Settings before closing the app.'
               : 'Recent edits are only in this tab. Export a backup from Settings before closing it.'}
           </span>
         </div>
       )}
 
+      {newAddress && (
+        <Suspense fallback={null}>
+          <MovedBanner target={newAddress} onExportGarden={garden.exportGarden} />
+        </Suspense>
+      )}
+
+      <Celebrations />
+
       <main id="main-content">
         {activeView === 'garden' &&
           hasUnseenRelease(state.profile?.lastSeenReleaseId) && (
             <aside className="release-notice">
               <div>
-                <span className="eyebrow">A little more wonder · 3.0</span>
+                <span className="eyebrow">
+                  A little more wonder · {releaseName()}
+                </span>
                 <strong>Your garden has grown.</strong>
               </div>
               <button
@@ -422,7 +834,7 @@ function App() {
           )}
 
         {activeView === 'garden' &&
-          isAndroidApp() &&
+          import.meta.env.VITE_PLATFORM === 'android' &&
           pass.lapsed &&
           pass.state !== 'active' && (
             <aside className="release-notice pass-lapse-notice">
@@ -459,6 +871,10 @@ function App() {
             </aside>
           )}
 
+        <ErrorBoundary
+          resetKey={activeView}
+          fallback={() => <ViewProblem onHome={() => setView('garden')} />}
+        >
         <Suspense
           fallback={
             <p className="view-loading" role="status">
@@ -476,8 +892,13 @@ function App() {
               onSelectCompanion={garden.selectCompanion}
               onRenameCreature={garden.renameCreature}
               onOpenCare={() => setView('care')}
+              onCareFor={(companionId) => navigate({ view: 'care', companionId })}
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
+              onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
+              onOpenLetter={() => navigate({ view: 'journal', letter: true })}
+              onReadLetter={garden.readLetter}
+              theme={theme}
             />
           )}
           {activeView === 'care' && (
@@ -487,8 +908,17 @@ function App() {
               onCare={garden.careForCreature}
               onEquip={garden.equipItem}
               onUnequip={garden.unequipSlot}
+              onSavePreset={garden.savePreset}
+              onWearPreset={garden.wearPreset}
+              onRenamePreset={garden.renamePreset}
+              onDeletePreset={garden.deletePreset}
+              onRestorePreset={garden.restorePreset}
               onRenameCreature={garden.renameCreature}
               onGoToShop={() => setView('shop')}
+              openOn={route.companionId}
+              onChooseFlight={garden.chooseCompanionFlight}
+              onOpenGuide={openGuideAt}
+              onAdoptGoal={garden.adoptGoal}
             />
           )}
           {activeView === 'shop' && (
@@ -496,6 +926,8 @@ function App() {
               state={state}
               onPurchasePattern={garden.purchaseFlightPattern}
               onPurchaseJar={garden.purchaseJar}
+              onRecycleJar={garden.recycleJar}
+              onRestoreJar={garden.restoreJar}
               onPurchaseItem={garden.purchaseItem}
               onOpenCare={() => setView('care')}
               onOpenFlight={() => setView('flight-patterns')}
@@ -504,6 +936,7 @@ function App() {
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
+              onChooseNightBackdrop={garden.chooseNightBackdrop}
             />
           )}
           {activeView === 'flight-patterns' && (
@@ -527,23 +960,37 @@ function App() {
               onWakeGoal={garden.wakeGoal}
               onPlanGoal={garden.planGoal}
               onSetGoalArchived={garden.setGoalArchived}
+              onUncompleteGoal={garden.uncompleteGoal}
+              onRestoreGoal={garden.restoreGoal}
+              onOpenSupport={openSupport}
+              onOpenComfort={openComfort}
+              onSetGentleDay={garden.setGentleDay}
+              onChooseNextPlant={garden.chooseNextPlant}
+              onOpenCare={() => setView('care')}
+              onAdoptGoal={garden.adoptGoal}
               recap={offeredRecap}
               moonlightCollected={recapCollected}
+              openAtCheckIn={route.checkIn}
+              onOpenGuide={openGuideAt}
+              onOpenBreathe={openBreathe}
               onOpenRecap={() => {
                 setRecapOpenedFor(recapTarget)
                 setView('recap')
               }}
             />
           )}
-          {inRecap && recapTarget && (
+          {inRecap && openedRecapDate && (
             <MoonlightRecap
               state={state}
-              targetDate={recapTarget}
+              targetDate={openedRecapDate}
               today={today}
               onCollect={(submission) =>
-                garden.collectMoonlight(recapTarget, submission)
+                garden.collectMoonlight(openedRecapDate, submission)
               }
               onClose={() => setView('today')}
+              onFadeToNight={fadeToNight}
+              onOpenGuide={openGuideAt}
+              onBreathe={() => openBreathe('recap')}
             />
           )}
           {activeView === 'guide' && (
@@ -553,6 +1000,15 @@ function App() {
                 setSeedFocus(id)
                 setView('garden')
               }}
+              onOpenSupport={openSupport}
+              section={route.section}
+              returnTo={route.from}
+              onReturn={() => {
+                const back = returnFrom(route)
+                if (back) navigate(back)
+              }}
+              onOpenSection={(section) => navigate({ ...route, section })}
+              onChangeSightings={garden.changeSightings}
             />
           )}
           {activeView === 'whats-new' && <WhatsNewView />}
@@ -561,6 +1017,33 @@ function App() {
           )}
           {activeView === 'notices' && (
             <NoticesView onBack={() => setView('settings')} />
+          )}
+          {activeView === 'support' && (
+            <SupportView
+              onBack={() => (supportFrom === 'comfort' ? navigate(planLeft) : setView(supportFrom))}
+              from={supportFrom}
+              state={state}
+              onBreathe={() => openBreathe('support')}
+              onOpenComfort={openComfort}
+            />
+          )}
+          {activeView === 'comfort' && (
+            <ComfortPlanView
+              plan={profile.comfortPlan}
+              onChange={garden.changeComfortPlan}
+              onOpenSupport={openSupport}
+              from={route.from}
+              onBack={() => navigate(returnFrom(route) ?? { view: 'garden' })}
+            />
+          )}
+          {activeView === 'breathe' && (
+            <BreathingView
+              state={state}
+              // A session cannot be counted where nothing can be saved.
+              onFinish={garden.persistence.readOnly ? undefined : garden.finishBreathing}
+              from={route.from}
+              onBack={() => navigate(returnFrom(route) ?? { view: 'garden' })}
+            />
           )}
           {activeView === 'journal' && (
             <JournalView
@@ -571,6 +1054,23 @@ function App() {
               onDeleteReflection={garden.deleteReflection}
               onUpdateRecap={garden.updateRecap}
               onDeleteRecap={garden.deleteRecap}
+              onAddEarlierMood={garden.addEarlierMood}
+              onAddEarlierReflection={garden.addEarlierReflection}
+              openLetter={route.letter}
+              onReadLetter={garden.readLetter}
+              onSetStarred={garden.setStarred}
+              onChangeSightings={garden.changeSightings}
+              onOpenYear={(year) => navigate({ view: 'year', year, from: 'journal' })}
+              returnedFromYear={route.from === 'year'}
+            />
+          )}
+          {activeView === 'year' && (
+            <YearView
+              state={state}
+              today={today}
+              year={route.year}
+              onChooseYear={(year) => navigate({ ...route, year }, { replace: true })}
+              onBack={() => navigate({ view: route.from ?? 'journal', from: 'year' })}
             />
           )}
           {activeView === 'settings' && (
@@ -581,7 +1081,16 @@ function App() {
               onSelectAmbientTrack={garden.selectAmbientTrack}
               onSelectBackdrop={garden.selectBackdrop}
               onExportGarden={garden.exportGarden}
+              onBackupMade={garden.recordBackup}
+              reminderAt={reminderAt}
               onImportGarden={garden.importGarden}
+              onUndoRestore={garden.undoRestore}
+              onListEarlierCopies={garden.earlierCopies}
+              onReadCopy={garden.readCopy}
+              onPutBackCopy={garden.putBackCopy}
+              onDownloadSetAside={garden.quarantinedCopy}
+              onDiscardSetAside={garden.discardQuarantine}
+              onCountSetAside={garden.countQuarantined}
               onDeleteAll={garden.deleteAll}
               onOpenWhatsNew={() => {
                 garden.markReleaseSeen(currentRelease.id)
@@ -590,28 +1099,59 @@ function App() {
               onOpenPrivacy={() => setView('privacy')}
               onOpenGardenPass={() => setView('shop', { onPass: true })}
               onOpenNotices={() => setView('notices')}
+              onOpenSupport={openSupport}
+              onOpenComfort={openComfort}
+              onSetDayCountsHidden={garden.setDayCountsHidden}
+              onSetRecapHours={garden.setRecapHours}
+              onChooseTheme={(choice) => {
+                setNightUntil('')
+                garden.chooseTheme(choice)
+              }}
+              onSetTextSize={garden.setTextSize}
+              onSetGardenPace={garden.setGardenPace}
+              fadeOutMinutes={fadeOut.minutes}
+              fadeOutEndsAt={fadeOut.endsAt}
+              onChooseFadeOut={(minutes) =>
+                fadeOut.choose(minutes, Boolean(profile.ambientSound))
+              }
+              heardTrackId={heardTrackId}
+              onSetSoundVolume={garden.setSoundVolume}
+              onHearSoundVolume={ambient.hearVolume}
+              onSetSoundFollowsTheme={garden.setSoundFollowsTheme}
+              onSetSoundInBackground={garden.setSoundInBackground}
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
               onSelectCustomBackdrop={garden.selectCustomBackdrop}
+              onSetRegion={garden.setRegion}
+              onOpenGuide={openGuideAt}
+              onChooseNightBackdrop={garden.chooseNightBackdrop}
+              onSetReminderTime={garden.setReminderTime}
+              onSetLetterQuotes={garden.setLetterQuotes}
             />
           )}
+          {route.restore && <PutBack place={route.restore} />}
         </Suspense>
+        </ErrorBoundary>
       </main>
 
-      <nav className="bottom-nav" aria-label="Mobile navigation">
-        {navigation.map((item) => (
-          <button
-            key={item.id}
-            className={activeView === item.id ? 'active' : ''}
-            onClick={() => setView(item.id)}
-            aria-current={activeView === item.id ? 'page' : undefined}
-          >
-            <Icon name={item.icon} />
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
-      <UpdatePrompt />
+      <BottomNav items={navItems} current={activeView} onNavigate={setView} />
+      {import.meta.env.VITE_PLATFORM !== 'android' && (
+        <Suspense fallback={null}>
+          <UpdatePrompt />
+        </Suspense>
+      )}
+      {/* Chromium on a computer: a save screen that hands the page a file to keep. */}
+      {AutoBackupKeeper &&
+        typeof (window as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function' && (
+        <Suspense fallback={null}>
+          <AutoBackupKeeper
+            state={state}
+            readOnly={garden.persistence.readOnly}
+            onExportGarden={garden.exportGarden}
+            onWritten={garden.recordAutomaticBackup}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

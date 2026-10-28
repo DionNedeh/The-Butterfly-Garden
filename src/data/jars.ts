@@ -5,17 +5,47 @@ export const JAR_PRICE = 6
 /** Enough for a name or a short word on every plant spot, several times over. */
 export const JAR_CAPACITY = 60
 
-export const jarCharacters = [
-  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
-  ...'0123456789'.split(''),
-]
+/** The letters and numbers the shop has always made. */
+export const JAR_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+export const JAR_NUMBERS = '0123456789'
+
+/**
+ * Accented capitals and a few marks, for names and little messages.
+ *
+ * Every one is drawn by the fonts the app ships, in the latin subset the PWA
+ * keeps offline (jarGlyphs.test.ts reads the font files to be sure). ♥, ★, ☀,
+ * ☾ and ✿ are not in them: a phone would draw those in a font of its own,
+ * different on every device, so they are left out until a font carries them.
+ */
+export const JAR_ACCENTED = 'ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÖØŒÙÚÛÜ'
+export const JAR_MARKS = '!?&+.*'
+
+/**
+ * What each mark is called, wherever a jar is spoken of. A lone "!" or "?"
+ * is passed over in silence by a screen reader at its usual punctuation
+ * level, so without these a "!" jar and a "?" jar would sound the same.
+ */
+export const JAR_MARK_NAMES: Readonly<Record<string, string>> = {
+  '!': 'exclamation mark',
+  '?': 'question mark',
+  '&': 'ampersand',
+  '+': 'plus',
+  '.': 'dot',
+  '*': 'asterisk',
+}
+
+/** Every character a jar can carry, in the order the shop shows them. */
+export const jarCharacters = [...JAR_LETTERS, ...JAR_NUMBERS, ...JAR_ACCENTED, ...JAR_MARKS]
+
+/** The cream label every jar's letter is printed on. */
+export const JAR_LABEL = '#fff9e8'
 
 export const jarColors: JarColorDefinition[] = [
   {
     id: 'blue',
     label: 'Blue',
     fill: '#3b82c4',
-    text: '#fffdf7',
+    text: '#1d4f86',
     border: '#1d4f86',
     highlight: '#9fd3ff',
   },
@@ -23,7 +53,7 @@ export const jarColors: JarColorDefinition[] = [
     id: 'yellow',
     label: 'Yellow',
     fill: '#f0bd45',
-    text: '#2f2412',
+    text: '#7a520c',
     border: '#9f6b12',
     highlight: '#ffe6a1',
   },
@@ -31,7 +61,7 @@ export const jarColors: JarColorDefinition[] = [
     id: 'pink',
     label: 'Pink',
     fill: '#d96f9f',
-    text: '#fffdf7',
+    text: '#8f3c63',
     border: '#8f3c63',
     highlight: '#ffc3dc',
   },
@@ -39,7 +69,7 @@ export const jarColors: JarColorDefinition[] = [
     id: 'purple',
     label: 'Purple',
     fill: '#7d5bb5',
-    text: '#fffdf7',
+    text: '#4f3479',
     border: '#4f3479',
     highlight: '#cab7ff',
   },
@@ -47,7 +77,7 @@ export const jarColors: JarColorDefinition[] = [
     id: 'green',
     label: 'Green',
     fill: '#5f9860',
-    text: '#fffdf7',
+    text: '#376238',
     border: '#376238',
     highlight: '#bde5b6',
   },
@@ -55,7 +85,7 @@ export const jarColors: JarColorDefinition[] = [
     id: 'orange',
     label: 'Orange',
     fill: '#df7d37',
-    text: '#fffdf7',
+    text: '#9c4f18',
     border: '#9c4f18',
     highlight: '#ffc18b',
   },
@@ -63,7 +93,7 @@ export const jarColors: JarColorDefinition[] = [
     id: 'white',
     label: 'White',
     fill: '#f8f4e8',
-    text: '#2b392e',
+    text: '#6b5f49',
     border: '#b9ad95',
     highlight: '#ffffff',
   },
@@ -71,7 +101,7 @@ export const jarColors: JarColorDefinition[] = [
     id: 'charcoal',
     label: 'Charcoal',
     fill: '#2d3b45',
-    text: '#fffdf7',
+    text: '#15222a',
     border: '#15222a',
     highlight: '#8095a3',
   },
