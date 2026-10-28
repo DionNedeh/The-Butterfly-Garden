@@ -1,0 +1,221 @@
+/* The shop's own rules. ShopView imports this file, so it arrives with the
+   shop rather than in the stylesheet every page waits for. Colours come from
+   the theme's tokens, which the night theme already redefines; the one rule
+   that names a colour has its .theme-night twin beside it. */
+
+/* A phone's single Filter button, with the results line beside it. */
+.shop-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+  margin: 1rem 0;
+}
+.shop-filter-bar .subtle-copy {
+  margin: 0;
+}
+.filter-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: 99px;
+  background: var(--forest);
+  color: var(--surface);
+  font-size: 0.75rem;
+}
+
+/* The filters in a sheet that rises from the bottom edge, within reach of
+   the thumb that opened it. */
+.shop-filter-sheet {
+  width: 100%;
+  max-width: 100%;
+  margin: auto auto 0;
+  border-radius: 24px 24px 0 0;
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+  animation: shop-sheet-rise 0.22s ease-out;
+}
+.shop-filter-sheet h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+/* One control to a row, full width, in place of the inline panel's wrap. */
+.shop-filter-sheet .shop-filters {
+  flex-direction: column;
+  align-items: stretch;
+  margin: 1rem 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+/* Restated over .garden-dialog label, which would stack the budget
+   checkbox above its words and space every field apart. */
+.shop-filter-sheet .shop-filters label {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.shop-filter-sheet .shop-filters .check-filter {
+  flex-direction: row;
+  align-items: center;
+}
+/* 16px text, so a phone does not zoom in on the field it focuses. */
+.shop-filter-sheet .shop-filters input[type='search'],
+.shop-filter-sheet .shop-filters select {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.shop-filter-sheet .text-button {
+  align-self: start;
+  min-height: 44px;
+}
+.shop-filter-done {
+  width: 100%;
+}
+@keyframes shop-sheet-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+.reduce-motion .shop-filter-sheet {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-filter-sheet {
+    animation: none;
+  }
+}
+
+/* ×1, ×3 or ×5 of a supply. */
+.quantity-choice {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+.quantity-choice button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+}
+.quantity-choice button[aria-pressed='true'] {
+  border-color: var(--forest);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--forest) inset;
+}
+
+/* A purchase that cannot go through stays pressable, so it keeps focus and
+   can say why (ShopView), but it looks as unavailable as it is. */
+.shop-view [aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+/* No hover lift or darkening: there is nothing to press towards. */
+.shop-view .primary-button[aria-disabled='true']:hover {
+  background: var(--forest);
+  box-shadow: none;
+  transform: none;
+}
+.theme-night .shop-view .primary-button[aria-disabled='true']:hover {
+  background: #92bca0;
+}
+
+/* The undo toast's look (App.css), for words alone: no button to make room
+   for, and nothing to catch a tap meant for the grid beneath it. */
+.purchase-toast-region {
+  pointer-events: none;
+}
+.purchase-toast {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+/* The life-stage filter capitalises its lowercase values; a companion's name
+   is shown exactly as the gardener wrote it. */
+.shop-filters select.companion-filter {
+  text-transform: none;
+}
+
+/* The jar's characters, in groups, with accents and marks behind a fold.
+   Every button is a 44px target, the size a thumb can be sure of. */
+.jar-character-group + .jar-character-group,
+.jar-more-characters {
+  margin-top: 0.8rem;
+}
+.jar-more-characters .jar-character-group {
+  margin-top: 0.8rem;
+}
+.jar-group-label {
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.jar-character-grid button,
+.jar-color-grid button {
+  min-height: 44px;
+}
+/* Padding, not flex, for its 44px: flex would take away the fold's marker. */
+.jar-more-characters summary {
+  width: fit-content;
+  /* Padding and line alone came to 41px; the marker stays with list-item. */
+  min-height: 44px;
+  padding-block: 0.6rem;
+  color: var(--forest);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* The shelf: one row for each kind of jar, however many of it there are. */
+.jar-shelf {
+  margin-bottom: 1.4rem;
+}
+/* Focus lands here when a recycled jar's row goes; it shows, but does not
+   look like a control. */
+.jar-shelf h2:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+.jar-stacks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.jar-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--surface);
+  padding: 0.6rem 0.75rem;
+}
+.jar-stack-copy {
+  display: grid;
+  flex: 1 1 8rem;
+  gap: 0.1rem;
+  min-width: 0;
+  color: var(--ink);
+}
+.jar-stack-copy small {
+  color: var(--muted);
+  font-weight: 700;
+}
+.jar-stack .secondary-button {
+  padding-inline: 0.85rem;
+}

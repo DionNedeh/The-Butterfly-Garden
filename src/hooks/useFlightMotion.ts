@@ -10,6 +10,9 @@ export function useFlightMotion(
   size: number,
   reduced: boolean,
   preview: boolean,
+  calm = false,
+  /** How many fly together, so each keeps to its own lane (lib/flightMotion). */
+  aloft = 1,
 ) {
   const travel = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLDivElement>(null)
@@ -27,7 +30,10 @@ export function useFlightMotion(
     const preference = matchMedia('(prefers-reduced-motion: reduce)')
     let animations: Animation[] = []
     let visible = true
-    let previousSize = ''
+    // The size the first track is built for. A resize observer reports once
+    // as soon as it starts observing; without this, that first report would
+    // build every butterfly's animations a second time as it appears.
+    let previousSize = `${frame.clientWidth}:${frame.clientHeight}`
     const sync = () => {
       // Only stop for work nobody can see. Pointer and focus deliberately do
       // not pause: a butterfly froze under the cursor, and a tap left it
@@ -49,9 +55,11 @@ export function useFlightMotion(
         bounds: { width: frame.clientWidth, height: frame.clientHeight },
         sprite: { width: size, height: (size * 110) / 120 },
         densityIndex: index,
+        aloft,
         auraMargin: preview ? 3 : 12,
         safeTop: preview ? 0 : Math.min(130, frame.clientHeight * 0.28),
         reducedMotion: reduced || preference.matches,
+        calm,
       })
       const pose = track.staticPose
       element.style.transform = `translate(${pose.x}px, ${pose.y}px)`
@@ -105,6 +113,6 @@ export function useFlightMotion(
       document.removeEventListener('visibilitychange', sync)
       preference.removeEventListener('change', create)
     }
-  }, [id, pattern, index, size, reduced, preview])
+  }, [id, pattern, index, size, reduced, preview, calm, aloft])
   return { travel, heading }
 }

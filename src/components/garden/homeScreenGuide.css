@@ -1,0 +1,55 @@
+/* The garden's Home Screen guide on iPhone and iPad (HomeScreenGuide.tsx).
+   The component imports this file, so it arrives only where the guide can
+   show, never with the garden's first load. Colours come from the theme's
+   tokens, which the night theme redefines, so nothing here needs a
+   .theme-night twin. It rises in like every card (theme-aurora's card-rise,
+   only opacity and transform), which reduced motion already stills. */
+
+.home-screen-guide {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  padding: 1rem 1.15rem;
+}
+
+.home-screen-guide .eyebrow {
+  margin: 0;
+  color: var(--muted);
+}
+
+.home-screen-guide h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
+.home-screen-guide p {
+  margin: 0;
+  color: var(--ink);
+}
+
+.home-screen-steps {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.4rem;
+  color: var(--ink);
+}
+
+.home-screen-share {
+  display: inline-block;
+  /* The forest ink: AA against the card in both themes, like the text. */
+  color: var(--forest);
+  vertical-align: -0.2em;
+}
+
+.home-screen-guide .home-screen-carry {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.home-screen-dismiss {
+  justify-self: end;
+  min-width: 44px;
+  min-height: 44px;
+}

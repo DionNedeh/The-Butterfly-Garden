@@ -3,11 +3,16 @@ import type { Goal } from '../types'
 import {
   addDaysToLocalDate,
   completionKey,
+  daysBetweenLocalDates,
+  DEFAULT_RECAP_HOURS,
   isGoalDue,
   isGoalPlannedOn,
   isGoalSkipped,
   localDateToNoon,
   monthDates,
+  RECAP_GRACE_CHOICES,
+  RECAP_OPENS_CHOICES,
+  recapHoursOf,
   recapWindow,
   retiredOnceGoalIds,
   toLocalDate,
@@ -184,5 +189,71 @@ describe('the Moonlight recap window', () => {
 
   it('reports no target day while it is shut', () => {
     expect(at(2026, 8, 8, 12).targetDate).toBeUndefined()
+  })
+
+  it('follows a gardener’s own evening and late night', () => {
+    // A night shift: the evening starts at 11pm, and the late night runs to 9am.
+    const nightShift = { opensHour: 23, graceEndsHour: 9 }
+    const own = (hour: number) => recapWindow(new Date(2026, 8, 9, hour), nightShift)
+    expect(own(18)).toEqual({ open: false, state: 'waiting' })
+    expect(own(23)).toEqual({ open: true, targetDate: '2026-09-09', state: 'evening' })
+    expect(own(8)).toEqual({ open: true, targetDate: '2026-09-08', state: 'grace' })
+    expect(own(9)).toEqual({ open: false, state: 'waiting' })
+  })
+
+  it('has no late night at all when it ends at midnight', () => {
+    const early = { opensHour: 20, graceEndsHour: 0 }
+    expect(recapWindow(new Date(2026, 8, 9, 0, 30), early)).toEqual({
+      open: false,
+      state: 'waiting',
+    })
+  })
+})
+
+describe('when the recap opens', () => {
+  it('reads as the gardener’s clock reads', async () => {
+    const { recapOpensAt } = await import('./date')
+    expect(recapOpensAt(undefined, 'en-US')).toMatch(/^6\s?PM$/)
+    expect(recapOpensAt(undefined, 'en-GB')).toBe('18')
+    expect(recapOpensAt(21, 'en-GB')).toBe('21')
+  })
+})
+
+describe('a gardener’s recap hours', () => {
+  it('are the defaults until chosen', () => {
+    expect(recapHoursOf(undefined)).toEqual(DEFAULT_RECAP_HOURS)
+    expect(recapHoursOf({})).toEqual({ opensHour: 18, graceEndsHour: 4 })
+  })
+
+  it('are kept when they are among the choices', () => {
+    expect(recapHoursOf({ recapOpensHour: 22, recapGraceEndsHour: 7 })).toEqual({
+      opensHour: 22,
+      graceEndsHour: 7,
+    })
+  })
+
+  it('fall back one at a time when they are not', () => {
+    // An evening starting at 4am would overlap the late night; 2.5 is no hour.
+    expect(recapHoursOf({ recapOpensHour: 4, recapGraceEndsHour: 6 })).toEqual({
+      opensHour: 18,
+      graceEndsHour: 6,
+    })
+    expect(recapHoursOf({ recapOpensHour: 20, recapGraceEndsHour: 2.5 })).toEqual({
+      opensHour: 20,
+      graceEndsHour: 4,
+    })
+  })
+
+  it('never let an evening and a late night meet', () => {
+    expect(Math.min(...RECAP_OPENS_CHOICES)).toBeGreaterThan(Math.max(...RECAP_GRACE_CHOICES))
+  })
+})
+
+describe('calendar days between dates', () => {
+  it('counts days, not hours, across months and daylight saving', () => {
+    expect(daysBetweenLocalDates('2026-10-26', '2026-10-27')).toBe(1)
+    expect(daysBetweenLocalDates('2026-02-28', '2026-03-01')).toBe(1)
+    expect(daysBetweenLocalDates('2026-03-07', '2026-03-09')).toBe(2)
+    expect(daysBetweenLocalDates('2026-10-27', '2026-10-26')).toBe(-1)
   })
 })

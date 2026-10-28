@@ -3,6 +3,10 @@
 **Status:** done. Implemented across six commits, each with its own green gate.
 This was the last outstanding item from the security and performance audit.
 
+**Last checked against the code:** 2026-10-26. The layout, both version numbers
+and the cross-tab sync below describe the code as it is now. Sections 1, 2 and
+5 to 9 record the split as it was done in September 2026, and still apply.
+
 **Audience:** anyone picking this code up cold. The reasoning that constrained
 the design is kept below, because most of it still constrains anyone changing
 the storage layer again.
@@ -65,7 +69,7 @@ The audit's first recommendation was "split the store, **or at minimum**
 debounce". A debounce was implemented and then deliberately reverted: it saved a
 few milliseconds but opened a window where closing a tab loses the reflection
 someone just wrote. For a private journal that is the wrong trade. The comment
-above the save effect in `src/hooks/useGardenState.ts` still records this.
+above the save effect in `src/hooks/usePersistence.ts` still records this.
 
 The split is strictly better than debouncing: it reduces write cost *without*
 delaying durability. **Do not reintroduce a debounce.**
@@ -98,22 +102,37 @@ npx vitest run src/repository src/hooks
 ## 4. How storage is laid out now
 
 ```
-butterfly-garden (DATABASE_VERSION = 3)
-├── meta        key 'current' → version, profile, seeds, nectar, stardust,
-│                               inventory, ownedItemIds,
-│                               ownedFlightPatternIds, selectedFlightPatternId
-├── goals       key 'current' → Goal[]
-├── completions key 'current' → DailyCompletion[]
-├── moods       key 'current' → MoodEntry[]
-├── reflections key 'current' → ReflectionEntry[]
-├── plants      key 'current' → PlantInstance[]
-├── creatures   key 'current' → CreatureInstance[]
-├── sunlight    key 'current' → SunlightAward[]
-├── jars        key 'current' → JarInstance[]
-├── placements  key 'current' → JarPlacement[]
-├── state       key 'current' → the pre-split whole garden (frozen; see §6)
-└── quarantine  key `${reason}-${iso}` → { id, reason, storedAt, raw }
+butterfly-garden (DATABASE_VERSION = 6)
+├── meta            key 'current' → version, profile, seeds, nectar, stardust,
+│                                   inventory, ownedItemIds,
+│                                   ownedFlightPatternIds,
+│                                   selectedFlightPatternId, and `revision`
+├── goals           key 'current' → Goal[]
+├── completions     key 'current' → DailyCompletion[]
+├── moods           key 'current' → MoodEntry[]
+├── reflections     key 'current' → ReflectionEntry[]
+├── recaps          key 'current' → RecapEntry[]            (since DB 4)
+├── moonlight       key 'current' → MoonlightAward[]        (since DB 4)
+├── customBackdrops key 'current' → CustomBackdrop[]        (since DB 5)
+├── plants          key 'current' → PlantInstance[]
+├── creatures       key 'current' → CreatureInstance[]
+├── sunlight        key 'current' → SunlightAward[]
+├── jars            key 'current' → JarInstance[]
+├── placements      key 'current' → JarPlacement[]
+├── state           key 'current' → the pre-split whole garden (frozen; see §6)
+├── quarantine      key `${reason}-${iso}` → { id, reason, storedAt, raw }
+│                                   newest three kept
+├── snapshots       key id → { id, reason: 'restore', takenAt, garden }
+│                                   the garden a restore replaced, newest
+│                                   two kept, so a restore can be undone (DB 6)
+└── drafts          key 'current' → unsaved text by field; never exported (DB 6)
 ```
+
+The store list is derived, not written out: `OBJECT_STORES` in
+`gardenRepository.ts` is built from `COLLECTION_STORES`, and the checklist on
+`COLLECTION_STORES` lists the six steps for adding a collection. `meta.revision`
+counts writes. A tab that finds a higher revision than the one it last read
+refuses to write over it (`GardenConflictError`) and reads the garden back.
 
 One array per store, not one record per entity. Storing 5,475 completions as
 5,475 records would make reads slower and the migration far riskier, and buys
@@ -122,15 +141,27 @@ nothing: a completion is only ever read as part of the whole set.
 ### Two different version numbers — do not confuse them
 
 ```ts
-export const CURRENT_STATE_VERSION = 4   // the shape of AppState itself
-const DATABASE_VERSION = 3               // which object stores exist
+export const CURRENT_STATE_VERSION = 6   // the shape of AppState itself
+export const DATABASE_VERSION = 6        // which object stores exist
 ```
 
 `AppState.version` describes the **document shape**, which the split did not
-change, so it stayed 4. Raising it would make every existing client read its own
-garden as the work of a newer build and refuse to write — exactly the disaster
-the quarantine logic exists to prevent. `DATABASE_VERSION` describes **which
-object stores exist**, which is what the split changed.
+change, so it stayed 4 then. Raising it would make every existing client read
+its own garden as the work of a newer build and refuse to write — exactly the
+disaster the quarantine logic exists to prevent. `DATABASE_VERSION` describes
+**which object stores exist**, which is what the split changed.
+
+That the two now read 6 is a coincidence of history, not a rule:
+
+| Change | DATABASE_VERSION | CURRENT_STATE_VERSION |
+| --- | --- | --- |
+| The split (this document) | 3 | 4 |
+| Evening recaps and Moonlight: two stores, two fields | 4 | 5 |
+| A gardener's own backdrops: one store, one field | 5 | 6 |
+| Restore snapshots and drafts: two stores, no field | 6 | 6 |
+
+`COLLECTION_SINCE_VERSION` records which state version brought each later
+collection, so a garden stored before it is not mistaken for a damaged one.
 
 ### The load contract is unchanged
 
@@ -155,16 +186,19 @@ again during this work — no in-place `push`/`splice`/`sort` on state anywhere,
 and no assignment into a state field. The two `.sort()` calls in `JournalView`
 and `CareView` both sort freshly built copies.
 
-It fails in one important case. `awardSunlight` in `src/lib/progression.ts` does:
+It failed in one important case. `awardSunlight` in `src/lib/progression.ts`
+used to do:
 
 ```ts
 const plants = state.plants.map((plant) => { ... })
 ```
 
 `.map()` **always allocates a new array**, even when no element changed. So
-`plants` gets a fresh identity on every Sunlight award — including when every
-plant is already fully grown and nothing could possibly have changed. A plain
-reference check would mark `plants` dirty on every check-in, forever.
+`plants` got a fresh identity on every Sunlight award — including when every
+plant was already fully grown and nothing could possibly have changed. A plain
+reference check would have marked `plants` dirty on every check-in, forever.
+`awardSunlight` now hands the array back untouched when nothing grows, but any
+other update that maps over a collection can bring the same trap back.
 
 The fix is `sameCollection` in `gardenRepository.ts`: same length, and every
 element identical by reference. O(n) pointer comparisons, zero allocation,
@@ -179,9 +213,9 @@ Pinned by `gardenRepository.test.ts` → "treats a mood check-in as touching onl
 moods, sunlight and meta", which asserts the fresh `plants` identity explicitly
 so the trap stays visible.
 
-A tempting follow-up is to make `awardSunlight` return the original array when
-nothing grew. That is a genuine improvement, and still a **separate change**
-with its own test.
+The follow-up this section used to suggest, making `awardSunlight` return the
+original array when nothing grew, has since been made. `sameCollection` stays,
+because it is what keeps the next `.map()` honest.
 
 ---
 
@@ -278,11 +312,13 @@ the user's only recovery path and their route to a new device. Import assembles
 and writes the split form; export reassembles the whole `AppState`.
 
 ### 7.6 Storage details do not leak upward
-`useGardenState`, the components and the tests outside `src/repository` do not
-know storage is split. `save(state)` kept its signature precisely so this stayed
+The hooks, the components and the tests outside `src/repository` do not know
+storage is split. `save(state)` kept its signature precisely so this stayed
 true: the repository tracks the previous state itself rather than having the
-caller pass it in. If anything above the repository has to learn about stores,
-the abstraction has failed.
+caller pass it in. The one thing that crosses the line is the list of parts a
+write touched, which `usePersistence` passes between tabs without looking
+inside (§11). If anything above the repository has to learn about stores, the
+abstraction has failed.
 
 ---
 
@@ -316,43 +352,18 @@ writes more. That is correct and expected.
 
 ## 10. Environment notes
 
-- Node v22, Vitest 4.1.8, TypeScript 6.0 (`strict` set explicitly in every
-  tsconfig).
+- Node 22 locally and 24 in CI, Vitest 4.1, TypeScript 6.0 (`strict` set
+  explicitly in every tsconfig). `npm test` measures coverage and fails below
+  the floors in `vite.config.ts`.
 - Lint is **type-aware** (`recommendedTypeChecked`) with `no-floating-promises`
   on for `src/**`. Every promise must be awaited or explicitly `void`-ed.
 - `tsconfig.e2e.json` typechecks `e2e/` and `playwright.config.ts`; `npm run
   typecheck` covers all three projects.
 - **Playwright browser mismatch in the cloud sandbox:** the pinned Playwright
-  expects a browser build that is not present. Symptom:
-  `Executable doesn't exist at /opt/pw-browsers/chromium_headless_shell-…`.
-  Work around it with a temporary config pointing at the installed binary, and
-  **delete it before committing**:
-
-  ```ts
-  // pw-local.config.ts  (temporary, do not commit)
-  import { defineConfig, devices } from '@playwright/test'
-  export default defineConfig({
-    testDir: './e2e',
-    fullyParallel: false,
-    use: {
-      baseURL: 'http://127.0.0.1:4173',
-      launchOptions: { executablePath: '/opt/pw-browsers/chromium' },
-    },
-    webServer: {
-      command: 'npm run build && npm run preview -- --host 127.0.0.1',
-      url: 'http://127.0.0.1:4173/The-Butterfly-Garden/',
-      reuseExistingServer: true,
-    },
-    projects: [
-      { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
-      { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
-    ],
-  })
-  ```
-  ```bash
-  npx playwright test -c pw-local.config.ts
-  ```
-  CI installs the correct browser itself, so `playwright.config.ts` stays as is.
+  expects a browser build that may not be present (`Executable doesn't exist`).
+  `CLAUDE.md` gives the workaround: a throwaway config that extends the real one
+  and points at the installed Chromium, deleted before committing. Never run
+  `npx playwright install` locally; CI installs its own browsers.
 
 - The project is **proprietary, all rights reserved**, heading for a Google Play
   release. `THIRD-PARTY-NOTICES.md` must stay accurate if a dependency is added —
@@ -369,8 +380,13 @@ writes more. That is correct and expected.
    forces the decision yet: the record is kept indefinitely, and removing it is
    a separate change. §6 argues for waiting until the split has shipped and
    soaked given Play's update adoption.
-3. **Should cross-tab sync become granular?** Not done, deliberately. After a
-   successful write the repository still posts a plain `garden-saved` on the
-   `butterfly-garden-sync` channel and other tabs reload everything. That is
-   correct, and it is the safer first version. Naming the changed collections in
-   the message is a reasonable follow-up on its own.
+3. **Should cross-tab sync become granular?** Done since. After a write that
+   changed something, `usePersistence` posts `garden-saved` on the
+   `butterfly-garden-sync` channel with the parts it wrote. Other tabs call
+   `adopt(parts)`, which reads only those stores and merges them onto the
+   garden they last read. A message without parts, from an older tab, still
+   falls back to a full load. Anything but a clean adopt stops that tab
+   writing and says why, rather than letting its stale garden overwrite the
+   newer one (audit finding D1). Deleting the garden has its own three
+   messages: `garden-clearing` (stop writing now), `garden-cleared` (start
+   again from nothing) and `garden-clear-failed` (read the garden again).

@@ -1,0 +1,58 @@
+/* The protected backup's two dialogs: making one, and opening one to restore.
+   Loaded with them, never with the garden. Surfaces, ink and the backdrop are
+   the shared .garden-dialog's, so both themes are already covered; nothing
+   here adds a colour. */
+
+.protected-dialog {
+  width: min(34rem, calc(100% - 2rem));
+}
+
+.protected-dialog h2 {
+  margin: 0.2rem 0 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+.protected-dialog form {
+  display: grid;
+}
+
+.protected-dialog .form-actions {
+  margin-top: 0.4rem;
+}
+
+/* The strength reading sits close under the field it describes. */
+.protected-dialog .protected-strength {
+  margin: -0.6rem 0 1rem;
+}
+
+/* A checkbox row, not a stacked field: the box beside its words, and the
+   whole row a 44px target. */
+.protected-dialog .protected-show {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 44px;
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.protected-dialog .protected-show input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.protected-dialog .protected-progress {
+  margin: 0;
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+/* Empty live regions keep their place in the page, so what arrives in them
+   is heard, but take no room until then. */
+.protected-dialog .protected-progress:empty,
+.protected-dialog .protected-problem:empty {
+  margin: 0;
+}

@@ -1,5 +1,6 @@
 import { memo, useId, type ReactNode } from 'react'
 import { plants } from '../../data/content'
+import { SpriteFrame, SpriteLayer } from './SpriteFrame'
 
 /**
  * Botanical SVG plants for the garden scene, with four growth stages:
@@ -509,6 +510,8 @@ function bloomFor(visual: PlantVisual, dotsId: string): ReactNode {
   }
 }
 
+const VIEW_BOX = '0 0 100 140'
+
 /**
  * Memoized. These sprites are large SVG trees -- a garden scene draws up to
  * twelve butterflies, eight flowers and a row of creatures at once -- and the
@@ -544,76 +547,80 @@ export const FlowerSprite = memo(function FlowerSprite({
   const isLow = visual.archetype === 'rosette' || visual.archetype === 'violet'
 
   return (
-    <svg
-      viewBox="0 0 100 140"
+    <SpriteFrame
       width={size}
       height={size * 1.4}
       className={`flower-sprite growth-stage-${stage} ${className}`}
       style={{ ['--sway-delay' as string]: `${swayDelay}s` }}
-      aria-hidden="true"
     >
-      <defs>
-        <pattern id={dotsId} width="2.4" height="2.4" patternUnits="userSpaceOnUse">
-          <circle cx="1.2" cy="1.2" r="0.5" fill="#8a5b16" />
-        </pattern>
-      </defs>
-
       {/* soil mound */}
-      <ellipse cx="50" cy="132" rx="26" ry="7" fill="#8a6f4d" />
-      <ellipse cx="50" cy="130.4" rx="22" ry="5.4" fill="#a0855f" />
+      <SpriteLayer viewBox={VIEW_BOX}>
+        <ellipse cx="50" cy="132" rx="26" ry="7" fill="#8a6f4d" />
+        <ellipse cx="50" cy="130.4" rx="22" ry="5.4" fill="#a0855f" />
+      </SpriteLayer>
 
-      {stage === 0 && (
-        <g className="plant-sway">
-          <ellipse cx="50" cy="127" rx="3.4" ry="4.4" fill="#c9a86a" stroke="#8a6f4d" strokeWidth="1" />
-          <path d="M50 122 C50 118 52 116 54 115" stroke={visual.foliage} strokeWidth="1.6" fill="none" />
-        </g>
-      )}
+      {/* The plant sways on a layer of its own, pivoting on the ground line
+          (y=130), so the motion stays on the compositor (see SpriteFrame). */}
+      <SpriteLayer viewBox={VIEW_BOX} className="plant-sway">
+        <defs>
+          <pattern id={dotsId} width="2.4" height="2.4" patternUnits="userSpaceOnUse">
+            <circle cx="1.2" cy="1.2" r="0.5" fill="#8a5b16" />
+          </pattern>
+        </defs>
 
-      {stage === 1 && (
-        <g className="plant-sway">
-          <path d="M50 130 C50 118 50 110 50 104" stroke={visual.foliageDark} strokeWidth="2.6" fill="none" />
-          {leaf(50, 116, -30, visual.foliage, 14)}
-          {leaf(50, 110, 152, visual.foliageDark, 13)}
-          <ellipse cx="50" cy="101" rx="3.4" ry="4.6" fill={visual.foliage} />
-        </g>
-      )}
+        {stage === 0 && (
+          <>
+            <ellipse cx="50" cy="127" rx="3.4" ry="4.4" fill="#c9a86a" stroke="#8a6f4d" strokeWidth="1" />
+            <path d="M50 122 C50 118 52 116 54 115" stroke={visual.foliage} strokeWidth="1.6" fill="none" />
+          </>
+        )}
 
-      {stage === 2 && (
-        <g className="plant-sway">
-          <path d="M50 130 C50 106 50 88 50 72" stroke={visual.foliageDark} strokeWidth="3" fill="none" />
-          {leaf(50, 116, -26, visual.foliage, 18)}
-          {leaf(50, 106, 150, visual.foliageDark, 17)}
-          {leaf(50, 94, -18, visual.foliage, 15)}
-          {/* closed bud showing a hint of bloom color */}
-          <path d="M50 72 C44 66 45 56 50 52 C55 56 56 66 50 72 Z" fill={visual.foliage} stroke={visual.foliageDark} strokeWidth="1.4" />
-          <path d="M50 56 C48 60 48 64 50 68 C52 64 52 60 50 56 Z" fill={visual.bloom} />
-        </g>
-      )}
+        {stage === 1 && (
+          <>
+            <path d="M50 130 C50 118 50 110 50 104" stroke={visual.foliageDark} strokeWidth="2.6" fill="none" />
+            {leaf(50, 116, -30, visual.foliage, 14)}
+            {leaf(50, 110, 152, visual.foliageDark, 13)}
+            <ellipse cx="50" cy="101" rx="3.4" ry="4.6" fill={visual.foliage} />
+          </>
+        )}
 
-      {stage === 3 && (
-        <g className="plant-sway">
-          {!fullHeight && !isLow && (
-            <g>
-              <path d="M50 130 C50 106 50 88 50 66" stroke={visual.foliageDark} strokeWidth="3.2" fill="none" />
-              {leaf(50, 118, -24, visual.foliage, 19)}
-              {leaf(50, 108, 150, visual.foliageDark, 18)}
-              {leaf(50, 96, -14, visual.foliage, 16)}
-              {leaf(50, 86, 160, visual.foliage, 14)}
+        {stage === 2 && (
+          <>
+            <path d="M50 130 C50 106 50 88 50 72" stroke={visual.foliageDark} strokeWidth="3" fill="none" />
+            {leaf(50, 116, -26, visual.foliage, 18)}
+            {leaf(50, 106, 150, visual.foliageDark, 17)}
+            {leaf(50, 94, -18, visual.foliage, 15)}
+            {/* closed bud showing a hint of bloom color */}
+            <path d="M50 72 C44 66 45 56 50 52 C55 56 56 66 50 72 Z" fill={visual.foliage} stroke={visual.foliageDark} strokeWidth="1.4" />
+            <path d="M50 56 C48 60 48 64 50 68 C52 64 52 60 50 56 Z" fill={visual.bloom} />
+          </>
+        )}
+
+        {stage === 3 && (
+          <>
+            {!fullHeight && !isLow && (
+              <g>
+                <path d="M50 130 C50 106 50 88 50 66" stroke={visual.foliageDark} strokeWidth="3.2" fill="none" />
+                {leaf(50, 118, -24, visual.foliage, 19)}
+                {leaf(50, 108, 150, visual.foliageDark, 18)}
+                {leaf(50, 96, -14, visual.foliage, 16)}
+                {leaf(50, 86, 160, visual.foliage, 14)}
+              </g>
+            )}
+            <g
+              transform={
+                fullHeight
+                  ? 'translate(0 28)'
+                  : isLow
+                    ? 'translate(0 52) scale(0.95)'
+                    : 'translate(0 26) scale(1.05)'
+              }
+            >
+              {bloomFor(visual, dotsId)}
             </g>
-          )}
-          <g
-            transform={
-              fullHeight
-                ? 'translate(0 28)'
-                : isLow
-                  ? 'translate(0 52) scale(0.95)'
-                  : 'translate(0 26) scale(1.05)'
-            }
-          >
-            {bloomFor(visual, dotsId)}
-          </g>
-        </g>
-      )}
-    </svg>
+          </>
+        )}
+      </SpriteLayer>
+    </SpriteFrame>
   )
 })

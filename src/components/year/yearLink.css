@@ -1,0 +1,22 @@
+/* The Journal's way to "Your garden's year": a line in the page's header,
+   small in its sentence but a full touch target. The colours are the
+   theme's own link colours, so night needs nothing more. */
+.year-link-line {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.year-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 0.15rem;
+  color: var(--forest);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.year-link:hover {
+  color: var(--forest-dark);
+}

@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { shopItems } from '../../data/shopItems'
+import { auraMotion } from './auraMotion'
 import { OutfitOverlay, type OutfitAnchor } from './OutfitOverlay'
 import type { OutfitSlot } from '../../types'
 
@@ -48,5 +49,28 @@ describe('every equippable cosmetic draws something', () => {
   it('draws nothing for an id that is not in the catalog', () => {
     // The negative case, so the check above is known to be able to fail.
     expect(drawn('headwear', 'not-a-real-item')).toBe(0)
+  })
+})
+
+describe('aura motion', () => {
+  const auras = cosmetics.filter((item) => item.slot === 'aura')
+
+  it.each(auras.map((item) => item.id))(
+    '%s says how it moves, and its art carries the same class',
+    (itemId) => {
+      const motion = auraMotion(itemId)
+      expect(motion).toBeDefined()
+      const { container } = render(
+        <svg>
+          <OutfitOverlay outfit={{ aura: itemId }} anchor={anchor} />
+        </svg>,
+      )
+      expect(container.querySelector(`.aura.aura-${motion}`)).not.toBeNull()
+    },
+  )
+
+  it('does not mistake an inherited property for an aura', () => {
+    expect(auraMotion('toString')).toBeUndefined()
+    expect(auraMotion('not-a-real-aura')).toBeUndefined()
   })
 })
