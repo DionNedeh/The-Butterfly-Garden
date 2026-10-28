@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import type { AppState } from '../src/types'
 import { expect, test } from '@playwright/test'
 import { seriousViolations } from './a11y'
+import { goTo, mainNav, moreSheet } from './navigation'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/The-Butterfly-Garden/')
@@ -56,6 +57,7 @@ interface GardenRecord {
     createdAt: string
     selectedBackdropId?: string
     unlockedBackdropIds?: string[]
+    lastVisitOn?: string
   }
   nectar: number
   stardust: number
@@ -66,10 +68,17 @@ interface GardenRecord {
     plantedAt: string
   }>
   creatures: Array<{
+    id?: string
+    name?: string
     stage?: string
     sourcePlantId?: string
     emergeAt?: string
+    awaitingName?: boolean
+    outfit?: Record<string, string>
+    careDates?: Record<string, string[]>
   }>
+  ownedFlightPatternIds?: string[]
+  ownedItemIds?: string[]
 }
 
 /**
@@ -162,16 +171,36 @@ async function reloadAfterSave(page: import('@playwright/test').Page) {
 }
 
 /**
- * The app's own navigation, whichever of the header or bottom bar is showing.
- * Scoped by label so it never picks up the shop's own <nav> of tabs.
+ * The shop's search and filters. A wide screen shows them inline; a phone
+ * (600px or narrower, as in ShopView) keeps them in a sheet behind one
+ * Filter button, so there the sheet is opened first, and put away again
+ * before the collection beneath it is used.
  */
-function mainNav(page: import('@playwright/test').Page) {
-  return page.locator('nav[aria-label$="navigation" i]:visible').first()
+function onPhone(page: import('@playwright/test').Page) {
+  return (page.viewportSize()?.width ?? 1280) <= 600
+}
+
+async function openShopFilters(page: import('@playwright/test').Page) {
+  if (!onPhone(page)) return
+  await page.getByRole('button', { name: /^Filter\b/ }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Filter the collection' }),
+  ).toBeVisible()
+}
+
+async function closeShopFilters(page: import('@playwright/test').Page) {
+  if (!onPhone(page)) return
+  await page
+    .getByRole('dialog', { name: 'Filter the collection' })
+    .getByRole('button', { name: /^Show / })
+    .click()
+  await expect(page.getByRole('button', { name: /^Filter\b/ })).toBeFocused()
 }
 
 async function enterGarden(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /enter the garden/i }).click()
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
 }
 
@@ -181,9 +210,9 @@ test('pages live in the address: Back, Forward and a reload all keep their place
   await enterGarden(page)
   await expect(page).toHaveURL(/\/The-Butterfly-Garden\/$/)
 
-  await mainNav(page).getByRole('button', { name: 'Journal', exact: true }).click()
+  await goTo(page, 'Journal')
   await expect(page).toHaveURL(/#\/journal$/)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await expect(page).toHaveURL(/#\/shop$/)
 
   await page.goBack()
@@ -215,6 +244,7 @@ test('onboards, completes care, and writes a private journal entry', async ({
   await page.getByLabel('Your name').fill('River')
   await page.getByLabel('Garden name').fill('Willowlight Garden')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await expect(
     page.getByRole('heading', { name: /how your sanctuary grows/i }),
   ).toBeVisible()
@@ -233,46 +263,489 @@ test('onboards, completes care, and writes a private journal entry', async ({
     page.getByRole('heading', { name: 'Willowlight Garden' }),
   ).toBeVisible()
   const marigold = page.getByRole('button', {
-    name: /pet marigold, your monarch garden guide/i,
+    name: /meet marigold, your monarch garden guide/i,
   })
   await marigold.focus()
   // Butterflies never stop flying, so Playwright's stability check can never
   // pass here; the click still lands on the element's live position.
   await marigold.click({ force: true })
-  await expect(
-    page.getByText(
-      /marigold, your monarch garden guide enjoyed that gentle hello/i,
-    ),
-  ).toBeVisible()
-  await mainNav(page)
-    .getByRole('button', { name: 'Today', exact: true })
-    .click()
+  // A tap introduces her; a hello is the card's own button.
+  const card = page.getByRole('dialog', { name: 'Marigold' })
+  await card.getByRole('button', { name: 'Pet Marigold' }).click()
+  await expect(card.getByText('Marigold enjoyed that gentle hello.')).toBeVisible()
+  await card.getByRole('button', { name: 'Close' }).click()
+  await expect(card).toHaveCount(0)
+  await expect(marigold).toBeFocused()
+  await goTo(page, 'Today')
   await page.getByRole('button', { name: /bright/i }).click()
   await page.getByLabel('A note, if you want').fill('A little more spacious.')
   await page.getByRole('button', { name: /save check-in/i }).click()
 
   await page.getByLabel('Add a goal').fill('Drink some water')
   await page.getByRole('button', { name: 'Add goal' }).click()
-  await page.getByRole('button', { name: /complete drink some water/i }).click()
+  await page.getByRole('button', { name: /care for drink some water/i }).click()
   await page
     .locator('#daily-reflection')
     .fill('I noticed sunlight on the kitchen table.')
   await page.getByRole('button', { name: /keep this reflection/i }).click()
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Journal', exact: true })
-    .click()
+  await goTo(page, 'Journal')
   await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Blue Morpho')).toBeVisible()
-  await expect(
-    page.getByRole('heading', { name: 'Sunlight streak' }),
-  ).toBeVisible()
-  await expect(page.getByLabel('1 day streak')).toBeVisible()
-  await expect(page.getByText('Today is counted')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Your rhythm' })).toBeVisible()
+  await expect(page.getByLabel('1 of the last 7 days cared for')).toBeVisible()
+  await expect(page.getByText(/never sets this back/)).toBeVisible()
   await expect(page.getByText('A little more spacious.')).toBeVisible()
   await expect(
     page.getByText('I noticed sunlight on the kitchen table.'),
   ).toBeVisible()
+})
+
+test('starter goals chosen on the way in wait on Today, two-minute versions and all', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: /enter the garden/i }).click()
+  await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  const heading = page.getByRole('heading', { name: 'Anything to care for each day?' })
+  await expect(heading).toBeFocused()
+  // Nothing is chosen for the gardener, and skipping is offered alike.
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Skip for now' })).toBeVisible()
+  expect(await seriousViolations(page, 'Starter goals')).toEqual([])
+  await page.getByRole('checkbox', { name: /^Drink a glass of water/ }).check()
+  await page.getByRole('checkbox', { name: /^Take three slow breaths/ }).check()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+
+  // Where the garden lives, and the button that keeps a copy of it.
+  await expect(
+    page.getByText(/open Settings and choose Download a backup/),
+  ).toBeVisible()
+  await page.getByRole('button', { name: /plant my first seeds/i }).click()
+
+  await goTo(page, 'Today')
+  await expect(page.getByRole('button', { name: 'Care for Drink a glass of water' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Care for Take three slow breaths' })).toBeVisible()
+  await expect(page.locator('.goal-row')).toHaveCount(2)
+  // Neither is offered again as an idea.
+  const ideas = page.getByRole('group', { name: 'Ideas' })
+  await expect(ideas.getByRole('button', { name: 'Drink a glass of water' })).toHaveCount(0)
+  await expect(ideas.getByRole('button', { name: /^Other ideas/ })).toBeVisible()
+  expect(await seriousViolations(page, 'Today with ideas')).toEqual([])
+
+  // A gentle day leads with the two-minute version; doing it does the goal.
+  await page.getByRole('checkbox', { name: /gentle day/i }).check()
+  const tiny = page.getByRole('button', { name: 'Care for Take three sips' })
+  await expect(tiny).toBeVisible()
+  await tiny.click()
+  await expect(page.getByRole('button', { name: 'Done: Take three sips' })).toBeDisabled()
+  await expect(page.getByText('Drink a glass of water marked done.')).toBeVisible()
+})
+
+test('a check-in can be unsure, a tap can be undone, and support is a link away', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Today')
+
+  // Nothing is chosen for the gardener, and "not sure" is an answer.
+  const save = page.getByRole('button', { name: /save check-in/i })
+  await expect(save).toBeDisabled()
+  await page.getByRole('button', { name: 'Not sure today' }).click()
+  await save.click()
+  await expect(page.getByRole('button', { name: /update check-in/i })).toBeVisible()
+
+  // Marking a goal done by mistake can be taken back for a few seconds.
+  await page.getByLabel('Add a goal').fill('Water the fern')
+  await page.getByRole('button', { name: 'Add goal' }).click()
+  await page.getByRole('button', { name: /care for water the fern/i }).click()
+  await expect(page.getByText('Water the fern marked done.')).toBeVisible()
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(page.getByRole('button', { name: /care for water the fern/i })).toBeEnabled()
+
+  // Support is reachable from Settings, and hands off to the phone.
+  await goTo(page, 'Settings')
+  await page.getByRole('button', { name: 'If you need support now' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'If you need support now' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Call 116 123' })).toHaveAttribute('href', 'tel:116123')
+  expect(await seriousViolations(page, 'Support')).toEqual([])
+  await page.getByRole('button', { name: 'Back to Settings' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+})
+
+test('a check-in can name feelings and energy, and offers one gentle next step', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Today')
+
+  // Both extras wait for a weather, and are folded away until asked for.
+  await page.getByRole('button', { name: /^Rainy/ }).click()
+  await expect(page.getByText('All weather is welcome.')).toBeVisible()
+  await page.getByRole('button', { name: 'Add feelings or energy' }).click()
+  const feelings = page.getByRole('group', { name: 'Feelings' })
+  await feelings.getByRole('button', { name: 'tired', exact: true }).click()
+  await feelings.getByRole('button', { name: 'hopeful', exact: true }).click()
+  await expect(feelings.getByRole('button', { name: 'tired', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await page.getByRole('group', { name: 'Energy' }).getByRole('radio', { name: 'low' }).check()
+  expect(await seriousViolations(page, 'Today with feelings and energy')).toEqual([])
+
+  // Saving offers one next step in the page, and leaves focus where it was.
+  await page.getByRole('button', { name: /save check-in/i }).click()
+  await expect(page.getByText('Kept in your journal.')).toBeVisible()
+  const offer = page.getByRole('group', { name: /One small thing/ })
+  await expect(offer.getByRole('button', { name: 'Make today a gentle day' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /update check-in/i })).toBeFocused()
+  expect(await seriousViolations(page, 'Today with a next step offered')).toEqual([])
+  await offer.getByRole('button', { name: 'Write one line' }).click()
+  await expect(page.locator('#daily-reflection')).toBeFocused()
+  await expect(offer).toHaveCount(0)
+
+  // The journal says them in words, and finds them.
+  await goTo(page, 'Journal')
+  await expect(page.getByText('Feeling hopeful, tired · Energy low')).toBeVisible()
+  await page.getByRole('searchbox', { name: 'Search your journal' }).fill('hopeful')
+  await expect(page.getByText('1 day matches')).toBeVisible()
+})
+
+test('a goal row keeps everything behind its menu, and a gentle day asks for little', async ({
+  page,
+}) => {
+  // A long walk through Today, with two accessibility sweeps and a reload:
+  // more than the default budget on a GPU-less runner's Safari.
+  test.slow()
+  await enterGarden(page)
+  await goTo(page, 'Today')
+  for (const title of ['Water the fern', 'Stretch', 'Open a window', 'Step outside']) {
+    await page.getByLabel('Add a goal').fill(title)
+    await page.getByRole('button', { name: 'Add goal' }).click()
+  }
+
+  // Each row is one line; everything else is behind its ⋯ menu. The menu of
+  // the first row is drawn over the rows below it, so its items take the
+  // click themselves (Playwright refuses a click another row would catch).
+  const more = page.getByRole('button', { name: 'More for Water the fern' })
+  await more.click()
+  const options = page.getByRole('group', { name: 'Water the fern options' })
+  await expect(options).toBeVisible()
+  expect(await seriousViolations(page, 'Today with a goal menu open')).toEqual([])
+  await options.getByRole('button', { name: 'Skip today' }).click()
+  await expect(more).toBeFocused()
+  await expect(page.getByText('Every day · skipped today')).toBeVisible()
+  // Skipping again is how a skip is undone.
+  await more.click()
+  await options.getByRole('button', { name: 'Bring back today' }).click()
+
+  // Editing changes more than the title, and hands focus back to the row.
+  await page.getByRole('button', { name: 'More for Stretch' }).click()
+  await page.getByRole('group', { name: 'Stretch options' }).getByRole('button', { name: 'Edit' }).click()
+  const title = page.getByRole('textbox', { name: /^Edit goal/ })
+  await expect(title).toBeFocused()
+  await title.fill('Stretch gently')
+  await page.getByRole('combobox', { name: /^Repeat/ }).selectOption('weekdays')
+  for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']) {
+    await page.getByRole('checkbox', { name: day }).uncheck()
+  }
+  await expect(page.getByRole('alert')).toHaveText(/never come round/)
+  await page.getByRole('combobox', { name: /^Repeat/ }).selectOption('daily')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'More for Stretch gently' })).toBeFocused()
+
+  // A gentle day: three goals, no counts, and it outlasts a reload.
+  await page.getByRole('checkbox', { name: /gentle day/i }).check()
+  await expect(page.getByText('Rest counts too.', { exact: false }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /^More for / })).toHaveCount(3)
+  await expect(page.getByRole('button', { name: 'Show the other 1 goal' })).toBeVisible()
+  expect(await seriousViolations(page, 'Today on a gentle day')).toEqual([])
+  await reloadAfterSave(page)
+  await goTo(page, 'Today')
+  await expect(page.getByRole('checkbox', { name: /gentle day/i })).toBeChecked()
+  await expect(page.getByRole('button', { name: /^More for / })).toHaveCount(3)
+
+  // Archiving from the row takes it away, and can be undone.
+  await page.getByRole('button', { name: 'More for Water the fern' }).click()
+  await page.getByRole('group', { name: 'Water the fern options' }).getByRole('button', { name: 'Archive' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Goals' })).toBeFocused()
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'More for Water the fern' })).toBeVisible()
+})
+
+test('the journal finds words, opens a day from its calendar, and gives readable copies', async ({
+  page,
+}) => {
+  // Two pages, an accessibility sweep and two downloads: more than the
+  // default budget on a GPU-less runner's Safari.
+  test.slow()
+  await enterGarden(page)
+  await mainNav(page).getByRole('button', { name: 'Today', exact: true }).click()
+  await page.getByRole('button', { name: /bright/i }).click()
+  await page.getByLabel('A note, if you want').fill('Walked by the río')
+  await page.getByRole('button', { name: /save check-in/i }).click()
+  // Words that would be markup anywhere careless.
+  await page.locator('#daily-reflection').fill('A <script>alert(1)</script> moment, =1+1')
+  await page.getByRole('button', { name: /keep this reflection/i }).click()
+
+  await mainNav(page).getByRole('button', { name: 'Journal', exact: true }).click()
+  expect(await seriousViolations(page, 'Journal with its calendar and search')).toEqual([])
+
+  // Searching forgives accents and case, and never leaves the device.
+  const search = page.getByRole('searchbox', { name: 'Search your journal' })
+  await search.fill('RIO')
+  await expect(page.getByText('1 day matches')).toBeVisible()
+  await search.fill('nowhere at all')
+  await expect(page.getByText('Nothing in the journal matches that yet.')).toBeVisible()
+  await search.press('Escape')
+  await expect(search).toHaveValue('')
+
+  // A day in the calendar opens its entry.
+  const calendar = page.getByRole('region', { name: 'Weather calendar' })
+  await calendar.getByRole('button', { name: /: Bright$/ }).click()
+  await expect(page.locator('.timeline-entry time').first()).toBeFocused()
+
+  // The printable page shows the words as words, and can run nothing.
+  const htmlDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Printable journal (HTML)' }).click()
+  const html = await readFile(await (await htmlDownload).path(), 'utf8')
+  expect(html).toContain("default-src 'none'")
+  expect(html).toContain('A &lt;script&gt;alert(1)&lt;/script&gt; moment')
+  expect(html).not.toContain('<script>')
+  await expect(page.getByText('Your download has started.')).toBeVisible()
+
+  // The spreadsheet opens with its accents, and a note cannot become a formula.
+  const csvDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Check-ins as CSV' }).click()
+  const csv = await readFile(await (await csvDownload).path(), 'utf8')
+  expect(csv.startsWith('﻿"date","weather","note","feelings","energy","written later"\r\n')).toBe(true)
+  expect(csv).toContain('"Bright","Walked by the río"')
+})
+
+/**
+ * Written later for an earlier day, and given back a month on. The zone and
+ * the instant are pinned, so the run can never cross a midnight between
+ * choosing the day and looking for it, and "a month ago" always exists: the
+ * 15th of September, twelve noon in UTC.
+ */
+test.describe('an earlier day', () => {
+  test.use({ timezoneId: 'UTC' })
+
+  test('an entry for an earlier day is kept with its day, marked, and earns nothing', async ({
+    page,
+  }) => {
+    // Two accessibility sweeps and a reload.
+    test.slow()
+    const now = new Date('2026-09-15T12:00:00.000Z')
+    await page.clock.setFixedTime(now)
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await editGardenRecord(page, (state) => {
+      state.profile.createdAt = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000).toISOString()
+    })
+    await page.reload()
+    await goTo(page, 'Journal')
+    await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
+
+    const day = '2026-08-15'
+    const opener = page.getByRole('button', { name: 'Add an entry for an earlier day' })
+    const form = page.getByRole('form', { name: 'Add an entry for an earlier day' })
+    await opener.click()
+    await expect(form.getByLabel('Which day?')).toBeFocused()
+    expect(await seriousViolations(page, 'Journal, writing for an earlier day')).toEqual([])
+    await form.getByLabel('Which day?').fill(day)
+    await form.getByLabel('Inner weather that day').selectOption({ label: 'Rainy' })
+    await form.getByLabel('A note about that day, if you want').fill('Caught up on it later')
+    await form.getByRole('button', { name: 'Save entry' }).click()
+
+    // The day opens in the timeline, marked as written later.
+    const entry = page.locator(`#day-${day}`)
+    await expect(entry.locator('time')).toBeFocused()
+    await expect(entry.getByText('Written later')).toBeVisible()
+    await expect(entry.getByText('Caught up on it later')).toBeVisible()
+    // The care happened today, not then: the rhythm is as it was.
+    await expect(page.getByLabel('0 of the last 7 days cared for')).toBeVisible()
+
+    // The journal keeps one check-in a day, so that day is offered instead.
+    await opener.click()
+    await form.getByLabel('Which day?').fill(day)
+    await expect(form.getByText(/already has a check-in/)).toBeVisible()
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await expect(opener).toBeFocused()
+
+    // Kept through a reload, still marked.
+    await reloadAfterSave(page)
+    await expect(page.locator(`#day-${day}`).getByText('Written later')).toBeVisible()
+
+    // A month on, the day comes back at the top of the Journal.
+    const card = page.getByRole('region', { name: 'A month ago today' })
+    await expect(card).toBeVisible()
+    await expect(card.getByText('Caught up on it later')).toBeVisible()
+    expect(await seriousViolations(page, 'Journal with a day from a month ago')).toEqual([])
+    await card.getByRole('button', { name: 'Put away for today' }).click()
+    await expect(card).toHaveCount(0)
+    await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeFocused()
+  })
+})
+
+/**
+ * Marigold's weekly letter. The zone and the instant are pinned: seven in the
+ * evening of Sunday 25 October in UTC, so the letter about the week ending
+ * that day has just arrived, and the run never crosses into the next week.
+ */
+test.describe('a letter from Marigold', () => {
+  test.use({ timezoneId: 'UTC' })
+
+  test('waits in the garden on Sunday evening, quotes only a starred line, and can quote nothing', async ({
+    page,
+  }) => {
+    // Three accessibility sweeps, a reload and four pages.
+    test.slow()
+    const now = new Date('2026-10-25T19:00:00.000Z')
+    await page.clock.setFixedTime(now)
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await goTo(page, 'Today')
+    await page.getByRole('button', { name: /bright/i }).click()
+    await page.getByLabel('A note, if you want').fill('The light on the river after work')
+    await page.getByRole('button', { name: /save check-in/i }).click()
+    // Planted ten days ago, so this is not its first Sunday.
+    await editGardenRecord(page, (state) => {
+      state.profile.createdAt = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString()
+    })
+    await page.reload()
+    await goTo(page, 'Garden')
+
+    const card = page.getByRole('region', { name: 'A letter from Marigold is waiting' })
+    await expect(card).toBeVisible()
+    expect(await seriousViolations(page, 'Garden, a letter waiting')).toEqual([])
+    await card.getByRole('button', { name: 'Read the letter' }).click()
+
+    const letter = page.getByRole('article', { name: /^The week of / })
+    await expect(letter.getByRole('heading')).toBeFocused()
+    await expect(letter.getByText(/^Dear .+,$/)).toBeVisible()
+    await expect(letter.getByText('This week you checked in once.')).toBeVisible()
+    // Never a line the gardener did not star.
+    await expect(letter.getByText('The light on the river after work')).toHaveCount(0)
+
+    // Starred in the journal, the line comes back in the letter.
+    const star = page.locator('#day-2026-10-25').getByRole('button', { name: 'Star this line' })
+    await expect(star).toHaveAttribute('aria-pressed', 'false')
+    await star.click()
+    await expect(star).toHaveAttribute('aria-pressed', 'true')
+    await expect(star).toBeFocused()
+    await expect(letter.getByText('The light on the river after work')).toBeVisible()
+    expect(await seriousViolations(page, 'Journal, a letter from Marigold')).toEqual([])
+
+    // Never quoting, chosen in Settings, quotes nothing, starred or not.
+    await goTo(page, 'Settings')
+    const quotes = page.getByRole('group', { name: 'Quote my words in letters' })
+    await expect(quotes.getByRole('radio', { name: /^Only lines I star/ })).toBeChecked()
+    await quotes.getByRole('radio', { name: /^Never/ }).check()
+    await expect(quotes.getByRole('radio', { name: /^Never/ })).toBeChecked()
+    expect(await seriousViolations(page, 'Settings, letters from Marigold')).toEqual([])
+    await goTo(page, 'Journal')
+    const letters = page.getByRole('region', { name: 'Letters from Marigold' })
+    await expect(letters.getByText('A letter each Sunday evening')).toBeVisible()
+    await letters.getByText('Letters from Marigold').click()
+    await expect(letter.getByText('This week you checked in once.')).toBeVisible()
+    await expect(letter.getByText('The light on the river after work')).toHaveCount(0)
+    await expect(
+      letters.getByText('Letters never quote your words, as you chose in Settings.'),
+    ).toBeVisible()
+
+    // Read, so the garden no longer says it is waiting, and the garden keeps
+    // only which letter that was.
+    await goTo(page, 'Garden')
+    await expect(page.locator('#garden-title')).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    await expect(card).toHaveCount(0)
+    const profile = await page.evaluate(
+      () =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const request = indexedDB.open('butterfly-garden')
+          request.onerror = () => reject(request.error)
+          request.onsuccess = () => {
+            const db = request.result
+            const get = db.transaction('meta', 'readonly').objectStore('meta').get('current')
+            get.onsuccess = () => {
+              db.close()
+              resolve((get.result as { profile: Record<string, unknown> }).profile)
+            }
+            get.onerror = () => reject(get.error)
+          }
+        }),
+    )
+    expect(profile).toMatchObject({ lastLetterRead: '2026-10-25', letterQuotes: 'never' })
+  })
+})
+
+/** A local calendar date some days back, by this machine's clock, which the browser shares. */
+function localDateDaysAgo(days: number): string {
+  const now = new Date()
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 12)
+  return [day.getFullYear(), day.getMonth() + 1, day.getDate()]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0'))
+    .join('-')
+}
+
+test('a garden that keeps giving, and a small welcome back after a few days away', async ({
+  page,
+}) => {
+  // Two accessibility sweeps and a reload.
+  test.slow()
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const pace = page.getByRole('group', { name: 'Garden pace' })
+  await expect(pace.getByRole('radio', { name: /^Classic/ })).toBeChecked()
+  await pace.getByRole('radio', { name: /^Keep giving/ }).check()
+  await expect(pace.getByRole('radio', { name: /^Keep giving/ })).toBeChecked()
+  expect(await seriousViolations(page, 'Settings, garden pace')).toEqual([])
+
+  // The starter milkweed in full bloom, and the last visit five days back.
+  await editGardenRecord(page, (state) => {
+    state.plants[0].growth = 3
+    state.profile.lastVisitOn = localDateDaysAgo(5)
+  })
+  await page.reload()
+  await goTo(page, 'Garden')
+  const welcome = page.getByRole('group', { name: 'Welcome back' })
+  await expect(welcome).toBeVisible()
+  // It never says how long.
+  await expect(welcome).not.toHaveText(/\b(\d+|days?|weeks?|missed|lost)\b/i)
+  await page.getByRole('button', { name: /^Milkweed 1/ }).click()
+  await expect(page.getByText('Blooms again in 7 more days of care.')).toBeVisible()
+  expect(await seriousViolations(page, 'Garden, welcome back')).toEqual([])
+
+  await welcome.getByRole('button', { name: 'Put away' }).click()
+  await expect(welcome).toHaveCount(0)
+  await expect(page.locator('#garden-title')).toBeFocused()
+
+  // Put away for good: what is stored says so...
+  const storedProfile = () =>
+    page.evaluate(
+      () =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          const request = indexedDB.open('butterfly-garden')
+          request.onerror = () => reject(request.error)
+          request.onsuccess = () => {
+            const db = request.result
+            const get = db.transaction('meta', 'readonly').objectStore('meta').get('current')
+            get.onsuccess = () => {
+              db.close()
+              resolve((get.result as { profile: Record<string, unknown> }).profile)
+            }
+            get.onerror = () => reject(get.error)
+          }
+        }),
+    )
+  await expect.poll(async () => (await storedProfile()).welcomeBackOn).toBeUndefined()
+  expect((await storedProfile()).lastVisitOn).toBe(localDateDaysAgo(0))
+  // ...and a reload the same day does not bring it back, once the card's own
+  // code would have had time to load (it is fetched only on such a day).
+  await reloadAfterSave(page)
+  await expect(page.locator('#garden-title')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await expect(page.getByRole('group', { name: 'Welcome back' })).toHaveCount(0)
 })
 
 test('supports plant selection and permanent local reset confirmation', async ({
@@ -281,9 +754,7 @@ test('supports plant selection and permanent local reset confirmation', async ({
   await enterGarden(page)
   await page.getByRole('button', { name: /plant a seed/i }).click()
   await page.getByRole('button', { name: /parsley/i }).click()
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
   await expect(
     page.getByRole('heading', { name: 'Backup and restore' }),
@@ -316,9 +787,8 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   await expect(
     page.getByRole('button', { name: 'Switch to sunlight mode' }),
   ).toBeVisible()
-  // Stars belong to the garden scene; the shell only takes on the night veil.
-  // Polled: the scene's veil eases in, and WebKit reports the daytime layers
-  // until that transition is done.
+  // The decoded painting belongs to the scene, with a contrast veil. The
+  // shell itself never takes on a scene image.
   const starLayers = () =>
     page.evaluate(() => ({
       shell: getComputedStyle(document.querySelector('.app-shell')!)
@@ -328,7 +798,9 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
         '::before',
       ).backgroundImage,
     }))
-  await expect.poll(async () => (await starLayers()).garden).toContain('radial-gradient')
+  await expect(page.locator('.garden-hero')).toHaveAttribute('data-night-art', '')
+  await expect(page.locator('.garden-hero')).toHaveCSS('background-image', /garden-sunlit-meadow-night/)
+  await expect.poll(async () => (await starLayers()).garden).toContain('gradient')
   expect((await starLayers()).shell).not.toContain('url(')
   expect(await seriousViolations(page, 'Night garden')).toEqual([])
 
@@ -340,9 +812,13 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     delete state.profile.unlockedBackdropIds
   })
   await page.reload()
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  // A garden this old with no copy on record is reminded, quietly, on the
+  // way to Settings: on Settings itself, or on More on a phone.
+  await expect(
+    mainNav(page).getByRole('button', { name: /^(Settings|More), time for a fresh copy/ }),
+  ).toBeVisible()
+  await goTo(page, 'Settings')
+  await expect(page.getByText('You have not saved a copy yet.', { exact: false })).toBeVisible()
 
   const conservatory = page
     .locator('.scene-card')
@@ -355,21 +831,134 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
     .getByRole('button')
   await conservatory.click()
   await expect(conservatory).toHaveText('In your garden')
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.garden-hero')).toHaveClass(
     /backdrop-secret-conservatory/,
   )
+})
+
+test('follows the device, and the switch in the header stops following', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const shell = page.locator('.app-shell')
+  const themes = page.getByRole('group', { name: 'Theme' })
+  await themes.getByRole('radio', { name: /^Follow device/ }).check()
+  await expect(shell).toHaveClass(/theme-sunlight/)
+
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await expect(shell).toHaveClass(/theme-night/)
+  // The browser's own bars match the garden, not only the device.
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    'content',
+    '#07131f',
+  )
+  await page
+    .getByRole('button', { name: 'Switch to sunlight mode and stop following your device' })
+    .click()
+  await expect(shell).toHaveClass(/theme-sunlight/)
+  await expect(themes.getByRole('radio', { name: /^Sunlight/ })).toBeChecked()
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    'content',
+    '#f7f3e8',
+  )
+})
+
+test('shapes the sound: a volume kept across a reload, and night bringing the piano', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const volume = page.getByRole('slider', { name: 'Volume' })
+  await expect(volume).toHaveValue('50')
+  // Each key press is a step of its own, stored as it is taken.
+  await volume.focus()
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await expect(volume).toHaveValue('48')
+  await expect(page.locator('.sound-volume-value')).toHaveText('48')
+  // The whole height of the slider can be pressed. Its laid-out height, not
+  // its box on screen: the card's entrance animation scales it a little for
+  // its first moments, which a box measured then would count.
+  expect(await volume.evaluate((slider) => (slider as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44)
+  expect(await seriousViolations(page, 'Settings, the sound card')).toEqual([])
+
+  await page.getByRole('radio', { name: /^Soft Rain/ }).check()
+  await page.getByRole('checkbox', { name: /^Night brings the piano/ }).check()
+  await expect(page.getByRole('button', { name: 'Turn on Soft Rain' })).toBeVisible()
+  await page.getByRole('button', { name: 'Switch to night mode' }).click()
+  await expect(page.getByRole('button', { name: 'Turn on Piano Music' })).toBeVisible()
+  await expect(
+    page.getByRole('radio', { name: /^Soft Rain/ }).locator('xpath=ancestor::label'),
+  ).toContainText('Back with the sunlight')
+  expect(await seriousViolations(page, 'Settings, the sound card at night')).toEqual([])
+
+  await reloadAfterSave(page)
+  await expect(page.getByRole('slider', { name: 'Volume' })).toHaveValue('48')
+  await expect(page.getByRole('checkbox', { name: /^Night brings the piano/ })).toBeChecked()
+  await expect(
+    page.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
+  ).toBeChecked()
+})
+
+test('sets a larger text size that the header and the dock make room for', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const rootSize = () => page.evaluate(() => document.documentElement.style.fontSize)
+  const sizes = page.getByRole('group', { name: 'Text size' })
+  await sizes.getByRole('radio', { name: /^Largest/ }).check()
+  await expect.poll(rootSize).toBe('125%')
+  expect(await seriousViolations(page, 'Settings at the largest text size')).toEqual([])
+
+  await goTo(page, 'Garden')
+  // The header's pills wrap at its end rather than sliding over the icon.
+  const icon = await page.locator('.brand img').boundingBox()
+  const actions = await page.locator('.header-actions').boundingBox()
+  expect(actions!.x).toBeGreaterThanOrEqual(icon!.x + icon!.width - 1)
+  // On a wide screen the tabs take a row of their own rather than covering
+  // the garden's icon; nothing is drawn over its middle.
+  const nav = page.locator('.app-header nav')
+  if (await nav.isVisible()) {
+    const tabs = (await nav.boundingBox())!
+    expect(
+      tabs.y >= icon!.y + icon!.height - 1 || tabs.x >= icon!.x + icon!.width - 1,
+    ).toBe(true)
+  }
+  const onTop = await page.evaluate(({ x, y }) => {
+    const element = document.elementFromPoint(x, y)
+    return Boolean(element?.closest('.brand'))
+  }, { x: icon!.x + icon!.width / 2, y: icon!.y + icon!.height / 2 })
+  expect(onTop).toBe(true)
+  // Every label in the dock stays inside its own tab.
+  const spilling = await page
+    .locator('.bottom-nav button:visible')
+    .evaluateAll((buttons) =>
+      buttons
+        .filter((button) => {
+          const label = button.querySelector('span')?.getBoundingClientRect()
+          const tab = button.getBoundingClientRect()
+          return label !== undefined && (label.left < tab.left - 0.5 || label.right > tab.right + 0.5)
+        })
+        .map((button) => button.textContent),
+    )
+  expect(spilling).toEqual([])
+  expect(await seriousViolations(page, 'The garden at the largest text size')).toEqual([])
+
+  // Back to the usual size, which leaves the root as it always was.
+  await goTo(page, 'Settings')
+  await sizes.getByRole('radio', { name: /^Comfortable/ }).check()
+  await expect.poll(rootSize).toBe('')
 })
 
 test('guide explains how plants grow and when eggs appear', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Guide', exact: true })
-    .click()
+  await goTo(page, 'Guide')
 
   await expect(
     page.getByRole('heading', { name: 'How the garden works' }),
@@ -386,20 +975,21 @@ test('guide explains how plants grow and when eggs appear', async ({
 test('earns Nectar, purchases every tier, and persists a selected flight pattern', async ({
   page,
 }) => {
+  // Four pages, two accessibility sweeps, a reload and two settings: about
+  // thirty seconds in Safari on a GPU-less runner, the default budget's edge.
+  test.slow()
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Today', exact: true })
-    .click()
+  await goTo(page, 'Today')
   await page.getByRole('button', { name: /bright/i }).click()
   await page.getByRole('button', { name: /save check-in/i }).click()
   await page.getByLabel('Add a goal').fill('Stretch')
   await page.getByRole('button', { name: 'Add goal' }).click()
-  await page.getByRole('button', { name: /complete stretch/i }).click()
+  await page.getByRole('button', { name: /care for stretch/i }).click()
   await page.locator('#daily-reflection').fill('A quiet moment.')
   await page.getByRole('button', { name: /keep this reflection/i }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('9')
 
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page.waitForTimeout(450)
   expect(await seriousViolations(page, 'Shop')).toEqual([])
   // Flight patterns live behind their own tab; the shop opens on Supplies.
@@ -418,7 +1008,7 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
     state.stardust = 20
   })
   await page.reload()
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page
     .locator('.shop-tabs')
     .getByRole('button', { name: 'Flight', exact: true })
@@ -435,31 +1025,23 @@ test('earns Nectar, purchases every tier, and persists a selected flight pattern
   await expect(page.getByTitle('Nectar balance')).toContainText('81')
   await expect(page.getByTitle('Stardust balance')).toContainText('3')
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Flight', exact: true })
-    .click()
+  await goTo(page, 'Flight')
   await page.waitForTimeout(450)
   expect(await seriousViolations(page, 'Flight patterns')).toEqual([])
   await page
     .getByRole('button', { name: /Garden Waltz.*Owned - select pattern/i })
     .click()
   await reloadAfterSave(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Flight', exact: true })
-    .click()
+  await goTo(page, 'Flight')
   await expect(
     page.getByRole('button', { name: /Garden Waltz.*Selected/i }),
   ).toHaveAttribute('aria-pressed', 'true')
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.flight-traveller').first()).toHaveAttribute(
     'data-pattern',
     'garden-waltz',
   )
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   await page.getByLabel('Calm garden motion').check()
   await page.getByRole('button', { name: 'Save settings' }).click()
   await expect(page.locator('.app-shell')).toHaveClass(/calm-motion/)
@@ -477,7 +1059,7 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
     state.nectar = 18
   })
   await page.reload()
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page
     .locator('.shop-tabs')
     .getByRole('button', { name: 'Jars', exact: true })
@@ -492,9 +1074,7 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   await page.getByRole('button', { name: 'Buy Yellow S jar' }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('6')
 
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await page.getByRole('button', { name: /View Milkweed/i }).click()
   await page
     .getByRole('button', { name: /Place Blue A jar on Milkweed/i })
@@ -532,6 +1112,64 @@ test('buys reusable jars, places, moves, replaces, and removes them', async ({
   await expect(page.getByText(/This plant spot is empty/i)).toBeVisible()
 })
 
+test('stacks alike jars, recycles one for half its Nectar, and Undo takes it back', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    state.nectar = 18
+  })
+  await page.reload()
+  await goTo(page, 'Shop')
+  await page
+    .locator('.shop-tabs')
+    .getByRole('button', { name: 'Jars', exact: true })
+    .click()
+
+  // An accented capital, from the fold beneath the letters and numbers.
+  // The fold is a 44px target like every control (laid out, not mid-animation).
+  const accents = page.locator('.jar-more-characters summary')
+  expect(await accents.evaluate((fold) => (fold as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44)
+  await page.getByText('Accents and marks').click()
+  await page.getByRole('button', { name: 'É', exact: true }).click()
+  await page.getByRole('button', { name: 'Buy Blue É jar' }).click()
+  await page.getByRole('button', { name: 'Buy Blue É jar' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('6')
+
+  // Two alike jars are one row on the shelf.
+  const shelf = page.getByRole('region', { name: 'Your jars' })
+  await expect(shelf.getByRole('listitem')).toHaveCount(1)
+  await expect(shelf.getByRole('listitem')).toContainText('Blue É ×2')
+
+  const recycle = shelf.getByRole('button', {
+    name: 'Recycle for 3 Nectar: one Blue É jar',
+  })
+  await recycle.click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('9')
+  await expect(shelf.getByRole('listitem')).not.toContainText('×2')
+  await expect(recycle).toBeFocused()
+  await expect(page.getByText('Blue É jar recycled, for 3 Nectar.')).toBeVisible()
+  expect(await seriousViolations(page, 'the jar shelf, with Undo')).toEqual([])
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByTitle('Nectar balance')).toContainText('6')
+  await expect(shelf.getByRole('listitem')).toContainText('Blue É ×2')
+  await expect(recycle).toBeFocused()
+
+  // In the garden the two are one choice, which places one of them.
+  await goTo(page, 'Garden')
+  await page.getByRole('button', { name: /View Milkweed/i }).click()
+  await page
+    .getByRole('button', { name: 'Place Blue É jar on Milkweed, 2 on the shelf' })
+    .click()
+  await expect(
+    page.getByRole('button', { name: /View Milkweed.*Blue É jar/i }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Place Blue É jar on Milkweed', exact: true }),
+  ).toBeFocused()
+})
+
 test('shows plant details, protects active hosts, and frees a full garden space', async ({
   page,
 }) => {
@@ -548,7 +1186,7 @@ test('shows plant details, protects active hosts, and frees a full garden space'
     }
   })
   await page.reload()
-  await expect(page.getByText(/all 8 plant spaces filled/i)).toBeVisible()
+  await expect(page.getByText(/all 8 spaces are growing/i)).toBeVisible()
   await expect(
     page.getByRole('button', { name: /plant a seed/i }),
   ).toBeDisabled()
@@ -577,12 +1215,127 @@ test('keeps butterfly field notes collapsed until requested', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Journal', exact: true })
-    .click()
+  await goTo(page, 'Journal')
   await expect(page.locator('.field-notes .species-grid')).toBeHidden()
   await page.getByText('Butterflies welcomed').click()
   await expect(page.locator('.field-notes .species-grid')).toBeVisible()
+})
+
+test('a new egg is offered a name of its own on the Care page', async ({ page }) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // An egg just found on a host plant, as one arrives from now on.
+    state.creatures[0].stage = 'egg'
+    state.creatures[0].awaitingName = true
+  })
+  await page.reload()
+  await goTo(page, 'Care')
+  const arrival = page.getByRole('region', { name: /Would you like to name your .* egg\?/ })
+  await expect(arrival).toBeVisible()
+  expect(await seriousViolations(page, 'Care with a new arrival')).toEqual([])
+  await arrival.getByLabel('Name', { exact: true }).fill('Pip')
+  await arrival.getByRole('button', { name: 'Save name' }).click()
+  await expect(arrival).toHaveCount(0)
+
+  // Answered once, it is not asked again.
+  await reloadAfterSave(page)
+  await goTo(page, 'Care')
+  await expect(page.getByText('Pip').first()).toBeVisible()
+  await expect(page.getByRole('region', { name: /Would you like to name/ })).toHaveCount(0)
+})
+
+test('a companion grown alongside a goal is cared for when the goal is done, and remembers it', async ({
+  page,
+}) => {
+  // Care, Today and Care again, with three accessibility sweeps and a reload.
+  test.slow()
+  await enterGarden(page)
+  await goTo(page, 'Today')
+  for (const title of ['Walk outside', 'Drink water']) {
+    await page.getByLabel('Add a goal').fill(title)
+    await page.getByRole('button', { name: 'Add goal' }).click()
+  }
+  await editGardenRecord(page, (state) => {
+    // Sol, the starter caterpillar, two days of care from its chrysalis.
+    state.creatures[0].careDates = { caterpillar: ['2026-01-01', '2026-01-02'] }
+  })
+  await page.reload()
+
+  await goTo(page, 'Care')
+  const choice = page.getByRole('combobox', { name: 'Grow alongside a goal' })
+  await choice.selectOption({ label: 'Walk outside' })
+  await expect(
+    page.getByText('Each day you complete Walk outside on Today counts as a day of care for Sol.'),
+  ).toBeVisible()
+  expect(await seriousViolations(page, 'Care with a goal to grow alongside')).toEqual([])
+
+  // Today names Sol quietly on the goal's row, which stays as compact as
+  // its neighbour's.
+  await goTo(page, 'Today')
+  const walk = page.locator('[data-goal-id]', { hasText: 'Walk outside' })
+  const water = page.locator('[data-goal-id]', { hasText: 'Drink water' })
+  await expect(walk.locator('.goal-companions')).toHaveText(/growing alongside Sol$/)
+  await expect(water.locator('.goal-companions')).toHaveCount(0)
+  const heights = await Promise.all(
+    [walk, water].map((row) => row.evaluate((element) => element.getBoundingClientRect().height)),
+  )
+  expect(Math.abs(heights[0] - heights[1])).toBeLessThanOrEqual(1)
+  expect(await seriousViolations(page, 'Today with a goal growing a companion')).toEqual([])
+  // At the largest text the badge may take a line of its own, but the
+  // schedule is never cut short. As Settings sets it (lib/textSize).
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '125%'
+    document.documentElement.dataset.textSize = 'largest'
+  })
+  const schedule = walk.locator('.goal-schedule')
+  await expect(schedule).toHaveText('Every day')
+  expect(
+    await schedule.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+  ).toBe(true)
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('font-size')
+    delete document.documentElement.dataset.textSize
+  })
+
+  // Done today: Sol's third day of care, and a chrysalis, celebrated. The
+  // same Sunlight brings the milkweed into bloom, with an egg.
+  await page.getByRole('button', { name: 'Care for Walk outside' }).click()
+  await expect(page.locator('.celebration-toast')).toContainText('Sol wrapped up into a chrysalis.')
+
+  // The new egg can grow alongside a goal of its own, chosen with its name.
+  await goTo(page, 'Care')
+  const arrival = page.getByRole('region', { name: /Would you like to name your .* egg\?/ })
+  await arrival
+    .getByRole('combobox', { name: 'Grow alongside a goal' })
+    .selectOption({ label: 'Drink water' })
+  expect(await seriousViolations(page, 'Care with a new arrival and goals')).toEqual([])
+  await arrival.getByRole('button', { name: /^Keep / }).click()
+  await expect(arrival).toHaveCount(0)
+  await expect(page.getByText(/^Each day you complete Drink water on Today/)).toBeVisible()
+
+  await page.getByRole('tab', { name: /\bSol\b/ }).click()
+  await expect(page.getByRole('tab', { name: /\bSol\b/ })).toContainText('Chrysalis · 0/3')
+  await expect(
+    page.getByText('Each day you complete Walk outside on Today counts as a day of care for Sol.'),
+  ).toBeVisible()
+  await page.getByText('Sol’s story').click()
+  const grown = page.locator('.story-list div', { hasText: 'Grown alongside' }).locator('dd')
+  await expect(grown).toHaveText('Walk outside · 1 day')
+
+  // Archived, the goal lets Sol go back to the care menu; the story stays.
+  await goTo(page, 'Today')
+  await expect(water.locator('.goal-companions')).toHaveCount(1)
+  await page.getByRole('button', { name: 'More for Walk outside' }).click()
+  await page
+    .getByRole('group', { name: 'Walk outside options' })
+    .getByRole('button', { name: 'Archive' })
+    .click()
+  await reloadAfterSave(page)
+  await goTo(page, 'Care')
+  await page.getByRole('tab', { name: /\bSol\b/ }).click()
+  await expect(choice).toHaveValue('')
+  await page.getByText('Sol’s story').click()
+  await expect(grown).toHaveText('Walk outside · 1 day')
 })
 
 test('persists emergence and selects the new butterfly as companion', async ({
@@ -601,9 +1354,7 @@ test('persists emergence and selects the new butterfly as companion', async ({
   await expect(page.getByText('Luna')).toBeVisible()
   await reloadAfterSave(page)
   await expect(page.getByLabel('Name for Luna')).toHaveValue('Luna')
-  await mainNav(page)
-    .getByRole('button', { name: 'Journal', exact: true })
-    .click()
+  await goTo(page, 'Journal')
   await page.getByText('Butterflies welcomed').click()
   await expect(page.getByText('Danaus plexippus')).toBeVisible()
   await expect(page.getByText('Welcomed as Luna')).toBeVisible()
@@ -669,7 +1420,7 @@ test('has no serious accessibility violations on any view', async ({
   ]
   const offenders: string[] = []
   for (const view of views) {
-    await mainNav(page).getByRole('button', { name: view, exact: true }).click()
+    await goTo(page, view)
     // Let entrance animations settle so axe sees final contrast and sizing.
     await page.waitForTimeout(400)
     offenders.push(...(await seriousViolations(page, view)))
@@ -677,10 +1428,83 @@ test('has no serious accessibility violations on any view', async ({
   expect(offenders).toEqual([])
 })
 
+test('a phone has five tabs in one solid row, and More holds the other four', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, 'The dock and its More sheet are for phones; a wider screen has a tab for every page.')
+  await enterGarden(page)
+  const dock = page.getByRole('navigation', { name: 'Mobile navigation' })
+  const tabs = dock.getByRole('button')
+  await expect(tabs).toHaveText(['Garden', 'Today', 'Care', 'Journal', 'More'])
+  const tops = await tabs.evaluateAll((buttons) =>
+    buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+  )
+  expect(new Set(tops).size).toBe(1)
+  for (const box of await tabs.evaluateAll((buttons) =>
+    buttons.map((button) => button.getBoundingClientRect()),
+  )) {
+    expect(box.width).toBeGreaterThanOrEqual(44)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+  }
+  // Solid, so no page text reads through the labels, and no blur to redraw.
+  const fill = await dock.evaluate((nav) => {
+    const style = getComputedStyle(nav)
+    return { background: style.backgroundColor, blur: style.backdropFilter }
+  })
+  expect(fill.background).toMatch(/^rgb\(/)
+  expect(fill.blur === 'none' || fill.blur === '').toBe(true)
+
+  const more = dock.getByRole('button', { name: 'More', exact: true })
+  await more.click()
+  const sheet = moreSheet(page)
+  await expect(sheet.getByRole('heading', { name: 'More' })).toBeVisible()
+  const pages = sheet.getByRole('list').getByRole('button')
+  await expect(pages).toHaveText(['Shop', 'Flight', 'Guide', 'Settings'])
+  // Let the sheet finish rising so axe sees it where it rests.
+  await page.waitForTimeout(400)
+  expect(await seriousViolations(page, 'More sheet')).toEqual([])
+
+  await sheet.getByRole('button', { name: 'Flight', exact: true }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: 'Flight Patterns' })).toBeVisible()
+  await expect(page).toHaveURL(/#\/flight$/)
+  await expect(more).toHaveAttribute('aria-current', 'page')
+  await expect(more).toBeFocused()
+
+  // Escape puts it away too, and so does a tap above it.
+  await more.click()
+  await page.keyboard.press('Escape')
+  await expect(sheet).toHaveCount(0)
+  await expect(more).toBeFocused()
+  await more.click()
+  await expect(sheet).toBeVisible()
+  await page.mouse.click(20, 20)
+  await expect(sheet).toHaveCount(0)
+  await expect(more).toBeFocused()
+
+  await goTo(page, 'Today')
+  await expect(more).not.toHaveAttribute('aria-current')
+
+  // On its side, a large phone still shares the width among the five.
+  await page.setViewportSize({ width: 915, height: 412 })
+  const sideways = await tabs.evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const box = button.getBoundingClientRect()
+      return { width: box.width, height: box.height, top: Math.round(box.top) }
+    }),
+  )
+  expect(new Set(sideways.map((box) => box.top)).size).toBe(1)
+  for (const box of sideways) {
+    expect(box.width).toBeGreaterThanOrEqual(150)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+  }
+})
+
 test('every shop tab is reachable and accessible', async ({ page }) => {
   test.slow()
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   const offenders: string[] = []
   for (const tab of [
     'Supplies',
@@ -739,6 +1563,12 @@ test('gradient headings leave room for their descenders', async ({ page }) => {
   await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
   await expect(
+    page.getByRole('heading', { name: /anything to care for each day/i }),
+  ).toBeVisible()
+  expect(await clipped()).toEqual([])
+
+  await page.getByRole('button', { name: 'Skip for now' }).click()
+  await expect(
     page.getByRole('heading', { name: /here is how your sanctuary grows/i }),
   ).toBeVisible()
   expect(await clipped()).toEqual([])
@@ -767,10 +1597,9 @@ test('the guide card glow has no edge inside the card', async ({ page }) => {
   await page.getByLabel('Your name').fill('Gardener')
   await page.getByLabel('Garden name').fill('Sunlit Sanctuary')
   await page.getByRole('button', { name: /meet your garden guide/i }).click()
+  await page.getByRole('button', { name: 'Skip for now' }).click()
   await page.getByRole('button', { name: /plant my first seeds/i }).click()
-  await mainNav(page)
-    .getByRole('button', { name: 'Guide', exact: true })
-    .click()
+  await goTo(page, 'Guide')
   await expect(
     page.getByRole('heading', { name: /how the garden works/i }),
   ).toBeVisible()
@@ -813,9 +1642,7 @@ test.describe('rounding out the day', () => {
     const stardust = page.locator('.stardust-wallet strong')
     await expect(stardust).toHaveText('0')
 
-    await mainNav(page)
-      .getByRole('button', { name: 'Today', exact: true })
-      .click()
+    await goTo(page, 'Today')
     await expect(page.getByText('Round out your day')).toBeVisible()
     await page.getByRole('button', { name: 'Begin' }).click()
 
@@ -837,15 +1664,13 @@ test.describe('rounding out the day', () => {
     await page.getByRole('textbox').fill('Book the appointment')
     await page.getByRole('button', { name: /add to tomorrow/i }).click()
     await page.getByRole('button', { name: 'Continue' }).click()
-    await page.getByRole('button', { name: 'Collect Moonlight' }).click()
+    await page.getByRole('button', { name: 'Collect Moonlight', exact: true }).click()
 
     // Back on Today, with the night collected and the bonus in the wallet.
     await expect(page.getByText('The day is rounded out.')).toBeVisible()
     await expect(stardust).toHaveText('1')
 
-    await mainNav(page)
-      .getByRole('button', { name: 'Journal', exact: true })
-      .click()
+    await goTo(page, 'Journal')
     await expect(page.getByText('Walked to the river.')).toBeVisible()
     await expect(page.getByText('The unanswered email.')).toBeVisible()
     await expect(
@@ -854,10 +1679,36 @@ test.describe('rounding out the day', () => {
 
     // And it survives a reload: the recap is stored, not just rendered.
     await reloadAfterSave(page)
-    await mainNav(page)
-      .getByRole('button', { name: 'Journal', exact: true })
-      .click()
+    await goTo(page, 'Journal')
     await expect(page.getByText('Walked to the river.')).toBeVisible()
+  })
+
+  test('ends by fading the garden to night, and lets the sound fade', async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date('2026-09-09T01:00:00.000Z'))
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await page.getByRole('button', { name: /^Turn on / }).click()
+
+    await goTo(page, 'Today')
+    await page.getByRole('button', { name: 'Begin' }).click()
+    await page.getByRole('button', { name: 'Continue' }).click()
+    for (let step = 0; step < 4; step += 1) {
+      await page.getByRole('button', { name: 'Skip this one' }).click()
+    }
+    // The ordinary finish is still the first choice.
+    const finishes = page.locator('.recap-finish button')
+    await expect(finishes.first()).toHaveText('Collect Moonlight')
+    expect(await seriousViolations(page, 'The end of the recap')).toEqual([])
+    await page.getByRole('button', { name: 'Fade the garden to night and close' }).click()
+
+    // Collected, night, and back in the garden with focus on its name.
+    await expect(page.locator('#garden-title')).toBeFocused()
+    await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
+    await expect(page.locator('.stardust-wallet strong')).toHaveText('1')
+    await goTo(page, 'Settings')
+    await expect(page.getByText(/The sound fades away at/)).toBeVisible()
   })
 })
 
@@ -868,7 +1719,7 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
 }) => {
   test.setTimeout(60_000)
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page.getByRole('button', { name: 'Backdrops', exact: true }).click()
   await page.getByRole('button', { name: /Add your own backdrop/ }).click()
   const editor = page.getByRole('dialog')
@@ -893,15 +1744,13 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   await page.reload()
   // A reload keeps its page now (#/shop); the image shows in the garden.
   await expect(page.getByRole('heading', { level: 1, name: /stock up/i })).toBeVisible()
-  await mainNav(page).getByRole('button', { name: 'Garden', exact: true }).click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.custom-scene-layer img')).toBeVisible()
   await expect(page.locator('.custom-scene-layer img')).toHaveJSProperty(
     'naturalWidth',
     1600,
   )
-  await mainNav(page)
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await goTo(page, 'Settings')
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download a backup' }).click()
   const download = await downloadPromise
@@ -949,9 +1798,7 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   await expect(
     page.getByRole('button', { name: 'Undo the restore' }),
   ).toBeVisible()
-  await mainNav(page)
-    .getByRole('button', { name: 'Garden', exact: true })
-    .click()
+  await goTo(page, 'Garden')
   await expect(page.locator('.custom-scene-layer img')).toHaveAttribute(
     'src',
     `data:${image.mimeType};base64,${image.imageData}`,
@@ -967,22 +1814,152 @@ test('personal backdrop crops, survives reload and backup restore, and rejects c
   )
 })
 
+test('a personal image turns, takes a brightness, and shows only by night', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  await enterGarden(page)
+  await goTo(page, 'Shop')
+  await page.getByRole('button', { name: 'Backdrops', exact: true }).click()
+  await page.getByRole('button', { name: /Add your own backdrop/ }).click()
+  const editor = page.getByRole('dialog')
+  await editor
+    .locator('input[type=file]')
+    .setInputFiles('src/assets/garden-cottage-bloom.webp')
+  await editor.getByLabel('Image name').fill('Evening light')
+  // Pressed from the keyboard, the button keeps focus while the turn is made
+  // and after; the turn is in the stored pixels, 1600 by 900 turned upright.
+  const right = editor.getByRole('button', { name: 'Turn right' })
+  await right.focus()
+  await page.keyboard.press('Enter')
+  await expect(editor.locator('.custom-scene-image')).toHaveJSProperty('naturalWidth', 900)
+  await expect(right).toHaveAttribute('aria-disabled', 'false')
+  await expect(right).toBeFocused()
+  const brightness = editor.getByLabel('Brightness')
+  await brightness.fill('-30')
+  await expect(brightness).toHaveAttribute('aria-valuetext', '30% darker')
+  await expect(editor.locator('.custom-scene-image')).toHaveCSS('filter', 'brightness(0.7)')
+  expect(await seriousViolations(page, 'Backdrop editor, turned and darkened')).toEqual([])
+  await editor.getByRole('button', { name: 'Save & use backdrop' }).click()
+  await expect(editor).not.toBeVisible()
+
+  // By day, a built-in scene; by night, the image.
+  await page
+    .locator('.scene-card')
+    .filter({ has: page.getByRole('heading', { name: 'Sunlit Meadow', exact: true }) })
+    .getByRole('button')
+    .click()
+  const byNight = page.getByRole('group', { name: 'By night' })
+  await expect(byNight.getByRole('radio', { name: /^The same as by day/ })).toBeChecked()
+  await byNight.getByRole('radio', { name: 'Evening light' }).check()
+  await expect(byNight.getByRole('radio', { name: 'Evening light' })).toBeChecked()
+  expect(await seriousViolations(page, 'Backdrops by night')).toEqual([])
+
+  await goTo(page, 'Garden')
+  const image = page.locator('.custom-scene-layer img')
+  await expect(image).toHaveCount(0)
+  await page.getByRole('button', { name: 'Switch to night mode' }).click()
+  await expect(image).toBeVisible()
+  await expect(image).toHaveJSProperty('naturalWidth', 900)
+  await expect(image).toHaveCSS('filter', 'brightness(0.7)')
+  // The heading over it is never filtered.
+  await expect(page.locator('.garden-heading h1')).toHaveCSS('filter', 'none')
+  await page.getByRole('button', { name: 'Switch to sunlight mode' }).click()
+  await expect(image).toHaveCount(0)
+})
+
+test('a look saved on one companion is worn by another, and their story kept', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // Sol, the starter caterpillar, in a cap the garden owns, and Fern, a
+    // butterfly with nothing on yet.
+    state.ownedItemIds = ['sprout-cap']
+    const sol = state.creatures[0]
+    sol.outfit = { headwear: 'sprout-cap' }
+    state.creatures.push({ ...sol, id: 'fern', name: 'Fern', stage: 'butterfly', outfit: {} })
+  })
+  await page.reload()
+  await goTo(page, 'Care')
+
+  // What the next bond level asks and brings, under the meter.
+  await expect(page.locator('.bond-next')).toContainText(
+    'Next bond level: 10 more bond points',
+  )
+
+  await page.getByRole('button', { name: 'Save this look' }).click()
+  await page.getByRole('textbox', { name: 'Name this look' }).fill('Little cap')
+  await page.getByRole('button', { name: 'Save look' }).click()
+  await expect(page.getByRole('heading', { name: 'Saved looks' })).toBeFocused()
+
+  // A companion's tab is named for its species first: "Monarch Fern Butterfly…".
+  await page.getByRole('tab', { name: /\bFern\b/ }).click()
+  await page.getByRole('button', { name: 'Wear Little cap' }).click()
+  await expect(page.locator('.look-status')).toHaveText('Fern is wearing Little cap.')
+
+  await page.getByText('Fern’s story').click()
+  const worn = page.locator('.story-list div', { hasText: 'Outfits worn' }).locator('dd')
+  await expect(worn).toHaveText('Sprout Cap')
+  expect(await seriousViolations(page, 'Care with saved looks and a story')).toEqual([])
+
+  // Kept: the look is still there after a reload, Fern's diary has the cap
+  // written down (not only worn now), and the shop knows who wears the cap
+  // and what fits whom.
+  await reloadAfterSave(page)
+  const fernsDiary = await page.evaluate(
+    () =>
+      new Promise<unknown>((resolve, reject) => {
+        const request = indexedDB.open('butterfly-garden')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const get = db.transaction('creatures', 'readonly').objectStore('creatures').get('current')
+          get.onsuccess = () => {
+            db.close()
+            const creatures = get.result as Array<{ id: string; outfitsWorn?: string[] }>
+            resolve(creatures.find((creature) => creature.id === 'fern')?.outfitsWorn)
+          }
+          get.onerror = () => reject(get.error)
+        }
+      }),
+  )
+  expect(fernsDiary).toEqual(['sprout-cap'])
+  await goTo(page, 'Care')
+  await expect(page.getByRole('button', { name: 'Wear Little cap' })).toBeVisible()
+  await goTo(page, 'Shop')
+  await page.getByRole('button', { name: 'Boutique', exact: true }).click()
+  await openShopFilters(page)
+  await page.getByRole('combobox', { name: /^Companion/ }).selectOption({ label: 'Fits Sol now' })
+  await closeShopFilters(page)
+  await expect(page.getByRole('heading', { name: 'Star Diadem' })).toHaveCount(0)
+  await expect(
+    page.locator('.boutique-card', { has: page.getByRole('heading', { name: 'Sprout Cap' }) }),
+  ).toContainText('Owned · worn by Sol and Fern')
+})
+
 test('boutique filters and try-on leave balances and outfits unchanged', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page).getByRole('button', { name: 'Shop', exact: true }).click()
+  await goTo(page, 'Shop')
   await page.getByRole('button', { name: 'Boutique', exact: true }).click()
+  await openShopFilters(page)
   await page.getByRole('searchbox').fill('Daisy Bonnet')
+  await closeShopFilters(page)
   await expect(page.locator('.boutique-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
   await expect(page.getByTitle('Nectar balance')).toContainText('10')
+  await openShopFilters(page)
   await page.getByRole('button', { name: 'Clear filters' }).click()
   await page.getByRole('combobox', { name: /^Type/ }).selectOption('aura')
+  await closeShopFilters(page)
   await expect(page.locator('.boutique-card')).toHaveCount(7)
+  await openShopFilters(page)
   await page.getByRole('searchbox').fill('no such treasure')
+  await closeShopFilters(page)
   await expect(
     page.getByRole('heading', { name: 'Nothing in this little corner yet' }),
   ).toBeVisible()
@@ -992,15 +1969,53 @@ test('species seed guidance opens the right seed without planting it', async ({
   page,
 }) => {
   await enterGarden(page)
-  await mainNav(page)
-    .getByRole('button', { name: 'Guide', exact: true })
-    .click()
+  await goTo(page, 'Guide')
   await page.getByRole('searchbox').fill('Queen')
   await expect(page.locator('.species-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Show Milkweed seed' }).click()
   await expect(page.locator('.seed-highlight')).toContainText('Milkweed')
   await expect(page.locator('.seed-highlight')).toBeInViewport()
   await expect(page.locator('.garden-plant')).toHaveCount(2)
+})
+
+test('the Guide finds things, marks what lives where you garden, and explains a meter', async ({
+  page,
+}) => {
+  await enterGarden(page)
+
+  // "What does this do?" beside Today's Sunlight, and the way back.
+  await goTo(page, 'Today')
+  await page.getByRole('link', { name: /^What does this do\? Sunlight/ }).click()
+  await expect(page).toHaveURL(/#\/guide\/sunlight$/)
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Sunlight — care for yourself first' }),
+  ).toBeFocused()
+  await page.getByRole('button', { name: 'Back to Today' }).click()
+  await expect(page).toHaveURL(/#\/today$/)
+  // Back where they were: focus on the link pressed, not on the page.
+  await expect(page.getByRole('link', { name: /^What does this do\? Sunlight/ })).toBeFocused()
+
+  // A region chosen by hand, never from a location.
+  await goTo(page, 'Settings')
+  await page.getByLabel('My region').selectOption('europe')
+  await goTo(page, 'Guide')
+  const contents = page.getByRole('navigation', { name: 'In this guide' })
+  await contents.getByRole('link', { name: 'Where you live' }).click()
+  await expect(page).toHaveURL(/#\/guide\/region$/)
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Butterflies where you live' }),
+  ).toBeFocused()
+  await expect(page.getByText('Holly and ivy, for holly blues')).toBeVisible()
+
+  // One search for the sections and the butterflies.
+  await page.getByRole('searchbox', { name: 'Search the guide' }).fill('red admiral')
+  await expect(page.locator('.species-card')).toHaveCount(1)
+  await expect(
+    page.locator('.species-card').getByText(/^Native to the UK and Europe/).first(),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Letter jars' })).toHaveCount(0)
+  await page.waitForTimeout(300)
+  expect(await seriousViolations(page, 'Guide with a region and a search')).toEqual([])
 })
 
 test.describe('the garden in flight', () => {
@@ -1092,8 +2107,15 @@ test.describe('the garden in flight', () => {
     await marigold.hover({ force: true })
     await stillFlying('while hovered')
 
-    // A tap pets the butterfly and leaves focus on it; neither may stop flight.
+    // A tap opens the butterfly's card; closing it leaves focus on the
+    // butterfly. None of it may stop flight.
     await marigold.click({ force: true })
+    const card = page.getByRole('dialog', { name: 'Marigold' })
+    await expect(card).toBeVisible()
+    await stillFlying('with its card open')
+    await page.keyboard.press('Escape')
+    await expect(card).toHaveCount(0)
+    await expect(marigold).toBeFocused()
     await stillFlying('after a tap')
 
     await page.mouse.move(4, 4)
@@ -1107,6 +2129,54 @@ test.describe('the garden in flight', () => {
     await page.evaluate(() => window.scrollTo(0, 0))
     await expect.poll(async () => (await flightState()).paused).toBe(false)
   })
+})
+
+test('a butterfly in the garden opens a card, and Care gives it a flight of its own', async ({
+  page,
+}) => {
+  await enterGarden(page)
+  await editGardenRecord(page, (state) => {
+    // The starter companion has emerged, and a second pattern is owned.
+    state.creatures[0].stage = 'butterfly'
+    state.ownedFlightPatternIds = ['gentle-drift', 'petal-hop']
+  })
+  await page.reload()
+  const sol = page.getByRole('button', { name: /^Meet Sol,/ })
+  await sol.focus()
+  await page.keyboard.press('Enter')
+  const card = page.getByRole('dialog', { name: 'Sol' })
+  await expect(card).toBeVisible()
+  await expect(card.getByText('Bond level 1')).toBeVisible()
+  expect(await seriousViolations(page, 'A butterfly\'s card')).toEqual([])
+  await card.getByRole('button', { name: 'Pet Sol' }).click()
+  await expect(card.getByText('Sol enjoyed that gentle hello.')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(card).toHaveCount(0)
+  await expect(sol).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await card.getByRole('button', { name: 'Care for Sol' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Care & nurture' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /Sol/ })).toBeFocused()
+  // By role: the navigation's Flight button carries the same name.
+  const flight = page.getByRole('combobox', { name: 'Flight', exact: true })
+  await expect(flight).toHaveValue('')
+  await flight.selectOption({ label: 'Petal Hop' })
+  expect(await seriousViolations(page, 'Care with a flight of its own')).toEqual([])
+
+  await reloadAfterSave(page)
+  await goTo(page, 'Garden')
+  await expect(page.locator('[data-flyer="marigold-guide"]')).toHaveAttribute(
+    'data-pattern',
+    'gentle-drift',
+  )
+  await expect(
+    page.locator('.flight-traveller', { has: page.getByRole('button', { name: /^Meet Sol,/ }) }),
+  ).toHaveAttribute('data-pattern', 'petal-hop')
+  await goTo(page, 'Flight')
+  await expect(
+    page.getByRole('button', { name: /Petal Hop/ }).getByText('Flown by Sol'),
+  ).toBeVisible()
 })
 
 test('a garden that cannot be read opens recovery, never onboarding', async ({

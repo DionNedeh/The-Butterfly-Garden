@@ -22,6 +22,35 @@ async function freshModule() {
 }
 
 describe('loading a garden scene', () => {
+  it('decodes day and night separately, sharing only the same variant', async () => {
+    const { backdropAssets, isBackdropReady, loadBackdrop } = await freshModule()
+    const day = loadBackdrop('cottage-bloom')
+    FakeImage.created[0].onload?.()
+    await day
+    expect(isBackdropReady('cottage-bloom')).toBe(true)
+    expect(isBackdropReady('cottage-bloom', true)).toBe(false)
+    const night = loadBackdrop('cottage-bloom', undefined, true)
+    const same = loadBackdrop('cottage-bloom', undefined, true)
+    expect(FakeImage.created).toHaveLength(2)
+    expect(FakeImage.created[1].src).toBe(backdropAssets['cottage-bloom'].night)
+    FakeImage.created[1].onload?.()
+    await Promise.all([night, same])
+    expect(isBackdropReady('cottage-bloom', true)).toBe(true)
+  })
+
+  it('times out a night load without invalidating its decoded day', async () => {
+    vi.useFakeTimers()
+    const { loadBackdrop, isBackdropReady } = await freshModule()
+    const day = loadBackdrop('sunlit-meadow')
+    FakeImage.created[0].onload?.()
+    await day
+    const night = loadBackdrop('sunlit-meadow', 10, true)
+    const rejected = expect(night).rejects.toThrow(/taking too long/)
+    vi.advanceTimersByTime(10)
+    await rejected
+    expect(isBackdropReady('sunlit-meadow')).toBe(true)
+    expect(isBackdropReady('sunlit-meadow', true)).toBe(false)
+  })
   beforeEach(() => {
     FakeImage.created = []
     vi.stubGlobal('Image', FakeImage)

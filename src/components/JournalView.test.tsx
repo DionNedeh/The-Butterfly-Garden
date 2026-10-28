@@ -1,8 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { addDaysToLocalDate, formatJournalDate, toLocalDate } from '../lib/date'
 import { createInitialState } from '../lib/progression'
-import type { AppState, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
+import { dayWeatherLabel } from '../lib/weatherCalendar'
+import type { AppState, Goal, MoodEntry, RecapEntry, ReflectionEntry } from '../types'
 import { JournalView } from './JournalView'
 
 function mood(localDate: string, note: string): MoodEntry {
@@ -38,6 +40,19 @@ function recap(localDate: string, overrides: Partial<RecapEntry> = {}): RecapEnt
     createdAt: `${localDate}T22:00:00.000Z`,
     updatedAt: `${localDate}T22:00:00.000Z`,
     ...overrides,
+  }
+}
+
+/** A one-time goal, as planning a note for tomorrow makes one. */
+function goal(id: string, title: string): Goal {
+  return {
+    id,
+    title,
+    schedule: 'once',
+    weekdays: [],
+    createdDate: '2026-01-01',
+    archived: false,
+    scheduledDate: '2026-01-02',
   }
 }
 
@@ -154,6 +169,95 @@ describe('butterflies welcomed', () => {
     renderJournal({ ...base, creatures: [monarch('a'), monarch('b')] })
     expect(document.querySelector('.field-notes .count-badge')?.textContent).toMatch(/^1 \/ \d+$/)
   })
+
+  const butterfly = (name: string, speciesId: string, discoveredAt: string) => ({
+    id: name,
+    speciesId,
+    name,
+    stage: 'butterfly' as const,
+    careDates: {},
+    actionLog: {},
+    bond: 0,
+    outfit: {},
+    carePoints: 0,
+    discoveredAt,
+  })
+  const onDay = (year: number, monthIndex: number, day: number) =>
+    new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', year: 'numeric' }).format(
+      new Date(year, monthIndex, day, 12),
+    )
+
+  it('says how many species and how many companions, both', () => {
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [
+        butterfly('Sol', 'monarch', '2026-03-03T15:00:00.000Z'),
+        butterfly('Luna', 'monarch', '2026-04-03T15:00:00.000Z'),
+        butterfly('Pip', 'queen', '2026-05-03T15:00:00.000Z'),
+        { ...butterfly('Egg', 'viceroy', '2026-06-03T15:00:00.000Z'), stage: 'egg' as const },
+      ],
+    })
+    expect(screen.getByText('2 species · 3 companions')).toBeInTheDocument()
+    expect(document.querySelector('.field-notes .count-badge')?.textContent).toMatch(/^2 \/ \d+$/)
+  })
+
+  it('says nothing of counts before the first butterfly', () => {
+    renderJournal({ ...gardenWithDays(1), creatures: [] })
+    expect(screen.queryByText(/companions?$/)).toBeNull()
+  })
+
+  it('gives each card the day its species was welcomed, naming the first of several', async () => {
+    const user = userEvent.setup()
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [
+        butterfly('Luna', 'monarch', '2026-04-03T15:00:00.000Z'),
+        // 01:30 UTC on 4 March is the evening of 3 March in New York.
+        butterfly('Sol', 'monarch', '2026-03-04T01:30:00.000Z'),
+        butterfly('Pip', 'queen', '2026-05-03T15:00:00.000Z'),
+      ],
+    })
+    await user.click(screen.getByText('Butterflies welcomed'))
+    const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
+    expect(within(monarch).getByText(`Welcomed in your garden on ${onDay(2026, 2, 3)}`)).toBeInTheDocument()
+    expect(within(monarch).getByText('Welcomed as Sol, the first of 2')).toBeInTheDocument()
+    const queen = screen.getByText('Queen').closest('article') as HTMLElement
+    expect(within(queen).getByText(`Welcomed in your garden on ${onDay(2026, 4, 3)}`)).toBeInTheDocument()
+    expect(within(queen).getByText('Welcomed as Pip')).toBeInTheDocument()
+  })
+
+  it('shares more of a species’ facts as the deepest bond with it grows', async () => {
+    const user = userEvent.setup()
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [
+        { ...butterfly('Sol', 'monarch', '2026-03-03T15:00:00.000Z'), bond: 25 },
+        { ...butterfly('Luna', 'monarch', '2026-04-03T15:00:00.000Z'), bond: 2 },
+        butterfly('Pip', 'queen', '2026-05-03T15:00:00.000Z'),
+      ],
+    })
+    await user.click(screen.getByText('Butterflies welcomed'))
+    // Sol's bond is level 3: two of three facts, and word of the third.
+    const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
+    expect(within(monarch).getAllByText(/./, { selector: '.field-fact' })).toHaveLength(2)
+    expect(within(monarch).getByText('Bond level 5 shares another.')).toBeInTheDocument()
+    // A new friend: the first fact, and the second still to come.
+    const queen = screen.getByText('Queen').closest('article') as HTMLElement
+    expect(within(queen).getAllByText(/./, { selector: '.field-fact' })).toHaveLength(1)
+    expect(within(queen).getByText('Bond level 3 shares another.')).toBeInTheDocument()
+  })
+
+  it('leaves the date off a card whose arrival is unknown', async () => {
+    const user = userEvent.setup()
+    renderJournal({
+      ...gardenWithDays(1),
+      creatures: [butterfly('Sol', 'monarch', new Date(0).toISOString())],
+    })
+    await user.click(screen.getByText('Butterflies welcomed'))
+    const monarch = screen.getByText('Monarch').closest('article') as HTMLElement
+    expect(within(monarch).queryByText(/Welcomed in your garden on/)).toBeNull()
+    expect(within(monarch).getByText('Welcomed as Sol')).toBeInTheDocument()
+  })
 })
 
 describe('recaps in the journal', () => {
@@ -218,6 +322,136 @@ describe('recaps in the journal', () => {
     ).toBeInTheDocument()
   })
 
+  it('lists each note for tomorrow when there were several', () => {
+    renderJournal({
+      ...base(),
+      recaps: [recap(DAY, { forTomorrow: 'Call the vet\nWater the fern\nRest' })],
+    })
+
+    expect(screen.getAllByText('For tomorrow')).toHaveLength(1)
+    const notes = within(screen.getByText('For tomorrow').parentElement as HTMLElement)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent)
+    expect(notes).toEqual(['Call the vet', 'Water the fern', 'Rest'])
+  })
+
+  it('leaves blank lines out of the notes for tomorrow', () => {
+    renderJournal({
+      ...base(),
+      recaps: [recap(DAY, { forTomorrow: 'Call the vet\n  \nRest' })],
+    })
+
+    const notes = within(screen.getByText('For tomorrow').parentElement as HTMLElement)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent)
+    expect(notes).toEqual(['Call the vet', 'Rest'])
+  })
+
+  it('shows a single note for tomorrow as a line, not a list', () => {
+    // A note left with an empty second line, from "Add another", is still one.
+    renderJournal({
+      ...base(),
+      recaps: [recap(DAY, { forTomorrow: 'Book the appointment\n' })],
+    })
+
+    expect(screen.getByText('For tomorrow')).toBeInTheDocument()
+    const note = screen.getByText('Book the appointment')
+    const entry = note.closest('article') as HTMLElement
+    expect(within(entry).queryByRole('list')).not.toBeInTheDocument()
+  })
+
+  it('names every note that became a goal', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [
+        ...state.goals,
+        goal('vet', 'Call the vet'),
+        goal('fern', 'Water the fern'),
+        goal('rest', 'Rest'),
+      ],
+      recaps: [
+        recap(DAY, {
+          forTomorrow: 'Call the vet\nWater the fern\nRest',
+          plannedGoalId: 'vet',
+          plannedGoalIds: ['vet', 'fern'],
+        }),
+      ],
+    })
+
+    expect(
+      screen.getByText('Became goals: Call the vet and Water the fern'),
+    ).toBeInTheDocument()
+  })
+
+  it('names three planned goals as a list', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [
+        ...state.goals,
+        goal('vet', 'Call the vet'),
+        goal('fern', 'Water the fern'),
+        goal('rest', 'Rest'),
+      ],
+      recaps: [recap(DAY, { plannedGoalIds: ['vet', 'fern', 'rest'] })],
+    })
+
+    expect(
+      screen.getByText('Became goals: Call the vet, Water the fern and Rest'),
+    ).toBeInTheDocument()
+  })
+
+  it('names one planned goal in the singular', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [...state.goals, goal('fern', 'Water the fern')],
+      recaps: [recap(DAY, { plannedGoalIds: ['fern'] })],
+    })
+
+    expect(screen.getByText('Became a goal: Water the fern')).toBeInTheDocument()
+  })
+
+  it('skips planned goals that have since been deleted', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [
+        ...state.goals,
+        goal('vet', 'Call the vet'),
+        goal('rest', 'Rest'),
+      ],
+      recaps: [
+        recap(DAY, { plannedGoalIds: ['gone', 'vet', 'also-gone', 'rest'] }),
+      ],
+    })
+
+    expect(screen.getByText('Became goals: Call the vet and Rest')).toBeInTheDocument()
+  })
+
+  it('names one goal in the singular when the others were deleted', () => {
+    const state = base()
+    renderJournal({
+      ...state,
+      goals: [...state.goals, goal('rest', 'Rest')],
+      recaps: [recap(DAY, { plannedGoalIds: ['gone', 'rest'] })],
+    })
+
+    expect(screen.getByText('Became a goal: Rest')).toBeInTheDocument()
+  })
+
+  it('says nothing of goals when every planned one was deleted', () => {
+    renderJournal({
+      ...base(),
+      recaps: [
+        recap(DAY, { plannedGoalId: 'gone', plannedGoalIds: ['gone', 'also-gone'] }),
+      ],
+    })
+
+    expect(screen.queryByText(/Became/)).not.toBeInTheDocument()
+  })
+
   it('asks before deleting a recap, and does nothing until confirmed', async () => {
     const handlers = renderJournal({ ...base(), recaps: [recap(DAY)] })
 
@@ -245,3 +479,141 @@ describe('recaps in the journal', () => {
   })
 })
 
+
+describe('the rhythm of care', () => {
+  const award = (localDate: string) => ({ id: localDate, localDate, source: `mood:${localDate}`, awardedAt: '' })
+
+  it('counts days cared for without ever showing a broken streak', () => {
+    const today = new Date()
+    const iso = (offset: number) => {
+      const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset)
+      return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    }
+    // Yesterday was missed; the old streak would read nothing at all today.
+    renderJournal({
+      ...createInitialState('Tester', 'Test Garden'),
+      sunlight: [award(iso(2)), award(iso(3)), award(iso(4))],
+    })
+    expect(screen.getByRole('heading', { name: 'Your rhythm' })).toBeInTheDocument()
+    expect(screen.getByLabelText('3 of the last 7 days cared for')).toBeInTheDocument()
+    expect(screen.getByText(/longest run so far is 3 days/)).toBeInTheDocument()
+    expect(screen.queryByText(/streak/i)).toBeNull()
+  })
+
+  it('keeps the journal free of numbers when the gardener asks', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    renderJournal({ ...seed, profile: { ...seed.profile!, hideDayCounts: true } })
+    expect(screen.getByText(/Day counts are hidden, as you chose/)).toBeInTheDocument()
+    expect(screen.queryByText(/of the last 7/)).toBeNull()
+  })
+})
+
+describe('feelings and energy in the journal', () => {
+  it('says them in plain words under the weather, and nothing when not answered', () => {
+    const tagged = { ...mood('2026-01-02', 'A long day'), feelings: ['hopeful', 'tired'], energy: 'low' as const }
+    renderJournal({
+      ...createInitialState('Tester', 'Test Garden'),
+      moods: [mood('2026-01-01', 'Quiet'), tagged],
+    })
+    const block = screen.getByText('A long day').closest('.journal-block') as HTMLElement
+    expect(within(block).getByText('Feeling hopeful, tired · Energy low')).toBeInTheDocument()
+    const quiet = screen.getByText('Quiet').closest('.journal-block') as HTMLElement
+    expect(within(quiet).queryByText(/^Feeling|^Energy/)).toBeNull()
+  })
+
+  it('keeps them through an edit of the weather or note', async () => {
+    const user = userEvent.setup()
+    const tagged = { ...mood('2026-01-02', 'A long day'), feelings: ['calm'], energy: 'steady' as const }
+    const { onUpdateMood } = renderJournal({ ...createInitialState('Tester', 'Test Garden'), moods: [tagged] })
+    const block = screen.getByText('A long day').closest('.journal-block') as HTMLElement
+    await user.click(within(block).getByRole('button', { name: 'Edit' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Inner weather' }), '2')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onUpdateMood).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 2, feelings: ['calm'], energy: 'steady' }),
+    )
+  })
+})
+
+describe('a check-in that was not sure', () => {
+  it('reads "Not sure", and can be changed to a weather or back', async () => {
+    const user = userEvent.setup()
+    const unsure: MoodEntry = { ...mood('2026-03-01', 'Hard to say'), level: 3, unsure: true }
+    const { onUpdateMood } = renderJournal({ ...createInitialState('Tester', 'Test Garden'), moods: [unsure] })
+    expect(within(document.getElementById('day-2026-03-01')!).getByText('Not sure')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const select = screen.getByLabelText('Inner weather')
+    expect(select).toHaveValue('unsure')
+    await user.selectOptions(select, '5')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    const saved = onUpdateMood.mock.calls[0][0] as MoodEntry
+    expect(saved.level).toBe(5)
+    expect(saved.unsure).toBeUndefined()
+  })
+})
+
+describe('finding a day in the journal', () => {
+  // Real days, ending today: the calendar opens on the month the clock says.
+  const today = toLocalDate(new Date())
+  const days = Array.from({ length: 35 }, (_, index) => addDaysToLocalDate(today, -index))
+  const journal = (): AppState => ({
+    ...createInitialState('Tester', 'Test Garden'),
+    moods: days.map((day, index) => mood(day, index === 3 ? 'Walked by the río' : 'Quiet')),
+  })
+  const shownDays = () => document.querySelectorAll('.timeline-entry').length
+
+  it('narrows the timeline to the days whose words match', async () => {
+    const user = userEvent.setup()
+    renderJournal(journal())
+    expect(shownDays()).toBe(30)
+    // Accents and case are forgiven.
+    await user.type(screen.getByRole('searchbox', { name: 'Search your journal' }), 'RIO')
+    await waitFor(() => expect(shownDays()).toBe(1))
+    expect(document.getElementById(`day-${days[3]}`)).toBeInTheDocument()
+    expect(screen.getByText('1 day matches')).toHaveAttribute('role', 'status')
+
+    await user.clear(screen.getByRole('searchbox', { name: 'Search your journal' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search your journal' }), 'nowhere')
+    await waitFor(() => expect(screen.getByText('Nothing in the journal matches that yet.')).toBeInTheDocument())
+  })
+
+  it('opens a day from the calendar, past the first page, and gives it focus', async () => {
+    const user = userEvent.setup()
+    renderJournal(journal())
+    const oldest = days[days.length - 1]
+    expect(document.getElementById(`day-${oldest}`)).toBeNull()
+    if (oldest.slice(0, 7) !== today.slice(0, 7)) {
+      await user.click(screen.getByRole('button', { name: 'Previous month' }))
+    }
+    await user.click(
+      screen.getByRole('button', { name: dayWeatherLabel(oldest, journal().moods[days.length - 1]) }),
+    )
+    const entry = document.getElementById(`day-${oldest}`)
+    expect(entry).toBeInTheDocument()
+    expect(within(entry!).getByText(formatJournalDate(oldest))).toHaveFocus()
+  })
+
+  it('opens a day already on the first page at once, and takes no focus later', async () => {
+    const user = userEvent.setup()
+    renderJournal(journal())
+    await user.click(
+      // Today: always in the month the calendar opens on.
+      screen.getByRole('button', { name: dayWeatherLabel(days[0], journal().moods[0]) }),
+    )
+    const entry = document.getElementById(`day-${days[0]}`)!
+    expect(within(entry).getByText(formatJournalDate(days[0]))).toHaveFocus()
+
+    // Typing in the search afterwards stays in the search.
+    const search = screen.getByRole('searchbox', { name: 'Search your journal' })
+    await user.click(search)
+    await user.type(search, 'quiet')
+    expect(search).toHaveValue('quiet')
+    expect(search).toHaveFocus()
+  })
+
+  it('offers readable copies of the journal', () => {
+    renderJournal(journal())
+    expect(screen.getByRole('heading', { name: 'Take your words with you' })).toBeInTheDocument()
+  })
+})

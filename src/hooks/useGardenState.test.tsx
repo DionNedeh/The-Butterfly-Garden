@@ -14,7 +14,10 @@ import {
   gardenRepository,
 } from '../repository/gardenRepository'
 import { onAnnouncement } from '../lib/announcer'
+import { toLocalDate } from '../lib/date'
 import { createEmptyState, createInitialState } from '../lib/progression'
+import type { PurchaseOutcome } from '../lib/purchase'
+import { ArrayBufferFileReader, unreadablePhoto } from '../test/fileReader'
 import { useGardenState } from './useGardenState'
 
 /** A minimal harness that exposes the hook's state through the DOM. */
@@ -382,7 +385,33 @@ describe('backups the garden cannot trust', () => {
     })
     const { result } = renderHook(() => useGardenState())
     await waitFor(() => expect(result.current.loading).toBe(false))
-    expect(result.current.exportGarden()).toBeUndefined()
+    await expect(result.current.exportGarden()).resolves.toBeUndefined()
+  })
+
+  it('begins a garden with the starter goals chosen, as daily goals', async () => {
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() =>
+      result.current.onboard('Tester', 'With goals', [
+        { title: 'Drink a glass of water', tinyTitle: 'Take three sips' },
+        { title: 'Take three slow breaths' },
+      ]),
+    )
+    const goals = result.current.state!.goals
+    expect(goals).toHaveLength(2)
+    expect(goals[0]).toMatchObject({
+      title: 'Drink a glass of water',
+      tinyTitle: 'Take three sips',
+      schedule: 'daily',
+      weekdays: [],
+      archived: false,
+    })
+    expect(goals[1]).toMatchObject({ title: 'Take three slow breaths', schedule: 'daily' })
+    expect(goals[1]).not.toHaveProperty('tinyTitle')
+    expect(goals[0].id).not.toBe(goals[1].id)
+    // Nothing chosen is a garden with no goals, as it always was.
+    act(() => result.current.onboard('Tester', 'Without'))
+    expect(result.current.state!.goals).toEqual([])
   })
 
   it('makes a restore undoable', async () => {
@@ -411,6 +440,60 @@ describe('backups the garden cannot trust', () => {
       await result.current.undoRestore(snapshotId!)
     })
     expect(result.current.state?.profile?.gardenName).toBe('Before')
+  })
+
+  it('counts a restore as a copy kept now, whatever time the file carries', async () => {
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const before = Date.now()
+    const garden = createInitialState('Tester', 'Moved')
+    await act(async () => {
+      await result.current.importGarden(
+        JSON.stringify({
+          format: 'the-butterfly-garden',
+          exportedAt: '2026-03-14T09:30:00.000Z',
+          // From the copy before this one, or edited by hand: neither says
+          // anything about the copies this device has.
+          garden: { ...garden, profile: { ...garden.profile, lastBackupAt: '2099-01-01T00:00:00.000Z' } },
+        }),
+      )
+    })
+    const restoredAt = Date.parse(result.current.state!.profile!.lastBackupAt!)
+    expect(restoredAt).toBeGreaterThanOrEqual(before)
+    expect(restoredAt).toBeLessThanOrEqual(Date.now())
+  })
+})
+
+describe('saved looks in a backup', () => {
+  it('keeps them through an export and a restore, in the profile', async () => {
+    const seed = createInitialState('Tester', 'Dressed')
+    const looks = [{ id: 'look-1', name: 'Sunday best', outfit: { headwear: 'sprout-cap' } }]
+    await gardenRepository.save({ ...seed, profile: { ...seed.profile!, outfitPresets: looks } })
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.state?.profile?.outfitPresets).toEqual(looks)
+
+    const file = (await result.current.exportGarden())!.text
+    const { garden } = JSON.parse(file) as { garden: Record<string, unknown> & { profile: object } }
+    // Inside the profile, which an older build restoring this file carries
+    // through whole, and not beside it, where that build would drop it.
+    expect(garden.profile).toMatchObject({ outfitPresets: looks })
+    expect(garden).not.toHaveProperty('outfitPresets')
+
+    // Gone from the garden, then brought back by the file.
+    act(() => result.current.deletePreset('look-1'))
+    expect(result.current.state?.profile).not.toHaveProperty('outfitPresets')
+    // Let the deletion's write land before replacing it.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    let outcome: { ok: boolean; message: string } | undefined
+    await act(async () => {
+      outcome = await result.current.importGarden(file)
+    })
+    expect(outcome).toEqual({ ok: true, message: 'Your garden was restored from the backup.' })
+    expect(result.current.state?.profile?.outfitPresets).toEqual(looks)
+    // And stored so, for the next time the garden opens.
+    const stored = await gardenRepository.load()
+    expect(stored.state.profile?.outfitPresets).toEqual(looks)
   })
 })
 
@@ -542,6 +625,9 @@ describe('every action, through the hook', () => {
     const garden = () => result.current.state!
     act(() => result.current.addGoal('Stretch', 'weekdays', [1, 2]))
     expect(garden().goals.at(-1)?.title).toBe('Stretch')
+    expect(garden().goals.at(-1)).not.toHaveProperty('tinyTitle')
+    act(() => result.current.addGoal('Walk', 'daily', [], 'Walk to the door'))
+    expect(garden().goals.at(-1)?.tinyTitle).toBe('Walk to the door')
     act(() => result.current.planGoal('  ', '2026-12-01'))
     act(() => result.current.planGoal('Post the letter', '2026-12-01'))
     expect(garden().goals.at(-1)).toMatchObject({ schedule: 'once', scheduledDate: '2026-12-01' })
@@ -584,6 +670,40 @@ describe('every action, through the hook', () => {
     expect(garden().recaps).toEqual([])
   })
 
+  it('counts a breathing session run to its end, once a day', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => result.current.finishBreathing())
+    expect(garden().sunlight.map((award) => award.source)).toEqual([`breath:${toLocalDate()}`])
+    const once = garden()
+    act(() => result.current.finishBreathing())
+    expect(garden()).toBe(once)
+  })
+
+  it('writes for an earlier day, earning nothing and announcing nothing', async () => {
+    const planted = createInitialState('Tester', 'Test Garden', new Date(Date.now() - 20 * 86_400_000))
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({ status: 'loaded', state: planted })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const heard: string[] = []
+    const stop = onAnnouncement((events) => heard.push(...events.map((event) => event.kind)))
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const garden = () => result.current.state!
+    const day = toLocalDate(new Date(Date.now() - 3 * 86_400_000))
+
+    act(() => result.current.addEarlierMood(day, 2, 'Caught up'))
+    act(() => result.current.addEarlierReflection(day, 'Remembered'))
+    expect(garden().moods[0]).toMatchObject({ localDate: day, writtenLater: true })
+    expect(garden().reflections[0]).toMatchObject({ localDate: day, writtenLater: true })
+    expect(garden().sunlight).toEqual([])
+    expect(garden().plants).toBe(planted.plants)
+    // Today is never written for here, whatever is asked.
+    act(() => result.current.addEarlierMood(toLocalDate(), 4, ''))
+    expect(garden().moods).toHaveLength(1)
+    expect(heard).toEqual([])
+    stop()
+  })
+
   it('tends the garden: plants, care, shop, flight, jars and companions', async () => {
     const { result } = await renderReady()
     const garden = () => result.current.state!
@@ -596,17 +716,39 @@ describe('every action, through the hook', () => {
 
     const sol = garden().creatures[0]
     act(() => result.current.careForCreature(sol.id, 'feed'))
-    act(() => result.current.purchaseItem('flower-crown'))
+    let outcome: PurchaseOutcome | undefined
+    act(() => {
+      outcome = result.current.purchaseItem('flower-crown')
+    })
     expect(garden().ownedItemIds).toContain('flower-crown')
+    expect(outcome).toMatchObject({ kind: 'bought', quantity: 1 })
+    // Asked again, the hook says what the reducer refused, and why.
+    act(() => {
+      outcome = result.current.purchaseItem('flower-crown')
+    })
+    expect(outcome).toEqual({ kind: 'owned' })
+    act(() => {
+      outcome = result.current.purchaseItem('leaf-bundle', 5)
+    })
+    expect(garden().inventory['leaf-bundle']).toBe(
+      (createInitialState('Tester', 'Test Garden').inventory['leaf-bundle'] ?? 0) + 5,
+    )
+    expect(outcome).toMatchObject({ kind: 'bought', quantity: 5 })
     act(() => result.current.equipItem(sol.id, 'flower-crown'))
     act(() => result.current.unequipSlot(sol.id, 'headwear'))
     expect(garden().creatures[0].outfit.headwear).toBeUndefined()
 
-    act(() => result.current.purchaseFlightPattern('petal-hop'))
+    act(() => {
+      outcome = result.current.purchaseFlightPattern('petal-hop')
+    })
+    expect(outcome).toMatchObject({ kind: 'bought', spent: 9, currency: 'nectar' })
     act(() => result.current.selectFlightPattern('petal-hop'))
     expect(garden().selectedFlightPatternId).toBe('petal-hop')
 
-    act(() => result.current.purchaseJar('A', 'blue'))
+    act(() => {
+      outcome = result.current.purchaseJar('A', 'blue')
+    })
+    expect(outcome).toMatchObject({ kind: 'bought', spent: 6 })
     const jar = garden().jars[0]
     act(() => result.current.placeJar(jar.id, garden().plants[0].id))
     expect(garden().jarPlacements).toHaveLength(1)
@@ -617,6 +759,135 @@ describe('every action, through the hook', () => {
     act(() => result.current.selectCompanion(sol.id))
     expect(garden().creatures[0].name).toBe('Pip')
     expect(garden().profile?.activeCompanionId).toBe(sol.id)
+  })
+
+  it('grows a companion alongside a goal, counting the goal as care until it is archived', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    const sol = garden().creatures[0]
+    act(() => result.current.adoptGoal(sol.id, 'g1'))
+    expect(garden().creatures[0].adoptedGoalId).toBe('g1')
+    act(() => result.current.completeGoal('g1'))
+    expect(garden().creatures[0].careDates[sol.stage]).toEqual([toLocalDate()])
+    expect(garden().creatures[0].grownAlongside).toEqual([
+      { goalId: 'g1', title: 'Walk', dates: [toLocalDate()] },
+    ])
+    act(() => result.current.setGoalArchived('g1', true))
+    expect(garden().creatures[0]).not.toHaveProperty('adoptedGoalId')
+    expect(garden().creatures[0].grownAlongside).toHaveLength(1)
+  })
+
+  it('saves, wears, renames, deletes and puts back a look', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    const sol = garden().creatures[0]
+    act(() => {
+      result.current.purchaseItem('flower-crown')
+      result.current.purchaseItem('silk-bow')
+    })
+    act(() => result.current.equipItem(sol.id, 'flower-crown'))
+    expect(garden().creatures[0].outfitsWorn).toEqual(['flower-crown'])
+    act(() => result.current.savePreset(sol.id, 'Crowned'))
+    const [look] = garden().profile!.outfitPresets!
+    expect(look).toMatchObject({ name: 'Crowned', outfit: { headwear: 'flower-crown' } })
+
+    act(() => result.current.unequipSlot(sol.id, 'headwear'))
+    act(() => result.current.equipItem(sol.id, 'silk-bow'))
+    let worn: ReturnType<typeof result.current.wearPreset> | undefined
+    act(() => {
+      worn = result.current.wearPreset(sol.id, look.id)
+    })
+    expect(worn).toEqual({ worn: ['flower-crown'], skipped: [] })
+    // The look is the whole outfit: the bow it does not hold comes off.
+    expect(garden().creatures[0].outfit).toEqual({ headwear: 'flower-crown' })
+
+    act(() => result.current.renamePreset(look.id, 'Sunday crown'))
+    expect(garden().profile?.outfitPresets?.[0].name).toBe('Sunday crown')
+    const renamed = garden().profile!.outfitPresets![0]
+    act(() => result.current.deletePreset(look.id))
+    // The last look gone leaves no list, as before any was saved.
+    expect(garden().profile).not.toHaveProperty('outfitPresets')
+    act(() => result.current.restorePreset(renamed, 0))
+    expect(garden().profile?.outfitPresets).toEqual([renamed])
+  })
+
+  it('recycles a jar for half its Nectar, and Undo puts it back while that Nectar is there', async () => {
+    const { result } = await renderReady()
+    const garden = () => result.current.state!
+    act(() => {
+      result.current.purchaseJar('É', 'pink')
+    })
+    const jar = garden().jars[0]
+    const nectar = garden().nectar
+    let recycled: ReturnType<typeof result.current.recycleJar> | undefined
+    act(() => {
+      recycled = result.current.recycleJar(jar.id)
+    })
+    expect(recycled).toEqual({ kind: 'recycled', recycled: { jar, index: 0, nectar: 3 } })
+    expect(garden().jars).toEqual([])
+    expect(garden().nectar).toBe(nectar + 3)
+    // A second press in the same moment is told the jar has gone already.
+    act(() => {
+      expect(result.current.recycleJar(jar.id)).toEqual({ kind: 'missing' })
+    })
+
+    if (recycled?.kind !== 'recycled') throw new Error('Expected a recycle')
+    const undo = recycled.recycled
+    act(() => {
+      expect(result.current.restoreJar(undo)).toEqual({ kind: 'restored' })
+    })
+    expect(garden().jars).toEqual([jar])
+    expect(garden().nectar).toBe(nectar)
+    act(() => {
+      expect(result.current.restoreJar(undo)).toEqual({ kind: 'back' })
+    })
+  })
+
+  it('recycles nothing, and puts nothing back, before the garden has loaded', () => {
+    vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useGardenState())
+    expect(result.current.recycleJar('jar')).toEqual({ kind: 'missing' })
+    const jar = { id: 'jar', character: 'A', colorId: 'blue' as const, purchasedAt: '' }
+    expect(result.current.restoreJar({ jar, index: 0, nectar: 3 })).toEqual({ kind: 'back' })
+  })
+
+  it('wears nothing before the garden has loaded', () => {
+    vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useGardenState())
+    expect(result.current.wearPreset('sol', 'look')).toEqual({ worn: [], skipped: [] })
+  })
+
+  it('refuses a purchase, and says so, when the balance cannot cover it', async () => {
+    const { result } = await renderReady()
+    const before = result.current.state
+    let outcome: PurchaseOutcome | undefined
+    act(() => {
+      // 300 Leaf Bundles at 2 Nectar are 600, and the garden holds 500: the
+      // whole lot is refused, not as many as the balance would stretch to.
+      outcome = result.current.purchaseItem('leaf-bundle', 300)
+    })
+    expect(outcome).toEqual({ kind: 'short', currency: 'nectar', needed: 100 })
+    expect(result.current.state).toBe(before)
+  })
+
+  it('tells a second purchase in the same moment about the first', async () => {
+    const { result } = await renderReady()
+    const outcomes: PurchaseOutcome[] = []
+    act(() => {
+      outcomes.push(result.current.purchaseItem('silk-bow'))
+      outcomes.push(result.current.purchaseItem('silk-bow'))
+    })
+    expect(outcomes.map((outcome) => outcome.kind)).toEqual(['bought', 'owned'])
+    expect(result.current.state?.ownedItemIds.filter((id) => id === 'silk-bow')).toHaveLength(1)
+  })
+
+  it('buys nothing before the garden has loaded', () => {
+    vi.spyOn(gardenRepository, 'load').mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() => useGardenState())
+    expect(result.current.purchaseItem('leaf-bundle')).toEqual({
+      kind: 'unavailable',
+      reason: 'unknown',
+    })
   })
 
   it('changes the gardener’s settings and scenes', async () => {
@@ -645,9 +916,21 @@ describe('every action, through the hook', () => {
 
   it('exports the garden it holds as a backup file', async () => {
     const { result } = await renderReady()
-    const file = JSON.parse(result.current.exportGarden()!) as { format: string; garden: { seeds: number } }
+    const file = JSON.parse((await result.current.exportGarden())!.text) as { format: string; garden: { seeds: number } }
     expect(file.format).toBe('the-butterfly-garden')
     expect(file.garden.seeds).toBe(5)
+  })
+
+  it('remembers when a backup was kept, as of its export', async () => {
+    const { result } = await renderReady()
+    const madeAt = new Date('2026-10-27T08:00:00.000Z')
+    act(() => result.current.recordBackup(madeAt))
+    expect(result.current.state?.profile?.lastBackupAt).toBe(madeAt.toISOString())
+    // The time is in the garden, so the next backup file carries it along.
+    const file = JSON.parse((await result.current.exportGarden())!.text) as {
+      garden: { profile: { lastBackupAt?: string } }
+    }
+    expect(file.garden.profile.lastBackupAt).toBe(madeAt.toISOString())
   })
 
   it('refuses an image save it cannot make, saying why', async () => {
@@ -684,7 +967,7 @@ describe('the way back from a garden that could not be read', () => {
     expect(await result.current.countQuarantined()).toBe(0)
 
     quarantined.mockResolvedValue([setAside])
-    const copy = JSON.parse((await result.current.quarantinedCopy())!) as Record<string, unknown>
+    const copy = JSON.parse((await result.current.quarantinedCopy())!.text) as Record<string, unknown>
     expect(copy).toMatchObject({
       format: 'the-butterfly-garden-set-aside',
       reason: 'malformed',
@@ -696,6 +979,27 @@ describe('the way back from a garden that could not be read', () => {
     const clear = vi.spyOn(gardenRepository, 'clearQuarantine').mockResolvedValue()
     await result.current.discardQuarantine()
     expect(clear).toHaveBeenCalledOnce()
+  })
+
+  it('writes the set-aside copy whole when one of its photos cannot be read, and says so', async () => {
+    vi.stubGlobal('FileReader', ArrayBufferFileReader)
+    const { result } = await renderWithheld()
+    const sound = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' })
+    vi.spyOn(gardenRepository, 'quarantined').mockResolvedValue([
+      { ...setAside, raw: { profile: { name: 'Robin' }, sightings: [{ photo: unreadablePhoto() }, { photo: sound }] } },
+    ])
+    const copy = (await result.current.quarantinedCopy())!
+    expect(copy.leftOut).toBe(
+      'One photo in the field book could not be read on this device, so the file keeps its sighting without it.',
+    )
+    expect((JSON.parse(copy.text) as { garden: unknown }).garden).toEqual({
+      profile: { name: 'Robin' },
+      sightings: [
+        { photo: { mimeType: 'image/webp', unreadable: true } },
+        { photo: { mimeType: 'image/webp', imageData: 'AQID' } },
+      ],
+    })
+    vi.unstubAllGlobals()
   })
 
   it('starts a new garden only once the old one is set aside', async () => {
@@ -1088,6 +1392,28 @@ describe('saving one of the gardener’s images', () => {
     expect(result.current.state?.profile?.selectedCustomBackdropId).toBeUndefined()
   })
 
+  it('chooses an image for the night, and goes back to the day’s', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a'), image('b')] })
+    act(() => result.current.selectCustomBackdrop('a'))
+    act(() => result.current.chooseNightBackdrop('b'))
+    expect(result.current.state?.profile?.nightCustomBackdropId).toBe('b')
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBe('a')
+    act(() => result.current.chooseNightBackdrop(undefined))
+    expect(result.current.state?.profile?.nightCustomBackdropId).toBeUndefined()
+  })
+
+  it('saves an image without choosing it for the day, when asked', async () => {
+    const { result } = await renderWith({ customBackdrops: [image('a'), image('b')] })
+    act(() => result.current.selectCustomBackdrop('a'))
+    let saved: Promise<{ ok: boolean }> | undefined
+    act(() => {
+      saved = result.current.saveCustomBackdrop({ ...image('b'), brightness: -20 }, false)
+    })
+    expect(await saved).toEqual({ ok: true })
+    expect(result.current.state?.profile?.selectedCustomBackdropId).toBe('a')
+    expect(result.current.state?.customBackdrops.find((entry) => entry.id === 'b')?.brightness).toBe(-20)
+  })
+
   it('clears a notice when a new garden begins', async () => {
     const { result } = await renderWith()
     const other = new BroadcastChannel('butterfly-garden-sync')
@@ -1097,5 +1423,131 @@ describe('saving one of the gardener’s images', () => {
     act(() => result.current.onboard('Robin', 'Second Garden'))
     expect(result.current.persistence.notice).toBeUndefined()
     expect(result.current.state?.profile?.gardenName).toBe('Second Garden')
+  })
+})
+
+describe('the day the garden was opened', () => {
+  function lastVisited(daysAgo: number) {
+    const seed = createInitialState('Tester', 'Test Garden')
+    const lastVisitOn = toLocalDate(new Date(Date.now() - daysAgo * 86_400_000))
+    return { ...seed, profile: { ...seed.profile!, lastVisitOn } }
+  }
+
+  it('is noted once, in one write, with a welcome after a few days away', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(4),
+    })
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
+    const heard: string[] = []
+    const stop = onAnnouncement((events) => heard.push(...events.map((event) => event.kind)))
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.state?.profile?.lastVisitOn).toBe(toLocalDate()))
+    expect(result.current.state?.profile?.welcomeBackOn).toBe(toLocalDate())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+
+    // Coming back into view the same day writes nothing more, and never loops.
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(save).toHaveBeenCalledTimes(1)
+    // A visit is not a moment to celebrate.
+    expect(heard).toEqual([])
+    stop()
+
+    act(() => result.current.putAwayWelcomeBack())
+    expect(result.current.state?.profile).not.toHaveProperty('welcomeBackOn')
+    expect(result.current.state?.profile?.lastVisitOn).toBe(toLocalDate())
+  })
+
+  it('says nothing when another tab noted the day first, and reads its garden back', async () => {
+    const other = lastVisited(0)
+    const load = vi
+      .spyOn(gardenRepository, 'load')
+      .mockResolvedValueOnce({ status: 'loaded', state: lastVisited(1) })
+      .mockResolvedValue({ status: 'loaded', state: other })
+    vi.spyOn(gardenRepository, 'save').mockRejectedValue(new GardenConflictError())
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(result.current.state).toEqual(other))
+    // The write held nothing of the gardener's, so nothing was lost.
+    expect(result.current.persistence.notice).toBeUndefined()
+  })
+
+  it('writes nothing for a garden already visited today', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(0),
+    })
+    const save = vi.spyOn(gardenRepository, 'save').mockResolvedValue(['meta'])
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(save).not.toHaveBeenCalled()
+    expect(result.current.state?.profile).not.toHaveProperty('welcomeBackOn')
+  })
+
+  it('is noted when an app left open comes back into view on a later day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    try {
+      vi.setSystemTime(new Date(2026, 9, 20, 9))
+      vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+        status: 'loaded',
+        state: createInitialState('Tester', 'Test Garden'),
+      })
+      vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+      const { result } = renderHook(() => useGardenState())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.state?.profile?.lastVisitOn).toBe('2026-10-20')
+
+      // Days later, in the background: nobody is looking, so nothing is noted.
+      vi.setSystemTime(new Date(2026, 9, 24, 8))
+      const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(result.current.state?.profile?.lastVisitOn).toBe('2026-10-20')
+
+      visibility.mockReturnValue('visible')
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(result.current.state?.profile).toMatchObject({
+        lastVisitOn: '2026-10-24',
+        welcomeBackOn: '2026-10-24',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('chooses the garden pace', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(0),
+    })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() => result.current.setGardenPace('keep-giving'))
+    expect(result.current.state?.profile?.gardenPace).toBe('keep-giving')
+    act(() => result.current.setGardenPace(undefined))
+    expect(result.current.state?.profile).not.toHaveProperty('gardenPace')
+  })
+
+  it('chooses a region, and none again', async () => {
+    vi.spyOn(gardenRepository, 'load').mockResolvedValue({
+      status: 'loaded',
+      state: lastVisited(0),
+    })
+    vi.spyOn(gardenRepository, 'save').mockResolvedValue([])
+    const { result } = renderHook(() => useGardenState())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() => result.current.setRegion('north-america'))
+    expect(result.current.state?.profile?.region).toBe('north-america')
+    act(() => result.current.setRegion(undefined))
+    expect(result.current.state?.profile).not.toHaveProperty('region')
   })
 })

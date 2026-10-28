@@ -1,26 +1,81 @@
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { ambientTrackDescriptions } from '../data/ambientTrackDescriptions'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
-import { previewBackup, type BackupPreview } from '../lib/backupPreview'
-import { formatJournalDate } from '../lib/date'
+import { previewBackup, previewGarden, type BackupPreview } from '../lib/backupPreview'
+import { backupReminder } from '../lib/backupReminder'
+import {
+  formatHour,
+  formatJournalDate,
+  RECAP_GRACE_CHOICES,
+  RECAP_OPENS_CHOICES,
+  recapHoursOf,
+  type RecapHours,
+} from '../lib/date'
 import { datedFileName, saveTextFile } from '../lib/download'
+import { canShareFile, shareTextFile } from '../lib/shareFile'
+import type { FileCopy } from '../lib/sightingPhotos'
 import { isAndroidApp } from '../lib/platform'
 import {
   formatBytes,
-  isAppleMobileBrowser,
-  isInstalledApp,
   requestPersistentStorage,
   storageStatus,
   type StorageStatus,
 } from '../lib/storage'
-import { readBackupFile } from '../lib/backupFile'
+import { homeScreenAdvice } from '../lib/install'
+import { MAX_SIGHTING_PHOTOS, photosIn } from '../lib/customBackdrops'
+import { readBackupFile, sealedKind } from '../lib/backupFile'
 import { managePassSubscription, type PassStatus } from '../lib/playBilling'
 import { usePassStatus } from '../hooks/usePassStatus'
-import type { AmbientTrackId, AppState, GardenBackdropId } from '../types'
+import { FADE_OUT_CHOICES, type FadeOutMinutes } from '../hooks/useFadeOut'
+import type {
+  AmbientTrackId,
+  AppState,
+  GardenBackdropId,
+  GardenPace,
+  RegionId,
+  TextSize,
+} from '../types'
 import { motionPreference, type MotionPreference } from '../lib/motion'
+import { eveningNightHours, themeChoiceOf, type ThemeChoice } from '../lib/theme'
 import { counted } from '../lib/plural'
-import { releaseName } from '../data/releases'
+import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
+import { releaseName } from '../data/currentRelease'
+import { soundVolumeOf } from '../lib/sound'
+import { SoundSwitches, SoundVolume } from './SoundControls'
+import { GuideLink } from './GuideLink'
+import { RegionSetting } from './RegionSetting'
+import { ReminderSetting } from './ReminderSetting'
+import { LetterSetting } from './LetterSetting'
+import { ComfortLink } from './ComfortLink'
+import { LockSettings } from './lock/LockSettings'
+import { useLockState } from '../hooks/useLockState'
+import { letterQuotesOf, type LetterQuotes } from '../lib/letters'
+import { ProtectedRestore } from './backup/ProtectedRestore'
+import { ArriveRestore } from './move/ArriveRestore'
+import { EarlierCopies, type CopiesKept } from './backup/EarlierCopies'
+import type { EarlierCopy } from '../repository/dailyCopies'
+import './settings.css'
+
+// Making a protected backup loads its dialog, and the code that locks the
+// file, only when it is asked for.
+const ProtectedBackupDialog = lazy(() =>
+  import('./backup/ProtectedBackupDialog').then((m) => ({ default: m.ProtectedBackupDialog })),
+)
+// So does moving the garden to another device: the dialog, the words.
+const MoveDialog = lazy(() =>
+  import('./move/MoveDialog').then((m) => ({ default: m.MoveDialog })),
+)
+
+// A backup file kept up to date, only where the browser can keep a file:
+// never in the Android app, whose bundle leaves it out altogether.
+const AutoBackupSetting =
+  import.meta.env.VITE_PLATFORM === 'android'
+    ? undefined
+    : lazy(() =>
+        import('./backup/AutoBackupSetting').then((m) => ({ default: m.AutoBackupSetting })),
+      )
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
 function passSummary(status: PassStatus): string {
@@ -96,6 +151,78 @@ const MOTION_CHOICES: ReadonlyArray<{
   },
 ]
 
+/** The text sizes, from the usual one up; the usual one stores nothing. */
+const TEXT_SIZE_CHOICES: ReadonlyArray<{
+  value: TextSize | undefined
+  label: string
+  description: string
+  /** The label itself is shown at the size it chooses, as a preview. */
+  scale: string
+}> = [
+  {
+    value: undefined,
+    label: 'Comfortable',
+    description: 'The garden’s usual size.',
+    scale: '1em',
+  },
+  {
+    value: 'larger',
+    label: 'Larger',
+    description: 'A little larger, everywhere.',
+    scale: '1.125em',
+  },
+  {
+    value: 'largest',
+    label: 'Largest',
+    description: 'Larger again, for easier reading.',
+    scale: '1.25em',
+  },
+]
+
+/** How the garden gives; Classic, the pace it has always had, stores nothing. */
+const PACE_CHOICES: ReadonlyArray<{
+  value: GardenPace | undefined
+  label: string
+  description: string
+}> = [
+  {
+    value: undefined,
+    label: 'Classic',
+    description:
+      'Each host plant can bring one egg, when it first blooms. Plant another to welcome more.',
+  },
+  {
+    value: 'keep-giving',
+    label: 'Keep giving',
+    description: `A host plant in full bloom blooms again after ${REBLOOM_CARE_DAYS} more days of care, and can bring another egg each time.`,
+  },
+]
+
+/** The theme choices, with what each does in words. */
+function themeChoices(
+  android: boolean,
+  evening: { from: number; until: number },
+): ReadonlyArray<{ value: ThemeChoice; label: string; description: string }> {
+  return [
+    {
+      value: 'sunlight',
+      label: 'Sunlight',
+      description: 'The bright garden, day and night.',
+    },
+    { value: 'night', label: 'Night', description: 'The starry garden, day and night.' },
+    {
+      value: 'device',
+      label: 'Follow device',
+      description: `Night whenever this ${android ? 'phone' : 'device'} is set to dark.`,
+    },
+    {
+      value: 'evening',
+      label: 'Follow evening',
+      description: `Night from ${formatHour(evening.from)}, when your evening starts, until ${formatHour(evening.until)}.`,
+    },
+  ]
+}
+
 /**
  * What the restore picker offers. On Android the system file picker filters
  * by the type each storage app reports, and some report a .json file as plain
@@ -125,6 +252,12 @@ function noteForName(value: string): string | undefined {
     .join('')
 }
 
+/** "10:45 pm" or "22:45", as the gardener's clock shows it. */
+const fadeTimeFormat = new Intl.DateTimeFormat(undefined, {
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
 export function SettingsView({
   state,
   persistence,
@@ -132,8 +265,13 @@ export function SettingsView({
   onSelectAmbientTrack,
   onSelectBackdrop,
   onExportGarden,
+  onBackupMade,
+  reminderAt,
   onImportGarden,
   onUndoRestore,
+  onListEarlierCopies,
+  onReadCopy,
+  onPutBackCopy,
   onDownloadSetAside,
   onDiscardSetAside,
   onCountSetAside,
@@ -141,10 +279,30 @@ export function SettingsView({
   onOpenWhatsNew,
   onOpenPrivacy,
   onOpenNotices,
+  onOpenSupport,
+  onOpenComfort,
+  onSetDayCountsHidden,
+  onSetRecapHours,
+  onChooseTheme,
+  onSetTextSize,
+  onSetGardenPace,
+  fadeOutMinutes,
+  fadeOutEndsAt,
+  onChooseFadeOut,
+  heardTrackId,
+  onSetSoundVolume,
+  onHearSoundVolume,
+  onSetSoundFollowsTheme,
+  onSetSoundInBackground,
   onOpenGardenPass,
   onSaveCustomBackdrop,
   onDeleteCustomBackdrop,
   onSelectCustomBackdrop,
+  onSetRegion,
+  onOpenGuide,
+  onChooseNightBackdrop,
+  onSetReminderTime,
+  onSetLetterQuotes,
 }: {
   state: AppState
   persistence: PersistenceStatus
@@ -155,14 +313,28 @@ export function SettingsView({
   ) => void
   onSelectAmbientTrack: (trackId: AmbientTrackId) => void
   onSelectBackdrop: (backdropId: GardenBackdropId) => void
-  /** Undefined while the garden is read-only: see useGardenState. */
-  onExportGarden: () => string | undefined
+  /**
+   * The backup's text, at once or once its photos are read (a sighting's
+   * photo is a Blob), with a word on any photo that could not be read.
+   * Undefined while the garden is read-only: see useGardenState.
+   */
+  onExportGarden: () => FileCopy | undefined | Promise<FileCopy | undefined>
+  /** A backup reached the gardener; `madeAt` is when it was exported. */
+  onBackupMade?: (madeAt: Date) => void
+  /** When the backup reminder is judged; the app passes noon of the day. */
+  reminderAt?: Date
   onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
   onUndoRestore?: (
     snapshotId: string,
   ) => Promise<{ ok: boolean; message: string }>
+  /** The daily copies kept on this device (repository/dailyCopies). */
+  onListEarlierCopies?: () => Promise<CopiesKept>
+  /** One daily copy, as putting it back would make the garden. */
+  onReadCopy?: (id: string) => Promise<AppState | undefined>
+  /** Put a daily copy back: a restore, with its undo. */
+  onPutBackCopy?: (id: string) => Promise<{ ok: boolean; message: string }>
   /** The newest set-aside copy of an unreadable garden, as file text. */
-  onDownloadSetAside?: () => Promise<string | undefined>
+  onDownloadSetAside?: () => Promise<FileCopy | undefined>
   onDiscardSetAside?: () => Promise<void>
   /** How many set-aside copies are kept, to decide whether to mention them. */
   onCountSetAside?: () => Promise<number>
@@ -170,10 +342,43 @@ export function SettingsView({
   onOpenWhatsNew?: () => void
   onOpenPrivacy?: () => void
   onOpenNotices?: () => void
+  onOpenSupport?: () => void
+  /** The comfort plan, offered beside the support page. */
+  onOpenComfort?: () => void
+  onSetDayCountsHidden?: (hidden: boolean) => void
+  onSetRecapHours?: (hours: RecapHours) => void
+  /** Sunlight or Night by hand, or follow the device or the evening. */
+  onChooseTheme?: (choice: ThemeChoice) => void
+  /** A larger text size, or undefined for the usual one. */
+  onSetTextSize?: (size: TextSize | undefined) => void
+  /** Keep giving, or Classic again (undefined). */
+  onSetGardenPace?: (pace: GardenPace | undefined) => void
+  /** The soundscape's fade-out length for this visit, if one is chosen. */
+  fadeOutMinutes?: FadeOutMinutes
+  /** When the fade-out timer runs out, while it is running. */
+  fadeOutEndsAt?: number
+  onChooseFadeOut?: (minutes: FadeOutMinutes | undefined) => void
+  /** The soundscape that plays now, if night has brought the piano. */
+  heardTrackId?: AmbientTrackId
+  /** Store a volume, 0 to 100. */
+  onSetSoundVolume?: (volume: number) => void
+  /** Hear a volume while it is being chosen, before it is stored. */
+  onHearSoundVolume?: (volume: number) => void
+  onSetSoundFollowsTheme?: (on: boolean) => void
+  onSetSoundInBackground?: (on: boolean) => void
   onOpenGardenPass?: () => void
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
   onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
+  /** Where the gardener gardens, for the Guide's native marks, or none. */
+  onSetRegion?: (region: RegionId | undefined) => void
+  /** Open the Guide at a section, from a "What does this do?" link. */
+  onOpenGuide?: (section: string) => void
+  onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
+  /** Remember the time of the daily visit just added to the calendar. */
+  onSetReminderTime?: (time: string) => void
+  /** Whether Marigold's letters may quote starred lines, or never. */
+  onSetLetterQuotes?: (quotes: LetterQuotes) => void
 }) {
   const [name, setName] = useState(state.profile?.name ?? '')
   const [gardenName, setGardenName] = useState(state.profile?.gardenName ?? '')
@@ -184,20 +389,67 @@ export function SettingsView({
   const [deleteError, setDeleteError] = useState<string>()
   const [backupNote, setBackupNote] = useState<string>()
   const [restoreStep, setRestoreStep] = useState(false)
-  /** A chosen backup, read and described, waiting for the gardener's yes. */
+  /**
+   * A chosen backup, read and described, waiting for the gardener's yes; or
+   * an earlier copy on this device (`copy`), described the same way.
+   */
   const [pendingRestore, setPendingRestore] = useState<
-    BackupPreview & { text: string }
+    BackupPreview & { text?: string; openedWith?: 'passphrase' | 'lock' | 'move'; copy?: EarlierCopy }
   >()
+  /**
+   * A protected backup chosen to restore, waiting for its passphrase, or a
+   * locked garden's copy, waiting for its passcode or recovery code.
+   */
+  const [sealedChoice, setSealedChoice] = useState<string>()
+  /** Making a protected backup: to save or download it, or to share it. */
+  const [protecting, setProtecting] = useState<'save' | 'share'>()
+  /** Moving this garden to another device, or arriving from one. */
+  const [moving, setMoving] = useState(false)
+  const [arriving, setArriving] = useState(false)
+  const arriveButton = useRef<HTMLButtonElement>(null)
+  const previewHeading = useRef<HTMLHeadingElement>(null)
   const [restoring, setRestoring] = useState(false)
+  /**
+   * While a backup is being made: a field book full of photos takes a moment
+   * to write out, and a second tap meanwhile would only start a second one.
+   */
+  const [preparing, setPreparing] = useState(false)
+  const preparingRef = useRef(false)
   /** The undo offer the gardener dismissed, so it is not shown again. */
   const [undoDismissed, setUndoDismissed] = useState<string>()
   const [setAsideCount, setSetAsideCount] = useState(0)
   const [storage, setStorage] = useState<StorageStatus>()
+  /** The room the earlier copies take, for the storage line. */
+  const [copiesBytes, setCopiesBytes] = useState(0)
+  /** Whether this browser can keep a file to write to (lib/autoBackupFile). */
+  const [canKeepFile] = useState(
+    () => typeof (window as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function',
+  )
+  const undoButton = useRef<HTMLButtonElement>(null)
+  /** Set as a copy is put back: the undo offer takes the focus once it shows. */
+  const focusUndo = useRef(false)
+  // The field book's photos, which every backup carries: how many, and their size.
+  const fieldBookPhotos = photosIn(state.sightings)
+  // The moment the backup reminder is worked out for: the app's own (noon of
+  // the day, shared with the badge on Settings), or when the page opened.
+  const [openedAt] = useState(() => new Date())
+  const reminderNow = reminderAt ?? openedAt
+  /**
+   * Whether this browser can hand the backup file to another app. Asked once;
+   * always false in the Android app, which has its own save screen.
+   */
+  const [canShareBackup] = useState(() =>
+    canShareFile(datedFileName(''), 'application/json'),
+  )
+  /** iPhone and iPad, not yet on the Home Screen: how to put it there. */
+  const [homeScreen] = useState(homeScreenAdvice)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Inline rather than isAndroidApp(): the bundler folds only an inline
   // check, which keeps the Android-only cards and Play calls out of the PWA.
   const android = import.meta.env.VITE_PLATFORM === 'android'
   const pass = usePassStatus()
+  // A backup is the garden in the clear, lock or no lock: said beside the button.
+  const locked = useLockState() === 'unlocked'
   const [passNote, setPassNote] = useState<string>()
   useEffect(() => {
     let active = true
@@ -214,6 +466,35 @@ export function SettingsView({
     }
   }, [onCountSetAside, android])
 
+  const backupMade = (madeAt: Date) => {
+    onBackupMade?.(madeAt)
+  }
+
+  /**
+   * The backup file, or undefined (and why) while it cannot be made. Making
+   * it can fail (its photos are read from storage), and that is said too,
+   * never left as a tap that did nothing.
+   */
+  const exportBackup = async (): Promise<FileCopy | undefined> => {
+    preparingRef.current = true
+    setPreparing(true)
+    if (fieldBookPhotos.count > 0) setBackupNote('Getting your backup ready, photos and all…')
+    try {
+      const copy = await onExportGarden()
+      if (copy === undefined)
+        setBackupNote(
+          'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
+        )
+      return copy
+    } catch {
+      setBackupNote('Your backup could not be made just now, so nothing was saved. Please try again.')
+      return undefined
+    } finally {
+      preparingRef.current = false
+      setPreparing(false)
+    }
+  }
+
   /**
    * One button, the right way for each build. On Android the gardener picks
    * where the file goes, and Android reports whether it was written, so
@@ -223,26 +504,33 @@ export function SettingsView({
    * trusting a backup that was never written.
    */
   const saveBackup = async () => {
+    if (preparingRef.current) return
     setBackupNote(undefined)
-    const text = onExportGarden()
-    if (text === undefined) {
-      setBackupNote(
-        'Saving a backup is paused while the stored garden cannot be read. Download the set-aside copy instead.',
-      )
-      return
-    }
+    const madeAt = new Date()
+    const copy = await exportBackup()
+    if (copy) await saveCopy(copy, madeAt)
+  }
+
+  /** Save a backup already made, and say how it went. */
+  const saveCopy = async (copy: FileCopy, madeAt: Date, started = 'Backup started.') => {
     try {
       const outcome = await saveTextFile(
         datedFileName(''),
         'application/json',
-        text,
+        copy.text,
       )
+      // A started download counts: the browser will not say whether it
+      // finished, and asking again every visit would be the wrong answer to
+      // that. Backing out of Android's save screen does not.
+      if (outcome !== 'cancelled') backupMade(madeAt)
       setBackupNote(
-        outcome === 'saved'
-          ? 'Backup saved. Keep the file somewhere safe.'
-          : outcome === 'cancelled'
-            ? 'No backup was saved.'
-            : 'Backup started. Check your downloads and keep the file somewhere safe.',
+        outcome === 'cancelled'
+          ? 'No backup was saved.'
+          : `${
+              outcome === 'saved'
+                ? 'Backup saved. Keep the file somewhere safe.'
+                : `${started} Check your downloads and keep the file somewhere safe.`
+            }${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
       setBackupNote(
@@ -253,30 +541,86 @@ export function SettingsView({
     }
   }
 
+  /** Hand the backup to an app the gardener picks: Files, a drive, a message. */
+  const shareBackup = async () => {
+    if (preparingRef.current) return
+    setBackupNote(undefined)
+    const madeAt = new Date()
+    const copy = await exportBackup()
+    if (!copy) return
+    // A browser shares only close after a tap: a few seconds. Writing out a
+    // field book full of photos can take longer on a slow phone, and then
+    // the share would be refused; the file is downloaded instead, and said
+    // so. (Not every browser can tell, and those are left to try.)
+    const activation = (navigator as { userActivation?: UserActivation }).userActivation
+    if (activation?.isActive === false) {
+      await saveCopy(
+        copy,
+        madeAt,
+        'Getting your backup ready took a while, so it was downloaded rather than shared.',
+      )
+      return
+    }
+    try {
+      const outcome = await shareTextFile(
+        datedFileName(''),
+        'application/json',
+        copy.text,
+        'The Butterfly Garden backup',
+      )
+      // Closing the share sheet is a choice, not a failure: nothing to say,
+      // and "getting it ready" is over.
+      if (outcome === 'cancelled') {
+        setBackupNote('')
+        return
+      }
+      backupMade(madeAt)
+      setBackupNote(
+        `Backup shared. Keep the file somewhere safe.${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
+      )
+    } catch {
+      setBackupNote('This browser would not share the file. Download it instead.')
+    }
+  }
+
   const saveSetAside = async () => {
     setBackupNote(undefined)
     try {
-      const text = await onDownloadSetAside?.()
-      if (!text) {
+      const copy = await onDownloadSetAside?.()
+      if (!copy) {
         setBackupNote('There is no set-aside copy to download.')
         return
       }
       const outcome = await saveTextFile(
         datedFileName('set-aside-copy'),
         'application/json',
-        text,
+        copy.text,
       )
       setBackupNote(
         outcome === 'cancelled'
           ? 'No copy was saved.'
-          : 'Keep that file safe: it is the garden exactly as it was stored.',
+          : `Keep that file safe: it is the garden exactly as it was stored.${copy.leftOut ? ` ${copy.leftOut}` : ''}`,
       )
     } catch {
       setBackupNote('The set-aside copy could not be saved there.')
     }
   }
 
-  /** Read and describe the chosen file; nothing is replaced yet. */
+  /** Describe a backup's text; nothing is replaced yet. */
+  const describeBackup = (text: string, openedWith?: 'passphrase' | 'lock' | 'move') => {
+    const preview = previewBackup(text)
+    if (!preview.ok) {
+      setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
+      return
+    }
+    setPendingRestore({ ...preview, text, openedWith })
+  }
+
+  /**
+   * Read and describe the chosen file; nothing is replaced yet. A protected
+   * backup asks for its passphrase first, and a locked garden's copy for its
+   * passcode or recovery code; then each is described like any other.
+   */
   const chooseBackup = async (file: File) => {
     setBackupNote(undefined)
     setPendingRestore(undefined)
@@ -285,22 +629,49 @@ export function SettingsView({
       setBackupNote(chosen.message)
       return
     }
-    const { text } = chosen
-    const preview = previewBackup(text)
-    if (!preview.ok) {
-      setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
+    if (sealedKind(chosen.text)) {
+      setSealedChoice(chosen.text)
       return
     }
-    setPendingRestore({ ...preview, text })
+    describeBackup(chosen.text)
+  }
+
+  // A preview reached through the passphrase prompt takes focus as the
+  // prompt goes, so what the backup holds is what is read next; so does an
+  // earlier copy's, which opens away from the button that asked for it.
+  useEffect(() => {
+    if (pendingRestore?.openedWith || pendingRestore?.copy) previewHeading.current?.focus()
+  }, [pendingRestore])
+
+  /** Describe an earlier copy kept on this device; nothing is replaced yet. */
+  const lookAtCopy = async (copy: EarlierCopy) => {
+    setBackupNote(undefined)
+    setRestoreStep(false)
+    const garden = await onReadCopy?.(copy.id).catch(() => undefined)
+    if (!garden) {
+      setBackupNote('That copy could not be read.')
+      return
+    }
+    setPendingRestore({ ...previewGarden(garden), copy })
   }
 
   const confirmRestore = async () => {
     if (!pendingRestore) return
     setRestoring(true)
-    const result = await onImportGarden(pendingRestore.text)
+    const { copy, text = '' } = pendingRestore
+    const result = !copy
+      ? await onImportGarden(text)
+      : onPutBackCopy
+        ? await onPutBackCopy(copy.id)
+        : { ok: false, message: 'That copy could not be put back.' }
     setRestoring(false)
-    setBackupNote(result.message)
+    setBackupNote(
+      result.ok && copy
+        ? `Your garden is back to how it was before your changes on ${formatJournalDate(copy.day)}.`
+        : result.message,
+    )
     if (result.ok) {
+      focusUndo.current = Boolean(copy)
       setPendingRestore(undefined)
       setRestoreStep(false)
     }
@@ -323,7 +694,19 @@ export function SettingsView({
     persistence.lastRestoreSnapshotId !== undoDismissed
       ? persistence.lastRestoreSnapshotId
       : undefined
+  // The preview a copy was put back from has gone: its undo takes the focus.
+  useEffect(() => {
+    if (!focusUndo.current || !undoSnapshotId) return
+    focusUndo.current = false
+    undoButton.current?.focus()
+  }, [undoSnapshotId, pendingRestore])
   const profile = state.profile
+  const recapHours = recapHoursOf(profile)
+  const themeChoice = themeChoiceOf(profile)
+  // Nothing to suggest about a garden that cannot be saved right now.
+  const reminder = persistence.readOnly
+    ? undefined
+    : backupReminder(state, reminderNow)
   // Availability rather than earned unlocks: a Garden Pass scene is choosable
   // while access holds, and is never recorded as permanently earned.
   const nameNote = noteForName(name)
@@ -391,6 +774,61 @@ export function SettingsView({
         </form>
       </section>
 
+      {(onChooseTheme || onSetTextSize) && (
+        // Beside motion, but a card of its own: motion waits for Save
+        // settings, while these change the page at once, so they can be seen.
+        <section className="card look-settings" aria-labelledby="look-settings-title">
+          <p className="eyebrow">Light and lettering</p>
+          <h2 id="look-settings-title">How the garden looks</h2>
+          <p className="section-explainer">These change straight away.</p>
+          {onChooseTheme && (
+            <fieldset className="motion-options">
+              <legend>Theme</legend>
+              {themeChoices(android, eveningNightHours(profile)).map((choice) => (
+                <label className="toggle-row" key={choice.value}>
+                  <span>
+                    <strong>{choice.label}</strong>
+                    <small>{choice.description}</small>
+                  </span>
+                  <input
+                    type="radio"
+                    name="garden-theme"
+                    value={choice.value}
+                    checked={themeChoice === choice.value}
+                    onChange={() => onChooseTheme(choice.value)}
+                  />
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {onSetTextSize && (
+            <fieldset className="motion-options">
+              <legend>Text size</legend>
+              {TEXT_SIZE_CHOICES.map((choice) => (
+                <label className="toggle-row" key={choice.label}>
+                  <span>
+                    <strong style={{ fontSize: choice.scale }}>{choice.label}</strong>
+                    <small>{choice.description}</small>
+                  </span>
+                  <input
+                    type="radio"
+                    name="text-size"
+                    value={choice.value ?? 'comfortable'}
+                    checked={profile?.textSize === choice.value}
+                    onChange={() => onSetTextSize(choice.value)}
+                  />
+                </label>
+              ))}
+              {android && (
+                <p className="subtle-copy">
+                  Your phone’s own text size applies as well, so the two add up.
+                </p>
+              )}
+            </fieldset>
+          )}
+        </section>
+      )}
+
       <section
         className="card sound-settings-card"
         aria-labelledby="sound-settings-title"
@@ -404,8 +842,10 @@ export function SettingsView({
         <fieldset className="sound-options">
           <legend className="sr-only">Sound option</legend>
           {ambientTracks.map((track) => {
-            const selected =
-              (profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID) === track.id
+            const chosen = profile?.ambientTrack ?? DEFAULT_AMBIENT_TRACK_ID
+            const selected = chosen === track.id
+            // Night may have brought the piano in place of the chosen one.
+            const heard = (heardTrackId ?? chosen) === track.id
             return (
               <label
                 className={`sound-option ${selected ? 'selected' : ''}`}
@@ -420,20 +860,188 @@ export function SettingsView({
                 />
                 <span>
                   <strong>{track.name}</strong>
-                  <small>{track.description}</small>
+                  <small>{ambientTrackDescriptions[track.id]}</small>
                   <em>
-                    {selected
+                    {heard
                       ? profile?.ambientSound
                         ? 'Playing now'
-                        : 'Selected'
-                      : 'Select sound'}
+                        : selected
+                          ? 'Selected'
+                          : 'Plays at night'
+                      : selected
+                        ? 'Back with the sunlight'
+                        : 'Select sound'}
                   </em>
                 </span>
               </label>
             )
           })}
         </fieldset>
+        {onSetSoundVolume && (
+          <SoundVolume
+            volume={soundVolumeOf(profile)}
+            onHear={onHearSoundVolume}
+            onSet={onSetSoundVolume}
+          />
+        )}
+        {onChooseFadeOut && (
+          <div className="fade-out-setting">
+            <label>
+              Fade out after
+              <select
+                value={fadeOutMinutes ?? ''}
+                onChange={(event) =>
+                  onChooseFadeOut(
+                    event.target.value
+                      ? (Number(event.target.value) as FadeOutMinutes)
+                      : undefined,
+                  )
+                }
+              >
+                <option value="">Keep playing</option>
+                {FADE_OUT_CHOICES.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutes} minutes
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="subtle-copy">
+              {fadeOutEndsAt !== undefined
+                ? `The sound fades away at ${fadeTimeFormat.format(fadeOutEndsAt)}.`
+                : fadeOutMinutes
+                  ? 'The timer starts when the sound is turned on.'
+                  : 'Calming ambience that slowly fades, for this visit. It is not a sleep aid.'}
+            </p>
+          </div>
+        )}
+        <SoundSwitches
+          profile={profile}
+          android={android}
+          onSetFollowsTheme={onSetSoundFollowsTheme}
+          onSetInBackground={onSetSoundInBackground}
+        />
       </section>
+
+      {(onSetDayCountsHidden || onSetRecapHours) && (
+        <section className="card" aria-labelledby="rhythm-settings-title">
+          <p className="eyebrow">Your rhythm</p>
+          <h2 id="rhythm-settings-title">Days and numbers</h2>
+          {onSetRecapHours && (
+            <div className="recap-hours">
+              <label>
+                My evening starts at
+                <select
+                  value={recapHours.opensHour}
+                  onChange={(event) =>
+                    onSetRecapHours({ ...recapHours, opensHour: Number(event.target.value) })
+                  }
+                >
+                  {RECAP_OPENS_CHOICES.map((hour) => (
+                    <option key={hour} value={hour}>
+                      {formatHour(hour)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                A late night lasts until
+                <select
+                  value={recapHours.graceEndsHour}
+                  onChange={(event) =>
+                    onSetRecapHours({ ...recapHours, graceEndsHour: Number(event.target.value) })
+                  }
+                >
+                  {RECAP_GRACE_CHOICES.map((hour) => (
+                    <option key={hour} value={hour}>
+                      {hour === 0 ? 'Midnight' : formatHour(hour)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="subtle-copy">
+                The Moonlight recap opens in your evening. Up past midnight, it
+                still offers the day before until your late night ends. For
+                shift work and night owls.
+                {onOpenGuide && (
+                  <>
+                    {' '}
+                    <GuideLink section="moonlight" topic="Moonlight" onOpen={onOpenGuide} />
+                  </>
+                )}
+              </p>
+            </div>
+          )}
+          {onSetDayCountsHidden && (
+            <label className="toggle-row">
+              <span>
+                <strong>Show day counts</strong>
+                <small>
+                  How many days you cared for yourself, in the journal. Turn this
+                  off to keep the journal free of numbers.
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={!profile?.hideDayCounts}
+                onChange={(event) => onSetDayCountsHidden(!event.target.checked)}
+              />
+            </label>
+          )}
+        </section>
+      )}
+
+      <ReminderSetting
+        savedTime={profile?.reminderTime}
+        eveningHour={recapHours.opensHour}
+        onChooseTime={onSetReminderTime}
+      />
+      {onSetLetterQuotes && (
+        <LetterSetting quotes={letterQuotesOf(profile)} onChoose={onSetLetterQuotes} />
+      )}
+
+      {onSetGardenPace && (
+        <section className="card" aria-labelledby="pace-settings-title">
+          <p className="eyebrow">How the garden gives</p>
+          <h2 id="pace-settings-title">Garden pace</h2>
+          <p className="section-explainer">
+            A day of care is a day you earn Sunlight. Changing the pace keeps
+            every plant, egg and day of care where it is.
+            {onOpenGuide && (
+              <>
+                {' '}
+                <GuideLink section="seeds" topic="Seeds, plants and eggs" onOpen={onOpenGuide} />
+              </>
+            )}
+          </p>
+          <fieldset className="motion-options">
+            <legend className="sr-only">Garden pace</legend>
+            {PACE_CHOICES.map((choice) => (
+              <label className="toggle-row" key={choice.label}>
+                <span>
+                  <strong>{choice.label}</strong>
+                  <small>{choice.description}</small>
+                </span>
+                <input
+                  type="radio"
+                  name="garden-pace"
+                  value={choice.value ?? 'classic'}
+                  checked={(choice.value === 'keep-giving') === keepsGiving(profile)}
+                  onChange={() => onSetGardenPace(choice.value)}
+                />
+              </label>
+            ))}
+          </fieldset>
+        </section>
+      )}
+
+      {onSetRegion && (
+        <RegionSetting
+          region={profile?.region}
+          onChoose={onSetRegion}
+          onOpenGuide={onOpenGuide}
+        />
+      )}
 
       {onSaveCustomBackdrop &&
         onDeleteCustomBackdrop &&
@@ -444,6 +1052,7 @@ export function SettingsView({
             onSaveCustomBackdrop={onSaveCustomBackdrop}
             onDeleteCustomBackdrop={onDeleteCustomBackdrop}
             onSelectCustomBackdrop={onSelectCustomBackdrop}
+            onChooseNightBackdrop={onChooseNightBackdrop}
           />
         )}
       <section className="card">
@@ -497,15 +1106,65 @@ export function SettingsView({
         <p className="section-explainer">
           {android
             ? 'Your garden lives only in this app, on this phone. A backup file is the only sure way to move it to another phone or bring it back if the app is uninstalled or its storage is cleared. Nothing is uploaded — you choose where the file is saved.'
-            : 'Your garden lives only in this browser. A backup file is the only way to move it to another device or bring it back after site data is cleared. Nothing is uploaded — the file is saved straight to this device.'}
+            : `Your garden lives only in this browser. A backup file is the only way to move it to another device or bring it back after site data is cleared. Nothing is uploaded — the file is saved straight to this device${canShareBackup ? ', or handed to an app you choose' : ''}.`}
         </p>
+        {reminder && (
+          <p className="backup-reminder">
+            {reminder.text} A fresh copy keeps everything written since.
+          </p>
+        )}
         <div className="form-actions">
+          {/* Held, not disabled, while a backup is made: a disabled button
+              would drop the focus of the one just pressed. */}
           <button
             className="secondary-button"
             disabled={persistence.readOnly}
+            aria-disabled={preparing || undefined}
             onClick={() => void saveBackup()}
           >
             {android ? 'Save a backup' : 'Download a backup'}
+          </button>
+          {canShareBackup && (
+            <button
+              className="secondary-button"
+              disabled={persistence.readOnly}
+              aria-disabled={preparing || undefined}
+              onClick={() => void shareBackup()}
+            >
+              Share backup…
+            </button>
+          )}
+          <button
+            className="secondary-button"
+            disabled={persistence.readOnly}
+            onClick={() => {
+              setBackupNote(undefined)
+              setProtecting('save')
+            }}
+          >
+            {android ? 'Save a protected backup…' : 'Download a protected backup…'}
+          </button>
+          {canShareBackup && (
+            <button
+              className="secondary-button"
+              disabled={persistence.readOnly}
+              onClick={() => {
+                setBackupNote(undefined)
+                setProtecting('share')
+              }}
+            >
+              Share protected backup…
+            </button>
+          )}
+          <button
+            className="secondary-button"
+            disabled={persistence.readOnly}
+            onClick={() => {
+              setBackupNote(undefined)
+              setMoving(true)
+            }}
+          >
+            Move my garden to another device…
           </button>
           {!restoreStep ? (
             <button
@@ -529,6 +1188,91 @@ export function SettingsView({
             </button>
           )}
         </div>
+        {locked && (
+          <p className="settings-note">
+            This copy is not locked; keep it somewhere private, or use a protected backup.
+          </p>
+        )}
+        <p className="subtle-copy">
+          A protected backup needs a passphrase to open, so nobody can read your
+          garden from the file without it.
+        </p>
+        <p className="subtle-copy">
+          Moving to a new phone or computer? Move my garden makes a locked file
+          and shows a one-time code to open it there.
+        </p>
+        {moving && (
+          <Suspense fallback={null}>
+            <MoveDialog
+              share={canShareBackup}
+              lockOn={locked}
+              onExportGarden={onExportGarden}
+              onClose={() => setMoving(false)}
+            />
+          </Suspense>
+        )}
+        {arriving && (
+          <ArriveRestore
+            next="preview"
+            returnFocus={() => arriveButton.current}
+            onOpened={(plain, from) => {
+              setArriving(false)
+              describeBackup(plain, from === 'plain' ? undefined : from)
+            }}
+            onClose={(note) => {
+              setArriving(false)
+              if (note) setBackupNote(note)
+            }}
+          />
+        )}
+        {AutoBackupSetting && canKeepFile && (
+          <Suspense fallback={null}>
+            <AutoBackupSetting
+              readOnly={persistence.readOnly}
+              onExportGarden={onExportGarden}
+              onBackupMade={backupMade}
+            />
+          </Suspense>
+        )}
+        {onListEarlierCopies && (
+          <EarlierCopies
+            onList={onListEarlierCopies}
+            onLook={(copy) => void lookAtCopy(copy)}
+            looking={pendingRestore?.copy?.id}
+            refresh={persistence.lastRestoreSnapshotId}
+            android={android}
+            onMeasured={setCopiesBytes}
+          />
+        )}
+        {protecting && (
+          <Suspense fallback={null}>
+            <ProtectedBackupDialog
+              share={protecting === 'share'}
+              onExportGarden={onExportGarden}
+              onClose={(result) => {
+                setProtecting(undefined)
+                if (!result) return
+                backupMade(result.madeAt)
+                setBackupNote(result.note)
+              }}
+            />
+          </Suspense>
+        )}
+        {sealedChoice !== undefined && (
+          <ProtectedRestore
+            text={sealedChoice}
+            next="preview"
+            returnFocus={() => fileInputRef.current}
+            onOpened={(plain, openedWith) => {
+              setSealedChoice(undefined)
+              describeBackup(plain, openedWith)
+            }}
+            onClose={(note) => {
+              setSealedChoice(undefined)
+              if (note) setBackupNote(note)
+            }}
+          />
+        )}
         {restoreStep && (
           <div className="delete-confirmation" role="alert">
             <strong>
@@ -549,14 +1293,40 @@ export function SettingsView({
             />
           </div>
         )}
+        {restoreStep && (
+          <div className="form-actions">
+            <button
+              ref={arriveButton}
+              className="secondary-button"
+              onClick={() => {
+                setBackupNote(undefined)
+                setPendingRestore(undefined)
+                setArriving(true)
+              }}
+            >
+              Arrive from another device…
+            </button>
+          </div>
+        )}
         {pendingRestore && (
           <div className="restore-preview" aria-labelledby="restore-preview-title">
-            <h3 id="restore-preview-title">
-              {pendingRestore.gardenName
-                ? `This backup holds ${pendingRestore.gardenName}`
-                : 'This backup holds a garden'}
+            <h3 id="restore-preview-title" ref={previewHeading} tabIndex={-1}>
+              {`${pendingRestore.copy ? 'This copy' : 'This backup'} holds ${pendingRestore.gardenName ?? 'a garden'}`}
             </h3>
             <ul>
+              {pendingRestore.openedWith === 'move' && (<li>A move file, opened with its one-time code</li>)}
+              {pendingRestore.openedWith === 'passphrase' && (
+                <li>A protected backup, opened with its passphrase</li>
+              )}
+              {pendingRestore.openedWith === 'lock' && (
+                <li>A sealed copy of a locked garden, opened with its lock</li>
+              )}
+              {pendingRestore.copy && (
+                <li>
+                  {pendingRestore.copy.reason === 'restore' ? 'Kept before a restore on ' : 'Kept on this device before your changes on '}
+                  {formatJournalDate(pendingRestore.copy.day)}
+                </li>
+              )}
               {pendingRestore.counts && (
                 <>
                   <li>
@@ -571,6 +1341,13 @@ export function SettingsView({
                     and{' '}
                     {counted(pendingRestore.counts.images, 'image of your own', 'images of your own')}
                   </li>
+                  {pendingRestore.counts.sightings > 0 && (
+                    <li>
+                      {counted(pendingRestore.counts.sightings, 'sighting', 'sightings')} in
+                      the field book, with{' '}
+                      {counted(pendingRestore.counts.photos, 'photo', 'photos')}
+                    </li>
+                  )}
                 </>
               )}
               {pendingRestore.firstDay && pendingRestore.lastDay && (
@@ -606,13 +1383,13 @@ export function SettingsView({
                 disabled={restoring}
                 onClick={() => void confirmRestore()}
               >
-                Restore this backup
+                {pendingRestore.copy ? 'Put this copy back' : 'Restore this backup'}
               </button>
               <button
                 className="text-button"
                 onClick={() => setPendingRestore(undefined)}
               >
-                Choose another file
+                {pendingRestore.copy ? 'Keep the garden as it is' : 'Choose another file'}
               </button>
             </div>
           </div>
@@ -620,6 +1397,7 @@ export function SettingsView({
         {undoSnapshotId && onUndoRestore && (
           <div className="form-actions undo-restore">
             <button
+              ref={undoButton}
               className="secondary-button"
               onClick={() => void undoRestore(undoSnapshotId)}
             >
@@ -674,6 +1452,14 @@ export function SettingsView({
             </div>
           </div>
         )}
+        {fieldBookPhotos.count > 0 && (
+          <p className="settings-note">
+            Your field book keeps{' '}
+            {counted(fieldBookPhotos.count, 'photo', 'photos')} of what you saw
+            in the wild, about {formatBytes(fieldBookPhotos.bytes)}, of the{' '}
+            {MAX_SIGHTING_PHOTOS} it can hold. They are in every backup.
+          </p>
+        )}
         {!android && storage && storage.protection !== 'unknown' && (
           <div className="storage-status">
             <p>
@@ -683,27 +1469,29 @@ export function SettingsView({
                   : 'This browser may clear your garden if it runs short of space.'}
               </strong>{' '}
               {storage.usage !== undefined &&
-                `The garden and the app use about ${formatBytes(storage.usage)} here.`}
+                `The garden and the app use about ${formatBytes(storage.usage)} here${
+                  copiesBytes > 0 ? `, about ${formatBytes(copiesBytes)} of it for earlier copies` : ''
+                }.`}
             </p>
             {storage.protection === 'best-effort' && (
-              <>
-                {isAppleMobileBrowser() && !isInstalledApp() && (
-                  <p>
-                    On iPhone and iPad, Safari clears a site's storage after
-                    seven days without a visit. Add the garden to your Home
-                    Screen (Share → Add to Home Screen) to keep it, and keep a
-                    backup too.
-                  </p>
-                )}
-                <button
-                  className="text-button"
-                  onClick={() => void askToKeepStorage()}
-                >
-                  Ask the browser again
-                </button>
-              </>
+              <button
+                className="text-button"
+                onClick={() => void askToKeepStorage()}
+              >
+                Ask the browser again
+              </button>
             )}
           </div>
+        )}
+        {/* The garden's Home Screen guide is shown once; this line stays,
+            whatever the browser says about storage, until it agrees to keep
+            the garden or the garden is on the Home Screen. */}
+        {!android && homeScreen && storage && storage.protection !== 'protected' && (
+          <p className="settings-note">
+            {homeScreen === 'safari'
+              ? 'On iPhone and iPad, Safari may clear what a website keeps after seven days of use without a visit. Add the garden to your Home Screen to keep it (Share, then Add to Home Screen, then Add), and keep a backup too.'
+              : 'On iPhone and iPad, a browser may clear what a website keeps after seven days of use without a visit. Add the garden to your Home Screen to keep it (your browser’s Share menu, then Add to Home Screen, then Add), and keep a backup too.'}
+          </p>
         )}
       </section>
 
@@ -770,6 +1558,7 @@ export function SettingsView({
             </p>
           </>
         )}
+        <LockSettings />
       </section>
 
       <section className="card about-card" aria-labelledby="about-title">
@@ -787,6 +1576,16 @@ export function SettingsView({
           <button className="text-button" onClick={onOpenNotices}>
             Open-source notices
           </button>
+          {onOpenSupport && (
+            <button className="text-button" onClick={onOpenSupport}>
+              If you need support now
+            </button>
+          )}
+          {onOpenComfort && (
+            <ComfortLink onOpen={onOpenComfort}>
+              {state.profile?.comfortPlan ? 'Your comfort plan' : 'Write a comfort plan'}
+            </ComfortLink>
+          )}
         </div>
       </section>
 

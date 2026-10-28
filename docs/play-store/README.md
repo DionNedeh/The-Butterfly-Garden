@@ -42,7 +42,7 @@ Spec source: https://support.google.com/googleplay/android-developer/answer/9866
 >   chrysalises and butterflies
 > • Meet 25 real butterfly species, each with field notes and the plants they need
 > • Care for your companions, dress them up, and choose how they fly
-> • Seven illustrated scenes, a starry night mode, and three soundscapes made
+> • Seven illustrated scenes, a starry night mode, and five soundscapes made
 >   on your phone
 >
 > PRIVATE BY DESIGN

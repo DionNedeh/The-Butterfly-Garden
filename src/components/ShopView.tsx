@@ -1,9 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { shopItems } from '../data/shopItems'
 import { flightPatterns } from '../data/flightPatterns'
-import { jarCharacters, jarColors, JAR_PRICE, JAR_CAPACITY } from '../data/jars'
+import { jarColors, JAR_PRICE, JAR_CAPACITY } from '../data/jars'
 import { balanceFor, currencyLabel } from '../lib/currency'
-import { GARDEN_PASS_PREVIEW_NOTICE } from '../lib/gardenPass'
+import {
+  canWearItem,
+  GARDEN_PASS_PREVIEW_NOTICE,
+  hasGardenPassFeature,
+} from '../lib/gardenPass'
+import type { JarRestoreOutcome, RecycledJar, RecycleOutcome } from '../lib/jars'
+import { jarName as nameJar, jarSpokenName } from '../lib/jars'
+import { stageLabels, STAGE_ORDER } from '../lib/lifecycle'
+import { fitsCreature, wearersByItem } from '../lib/wardrobe'
+import type { PurchaseOutcome } from '../lib/purchase'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import type {
   AppState,
   FlightPatternId,
@@ -17,7 +27,17 @@ import { ShopItemCard } from './shop/ShopItemCard'
 import { ItemPreview } from './shop/ItemPreview'
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { GardenPassPanel } from './shop/GardenPassPanel'
+import { FilterSheet } from './shop/FilterSheet'
+import { PurchaseToast, type PurchaseNote } from './shop/PurchaseToast'
+import { purchaseWords, type PurchaseSubject } from './shop/purchaseMessage'
+import { JarCharacterPicker } from './shop/JarCharacterPicker'
+import { JarShelf } from './shop/JarShelf'
+import { UndoToast, type UndoOffer } from './UndoToast'
+import { JarCharacter, Spoken } from './Spoken'
 import { motionPreference } from '../lib/motion'
+// Only the shop draws these, so they arrive with it rather than with the
+// stylesheet every page waits for.
+import './shop/shop.css'
 
 export type ShopTab =
   | 'supplies'
@@ -34,10 +54,14 @@ const tabs: { id: ShopTab; label: string }[] = [
   { id: 'backdrops', label: 'Backdrops' },
   { id: 'pass', label: 'Garden Pass' },
 ]
+/** Matches the phone layout in garden-3.css. */
+const PHONE_WIDTH = '(max-width: 600px)'
 export function ShopView({
   state,
   onPurchasePattern,
   onPurchaseJar,
+  onRecycleJar,
+  onRestoreJar,
   onPurchaseItem,
   onOpenCare = () => {},
   onOpenFlight = () => {},
@@ -45,9 +69,13 @@ export function ShopView({
   ...backdrops
 }: {
   state: AppState
-  onPurchasePattern: (id: FlightPatternId) => void
-  onPurchaseJar: (character: string, color: JarColorId) => void
-  onPurchaseItem: (id: string) => void
+  onPurchasePattern: (id: FlightPatternId) => PurchaseOutcome
+  onPurchaseJar: (character: string, color: JarColorId) => PurchaseOutcome
+  /** Recycle a jar on no plant for half its Nectar (lib/jars). */
+  onRecycleJar: (jarId: string) => RecycleOutcome
+  /** Undo a recycle, while the Nectar it brought is still there. */
+  onRestoreJar: (recycled: RecycledJar) => JarRestoreOutcome
+  onPurchaseItem: (id: string, quantity?: number) => PurchaseOutcome
   onOpenCare?: () => void
   onOpenFlight?: () => void
   /** Where the shop opens; the garden's Pass notice opens it on the Pass. */
@@ -59,11 +87,54 @@ export function ShopView({
   const [stage, setStage] = useState('all')
   const [currency, setCurrency] = useState('all')
   const [ownership, setOwnership] = useState('all')
+  const [fitsId, setFitsId] = useState('all')
   const [affordableOnly, setAffordableOnly] = useState(false)
   const [preview, setPreview] = useState<ShopItemDefinition>()
   const [character, setCharacter] = useState('A')
   const [color, setColor] = useState<JarColorId>('blue')
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState<PurchaseNote>()
+  // One toast at a time, in the one place toasts appear: a purchase's words
+  // put away the last undo, and an undo puts away the last purchase's words.
+  const [undo, setUndo] = useState<UndoOffer>()
+  // On a phone the filters wait in a sheet behind one button, so the
+  // collection itself starts on the first screen.
+  const phone = useMediaQuery(PHONE_WIDTH)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  // A phone turned on its side can be wide enough for the inline panel. The
+  // sheet is put away then, so it does not spring open again on turning back.
+  if (sheetOpen && !phone) setSheetOpen(false)
+  const filterButton = useRef<HTMLButtonElement>(null)
+  const searchField = useRef<HTMLInputElement>(null)
+  // Put away by a turn of the phone rather than by the gardener, the sheet
+  // takes focus with it; the same search, now inline, has it back.
+  const sheetWasOpen = useRef(false)
+  useEffect(() => {
+    if (sheetWasOpen.current && !sheetOpen && !phone) searchField.current?.focus()
+    sheetWasOpen.current = sheetOpen
+  }, [sheetOpen, phone])
+  // The companions in the order Care lists them, for "Fits {name} now". A
+  // name two companions share says which one by its stage.
+  const companions = useMemo(() => {
+    const ordered = [...state.creatures].sort(
+      (a, b) =>
+        STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage) ||
+        a.name.localeCompare(b.name),
+    )
+    return ordered.map((creature) => ({
+      creature,
+      label: ordered.some((other) => other !== creature && other.name === creature.name)
+        ? `Fits ${creature.name}, the ${stageLabels[creature.stage].toLowerCase()}, now`
+        : `Fits ${creature.name} now`,
+    }))
+  }, [state.creatures])
+  // A companion gone from the garden (a sync from another tab) filters nothing.
+  const fitsCompanion = state.creatures.find((creature) => creature.id === fitsId)
+  // Who wears each piece, worked out once rather than per card.
+  const passCosmetics = hasGardenPassFeature('pass-cosmetics')
+  const wearers = useMemo(
+    () => wearersByItem(state.creatures, passCosmetics),
+    [state.creatures, passCosmetics],
+  )
   const items = shopItems
     .filter((item) =>
       tab === 'supplies'
@@ -80,24 +151,179 @@ export function ShopView({
         (slot === 'all' || item.slot === slot) &&
         (stage === 'all' || item.stages?.some((value) => value === stage)) &&
         (currency === 'all' || item.currency === currency) &&
+        // A Pass piece is owned while the Pass is open, as it can be worn
+        // then (canWearItem), and not once it has closed.
         (ownership === 'all' ||
-          state.ownedItemIds.includes(item.id) === (ownership === 'owned')) &&
+          canWearItem(state.ownedItemIds, item) === (ownership === 'owned')) &&
+        (!fitsCompanion || fitsCreature(item, fitsCompanion)) &&
         (!affordableOnly || balanceFor(state, item.currency) >= item.cost),
     )
+  const activeFilters = [
+    query !== '',
+    slot !== 'all',
+    stage !== 'all',
+    currency !== 'all',
+    ownership !== 'all',
+    fitsCompanion !== undefined,
+    affordableOnly,
+  ].filter(Boolean).length
   const reset = () => {
     setQuery('')
     setSlot('all')
     setStage('all')
     setCurrency('all')
     setOwnership('all')
+    setFitsId('all')
     setAffordableOnly(false)
   }
-  const buyItem = (id: string) => {
-    onPurchaseItem(id)
-    setNote(
-      `${shopItems.find((item) => item.id === id)?.name ?? 'Item'} added to your garden.`,
-    )
+  const closeSheet = () => {
+    setSheetOpen(false)
+    filterButton.current?.focus()
   }
+  /**
+   * Words in the shop's toast, in place of any undo on offer, and the same
+   * words as a screen reader should say them where they differ.
+   */
+  const say = (text: string, spoken?: string) => {
+    setUndo(undefined)
+    setNote((previous) => ({ text, spoken, key: (previous?.key ?? 0) + 1 }))
+  }
+  /**
+   * Say what a purchase came to, in the words of the reducer's outcome.
+   *
+   * A purchase that cannot go through is aria-disabled rather than disabled:
+   * it still looks unavailable, but it keeps focus when a purchase empties
+   * the purse, and pressing it says why, and by how much, instead of nothing.
+   */
+  const tell = (outcome: PurchaseOutcome, subject: PurchaseSubject) => {
+    const { text, spoken } = purchaseWords(outcome, subject)
+    say(text, spoken)
+  }
+  const offerUndo = (offer: UndoOffer) => {
+    setNote(undefined)
+    setUndo(offer)
+  }
+  const buyItem = (id: string, quantity: number) => {
+    const item = shopItems.find((entry) => entry.id === id)
+    tell(onPurchaseItem(id, quantity), {
+      name: item?.name ?? 'This piece',
+      kind: item?.kind === 'supply' ? 'supply' : 'piece',
+      quantity,
+    })
+  }
+  const jarName = nameJar(color, character)
+  /** The jar as it is said: a mark by its name (lib/jars). */
+  const spokenJarName = jarSpokenName(color, character)
+  // One set of filters, drawn inline on a wide screen or inside the sheet on
+  // a phone, so there is never a second search field to keep in step.
+  const filters = (
+    <div className="shop-filters">
+      <label className="shop-search">
+        Find something lovely
+        <input
+          ref={searchField}
+          type="search"
+          placeholder="Search the collection…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      {tab !== 'supplies' && (
+        <>
+          <label>
+            Type
+            <select
+              value={slot}
+              onChange={(event) => setSlot(event.target.value)}
+            >
+              <option value="all">Every type</option>
+              <option value="headwear">Headwear</option>
+              <option value="accessory">Accessories</option>
+              <option value="aura">Auras</option>
+            </select>
+          </label>
+          <label>
+            Life stage
+            <select
+              value={stage}
+              onChange={(event) => setStage(event.target.value)}
+            >
+              <option value="all">Every stage</option>
+              {['egg', 'caterpillar', 'chrysalis', 'butterfly'].map(
+                (value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          <label>
+            Collection
+            <select
+              value={ownership}
+              onChange={(event) => setOwnership(event.target.value)}
+            >
+              <option value="all">All pieces</option>
+              <option value="owned">Owned</option>
+              <option value="new">Not owned</option>
+            </select>
+          </label>
+          {companions.length > 0 && (
+            <label>
+              Companion
+              <select
+                className="companion-filter"
+                value={fitsCompanion ? fitsId : 'all'}
+                onChange={(event) => setFitsId(event.target.value)}
+              >
+                <option value="all">Any companion</option>
+                {companions.map(({ creature, label }) => (
+                  <option key={creature.id} value={creature.id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </>
+      )}
+      {tab !== 'pass' && (
+        <>
+          <label>
+            Currency
+            <select
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value)}
+            >
+              <option value="all">Both currencies</option>
+              <option value="nectar">Nectar</option>
+              <option value="stardust">Stardust</option>
+            </select>
+          </label>
+          <label className="check-filter">
+            <input
+              type="checkbox"
+              checked={affordableOnly}
+              onChange={(event) =>
+                setAffordableOnly(event.target.checked)
+              }
+            />
+            Within my budget
+          </label>
+        </>
+      )}
+      <button className="text-button" onClick={reset}>
+        Clear filters
+      </button>
+    </div>
+  )
+  const results = (
+    <p className="subtle-copy" role="status">
+      {items.length} {items.length === 1 ? 'piece' : 'pieces'} to explore
+      {tab === 'boutique' ? ' · Buy once, dress every companion.' : ''}
+    </p>
+  )
   return (
     <div className="view shop-view">
       <header className="page-header shop-heading">
@@ -128,18 +354,14 @@ export function ShopView({
             onClick={() => {
               setTab(item.id)
               reset()
-              setNote('')
+              // A jar's undo belongs to the shelf it was offered beside.
+              setUndo(undefined)
             }}
           >
             {item.label}
           </button>
         ))}
       </nav>
-      {note && (
-        <p className="shop-feedback" role="status">
-          {note}
-        </p>
-      )}
       {(tab === 'supplies' || tab === 'boutique' || tab === 'pass') && (
         <>
           {/* Inline rather than isAndroidApp(): the bundler folds only an
@@ -194,92 +416,38 @@ export function ShopView({
               <span className="count-badge">{items.length} pieces</span>
             </div>
           )}
-          <div className="shop-filters">
-            <label className="shop-search">
-              Find something lovely
-              <input
-                type="search"
-                placeholder="Search the collection…"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-            {tab !== 'supplies' && (
-              <>
-                <label>
-                  Type
-                  <select
-                    value={slot}
-                    onChange={(event) => setSlot(event.target.value)}
-                  >
-                    <option value="all">Every type</option>
-                    <option value="headwear">Headwear</option>
-                    <option value="accessory">Accessories</option>
-                    <option value="aura">Auras</option>
-                  </select>
-                </label>
-                <label>
-                  Life stage
-                  <select
-                    value={stage}
-                    onChange={(event) => setStage(event.target.value)}
-                  >
-                    <option value="all">Every stage</option>
-                    {['egg', 'caterpillar', 'chrysalis', 'butterfly'].map(
-                      (value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </label>
-                <label>
-                  Collection
-                  <select
-                    value={ownership}
-                    onChange={(event) => setOwnership(event.target.value)}
-                  >
-                    <option value="all">All pieces</option>
-                    <option value="owned">Owned</option>
-                    <option value="new">Not owned</option>
-                  </select>
-                </label>
-              </>
-            )}
-            {tab !== 'pass' && (
-              <>
-                <label>
-                  Currency
-                  <select
-                    value={currency}
-                    onChange={(event) => setCurrency(event.target.value)}
-                  >
-                    <option value="all">Both currencies</option>
-                    <option value="nectar">Nectar</option>
-                    <option value="stardust">Stardust</option>
-                  </select>
-                </label>
-                <label className="check-filter">
-                  <input
-                    type="checkbox"
-                    checked={affordableOnly}
-                    onChange={(event) =>
-                      setAffordableOnly(event.target.checked)
-                    }
-                  />
-                  Within my budget
-                </label>
-              </>
-            )}
-            <button className="text-button" onClick={reset}>
-              Clear filters
-            </button>
-          </div>
-          <p className="subtle-copy" role="status">
-            {items.length} {items.length === 1 ? 'piece' : 'pieces'} to explore
-            {tab === 'boutique' ? ' · Buy once, dress every companion.' : ''}
-          </p>
+          {phone ? (
+            <div className="shop-filter-bar">
+              <button
+                ref={filterButton}
+                className="secondary-button"
+                aria-haspopup="dialog"
+                onClick={() => setSheetOpen(true)}
+              >
+                Filter
+                {activeFilters > 0 && (
+                  <>
+                    {' '}
+                    <span className="filter-count">
+                      {activeFilters}{' '}
+                      <span className="sr-only">active</span>
+                    </span>
+                  </>
+                )}
+              </button>
+              {results}
+            </div>
+          ) : (
+            <>
+              {filters}
+              {results}
+            </>
+          )}
+          {sheetOpen && (
+            <FilterSheet results={items.length} onClose={closeSheet}>
+              {filters}
+            </FilterSheet>
+          )}
           <div className="boutique-grid">
             {items.map((item) => (
               <ShopItemCard
@@ -289,6 +457,7 @@ export function ShopView({
                 onPurchase={buyItem}
                 onPreview={() => setPreview(item)}
                 onWardrobe={onOpenCare}
+                wornBy={wearers.get(item.id)}
               />
             ))}
           </div>
@@ -304,90 +473,94 @@ export function ShopView({
         </>
       )}
       {tab === 'jars' && (
-        <section className="card jar-shop-panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Letters from the garden</p>
-              <h2>Buy letters and numbers</h2>
-              <p>
-                Spell a name, a date, a little reminder. Each jar is yours to
-                move and reuse.
-              </p>
+        <>
+          <section className="card jar-shop-panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Letters from the garden</p>
+                <h2>Buy letters and numbers</h2>
+                <p>
+                  Spell a name, a date, a little reminder. Each jar is yours to
+                  move and reuse, and alike jars stack on your shelf.
+                </p>
+              </div>
+              <span className="pattern-cost">{JAR_PRICE} Nectar each</span>
             </div>
-            <span className="pattern-cost">{JAR_PRICE} Nectar each</span>
-          </div>
-          <div className="jar-shop-layout">
-            <div>
-              <h3>Character</h3>
-              <div className="jar-character-grid" aria-label="Jar characters">
-                {jarCharacters.map((value) => (
-                  <button
-                    key={value}
-                    className={character === value ? 'selected' : ''}
-                    aria-pressed={character === value}
-                    onClick={() => setCharacter(value)}
-                  >
-                    {value}
-                  </button>
-                ))}
+            <div className="jar-shop-layout">
+              <div>
+                <h3>Character</h3>
+                <JarCharacterPicker value={character} onChange={setCharacter} />
+              </div>
+              <div>
+                <h3>Colour</h3>
+                <div className="jar-color-grid" aria-label="Jar colors">
+                  {jarColors.map((value) => (
+                    <button
+                      key={value.id}
+                      className={color === value.id ? 'selected' : ''}
+                      aria-pressed={color === value.id}
+                      onClick={() => setColor(value.id)}
+                    >
+                      <span
+                        className="colour-dot"
+                        style={{ background: value.fill }}
+                      />
+                      {value.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="jar-purchase-preview">
+                <JarSprite character={character} colorId={color} size={128} />
+                <strong>
+                  {jarColors.find((value) => value.id === color)?.label}{' '}
+                  <JarCharacter character={character} />
+                </strong>
+                <small>
+                  {state.jars.length} / {JAR_CAPACITY} keepsakes ·{' '}
+                  {
+                    state.jars.filter(
+                      (jar) =>
+                        jar.character === character && jar.colorId === color,
+                    ).length
+                  }{' '}
+                  matching
+                </small>
+                <button
+                  className="primary-button"
+                  aria-disabled={
+                    state.nectar < JAR_PRICE || state.jars.length >= JAR_CAPACITY
+                      ? true
+                      : undefined
+                  }
+                  onClick={() =>
+                    tell(onPurchaseJar(character, color), {
+                      name: jarName,
+                      spokenName: spokenJarName,
+                      kind: 'jar',
+                    })
+                  }
+                >
+                  {state.jars.length >= JAR_CAPACITY ? (
+                    'Your jar shelf is full'
+                  ) : state.nectar < JAR_PRICE ? (
+                    'Not enough Nectar'
+                  ) : (
+                    <Spoken text={`Buy ${jarName}`} spoken={`Buy ${spokenJarName}`} />
+                  )}
+                </button>
               </div>
             </div>
-            <div>
-              <h3>Colour</h3>
-              <div className="jar-color-grid" aria-label="Jar colors">
-                {jarColors.map((value) => (
-                  <button
-                    key={value.id}
-                    className={color === value.id ? 'selected' : ''}
-                    aria-pressed={color === value.id}
-                    onClick={() => setColor(value.id)}
-                  >
-                    <span
-                      className="colour-dot"
-                      style={{ background: value.fill }}
-                    />
-                    {value.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="jar-purchase-preview">
-              <JarSprite character={character} colorId={color} size={128} />
-              <strong>
-                {jarColors.find((value) => value.id === color)?.label}{' '}
-                {character}
-              </strong>
-              <small>
-                {state.jars.length} / {JAR_CAPACITY} keepsakes ·{' '}
-                {
-                  state.jars.filter(
-                    (jar) =>
-                      jar.character === character && jar.colorId === color,
-                  ).length
-                }{' '}
-                matching
-              </small>
-              <button
-                className="primary-button"
-                disabled={
-                  state.nectar < JAR_PRICE || state.jars.length >= JAR_CAPACITY
-                }
-                onClick={() => {
-                  onPurchaseJar(character, color)
-                  setNote(
-                    `${character} jar added. Place it from a plant's detail panel in Garden.`,
-                  )
-                }}
-              >
-                {state.jars.length >= JAR_CAPACITY
-                  ? 'Your jar shelf is full'
-                  : state.nectar < JAR_PRICE
-                    ? 'Not enough Nectar'
-                    : `Buy ${jarColors.find((value) => value.id === color)?.label} ${character} jar`}
-              </button>
-            </div>
-          </div>
-        </section>
+          </section>
+          <JarShelf
+            jars={state.jars}
+            jarPlacements={state.jarPlacements}
+            onRecycle={onRecycleJar}
+            onRestore={onRestoreJar}
+            onOfferUndo={offerUndo}
+            onSay={say}
+          />
+        </>
       )}
       {tab === 'flight' && (
         <section>
@@ -426,8 +599,13 @@ export function ShopView({
                         </span>
                         <button
                           className="primary-button compact"
-                          disabled={owned || !affordable}
-                          onClick={() => onPurchasePattern(pattern.id)}
+                          aria-disabled={owned || !affordable ? true : undefined}
+                          onClick={() =>
+                            tell(onPurchasePattern(pattern.id), {
+                              name: pattern.name,
+                              kind: 'pattern',
+                            })
+                          }
                         >
                           {owned
                             ? 'Owned'
@@ -447,6 +625,8 @@ export function ShopView({
       {preview && (
         <ItemPreview item={preview} onClose={() => setPreview(undefined)} />
       )}
+      <PurchaseToast note={note} onDone={() => setNote(undefined)} />
+      <UndoToast offer={undo} onDone={() => setUndo(undefined)} />
     </div>
   )
 }

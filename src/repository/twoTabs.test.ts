@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createInitialState } from '../lib/progression'
 import {
   createGardenRepository,
+  CURRENT_STATE_VERSION,
   GardenConflictError,
   GardenDeletedElsewhereError,
   GardenWithheldError,
@@ -71,7 +72,7 @@ describe('two tabs on one garden', () => {
 
     const db = await openDB(name)
     const meta = (await db.get('meta', 'current')) as Record<string, unknown>
-    await db.put('meta', { ...meta, version: 7 }, 'current')
+    await db.put('meta', { ...meta, version: CURRENT_STATE_VERSION + 1 }, 'current')
     db.close()
 
     const adopted = await tab.adopt(['meta'])
@@ -81,7 +82,7 @@ describe('two tabs on one garden', () => {
     )
 
     const check = await openDB(name)
-    expect(await check.get('meta', 'current')).toMatchObject({ version: 7 })
+    expect(await check.get('meta', 'current')).toMatchObject({ version: CURRENT_STATE_VERSION + 1 })
     check.close()
   })
 
@@ -117,6 +118,32 @@ describe('two tabs on one garden', () => {
     other.forget()
     const fresh = await other.load()
     expect(fresh.status).toBe('empty')
+  })
+})
+
+describe('saved looks in two tabs', () => {
+  it('does not write back looks a restore in the other tab replaced', async () => {
+    const name = freshName()
+    const restorer = createGardenRepository(name)
+    const dresser = createGardenRepository(name)
+    const seed = garden(2)
+    const looks = [{ id: 'look-1', name: 'Sunday best', outfit: { headwear: 'sprout-cap' } }]
+    await dresser.save({ ...seed, profile: { ...seed.profile!, outfitPresets: looks } })
+
+    // The other tab restores a garden that never saved a look: every part is
+    // written, and the dresser's tab is told so.
+    const parts = await restorer.replace(garden(7))
+    const adopted = await dresser.adopt(parts)
+    expect(adopted.status).toBe('loaded')
+    // The restored profile is taken whole, so the looks it lacks are gone
+    // here too, rather than kept from the garden it replaced.
+    expect(adopted.state.profile).not.toHaveProperty('outfitPresets')
+
+    // The dresser's next edit is made on the garden it adopted.
+    await dresser.save({ ...adopted.state, nectar: 3 })
+    const after = await createGardenRepository(name).load()
+    expect(after.state).toMatchObject({ seeds: 7, nectar: 3 })
+    expect(after.state.profile).not.toHaveProperty('outfitPresets')
   })
 })
 

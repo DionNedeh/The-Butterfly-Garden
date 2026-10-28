@@ -1,0 +1,17 @@
+/* The way to the comfort plan, and from it to the support page: small in
+   its line, but a full touch target. The colours are the theme's own link
+   colours, so night needs nothing more. */
+.comfort-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 0.3rem;
+  color: var(--forest);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.comfort-link:hover {
+  color: var(--forest-dark);
+}

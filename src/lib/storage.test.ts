@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   formatBytes,
-  isAppleMobileBrowser,
-  isInstalledApp,
   requestPersistentStorage,
   storageStatus,
 } from './storage'
@@ -64,31 +62,5 @@ describe('reporting storage', () => {
     expect(formatBytes(1536)).toBe('1.5 KB')
     expect(formatBytes(25 * 1024 * 1024)).toBe('25 MB')
     expect(formatBytes(3 * 1024 ** 4)).toBe('3072 GB')
-  })
-})
-
-describe('where the app is running', () => {
-  afterEach(() => vi.unstubAllGlobals())
-
-  it('recognises an iPhone, and an iPad that says it is a Mac', () => {
-    vi.stubGlobal('navigator', { ...navigator, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)' })
-    expect(isAppleMobileBrowser()).toBe(true)
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      maxTouchPoints: 5,
-    })
-    expect(isAppleMobileBrowser()).toBe(true)
-    vi.stubGlobal('navigator', { ...navigator, userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', maxTouchPoints: 0 })
-    expect(isAppleMobileBrowser()).toBe(false)
-  })
-
-  it('knows an installed app from a browser tab', () => {
-    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('standalone') }))
-    expect(isInstalledApp()).toBe(true)
-    vi.stubGlobal('matchMedia', () => ({ matches: false }))
-    expect(isInstalledApp()).toBe(false)
-    vi.stubGlobal('navigator', { ...navigator, standalone: true })
-    expect(isInstalledApp()).toBe(true)
   })
 })

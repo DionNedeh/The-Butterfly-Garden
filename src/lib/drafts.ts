@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { gardenRepository, type Drafts } from '../repository/gardenRepository'
+import { addDaysToLocalDate, toLocalDate } from './date'
 
 /**
  * Unsaved writing that survives a change of page, a reload or a closed tab.
@@ -33,20 +34,50 @@ function scheduleWrite() {
   }, WRITE_DELAY_MS)
 }
 
-/** Write any pending draft now, for example as the page is being hidden. */
-export function flushDrafts() {
-  if (writeTimer === undefined) return
+/**
+ * Write any pending draft now, for example as the page is being hidden.
+ * Settles once it is written, so a reload can wait for it.
+ */
+export function flushDrafts(): Promise<void> {
+  if (writeTimer === undefined) return Promise.resolve()
   clearTimeout(writeTimer)
   writeTimer = undefined
-  void gardenRepository.writeDrafts(drafts)
+  return gardenRepository.writeDrafts(drafts)
+}
+
+/** A day named in a draft's key, as in `reflection:2026-10-26:…`. */
+const KEY_DAY = /:(\d{4}-\d{2}-\d{2})(?::|$)/
+
+/**
+ * How long a draft that names its day is kept. A day's words are only ever
+ * offered on that day, or the next while a recap's late night runs, so a
+ * week is generous; without a limit, the marks a day leaves (an offer put
+ * away, a gentle day's list) would be stored and copied on every keystroke
+ * for as long as the garden lives.
+ */
+const DAY_DRAFT_DAYS = 7
+
+/** The stored drafts without those whose day has long passed. */
+function withoutOldDays(stored: Drafts, today: string): { kept: Drafts; dropped: boolean } {
+  const oldest = addDaysToLocalDate(today, -DAY_DRAFT_DAYS)
+  const kept: Drafts = {}
+  let dropped = false
+  for (const [key, value] of Object.entries(stored)) {
+    const day = KEY_DAY.exec(key)?.[1]
+    if (day !== undefined && day < oldest) dropped = true
+    else kept[key] = value
+  }
+  return { kept, dropped }
 }
 
 /** Read stored drafts once, after the garden itself has loaded. */
 export async function loadDrafts(): Promise<void> {
   const stored = await gardenRepository.readDrafts()
+  const { kept, dropped } = withoutOldDays(stored, toLocalDate())
   // Anything typed while the read was in flight wins over what was stored.
-  drafts = { ...stored, ...drafts }
+  drafts = { ...kept, ...drafts }
   emit()
+  if (dropped) scheduleWrite()
 }
 
 export function getDraft(key: string): string | undefined {
@@ -86,7 +117,7 @@ function subscribe(listener: () => void) {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushDrafts()
+    if (document.visibilityState === 'hidden') void flushDrafts()
   })
 }
 

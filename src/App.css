@@ -336,6 +336,14 @@
   margin-top: 0.6rem;
 }
 
+/* The one suggestion of a fresh backup (lib/backupReminder): framed like the
+   other notes in this card, and never louder than them. */
+.backup-reminder {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.7rem 1rem;
+}
+
 #main-content {
   padding: clamp(1rem, 3vw, 2rem);
 }
@@ -1930,6 +1938,11 @@
   background-image: linear-gradient(160deg, #07131f, #10283a 58%, #13263a);
 }
 
+/* White on night's light --danger would be 2.3:1; a deeper red keeps it 5.3:1. */
+.theme-night .danger-button {
+  background: #b4483f;
+}
+
 .theme-night .app-header,
 .theme-night .bottom-nav {
   border-color: rgba(176, 207, 194, 0.2);
@@ -2007,7 +2020,8 @@
 
 .theme-night .restore-preview,
 .theme-night .set-aside,
-.theme-night .storage-status {
+.theme-night .storage-status,
+.theme-night .backup-reminder {
   border-color: rgba(167, 202, 188, 0.2);
 }
 
@@ -2180,7 +2194,8 @@
   }
 
   .mood-grid {
-    grid-template-columns: repeat(5, minmax(100px, 1fr));
+    /* rem, so a larger text size widens the weathers with their names. */
+    grid-template-columns: repeat(5, minmax(6.25rem, 1fr));
     overflow-x: auto;
     /* Keep selected rings and hover lift inside the scrollport on every edge. */
     padding-block: 0.4rem;
@@ -2291,14 +2306,6 @@
     padding: 0.48rem 0.58rem;
   }
 
-  .header-sunlight {
-    display: none;
-  }
-
-  .nectar-wallet > span {
-    display: none;
-  }
-
   .pattern-select-card {
     grid-template-columns: 1fr;
   }
@@ -2334,7 +2341,7 @@
   }
 
   .mood-grid {
-    grid-template-columns: repeat(5, 95px);
+    grid-template-columns: repeat(5, 5.95rem);
   }
 
   .mood-button {
@@ -2344,15 +2351,6 @@
   .goal-form,
   .goal-form.edit-form {
     grid-template-columns: 1fr;
-  }
-
-  .goal-row {
-    grid-template-columns: auto 1fr;
-  }
-
-  .goal-row > .text-button {
-    grid-column: 2;
-    justify-self: start;
   }
 
   .journal-block {
@@ -2681,6 +2679,11 @@
 
 .care-species em { font-weight: 400; }
 
+/* The offer to name a new egg: themed colours only, so night mode follows. */
+.arrival-form { display: grid; gap: 0.75rem; max-width: 26rem; }
+.arrival-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.arrival-note { margin: 0; color: var(--muted); font-size: 0.88rem; }
+
 .lifecycle-track {
   display: flex;
   gap: 0.4rem;
@@ -2969,13 +2972,26 @@
   white-space: nowrap;
 }
 
+/* Named for screen readers, the same way for both currencies, and left to
+   their icons on screen: the header has no room for the words. */
 .header-actions .nectar-wallet > span,
 .header-actions .stardust-wallet > span {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .header-actions {
   gap: 0.45rem;
+  /* With larger text (Settings → Text size) the pills can outgrow a phone's
+     header; they wrap to a second row at the end rather than sliding over
+     the garden's icon. At the usual size they fit on one. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 @media (max-width: 1280px) {
@@ -3110,16 +3126,180 @@
   100% { transform: translateY(62vh) translateX(14px) rotate(390deg); opacity: 0; }
 }
 
-/* Goal rows: skip / snooze */
-.goal-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+/* Goal rows: one line each, everything else behind the ⋯ menu */
+.goal-row {
+  position: relative;
+  /* Sideways movement is a swipe (hooks/useSwipe.ts); vertical scrolls, and
+     two fingers still zoom. */
+  touch-action: pan-y pinch-zoom;
 }
 
-.goal-row.skipped {
+/* A row that moves or fades is its own stacking context, so the row with its
+   menu open is lifted above the rows below it, or they cover the menu. */
+.goal-row.menu-open {
+  z-index: 6;
+}
+
+/* The same for the card, when its glass makes it a stacking context too: a
+   menu near the bottom can reach over the card that follows. */
+.card:has(.goal-row.menu-open) {
+  position: relative;
+  z-index: 6;
+}
+
+.goal-check {
+  min-height: 44px;
+}
+
+.goal-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.goal-menu {
+  position: relative;
+}
+
+.goal-menu-button {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.goal-menu-button[aria-expanded='true'] {
+  background: rgba(49, 92, 75, 0.1);
+  color: var(--forest);
+}
+
+.goal-menu-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  display: grid;
+  min-width: 11rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  padding: 0.35rem;
+}
+
+.goal-menu-panel .text-button {
+  min-height: 44px;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.snooze-choices {
+  display: grid;
+  border-block: 1px solid var(--line);
+  padding-block: 0.25rem;
+}
+
+.snooze-choices label {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--forest);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.form-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.88rem;
+}
+
+.gentle-toggle {
+  margin-bottom: 0.7rem;
+  border: 1px solid var(--line);
+}
+
+.gentle-note {
+  margin: 0 0 0.8rem;
+  color: var(--muted);
+}
+
+.next-tend {
+  margin: -0.4rem 0 1.1rem;
+}
+
+.next-tend label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.next-tend select {
+  width: auto;
+  min-height: 44px;
+}
+
+.prompt-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  margin: -0.4rem 0 0.6rem;
+}
+
+.prompt-choices .text-button[aria-pressed='true'] {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.prompt-choices .text-button,
+.goal-list-more,
+.tomorrow-add {
+  min-height: 44px;
+}
+
+.month-planner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.tomorrow-note {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.7rem;
+}
+
+.tomorrow-note .recap-plan-toggle {
+  justify-self: start;
+  margin-top: 0.3rem;
+}
+
+.tomorrow-list {
+  margin: 0.2rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.theme-night .goal-menu-panel {
+  border-color: #385463;
+  background: #152f3e;
+}
+
+.theme-night .goal-menu-button[aria-expanded='true'] {
+  background: rgba(140, 201, 171, 0.14);
+}
+
+.goal-row.skipped > .goal-check,
+.goal-row.skipped > .goal-copy {
+  /* The row's parts fade, not the row, so its menu stays fully legible. */
   opacity: 0.62;
 }
 
@@ -3451,6 +3631,24 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
 }
 
+/* At a larger text size (Settings → Text size) the tabs outgrow a laptop's
+   header and would cover the garden's name, so they take a row of their own
+   beneath it, wrapping if they must. Narrower windows have the dock instead. */
+@media (min-width: 1181px) {
+  :root[data-text-size] .app-header {
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  }
+  :root[data-text-size] .app-header nav {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+  :root[data-text-size] .header-actions {
+    grid-row: 1;
+    grid-column: 2;
+  }
+}
+
 .brand,
 .brand > span {
   min-width: 0;
@@ -3548,6 +3746,13 @@
   color: var(--ink);
   font: inherit;
   resize: vertical;
+}
+
+.recap-day-words {
+  margin: 1rem 0 0;
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1.5;
 }
 
 .recap-summary {
@@ -3652,4 +3857,398 @@
   gap: 0.4rem;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* =====================================================================
+   Kinder moments (Voyager b, "Now")
+   ===================================================================== */
+
+/* "Not sure today": a quiet sixth answer under the five weathers. */
+.unsure-choice {
+  justify-self: start;
+  margin: -0.4rem 0 0.8rem;
+}
+
+.unsure-choice.selected {
+  border-radius: 999px;
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.weather-unsure {
+  border: 2px dashed #9aa79f;
+  background: transparent;
+}
+
+.weather-unsure::after {
+  display: none;
+}
+
+/* Undo in place of "Are you sure?" (components/UndoToast). */
+.undo-region {
+  position: fixed;
+  z-index: 55;
+  bottom: 1.5rem;
+  left: 50%;
+  width: min(440px, calc(100% - 2rem));
+  transform: translateX(-50%);
+}
+
+.undo-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 16px;
+  /* Fixed colours: the night theme turns --forest-dark pale. */
+  background: #224438;
+  padding: 0.6rem 0.6rem 0.6rem 1rem;
+  color: #fffdf7;
+  box-shadow: 0 14px 34px rgba(35, 62, 51, 0.28);
+}
+
+.theme-night .undo-toast {
+  border: 1px solid rgba(231, 196, 120, 0.4);
+  background: #18303d;
+}
+
+.undo-toast .text-button {
+  color: #fbe7a6;
+  font-weight: 800;
+}
+
+@media (max-width: 1080px) {
+  /* Above the two-row dock. */
+  .undo-region {
+    bottom: 9rem;
+  }
+}
+
+/* "If you need support now" and the quiet ways to it. */
+.support-link-note {
+  margin: 1rem 0 0;
+  color: var(--muted);
+}
+
+.guide-view .support-link-note {
+  text-align: center;
+}
+
+.support-lines {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.support-line h2 {
+  margin-bottom: 0.3rem;
+}
+
+.support-line a {
+  text-decoration: none;
+}
+
+.support-urgent {
+  border-left: 5px solid #b4553d;
+}
+
+.support-checked {
+  max-width: 60ch;
+}
+
+/* The soundscape's fade-out timer. */
+.fade-out-setting {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.fade-out-setting select {
+  max-width: 16rem;
+}
+
+/* How far a scene that grows with the garden has come. */
+.unlock-ring {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: conic-gradient(currentColor var(--ripeness, 0%), rgba(0, 0, 0, 0.12) 0);
+  vertical-align: -0.2rem;
+}
+
+/* The header keeps Sunlight on phones too, so the narrowest ones tighten it
+   rather than letting the pills slide over the garden's icon. */
+@media (max-width: 400px) {
+  .app-header {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .header-actions {
+    gap: 0.3rem;
+  }
+
+  .header-sunlight,
+  .header-actions .nectar-wallet,
+  .header-actions .stardust-wallet {
+    gap: 0.25rem;
+    padding: 0.4rem 0.45rem;
+    font-size: 0.8rem;
+  }
+
+  .header-actions .theme-toggle {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+/* Settings → Your rhythm: when the gardener's evening starts and ends */
+.recap-hours {
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.recap-hours label {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 700;
+}
+
+.recap-hours select {
+  max-width: 16rem;
+}
+
+.recap-hours .subtle-copy {
+  margin: 0;
+}
+
+/* Journal: find things (J2), the weather calendar (J3), readable copies (J6) */
+/* Journal → Find things: words, kinds and weather (components/JournalSearch). */
+.journal-search {
+  display: grid;
+  gap: 1rem;
+}
+
+.journal-search-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.journal-search-field input {
+  min-height: 44px;
+}
+
+.journal-search-hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.journal-search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 1.5rem;
+}
+
+/* The fieldset is there for the group's name, not for the browser's frame. */
+.journal-search-kinds {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.journal-search-kinds legend {
+  margin-bottom: 0.45rem;
+  padding: 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+.journal-search-kind-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.journal-search-kind {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  padding: 0.55rem 1rem 0.55rem 0.75rem;
+  color: var(--ink);
+  font-weight: 750;
+  transition:
+    background 200ms ease,
+    border-color 200ms ease;
+}
+
+.journal-search-kind:hover {
+  border-color: var(--forest);
+}
+
+.journal-search-kind[aria-pressed='true'] {
+  border-color: var(--forest);
+  background: #e6eddd;
+  color: var(--forest-dark);
+}
+
+/* An empty ring that fills with a tick when pressed, so the state can be
+   read from the shape alone, without telling the two greens apart. */
+.journal-search-check {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+}
+
+.journal-search-kind[aria-pressed='true'] .journal-search-check {
+  border-color: var(--forest);
+  background: var(--forest);
+}
+
+.journal-search-kind[aria-pressed='true'] .journal-search-check::after {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 6px;
+  height: 10px;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  content: '';
+}
+
+.journal-search-weather {
+  flex: 1 1 12rem;
+  max-width: 20rem;
+}
+
+.journal-search-weather select {
+  min-height: 44px;
+}
+
+.journal-search-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+/* With no filter the count is empty and Clear is gone; the row then takes
+   no room. An engine without :has() just keeps a little space below. */
+.journal-search-summary:has(.journal-search-status:empty) {
+  margin-top: -1rem;
+}
+
+.journal-search-status {
+  margin: 0;
+  color: var(--forest-dark);
+  font-weight: 800;
+}
+
+.journal-search-clear {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+}
+
+.theme-night .journal-search-kind {
+  border-color: #385463;
+  background: #152f3e;
+  color: var(--ink);
+}
+
+.theme-night .journal-search-kind:hover {
+  border-color: var(--forest);
+}
+
+.theme-night .journal-search-kind[aria-pressed='true'] {
+  border-color: var(--forest);
+  background: #254b4b;
+  color: var(--forest-dark);
+}
+
+.reduce-motion .journal-search-kind {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journal-search-kind {
+    transition: none;
+  }
+}
+/* Journal → Take your words with you: readable downloads (components/JournalExport).
+   Colours come only from the theme variables and the shared .settings-note and
+   .empty-copy rules, which the night theme already redefines, so this needs no
+   .theme-night overrides. It adds no motion of its own. */
+.journal-export h2 {
+  margin-bottom: 0.5rem;
+}
+
+.journal-export .empty-copy {
+  margin-bottom: 0;
+}
+
+.journal-export-intro {
+  max-width: 62ch;
+  margin-bottom: 1rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.journal-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+/* Side by side where there is room, one to a row on a phone. The shared
+   button rule already keeps each at least 44px tall. */
+.journal-export-actions .secondary-button {
+  flex: 1 1 13rem;
+}
+
+/* While a file is being saved the buttons are aria-disabled rather than
+   disabled, so the one just pressed keeps keyboard focus. They look like any
+   unavailable button, and lose the hover lift and the press. */
+.journal-export-actions .secondary-button[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.journal-export-actions .secondary-button[aria-disabled='true']:hover,
+.journal-export-actions .secondary-button[aria-disabled='true']:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.journal-export .settings-note {
+  margin-top: 0.65rem;
+}
+
+/* The status line stays in the page while it is empty, so a screen reader is
+   already listening when it fills; it just takes no room until then. */
+.journal-export .settings-note:empty {
+  margin: 0;
+}
+
+/* A button announced as unavailable does not move as if it were not. */
+.secondary-button[aria-disabled='true']:hover,
+.secondary-button[aria-disabled='true']:active {
+  transform: none;
+  box-shadow: none;
 }

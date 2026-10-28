@@ -1,4 +1,5 @@
 import { inspectImportedState } from '../repository/gardenRepository'
+import { photosIn } from './customBackdrops'
 import type { AppState } from '../types'
 
 /** What a backup file holds, shown before it replaces anything. */
@@ -16,6 +17,9 @@ export interface BackupPreview {
     goals: number
     butterflies: number
     images: number
+    /** Sightings in the field book, and how many of them have a photo. */
+    sightings: number
+    photos: number
   }
   /** The first and last day anything was written, YYYY-MM-DD. */
   firstDay?: string
@@ -58,13 +62,24 @@ export function previewBackup(text: string): BackupPreview {
     parsed && typeof parsed === 'object'
       ? (parsed as Record<string, unknown>)
       : {}
-  const days = writtenDays(state)
   return {
-    ok: true,
+    ...previewGarden(state, inspection.repaired),
     exportedAt:
       typeof envelope.exportedAt === 'string' ? envelope.exportedAt : undefined,
     appVersion:
       typeof envelope.appVersion === 'string' ? envelope.appVersion : undefined,
+  }
+}
+
+/**
+ * Describe a garden already read: a backup's, or an earlier copy kept on
+ * this device (repository/dailyCopies), which is shown the same way before
+ * it is put back.
+ */
+export function previewGarden(state: AppState, repaired = 0): BackupPreview {
+  const days = writtenDays(state)
+  return {
+    ok: true,
     gardenName: state.profile?.gardenName,
     counts: {
       checkIns: state.moods.length,
@@ -75,9 +90,11 @@ export function previewBackup(text: string): BackupPreview {
         (creature) => creature.stage === 'butterfly',
       ).length,
       images: state.customBackdrops.length,
+      sightings: state.sightings.length,
+      photos: photosIn(state.sightings).count,
     },
     firstDay: days[0],
     lastDay: days[days.length - 1],
-    repaired: inspection.repaired,
+    repaired,
   }
 }

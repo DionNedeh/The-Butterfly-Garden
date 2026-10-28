@@ -9,7 +9,8 @@ import { getSpecies, MAX_PLANT_GROWTH } from './progression'
  * action reports them alike, including ones added later.
  */
 export type GardenEvent =
-  | { kind: 'plant-bloomed'; plantName: string }
+  /** `again` when a plant already in bloom blooms once more (lib/gardenPace). */
+  | { kind: 'plant-bloomed'; plantName: string; again?: true }
   | { kind: 'egg-found'; creatureName: string; speciesName: string; plantName?: string }
   | { kind: 'stage-advanced'; creatureName: string; stage: CreatureStage }
   | { kind: 'bond-level'; creatureName: string; level: number }
@@ -27,6 +28,13 @@ export function gardenEvents(before: AppState, after: AppState): GardenEvent[] {
       const previous = earlier.get(plant.id)
       if (previous && previous.growth < MAX_PLANT_GROWTH && plant.growth >= MAX_PLANT_GROWTH) {
         events.push({ kind: 'plant-bloomed', plantName: plantName(plant.plantId) })
+      } else if (
+        previous?.careDaysSinceBloom !== undefined &&
+        plant.careDaysSinceBloom === undefined &&
+        plant.growth >= MAX_PLANT_GROWTH
+      ) {
+        // Only a new bloom starts a plant's count again.
+        events.push({ kind: 'plant-bloomed', plantName: plantName(plant.plantId), again: true })
       }
     }
   }
@@ -66,7 +74,9 @@ export function gardenEvents(before: AppState, after: AppState): GardenEvent[] {
 export function describeEvent(event: GardenEvent): string {
   switch (event.kind) {
     case 'plant-bloomed':
-      return `Your ${event.plantName.toLowerCase()} is in full bloom.`
+      return event.again
+        ? `Your ${event.plantName.toLowerCase()} bloomed again.`
+        : `Your ${event.plantName.toLowerCase()} is in full bloom.`
     case 'egg-found':
       return event.plantName
         ? `A tiny egg appeared on your ${event.plantName.toLowerCase()}: a ${event.speciesName.toLowerCase()}, named ${event.creatureName}.`

@@ -1,11 +1,14 @@
 import type {
   MoodEntry,
-  Observation,
   PlantDefinition,
   ReflectionPrompt,
   SpeciesDefinition,
 } from '../types'
 
+/**
+ * The garden's butterflies. Their facts, and the sources each species was
+ * checked against, load with the pages that show them (data/speciesFacts).
+ */
 export const species: SpeciesDefinition[] = [
   {
     id: 'monarch',
@@ -15,7 +18,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#e87832', '#27231f'],
     visualPattern: 'monarch-veins',
     wingShape: 'rounded',
-    fact: 'Monarch caterpillars rely on milkweed, the only plants they can eat.',
   },
   {
     id: 'black-swallowtail',
@@ -25,7 +27,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#252a2d', '#e9c94b'],
     visualPattern: 'swallowtail-gold-spots',
     wingShape: 'swallowtail',
-    fact: 'Black swallowtail caterpillars often visit parsley, dill, and fennel.',
   },
   {
     id: 'tiger-swallowtail',
@@ -35,7 +36,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#f2cf4d', '#282726'],
     visualPattern: 'tiger-stripes',
     wingShape: 'swallowtail',
-    fact: 'Eastern tiger swallowtails are among the largest butterflies in the East.',
   },
   {
     id: 'red-admiral',
@@ -45,7 +45,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#302b2a', '#d95c3f'],
     visualPattern: 'admiral-red-bands',
     wingShape: 'ragged',
-    fact: 'Red admiral caterpillars fold nettle leaves into small shelters.',
   },
   {
     id: 'painted-lady',
@@ -55,7 +54,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#d77b43', '#4b3a32'],
     visualPattern: 'painted-mosaic',
     wingShape: 'ragged',
-    fact: 'Painted ladies live on every continent except Antarctica and Australia.',
   },
   {
     id: 'cloudless-sulphur',
@@ -65,7 +63,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#f3db4e', '#dd8b3c'],
     visualPattern: 'sulphur-blush',
     wingShape: 'broad',
-    fact: 'Cloudless sulphurs migrate and often fly high above the ground.',
   },
   {
     id: 'blue-morpho',
@@ -75,7 +72,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#168bd2', '#203b5c'],
     visualPattern: 'morpho-shimmer',
     wingShape: 'broad',
-    fact: 'Microscopic scales reflect blue light, creating the morpho’s brilliant shimmer.',
   },
   {
     id: 'glasswing',
@@ -85,7 +81,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['rgba(224, 242, 235, 0.42)', '#6c5547'],
     visualPattern: 'glasswing-clear',
     wingShape: 'clear',
-    fact: 'Most of a glasswing’s wing surface is transparent, edged with warm brown.',
   },
   {
     id: 'queen',
@@ -95,7 +90,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#9f4e2f', '#30251f'],
     visualPattern: 'queen-pale-dots',
     wingShape: 'rounded',
-    fact: 'Queen caterpillars eat milkweed and carry its chemical defenses into adulthood.',
   },
   {
     id: 'gulf-fritillary',
@@ -105,7 +99,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#e66f2c', '#5a3329'],
     visualPattern: 'fritillary-silver',
     wingShape: 'longwing',
-    fact: 'Gulf fritillaries use passionflower vines as nurseries for their caterpillars.',
   },
   {
     id: 'zebra-longwing',
@@ -115,7 +108,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#252525', '#f2d868'],
     visualPattern: 'zebra-long-stripes',
     wingShape: 'longwing',
-    fact: 'Zebra longwings can gather pollen as well as nectar, helping them live unusually long lives.',
   },
   {
     id: 'common-buckeye',
@@ -125,7 +117,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#9b7656', '#4b3429'],
     visualPattern: 'buckeye-eyespots',
     wingShape: 'broad',
-    fact: 'Large eyespots on a common buckeye’s wings may startle would-be predators.',
   },
   {
     id: 'viceroy',
@@ -135,7 +126,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#d66a2e', '#2d2723'],
     visualPattern: 'viceroy-black-line',
     wingShape: 'rounded',
-    fact: 'A black line across each hindwing helps distinguish a viceroy from a monarch.',
   },
   {
     id: 'mourning-cloak',
@@ -145,7 +135,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#4b3540', '#e4c56d'],
     visualPattern: 'mourning-gold-border',
     wingShape: 'ragged',
-    fact: 'Adult mourning cloaks overwinter, so they may appear on the first warm days of spring.',
   },
   {
     id: 'spicebush-swallowtail',
@@ -155,7 +144,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#24282a', '#4aa0a1'],
     visualPattern: 'spicebush-blue-dust',
     wingShape: 'swallowtail',
-    fact: 'Young spicebush swallowtail caterpillars fold leaves into shelters with silk.',
   },
   {
     id: 'giant-swallowtail',
@@ -165,7 +153,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#332d28', '#efd56d'],
     visualPattern: 'giant-yellow-sashes',
     wingShape: 'swallowtail',
-    fact: 'Giant swallowtail caterpillars resemble bird droppings while feeding on citrus relatives.',
   },
   {
     id: 'cabbage-white',
@@ -175,7 +162,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#f2f0df', '#55524c'],
     visualPattern: 'cabbage-ink-spots',
     wingShape: 'small',
-    fact: 'The cabbage white is a familiar garden butterfly whose caterpillars eat mustard-family plants.',
   },
   {
     id: 'baltimore-checkerspot',
@@ -185,7 +171,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#1f2424', '#f07b36'],
     visualPattern: 'baltimore-checkers',
     wingShape: 'rounded',
-    fact: 'Baltimore checkerspot caterpillars feed together on white turtlehead before dispersing.',
   },
   {
     id: 'pipevine-swallowtail',
@@ -195,7 +180,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#171c22', '#2274a8'],
     visualPattern: 'pipevine-iridescent',
     wingShape: 'swallowtail',
-    fact: 'Pipevine swallowtails use pipevine plants and carry their chemical defenses as adults.',
   },
   {
     id: 'american-lady',
@@ -205,7 +189,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#df7a3d', '#2c2826'],
     visualPattern: 'american-lady-eyes',
     wingShape: 'ragged',
-    fact: 'American lady caterpillars make silk shelters on pussytoes and related everlastings.',
   },
   {
     id: 'great-spangled-fritillary',
@@ -215,7 +198,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#d97835', '#553223'],
     visualPattern: 'spangled-fritillary',
     wingShape: 'broad',
-    fact: 'Great spangled fritillaries depend on violets for their caterpillars.',
   },
   {
     id: 'spring-azure',
@@ -225,7 +207,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#a9c9f2', '#536f9b'],
     visualPattern: 'azure-soft-edge',
     wingShape: 'small',
-    fact: 'Spring azures are small blue butterflies often seen early in the warm season.',
   },
   {
     id: 'red-spotted-purple',
@@ -235,7 +216,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#171b2b', '#3156aa'],
     visualPattern: 'red-spotted-purple',
     wingShape: 'broad',
-    fact: 'Red-spotted purples mimic pipevine swallowtails but do not have swallowtail tails.',
   },
   {
     id: 'california-sister',
@@ -245,7 +225,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#2d241f', '#f0e7c8'],
     visualPattern: 'california-sister-bands',
     wingShape: 'rounded',
-    fact: 'California sister caterpillars feed on oaks and adults flash bold white bands.',
   },
   {
     id: 'atala',
@@ -255,7 +234,6 @@ export const species: SpeciesDefinition[] = [
     wingColors: ['#111827', '#1f9bb4'],
     visualPattern: 'atala-jewel-spots',
     wingShape: 'small',
-    fact: 'Atalas returned to parts of Florida where their coontie host plants were restored.',
   },
 ]
 
@@ -293,7 +271,7 @@ const plantRows: readonly PlantRow[] = [
   ['pipevine', 'Pipevine', 'Aristolochia spp.', 'host', ['pipevine-swallowtail'], '#5f8061', 'Heart-shaped leaves for pipevine swallowtail caterpillars.'],
   ['pussytoes', 'Pussytoes', 'Antennaria spp.', 'host', ['american-lady'], '#b9b2a4', 'Soft silver leaves where American lady caterpillars make shelters.'],
   ['violet', 'Violet', 'Viola spp.', 'host', ['great-spangled-fritillary'], '#805aa6', 'Low violet leaves that support great spangled fritillaries.'],
-  ['dogwood', 'Flowering Dogwood', 'Cornus florida', 'host', ['spring-azure'], '#d9d9c5', 'Spring blossoms and leaves for small azure butterflies.'],
+  ['dogwood', 'Flowering Dogwood', 'Cornus florida', 'host', ['spring-azure'], '#d9d9c5', 'Spring flower buds where small azure caterpillars feed.'],
   ['black-cherry', 'Black Cherry', 'Prunus serotina', 'host', ['red-spotted-purple'], '#6f8b58', 'A native tree that shelters red-spotted purple caterpillars.'],
   ['oak', 'Oak', 'Quercus spp.', 'host', ['california-sister'], '#8f8a42', 'Strong oak leaves for California sister caterpillars.'],
   ['coontie', 'Coontie', 'Zamia integrifolia', 'host', ['atala'], '#527d6c', 'A cycad host that helped the jewel-like atala return.'],
@@ -314,36 +292,12 @@ export const plants: PlantDefinition[] = plantRows.map(
   }),
 )
 
-const reflectionPromptRows: ReadonlyArray<readonly [id: string, text: string]> = [
-  ['notice', 'What is one small thing you noticed today?'],
-  ['kindness', 'What would kindness toward yourself look like right now?'],
-  ['lighter', 'What made today feel a little lighter?'],
-  ['weather', 'If your inner weather could speak, what would it say?'],
-  ['enough', 'What was enough for today?'],
-  ['release', 'What can you set down until tomorrow?'],
-  ['body', 'What is your body asking for?'],
-  ['care', 'Where did you offer care today?'],
-  ['support', 'What support would feel welcome?'],
-  ['steady', 'What helped you feel steady?'],
-  ['tiny-win', 'Name a tiny win that deserves to be remembered.'],
-  ['curious', 'What are you curious about today?'],
-  ['rest', 'What kind of rest might restore you?'],
-  ['boundary', 'What boundary protected your energy?'],
-  ['gratitude', 'What ordinary thing are you grateful for?'],
-  ['tomorrow', 'What gentle intention can you carry into tomorrow?'],
-  ['comfort', 'What brought you comfort recently?'],
-  ['courage', 'Where did you show quiet courage?'],
-  ['connection', 'When did you feel connected today?'],
-  ['pace', 'What would it mean to move at your own pace?'],
-  ['learned', 'What did today teach you about yourself?'],
-  ['begin', 'What is one easy place to begin?'],
-  ['protected', 'What deserves your attention, and what can wait?'],
-  ['garden', 'What would you like to nurture in your inner garden?'],
-]
-
-export const reflectionPrompts: ReflectionPrompt[] = reflectionPromptRows.map(
-  ([id, text]) => ({ id, text }),
-)
+/** The prompt shown when the gardener chooses to write without one. */
+export const freeWritingPrompt: ReflectionPrompt = {
+  id: 'free',
+  text: 'Write freely',
+  family: 'free',
+}
 
 /**
  * The five inner-weather levels, named in one place.
@@ -366,123 +320,6 @@ export const moodLevels: Array<{
 
 /** Just the names, in level order, for places that only label a level. */
 export const moodNames = moodLevels.map((mood) => mood.name)
-
-export const suggestedGoals = [
-  'Drink a glass of water',
-  'Step outside for two minutes',
-  'Take three slow breaths',
-  'Eat something nourishing',
-  'Stretch your shoulders',
-  'Put away one small thing',
-  'Send a kind message',
-  'Take prescribed medication',
-  'Rest without multitasking',
-  'Write down one thought',
-  'Prepare for tomorrow',
-  'Notice something beautiful',
-]
-
-const observationTexts: Array<[string, string]> = [
-  ['monarch', 'The milkweed leaves are warm in the morning light.'],
-  ['monarch', 'A monarch tastes the air with its antennae.'],
-  ['monarch', 'Orange wings open like a small sunrise.'],
-  ['monarch', 'Marigold rests where the garden feels quietest.'],
-  ['monarch', 'Even long journeys are made one wingbeat at a time.'],
-  ['black-swallowtail', 'A swallowtail traces a patient circle over the parsley.'],
-  ['black-swallowtail', 'Golden spots flash when the dark wings turn.'],
-  ['black-swallowtail', 'The parsley patch makes a fine sheltered nursery.'],
-  ['black-swallowtail', 'Two delicate tails steer through the afternoon air.'],
-  ['black-swallowtail', 'The swallowtail chooses a sunlit leaf and settles.'],
-  ['tiger-swallowtail', 'Tiger stripes glow between the branches.'],
-  ['tiger-swallowtail', 'Large wings drift as lightly as falling petals.'],
-  ['tiger-swallowtail', 'The tulip tree keeps a green room high above the path.'],
-  ['tiger-swallowtail', 'A swallowtail glides without hurrying.'],
-  ['tiger-swallowtail', 'The garden feels wider beneath these yellow wings.'],
-  ['red-admiral', 'A red admiral guards a bright patch of sunlight.'],
-  ['red-admiral', 'Scarlet bands flicker near the nettle leaves.'],
-  ['red-admiral', 'A folded leaf can be a safe beginning.'],
-  ['red-admiral', 'The admiral returns to the same warm stone.'],
-  ['red-admiral', 'Strong colors can belong to gentle moments.'],
-  ['painted-lady', 'Painted wings carry a map of distant places.'],
-  ['painted-lady', 'The thistle nods under a welcome visitor.'],
-  ['painted-lady', 'Soft orange wings pause beside the asters.'],
-  ['painted-lady', 'A traveler can still make a place feel like home.'],
-  ['painted-lady', 'The painted lady follows the warm edge of the path.'],
-  ['cloudless-sulphur', 'A yellow wing passes like sunlight set free.'],
-  ['cloudless-sulphur', 'The partridge pea glows beneath a sulphur butterfly.'],
-  ['cloudless-sulphur', 'This visitor prefers the high, open air.'],
-  ['cloudless-sulphur', 'Pale wings settle among the zinnias.'],
-  ['blue-morpho', 'Blue light shimmers across the morpho’s wing scales.'],
-  ['blue-morpho', 'The morpho folds its wings and becomes quietly brown.'],
-  ['blue-morpho', 'A flash of rainforest blue passes between the flowers.'],
-  ['blue-morpho', 'The morpho rests near fallen fruit at the garden edge.'],
-  ['blue-morpho', 'Brilliant color can come from the way light is reflected.'],
-  ['glasswing', 'A glasswing passes like a window carried on the breeze.'],
-  ['glasswing', 'Transparent wings catch only a faint green shimmer.'],
-  ['glasswing', 'The glasswing rests quietly beneath a shaded leaf.'],
-  ['queen', 'A queen glides low over the milkweed patch.'],
-  ['queen', 'Chestnut wings carry neat rows of pale spots.'],
-  ['queen', 'The queen pauses where the afternoon light is warm.'],
-  ['gulf-fritillary', 'Silver spots gleam beneath a gulf fritillary’s wings.'],
-  ['gulf-fritillary', 'A bright orange visitor circles the passionflower vine.'],
-  ['gulf-fritillary', 'The fritillary follows a curling tendril toward the sun.'],
-  ['zebra-longwing', 'Long striped wings drift through the garden shade.'],
-  ['zebra-longwing', 'A zebra longwing lingers over the passionflowers.'],
-  ['zebra-longwing', 'Black and yellow bands move with an unhurried rhythm.'],
-  ['common-buckeye', 'A buckeye opens its many watchful eyespots to the sun.'],
-  ['common-buckeye', 'Brown wings settle neatly beside the plantain leaves.'],
-  ['common-buckeye', 'The path brightens with a flash of orange and blue.'],
-  ['viceroy', 'A viceroy traces the willow’s softly bending branches.'],
-  ['viceroy', 'Orange wings open to reveal one careful black line.'],
-  ['viceroy', 'The viceroy drinks from a damp place near the path.'],
-  ['mourning-cloak', 'A pale gold border frames the mourning cloak’s dark wings.'],
-  ['mourning-cloak', 'One of spring’s earliest visitors rests on the willow bark.'],
-  ['mourning-cloak', 'Deep velvet wings warm themselves in a patch of sun.'],
-  ['spicebush-swallowtail', 'Blue-green scales glow across a spicebush swallowtail.'],
-  ['spicebush-swallowtail', 'A folded spicebush leaf shelters a hidden beginning.'],
-  ['spicebush-swallowtail', 'The swallowtail sweeps past with two dark tails steering.'],
-  ['giant-swallowtail', 'A giant swallowtail sails above the citrus leaves.'],
-  ['giant-swallowtail', 'Broad black wings carry bands of warm yellow.'],
-  ['giant-swallowtail', 'The garden’s largest visitor glides without effort.'],
-  ['cabbage-white', 'A cabbage white bobs lightly over the garden beds.'],
-  ['cabbage-white', 'Creamy wings flicker beside the brassica leaves.'],
-  ['cabbage-white', 'A familiar white butterfly makes the ordinary feel bright.'],
-  ['baltimore-checkerspot', 'A checkered wing opens like tiny stained glass.'],
-  ['baltimore-checkerspot', 'The turtlehead patch holds a bright black-and-orange visitor.'],
-  ['baltimore-checkerspot', 'Small squares of color move together in the sun.'],
-  ['pipevine-swallowtail', 'A pipevine swallowtail flashes blue where the light catches it.'],
-  ['pipevine-swallowtail', 'Dark wings sweep low over the pipevine leaves.'],
-  ['pipevine-swallowtail', 'Two slender tails steer through a patch of shade.'],
-  ['american-lady', 'An American lady opens two watchful eyespots to the path.'],
-  ['american-lady', 'Orange wings settle near the soft pussytoes leaves.'],
-  ['american-lady', 'A silk shelter begins as a careful folded leaf.'],
-  ['great-spangled-fritillary', 'Black spots scatter across warm orange wings.'],
-  ['great-spangled-fritillary', 'The violets keep a quiet nursery close to the soil.'],
-  ['great-spangled-fritillary', 'A fritillary glows like copper beside the coneflowers.'],
-  ['spring-azure', 'A tiny blue wing flickers at the garden edge.'],
-  ['spring-azure', 'The dogwood blossoms seem to have lent the azure their softness.'],
-  ['spring-azure', 'Small things can brighten an entire path.'],
-  ['red-spotted-purple', 'Blue-black wings shine with a hidden purple sheen.'],
-  ['red-spotted-purple', 'Red-orange spots glimmer along the dark wing edge.'],
-  ['red-spotted-purple', 'The black cherry leaves shelter a quiet beginning.'],
-  ['california-sister', 'A bold white band crosses the California sister’s dark wings.'],
-  ['california-sister', 'Orange tips flash as the butterfly turns near the oak.'],
-  ['california-sister', 'The oak canopy holds a warm western visitor.'],
-  ['atala', 'An atala carries jewel-blue spots through the garden air.'],
-  ['atala', 'The coontie leaves shelter a rare bright beginning.'],
-  ['atala', 'Dark wings open with a flash of turquoise and red.'],
-  ['all', 'The garden does not ask the day to be anything else.'],
-  ['all', 'Something is always growing, even when it is hard to see.'],
-  ['all', 'A quiet garden can hold many kinds of weather.'],
-]
-
-export const observations: Observation[] = observationTexts.map(
-  ([speciesId, text], index) => ({
-    id: `observation-${index + 1}`,
-    speciesId,
-    text,
-  }),
-)
 
 export const butterflyNames = [
   'Juniper',

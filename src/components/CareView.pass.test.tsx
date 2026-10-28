@@ -38,6 +38,11 @@ const handlers = {
   onUnequip: vi.fn(),
   onRenameCreature: vi.fn(),
   onGoToShop: vi.fn(),
+  onSavePreset: vi.fn(),
+  onWearPreset: vi.fn(() => ({ worn: [], skipped: [] })),
+  onRenamePreset: vi.fn(),
+  onDeletePreset: vi.fn(),
+  onRestorePreset: vi.fn(),
 }
 
 describe('Pass outfits in the Android app', () => {

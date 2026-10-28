@@ -13,9 +13,13 @@ import {
   progressGarden,
   STARTER_SEEDS,
   MOONLIGHT_STARDUST_REWARD,
+  MAX_PLANT_GROWTH,
   moonlightForDate,
+  nameInUse,
+  nameToOffer,
   NECTAR_PER_SUNLIGHT,
   nextCompanionName,
+  nextPlantToTend,
   recapForDate,
 } from './progression'
 import { butterflyNames } from '../data/content'
@@ -25,6 +29,27 @@ beforeEach(() => {
     randomUUID: vi.fn(() => `id-${Math.random()}`),
   })
 })
+
+/** A garden of asters at these growths, p1 onwards, tending the chosen one. */
+function plantedGarden(growths: number[], tendFirstPlantId?: string): AppState {
+  return {
+    ...createEmptyState(),
+    profile: {
+      id: 'profile',
+      name: 'Gardener',
+      gardenName: 'Tending Garden',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      reducedMotion: false,
+      ...(tendFirstPlantId === undefined ? {} : { tendFirstPlantId }),
+    },
+    plants: growths.map((growth, index) => ({
+      id: `p${index + 1}`,
+      plantId: 'aster',
+      growth,
+      plantedAt: '2026-06-01T00:00:00.000Z',
+    })),
+  }
+}
 
 describe('garden progression', () => {
   it('caps Sunlight at five unique care activities per day', () => {
@@ -213,6 +238,66 @@ describe('garden progression', () => {
   })
 })
 
+describe('choosing the plant Sunlight tends', () => {
+  it('tends the first plant still growing when none was chosen', () => {
+    expect(nextPlantToTend(plantedGarden([3, 1, 0]))).toBe(1)
+    // A garden with no gardener yet tends the same way.
+    expect(nextPlantToTend({ ...plantedGarden([3, 3, 2]), profile: undefined })).toBe(2)
+  })
+
+  it('tends the chosen plant while it is still growing', () => {
+    expect(nextPlantToTend(plantedGarden([1, 0, 2], 'p3'))).toBe(2)
+  })
+
+  it('goes back to the first plant growing once the chosen one is fully grown', () => {
+    expect(nextPlantToTend(plantedGarden([3, 2, MAX_PLANT_GROWTH], 'p3'))).toBe(1)
+  })
+
+  it('goes back to the first plant growing when the chosen one is gone', () => {
+    expect(nextPlantToTend(plantedGarden([3, 0, 1], 'removed-plant'))).toBe(1)
+  })
+
+  it('tends nothing when every plant is grown, chosen or not', () => {
+    expect(nextPlantToTend(plantedGarden([3, 3]))).toBe(-1)
+    expect(nextPlantToTend(plantedGarden([3, 3], 'p2'))).toBe(-1)
+    expect(nextPlantToTend(plantedGarden([]))).toBe(-1)
+  })
+
+  it('grows the chosen plant with the next Sunlight, and leaves the rest alone', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const garden = plantedGarden([0, 1, 0], 'p3')
+    const after = awardSunlight(garden, 'mood:2026-06-13', now)
+    expect(after.plants.map((plant) => plant.growth)).toEqual([0, 1, 1])
+    expect(after.plants[0]).toBe(garden.plants[0])
+    expect(after.plants[1]).toBe(garden.plants[1])
+  })
+
+  it('reveals an egg from the chosen plant when it reaches full bloom', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const garden: AppState = {
+      ...plantedGarden([], 'host'),
+      plants: [
+        { id: 'p1', plantId: 'aster', growth: 0, plantedAt: '2026-06-01T00:00:00.000Z' },
+        { id: 'host', plantId: 'milkweed', growth: 2, plantedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    }
+    const after = awardSunlight(garden, 'goal:one', now)
+    expect(after.plants.map((plant) => plant.growth)).toEqual([0, MAX_PLANT_GROWTH])
+    expect(after.creatures.at(-1)).toMatchObject({
+      speciesId: 'monarch',
+      stage: 'egg',
+      sourcePlantId: 'host',
+    })
+  })
+
+  it('moves on to the first plant growing after the chosen one blooms', () => {
+    const now = new Date(2026, 5, 13, 10)
+    const bloomed = awardSunlight(plantedGarden([0, 1, 2], 'p3'), 'activity-1', now)
+    const next = awardSunlight(bloomed, 'activity-2', now)
+    expect(next.plants.map((plant) => plant.growth)).toEqual([1, 1, MAX_PLANT_GROWTH])
+  })
+})
+
 describe('collecting Moonlight', () => {
   const evening = new Date(2026, 8, 8, 21, 30)
 
@@ -374,5 +459,79 @@ describe('naming a new companion', () => {
 
   it('treats a renamed companion by its new name', () => {
     expect(nextCompanionName([{ name: '  juniper ' }])).not.toBe('Juniper')
+  })
+
+  it('compares numbered names the same way once every name is taken', () => {
+    const everyone = butterflyNames.map((name) => ({ name: ` ${name.toUpperCase()} ` }))
+    expect(nextCompanionName(everyone)).toBe(`${butterflyNames[0]} 2`)
+    // One more companion moves the start to the second name, whose "2" is
+    // already taken in another case.
+    const crowded = [...everyone, { name: `  ${butterflyNames[1].toLowerCase()} 2` }]
+    expect(nextCompanionName(crowded)).toBe(`${butterflyNames[1]} 3`)
+  })
+})
+
+describe('offering a new arrival a name', () => {
+  const garden = [
+    { id: 'sol', name: 'Sol' },
+    { id: 'egg', name: 'Clover' },
+  ]
+
+  it('knows a name another companion has, ignoring case and spaces', () => {
+    expect(nameInUse(garden, '  sOL ', 'egg')).toBe(true)
+    expect(nameInUse(garden, 'Pip', 'egg')).toBe(false)
+  })
+
+  it('never counts the companion being named against itself', () => {
+    expect(nameInUse(garden, 'clover', 'egg')).toBe(false)
+    expect(nameInUse(garden, 'clover', 'sol')).toBe(true)
+  })
+
+  it('offers an arrival the name it already has while nobody shares it', () => {
+    expect(nameToOffer(garden, 'egg')).toBe('Clover')
+  })
+
+  it('offers the first free name when another companion took its name', () => {
+    const shared = [
+      { id: 'sol', name: 'Sol' },
+      { id: 'egg', name: 'Sol' },
+    ]
+    const offered = nameToOffer(shared, 'egg')
+    expect(offered).toBe(nextCompanionName([{ name: 'Sol' }]))
+    expect(nameInUse(shared, offered, 'egg')).toBe(false)
+  })
+
+  it('offers a free name for a creature the garden does not have', () => {
+    expect(nameInUse(garden, nameToOffer(garden, 'gone'), 'gone')).toBe(false)
+  })
+})
+
+describe('a new egg', () => {
+  const now = new Date(2026, 5, 13, 10)
+
+  function hostAboutToBloom(names: string[]): AppState {
+    const base = createInitialState('Gardener', 'Naming Garden', now)
+    const starter = base.creatures[0]
+    return {
+      ...base,
+      plants: [{ id: 'host', plantId: 'milkweed', growth: 2, plantedAt: '2026-06-01T00:00:00.000Z' }],
+      creatures: names.map((name, index) => ({ ...starter, id: `c${index}`, name })),
+    }
+  }
+
+  it('arrives with a name nobody has, waiting to be named', () => {
+    const before = hostAboutToBloom(['Sol', 'Juniper'])
+    const egg = awardSunlight(before, 'goal:one', now).creatures.at(-1)
+    expect(egg).toMatchObject({ stage: 'egg', awaitingName: true })
+    expect(['sol', 'juniper']).not.toContain(egg?.name.toLowerCase())
+  })
+
+  it('leaves the names of companions already there alone, even shared ones', () => {
+    // A garden from before names were checked: two companions called Sol.
+    const before = hostAboutToBloom(['Sol', 'Clover', 'Sol'])
+    const after = awardSunlight(before, 'goal:one', now)
+    expect(after.creatures.slice(0, 3)).toEqual(before.creatures)
+    expect(after.creatures).toHaveLength(4)
+    expect(['sol', 'clover']).not.toContain(after.creatures[3].name.toLowerCase())
   })
 })

@@ -7,16 +7,35 @@ import {
   MOONLIGHT_STARDUST_REWARD,
   sunlightForDate,
 } from '../lib/progression'
-import { calculateSunlightStreak } from '../lib/streak'
+import { describeDay } from '../lib/daySummary'
+import { pacerFor } from '../lib/breathing'
+import { TOMORROW_NOTE_LENGTH, TOMORROW_NOTES, type TomorrowNote } from '../lib/gardenActions'
 import type { AppState, MoodEntry } from '../types'
+import { GuideLink } from './GuideLink'
 import { Icon } from './Icons'
+import './recap.css'
+
+/**
+ * The draft for tomorrow as notes, a line each. A draft left by an older
+ * build was one free text box with any number of lines; rather than drop
+ * what was written after the third, the rest is kept in the last note.
+ */
+function notesOf(draft: string): string[] {
+  const lines = draft.split('\n')
+  if (lines.length <= TOMORROW_NOTES) return lines
+  const kept = lines.filter((line) => line.trim())
+  return [
+    ...kept.slice(0, TOMORROW_NOTES - 1),
+    kept.slice(TOMORROW_NOTES - 1).join(' '),
+  ]
+}
 
 export interface RecapSubmission {
   level?: MoodEntry['level']
   wentWell: string
   settingDown: string
-  forTomorrow: string
-  planForTomorrow: boolean
+  /** Up to three notes for tomorrow, each of which can become a goal. */
+  tomorrow: TomorrowNote[]
 }
 
 /** Enough of a step to render its heading; the body is chosen per index. */
@@ -59,6 +78,9 @@ export function MoonlightRecap({
   today,
   onCollect,
   onClose,
+  onFadeToNight,
+  onOpenGuide,
+  onBreathe,
 }: {
   state: AppState
   /** The day being closed out, which after midnight is yesterday. */
@@ -66,6 +88,19 @@ export function MoonlightRecap({
   today: string
   onCollect: (submission: RecapSubmission) => void
   onClose: () => void
+  /**
+   * The other way to finish: once the night is collected, turn the garden to
+   * night, let the sound fade, and go back to the garden. Offered only when
+   * given.
+   */
+  onFadeToNight?: () => void
+  /** Open the Guide at a section, from a "What does this do?" link. */
+  onOpenGuide?: (section: string) => void
+  /**
+   * A last, optional step: once the night is collected, breathe with a
+   * butterfly before bed. Offered only when given.
+   */
+  onBreathe?: () => void
 }) {
   const [step, setStep] = useState(0)
   const [level, setLevel] = useState<MoodEntry['level']>()
@@ -81,7 +116,22 @@ export function MoonlightRecap({
     `recap:${targetDate}:forTomorrow`,
     '',
   )
-  const [planForTomorrow, setPlanForTomorrow] = useState(false)
+  // The notes are one draft, a line each, so they survive a reload together.
+  const notes = notesOf(forTomorrow)
+  const [planned, setPlanned] = useState<boolean[]>([])
+  const notesRef = useRef<HTMLDivElement>(null)
+  // "Add another" hides once used, so the note it added takes its focus.
+  const focusNote = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (focusNote.current === undefined) return
+    notesRef.current?.querySelectorAll('input')[focusNote.current]?.focus()
+    focusNote.current = undefined
+  }, [notes.length])
+  const setNote = (index: number, text: string) => {
+    const next = [...notes]
+    next[index] = text.replace(/\n/g, ' ')
+    setForTomorrow(next.join('\n'))
+  }
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   // Each step replaces the last in place, so without this the reader is left
@@ -92,17 +142,7 @@ export function MoonlightRecap({
 
   const closingAnotherDay = targetDate !== today
   const sunlight = sunlightForDate(state, targetDate)
-  const streak = useMemo(
-    () => calculateSunlightStreak(state.sunlight, targetDate),
-    [state.sunlight, targetDate],
-  )
-  const goalsCaredFor = useMemo(
-    () =>
-      state.completions.filter(
-        (completion) => completion.localDate === targetDate,
-      ).length,
-    [state.completions, targetDate],
-  )
+  const dayInWords = useMemo(() => describeDay(state, targetDate), [state, targetDate])
 
   const last = steps.length - 1
   const current = steps[step]
@@ -122,25 +162,29 @@ export function MoonlightRecap({
     if (step === 3) setSettingDown('')
     if (step === 4) {
       setForTomorrow('')
-      setPlanForTomorrow(false)
+      setPlanned([])
     }
     next()
   }
 
-  const collect = () => {
+  /** Collect the night, then leave the way the gardener chose. */
+  const collect = (leave: () => void) => {
     onCollect({
       level,
       wentWell,
       settingDown,
-      forTomorrow,
-      planForTomorrow: planForTomorrow && forTomorrow.trim().length > 0,
+      // A note emptied again after it was marked is not planned.
+      tomorrow: notes.map((text, index) => ({
+        text,
+        plan: planned[index] === true && text.trim() !== '',
+      })),
     })
     clearDraft(
       `recap:${targetDate}:wentWell`,
       `recap:${targetDate}:settingDown`,
       `recap:${targetDate}:forTomorrow`,
     )
-    onClose()
+    leave()
   }
 
   return (
@@ -172,31 +216,25 @@ export function MoonlightRecap({
         {current.helper && <p className="recap-helper">{current.helper}</p>}
 
         {step === 0 && (
-          <ul className="recap-summary">
-            <li>
-              <Icon name="sun" size={20} />
-              <span>
-                <strong>
-                  {sunlight} / {DAILY_SUNLIGHT_CAP}
-                </strong>
-                Sunlight earned
-              </span>
-            </li>
-            <li>
-              <Icon name="leaf" size={20} />
-              <span>
-                <strong>{goalsCaredFor}</strong>
-                {goalsCaredFor === 1 ? 'act of care' : 'acts of care'}
-              </span>
-            </li>
-            <li>
-              <Icon name="sparkle" size={20} />
-              <span>
-                <strong>{streak.days}</strong>
-                {streak.days === 1 ? 'day streak' : 'days in a row'}
-              </span>
-            </li>
-          </ul>
+          <>
+            <p className="recap-day-words">{dayInWords}</p>
+            <ul className="recap-summary">
+              <li>
+                <Icon name="sun" size={20} />
+                <span>
+                  <strong>
+                    {sunlight} / {DAILY_SUNLIGHT_CAP}
+                  </strong>
+                  Sunlight earned
+                </span>
+              </li>
+            </ul>
+            {/* Only here, before any answer: the recap's step and weather are
+                not drafts, so leaving from a later step would lose them. */}
+            {onOpenGuide && (
+              <GuideLink section="moonlight" topic="Moonlight" onOpen={onOpenGuide} />
+            )}
+          </>
         )}
 
         {step === 1 && (
@@ -249,30 +287,55 @@ export function MoonlightRecap({
 
         {step === 4 && (
           <>
-            <textarea
-              className="recap-field"
-              aria-labelledby="recap-step-title"
-              value={forTomorrow}
-              onChange={(event) => setForTomorrow(event.target.value)}
-              placeholder="A note to yourself"
-              rows={3}
-              maxLength={280}
-            />
-            {forTomorrow.trim() && (
+            <div className="tomorrow-notes" ref={notesRef}>
+              {notes.map((note, index) => (
+                <div className="tomorrow-note" key={index}>
+                  <input
+                    className="recap-field"
+                    aria-label={`Note ${index + 1} for tomorrow`}
+                    value={note}
+                    onChange={(event) => setNote(index, event.target.value)}
+                    placeholder={index === 0 ? 'A note to yourself' : 'Another, if you like'}
+                    maxLength={TOMORROW_NOTE_LENGTH}
+                  />
+                  {note.trim() && (
+                    <button
+                      className={`recap-plan-toggle ${planned[index] ? 'selected' : ''}`}
+                      aria-pressed={planned[index] === true}
+                      // One name whatever its state, which aria-pressed carries; the
+                      // visible words first, so a voice user can say what they see.
+                      aria-label={`Add to tomorrow’s goals: ${note.trim()}`}
+                      onClick={() =>
+                        setPlanned((current) => {
+                          const next = [...current]
+                          next[index] = !next[index]
+                          return next
+                        })
+                      }
+                    >
+                      <Icon name="today" size={18} />
+                      {/* Pressed shows in more than colour. */}
+                      {planned[index] && <span aria-hidden="true">✓</span>}
+                      Add to tomorrow’s goals
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {notes.length < TOMORROW_NOTES && notes[notes.length - 1]?.trim() && (
               <button
-                className={`recap-plan-toggle ${planForTomorrow ? 'selected' : ''}`}
-                aria-pressed={planForTomorrow}
-                onClick={() => setPlanForTomorrow((value) => !value)}
+                className="text-button tomorrow-add"
+                onClick={() => {
+                  focusNote.current = notes.length
+                  setForTomorrow(`${notes.join('\n')}\n`)
+                }}
               >
-                <Icon name="today" size={18} />
-                {planForTomorrow
-                  ? 'Added to tomorrow’s goals'
-                  : 'Add to tomorrow’s goals'}
+                Add another
               </button>
             )}
-            {planForTomorrow && forTomorrow.trim() && (
+            {notes.some((note, index) => note.trim() && planned[index]) && (
               <p className="recap-helper">
-                It will be waiting on {formatWeekday(addDaysToLocalDate(targetDate, 1))}.
+                They will be waiting on {formatWeekday(addDaysToLocalDate(targetDate, 1))}.
               </p>
             )}
           </>
@@ -302,9 +365,25 @@ export function MoonlightRecap({
             Continue
           </button>
         ) : (
-          <button className="primary-button" onClick={collect}>
-            Collect Moonlight
-          </button>
+          // The ordinary finish comes first; putting the phone down is the
+          // quieter second choice, collected exactly the same way.
+          <div className="recap-finish">
+            <button className="primary-button" onClick={() => collect(onClose)}>
+              Collect Moonlight
+            </button>
+            {onFadeToNight && (
+              <button className="secondary-button" onClick={() => collect(onFadeToNight)}>
+                Fade the garden to night and close
+              </button>
+            )}
+            {/* Collected the same way first: the answers here are not drafts,
+                so leaving before collecting would lose them. */}
+            {onBreathe && (
+              <button className="text-button recap-breathe" onClick={() => collect(onBreathe)}>
+                Collect Moonlight and breathe with {pacerFor(state).name}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

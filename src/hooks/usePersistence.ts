@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadDrafts, resetDrafts } from '../lib/drafts'
+import { recordBackup } from '../lib/gardenActions'
 import { progressGarden } from '../lib/progression'
 import { requestPersistentStorage } from '../lib/storage'
 import {
@@ -11,14 +12,17 @@ import {
   type GardenRepository,
   type LoadResult,
 } from '../repository/gardenRepository'
-import type { AppState } from '../types'
+import { isQuietWrite } from '../lib/quietWrites'
+import { hasPictures } from '../lib/customBackdrops'
+import type { FileCopy } from '../lib/sightingPhotos'
+import type { AppState, CustomBackdrop, Sighting } from '../types'
 import type { useMediaSaves } from './useMediaSaves'
 
 /** Tabs tell each other when the shared garden changed underneath them. */
-const SYNC_CHANNEL = 'butterfly-garden-sync'
+export const SYNC_CHANNEL = 'butterfly-garden-sync'
 
 /** What tabs say to each other on the sync channel. */
-type SyncMessage =
+export type SyncMessage =
   | { type: 'garden-saved'; parts?: unknown }
   /** A tab is about to delete the garden: stop writing now. */
   | { type: 'garden-clearing' }
@@ -26,6 +30,18 @@ type SyncMessage =
   | { type: 'garden-cleared' }
   /** The deletion did not happen after all: read the garden again. */
   | { type: 'garden-clear-failed' }
+  /**
+   * The garden lock was turned on or off, or (`now`) locked. A tab with the
+   * garden open follows it here, reading the garden again; one showing the
+   * lock screen, there.
+   */
+  | { type: 'garden-lock'; now?: boolean }
+  /**
+   * The time the garden may be out of sight before it locks itself was
+   * chosen anew. Nothing of the garden changed: only a tab with it open
+   * under the lock takes the new time (components/lock/LockWatch).
+   */
+  | { type: 'garden-auto-lock' }
 
 /** Retry delays after storage could not be read, in milliseconds. */
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
@@ -187,6 +203,12 @@ export function usePersistence(
     channelRef.current = channel
     channel.onmessage = (event: MessageEvent<SyncMessage | undefined>) => {
       const message = event.data
+      if (message?.type === 'garden-lock' && message.now) {
+        // Locked everywhere now: this tab too, and components/LockGate
+        // shows the lock screen.
+        void import('../lib/gardenLockActions').then(({ lockGarden }) => lockGarden(false))
+        return
+      }
       if (message?.type === 'garden-clearing') {
         pauseSaving('deleting')
         return
@@ -199,10 +221,22 @@ export function usePersistence(
         void repository.load().then(applyLoadResult)
         return
       }
-      if (message?.type !== 'garden-saved' || readOnlyRef.current) return
+      if (message?.type !== 'garden-saved' && message?.type !== 'garden-lock') return
+      if (readOnlyRef.current) {
+        // Nothing is written from here, so nothing is read back; but a lock
+        // turned on still takes the garden off this screen (LockGate).
+        if (message.type === 'garden-lock') void repository.checkLock().catch(() => undefined)
+        return
+      }
       // The sender names what it wrote, so only those parts are read back.
-      // A message without them -- an older tab -- falls back to a full load.
-      void repository.adopt(message.parts).then((result) => {
+      // A message without them falls back to a full load: an older tab's, or
+      // the lock turned on or off, which stores every part again under a new
+      // revision (in a database of its own, perhaps, which the read opens).
+      // Kept at the old one, this tab's next change would be refused as a
+      // conflict and lost. The load follows the lock as it now stands, so a
+      // garden this tab may no longer read goes to the lock screen.
+      const parts = message.type === 'garden-saved' ? message.parts : undefined
+      void repository.adopt(parts).then((result) => {
         if (result.status === 'loaded') {
           applyLoadResult(result)
           return
@@ -246,34 +280,56 @@ export function usePersistence(
         }
         if (error instanceof GardenConflictError) {
           // Another tab wrote first. Its garden is the true one: read it back
-          // and say plainly that this change was not kept.
-          settleAll({ ok: false, message: error.message })
+          // and say plainly that this change was not kept -- unless the write
+          // held nothing of the gardener's (lib/quietWrites), when there is
+          // nothing to say.
+          const quiet = isQuietWrite(next)
+          if (!quiet) settleAll({ ok: false, message: error.message })
           const result = await repository.load()
           if (result.status === 'loaded') applyLoadResult(result)
           else pauseSaving(result.reason)
-          setPersistence((current) => ({ ...current, notice: error.message }))
+          if (!quiet) setPersistence((current) => ({ ...current, notice: error.message }))
           return
         }
         const failed = failWritten(next, errorMessage(error))
         const previous = persistedRef.current
         // Keep the old scene active on quota/decode write failure. The editor
         // still owns the unsaved draft; unrelated in-memory edits survive.
+        // A sighting's photo that would not go in comes back out (the photo
+        // stored before, if any), or every later write would carry it, and
+        // fail too; the field book says it was not kept.
         if (failed.length && previous) {
-          setState((current) =>
-            current && failed.some((record) => current.customBackdrops.includes(record))
-              ? {
-                  ...current,
-                  customBackdrops: previous.customBackdrops,
-                  profile: current.profile
+          setState((current) => {
+            if (!current) return current
+            let kept = current
+            if (failed.some((record) => current.customBackdrops.includes(record as CustomBackdrop)))
+              kept = {
+                ...kept,
+                customBackdrops: previous.customBackdrops,
+                profile: current.profile
+                  ? {
+                      ...current.profile,
+                      selectedCustomBackdropId:
+                        previous.profile?.selectedCustomBackdropId,
+                    }
+                  : undefined,
+              }
+            const refused = (sighting: Sighting) =>
+              sighting.photo !== undefined && failed.includes(sighting.photo)
+            if (current.sightings.some(refused))
+              kept = {
+                ...kept,
+                sightings: current.sightings.map((sighting) =>
+                  refused(sighting)
                     ? {
-                        ...current.profile,
-                        selectedCustomBackdropId:
-                          previous.profile?.selectedCustomBackdropId,
+                        ...sighting,
+                        photo: previous.sightings.find((item) => item.id === sighting.id)?.photo,
                       }
-                    : undefined,
-                }
-              : current,
-          )
+                    : sighting,
+                ),
+              }
+            return kept
+          })
         }
         setPersistence((current) => ({ ...current, writeError: errorMessage(error) }))
       }
@@ -352,21 +408,10 @@ export function usePersistence(
        * The newest set-aside copy of a garden this build could not read, as a
        * file the gardener can keep, or undefined when there is none.
        */
-      quarantinedCopy: async (): Promise<string | undefined> => {
+      quarantinedCopy: async (): Promise<FileCopy | undefined> => {
         const [newest] = await repository.quarantined()
-        if (!newest) return undefined
-        return JSON.stringify(
-          {
-            format: 'the-butterfly-garden-set-aside',
-            exportedAt: new Date().toISOString(),
-            appVersion: __APP_VERSION__,
-            reason: newest.reason,
-            storedAt: newest.storedAt,
-            garden: newest.raw,
-          },
-          null,
-          2,
-        )
+        // Its photos are Blobs, which go into a file as text (lib/sightingPhotos).
+        return newest && (await import('../lib/sightingPhotos')).setAsideCopy(newest)
       },
       /** How many set-aside copies are kept. */
       countQuarantined: async (): Promise<number> =>
@@ -384,7 +429,12 @@ export function usePersistence(
           return { ok: false, message: 'That file is not a garden backup.' }
         }
         const inspection = inspectImportedState(parsed)
-        const imported = inspection.state
+        // The restored garden is exactly a file the gardener holds, so it
+        // counts as a copy kept now. This also replaces the time the file
+        // carries, which is from the copy before it (or hand-edited), and
+        // would otherwise say the wrong thing about copies on a new device.
+        const imported =
+          inspection.state && recordBackup(inspection.state, new Date())
         if (!imported) {
           return {
             ok: false,
@@ -394,9 +444,9 @@ export function usePersistence(
         let written: GardenPart[]
         const startedAt = new Date().toISOString()
         try {
-          if (imported.customBackdrops.length) {
-            const { verifyBackdropImages } = await import('../lib/imageImport')
-            await verifyBackdropImages(imported.customBackdrops)
+          if (hasPictures(imported)) {
+            const { verifyGardenImages } = await import('../lib/imageImport')
+            await verifyGardenImages(imported)
           }
           // Replaced rather than saved: a restore swaps the whole document,
           // and writing only the difference from the garden being replaced can
@@ -446,6 +496,35 @@ export function usePersistence(
           ok: true,
           message: 'Your garden is back to how it was before the restore.',
         }
+      },
+      /** The daily copies kept on this device, and the room every copy takes. */
+      earlierCopies: () => repository.earlierCopies(),
+      /** A daily copy as it would be put back: with the field book's photos of now. */
+      readCopy: (id: string) => repository.dailyCopy(id, persistedRef.current),
+      /**
+       * Put a daily copy back, as a restore is made: the garden it replaces
+       * is kept first, and the restore's undo offered.
+       */
+      putBackCopy: async (id: string): Promise<{ ok: boolean; message: string }> => {
+        const startedAt = new Date().toISOString()
+        let copy: AppState | undefined
+        let written: GardenPart[]
+        try {
+          copy = await repository.dailyCopy(id, persistedRef.current)
+          if (!copy) return { ok: false, message: 'That copy could not be read.' }
+          written = await repository.replace(copy, { snapshot: true })
+        } catch (error) {
+          return { ok: false, message: errorMessage(error) }
+        }
+        // As after any restore: the undo offered, if its copy can be found.
+        const [snapshot] = await repository.snapshots().catch(() => [])
+        setPersistence({
+          readOnly: false,
+          lastRestoreSnapshotId:
+            snapshot && snapshot.takenAt >= startedAt ? snapshot.id : undefined,
+        })
+        adoptReplacement(copy, written)
+        return { ok: true, message: 'Your garden is back to that earlier copy.' }
       },
       /**
        * Start a new garden over one this build could not read.

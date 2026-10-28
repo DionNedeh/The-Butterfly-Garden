@@ -1,20 +1,40 @@
 import type {
   AmbientTrackId,
+  AppearanceTheme,
   AppState,
+  CheckInDetails,
   GardenBackdropId,
+  GardenPace,
   Goal,
   GoalSchedule,
+  MoodChoice,
   MoodEntry,
   RecapEntry,
   ReflectionEntry,
+  RegionId,
+  TextSize,
 } from '../types'
+import { freeWritingPrompt } from '../data/content'
 import { availableBackdropIds } from './appearance'
-import { addDaysToLocalDate, toLocalDate } from './date'
+import {
+  addDaysToLocalDate,
+  RECAP_GRACE_CHOICES,
+  RECAP_OPENS_CHOICES,
+  recapHoursOf,
+  toLocalDate,
+  type RecapHours,
+} from './date'
+import { checkInDetails } from './feelings'
+import { earlierDayProblem } from './earlierDay'
 import { createId } from './id'
+import { careFromGoal, releaseGoal } from './lifecycle'
+import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
+import type { ThemeChoice } from './theme'
 import {
   awardMoonlight,
   awardSunlight,
+  MAX_PLANT_GROWTH,
   moonlightForDate,
   progressGarden,
   type RecapDraft,
@@ -29,12 +49,26 @@ import {
  * do, so the save effect sees no change and writes nothing.
  */
 
+/** The longest a goal's title is, and so its two-minute version too. */
+export const GOAL_TITLE_LENGTH = 120
+
+/**
+ * A goal's two-minute version as it is kept: trimmed, no longer than a
+ * title, and left out altogether when there is none, so a goal without one
+ * looks exactly as it did before there were any.
+ */
+function tinyTitleField(tinyTitle: string | undefined): Pick<Goal, 'tinyTitle'> {
+  const tiny = tinyTitle?.trim().slice(0, GOAL_TITLE_LENGTH).trim()
+  return tiny ? { tinyTitle: tiny } : {}
+}
+
 export function addGoal(
   state: AppState,
   title: string,
   schedule: GoalSchedule,
   weekdays: number[],
   today: string,
+  tinyTitle?: string,
 ): AppState {
   return {
     ...state,
@@ -47,30 +81,39 @@ export function addGoal(
         weekdays,
         createdDate: today,
         archived: false,
+        ...tinyTitleField(tinyTitle),
       },
     ],
   }
 }
 
 export function updateGoal(state: AppState, goal: Goal): AppState {
+  const { tinyTitle, ...rest } = goal
+  const saved: Goal = { ...rest, ...tinyTitleField(tinyTitle) }
   return {
     ...state,
-    goals: state.goals.map((item) => (item.id === goal.id ? goal : item)),
+    goals: state.goals.map((item) => (item.id === goal.id ? saved : item)),
   }
 }
 
-/** Retire a goal without discarding the days it was completed. */
+/**
+ * Retire a goal without discarding the days it was completed. A companion
+ * grown alongside it is let go, back to the care menu alone, keeping every
+ * day the goal gave (lib/lifecycle releaseGoal); restoring the goal later
+ * does not take it back without being asked.
+ */
 export function setGoalArchived(
   state: AppState,
   goalId: string,
   archived: boolean,
 ): AppState {
-  return {
+  const next = {
     ...state,
     goals: state.goals.map((goal) =>
       goal.id === goalId ? { ...goal, archived } : goal,
     ),
   }
+  return archived ? releaseGoal(next, goalId) : next
 }
 
 export function planGoal(
@@ -146,16 +189,76 @@ export function wakeGoal(state: AppState, goalId: string): AppState {
   }
 }
 
-/** A goal and every day it was completed. */
+/**
+ * A goal and every day it was completed. A companion grown alongside it is
+ * let go, as archiving does; its diary keeps the goal's name and days.
+ */
 export function deleteGoal(state: AppState, goalId: string): AppState {
+  return releaseGoal(
+    {
+      ...state,
+      goals: state.goals.filter((goal) => goal.id !== goalId),
+      completions: state.completions.filter((completion) => completion.goalId !== goalId),
+    },
+    goalId,
+  )
+}
+
+/**
+ * Put back a goal that was just deleted, where it was, with its completions.
+ *
+ * What makes Delete undoable. A goal that is somehow already back is left
+ * alone rather than doubled.
+ */
+export function restoreGoal(
+  state: AppState,
+  goal: Goal,
+  index: number,
+  completions: AppState['completions'],
+): AppState {
+  if (state.goals.some((item) => item.id === goal.id)) return state
+  const goals = [...state.goals]
+  goals.splice(Math.max(0, Math.min(index, goals.length)), 0, goal)
+  const known = new Set(state.completions.map((completion) => completion.id))
   return {
     ...state,
-    goals: state.goals.filter((goal) => goal.id !== goalId),
-    completions: state.completions.filter((completion) => completion.goalId !== goalId),
+    goals,
+    completions: [
+      ...state.completions,
+      ...completions.filter((completion) => !known.has(completion.id)),
+    ],
   }
 }
 
-/** Mark a goal done for the day, once, and earn its Sunlight. */
+/**
+ * Take back a goal marked done by mistake.
+ *
+ * The completion goes; any Sunlight it earned stays, the way deleting a
+ * check-in never takes its Sunlight back. Completing it again earns nothing
+ * more, because each completion's Sunlight is awarded once.
+ *
+ * A day of care it gave a companion grown alongside it stays too, for the
+ * same reason: the care day is the companion's now, and taking it back could
+ * undo a hatching already celebrated. Completing again gives no second day,
+ * since the companion's diary has this one (careFromGoal).
+ */
+export function uncompleteGoal(
+  state: AppState,
+  goalId: string,
+  localDate: string,
+): AppState {
+  const id = `${goalId}:${localDate}`
+  if (!state.completions.some((item) => item.id === id)) return state
+  return {
+    ...state,
+    completions: state.completions.filter((item) => item.id !== id),
+  }
+}
+
+/**
+ * Mark a goal done for the day, once, and earn its Sunlight. A companion
+ * grown alongside the goal counts the day as a day of care (careFromGoal).
+ */
 export function completeGoal(state: AppState, goalId: string, now: Date): AppState {
   const localDate = toLocalDate(now)
   const id = `${goalId}:${localDate}`
@@ -167,23 +270,46 @@ export function completeGoal(state: AppState, goalId: string, now: Date): AppSta
       { id, goalId, localDate, completedAt: now.toISOString() },
     ],
   }
-  return awardSunlight(completed, `goal:${id}`, now)
+  return careFromGoal(awardSunlight(completed, `goal:${id}`, now), goalId, now)
 }
 
-/** Today's check-in, written or rewritten, and its Sunlight. */
+/**
+ * A star on today's entry stays through a rewrite while its words do: a star
+ * is the gardener's choice of those words for a letter to quote (lib/letters),
+ * and new words written on Today, where no star is shown, were not chosen.
+ */
+function keptStar(
+  existing: { starred?: true } | undefined,
+  before: string | undefined,
+  after: string,
+): { starred?: true } {
+  return existing?.starred === true && before === after ? { starred: true } : {}
+}
+
+/**
+ * Today's check-in, written or rewritten, and its Sunlight.
+ *
+ * The Sunlight is the same whatever the answer, "not sure" included: it is
+ * for checking in, never for the weather chosen, and never for the feelings
+ * or energy beside it. Those are stored only when answered, so a rewrite
+ * that unchooses them leaves none behind.
+ */
 export function saveMood(
   state: AppState,
-  level: MoodEntry['level'],
+  choice: MoodChoice,
   note: string,
   now: Date,
+  details: CheckInDetails = {},
 ): AppState {
   const localDate = toLocalDate(now)
   const existing = state.moods.find((item) => item.localDate === localDate)
   const entry: MoodEntry = {
     id: existing?.id ?? createId(),
     localDate,
-    level,
+    ...moodFields(choice),
     note: note.trim(),
+    ...checkInDetails(details),
+    ...keptStar(existing, existing?.note, note.trim()),
     createdAt: existing?.createdAt ?? now.toISOString(),
     updatedAt: now.toISOString(),
   }
@@ -220,6 +346,7 @@ export function saveReflection(
     localDate,
     promptId,
     body: body.trim(),
+    ...keptStar(existing, existing?.body, body.trim()),
     createdAt: existing?.createdAt ?? now.toISOString(),
     updatedAt: now.toISOString(),
   }
@@ -246,6 +373,80 @@ export function deleteReflection(state: AppState, id: string): AppState {
   return { ...state, reflections: state.reflections.filter((item) => item.id !== id) }
 }
 
+/** The Sunlight a finished breathing session earns, one a day. */
+export const breathSource = (localDate: string) => `breath:${localDate}`
+
+/**
+ * A breathing session run to its end (plan c.1): an act of care, counted
+ * once a day through the same Sunlight as any other and within the daily
+ * cap. Stopping early never comes here.
+ */
+export function finishBreathing(state: AppState, now: Date): AppState {
+  return awardSunlight(state, breathSource(toLocalDate(now)), now)
+}
+
+/** Whether an answer is one the check-in offers. */
+function isMoodChoice(choice: unknown): choice is MoodChoice {
+  return choice === 'unsure' || (typeof choice === 'number' && [1, 2, 3, 4, 5].includes(choice))
+}
+
+/**
+ * A check-in for an earlier day, written now, marked as written later.
+ *
+ * It earns no Sunlight and tends no plant, and it never touches the Sunlight
+ * ledger, so it cannot make that day a cared-for one in the rhythm: the care
+ * happened today, not then. Refused (the garden handed back as it was) for
+ * today or later, before the garden began, or a day that has a check-in.
+ */
+export function addEarlierMood(
+  state: AppState,
+  localDate: string,
+  choice: MoodChoice,
+  note: string,
+  now: Date,
+): AppState {
+  if (!isMoodChoice(choice)) return state
+  if (earlierDayProblem(state, localDate, 'check-in', toLocalDate(now))) return state
+  const written = now.toISOString()
+  const entry: MoodEntry = {
+    id: createId(),
+    localDate,
+    ...moodFields(choice),
+    note: note.trim(),
+    writtenLater: true,
+    createdAt: written,
+    updatedAt: written,
+  }
+  return { ...state, moods: [...state.moods, entry] }
+}
+
+/**
+ * A reflection for an earlier day, written freely now, marked as written
+ * later. Like a check-in written later, it earns nothing. Refused for words
+ * that are only spaces, and for the same days as `addEarlierMood`.
+ */
+export function addEarlierReflection(
+  state: AppState,
+  localDate: string,
+  body: string,
+  now: Date,
+): AppState {
+  const trimmed = body.trim()
+  if (!trimmed) return state
+  if (earlierDayProblem(state, localDate, 'reflection', toLocalDate(now))) return state
+  const written = now.toISOString()
+  const entry: ReflectionEntry = {
+    id: createId(),
+    localDate,
+    promptId: freeWritingPrompt.id,
+    body: trimmed,
+    writtenLater: true,
+    createdAt: written,
+    updatedAt: written,
+  }
+  return { ...state, reflections: [...state.reflections, entry] }
+}
+
 /**
  * Round out a day and collect its Moonlight.
  *
@@ -258,34 +459,66 @@ export function deleteReflection(state: AppState, id: string): AppState {
 export function collectMoonlight(
   state: AppState,
   localDate: string,
-  draft: RecapDraft & { planForTomorrow?: boolean },
+  draft: RecapDraft & { tomorrow?: readonly TomorrowNote[]; planForTomorrow?: boolean },
   now: Date,
 ): AppState {
   if (moonlightForDate(state, localDate)) return state
 
-  const title = draft.forTomorrow?.trim() ?? ''
-  const plannedGoal: Goal | undefined =
-    draft.planForTomorrow && title
-      ? {
-          id: createId(),
-          title,
-          schedule: 'once',
-          weekdays: [],
-          createdDate: toLocalDate(now),
-          archived: false,
-          scheduledDate: addDaysToLocalDate(localDate, 1),
-        }
-      : undefined
+  // A specific list for tomorrow, written at bedtime, is the version that
+  // helped people fall asleep (Scullin et al. 2018), so up to three notes,
+  // each of which can become one of tomorrow's goals.
+  const notes = (
+    draft.tomorrow ??
+    (draft.forTomorrow ? [{ text: draft.forTomorrow, plan: draft.planForTomorrow === true }] : [])
+  )
+    .map((note) => ({ text: note.text.trim(), plan: note.plan }))
+    .filter((note) => note.text)
+    .slice(0, TOMORROW_NOTES)
+  const plannedGoals: Goal[] = notes
+    .filter((note) => note.plan)
+    .map((note) => ({
+      id: createId(),
+      // A draft restored from an older build is not held to the field's
+      // limit; the note is kept whole, and its goal fits a goal's title.
+      title: note.text.slice(0, TOMORROW_NOTE_LENGTH).trim(),
+      schedule: 'once',
+      weekdays: [],
+      createdDate: toLocalDate(now),
+      archived: false,
+      scheduledDate: addDaysToLocalDate(localDate, 1),
+    }))
 
   const collected = awardMoonlight(
     state,
     localDate,
-    { ...draft, plannedGoalId: plannedGoal?.id },
+    {
+      level: draft.level,
+      wentWell: draft.wentWell,
+      settingDown: draft.settingDown,
+      forTomorrow: notes.map((note) => note.text).join('\n'),
+      plannedGoalId: plannedGoals[0]?.id,
+      plannedGoalIds: plannedGoals.map((goal) => goal.id),
+    },
     now,
   )
-  return plannedGoal
-    ? { ...collected, goals: [...collected.goals, plannedGoal] }
+  return plannedGoals.length
+    ? { ...collected, goals: [...collected.goals, ...plannedGoals] }
     : collected
+}
+
+/** How many notes "Anything for tomorrow?" takes. */
+export const TOMORROW_NOTES = 3
+
+/** The longest a note for tomorrow is: a goal's title, since it can become one. */
+export const TOMORROW_NOTE_LENGTH = 120
+
+/** Every note for tomorrow, a line each, as the journal edits them together. */
+export const TOMORROW_TEXT_LENGTH = TOMORROW_NOTES * (TOMORROW_NOTE_LENGTH + 1) - 1
+
+/** One note for tomorrow, and whether to plan it as a goal. */
+export interface TomorrowNote {
+  text: string
+  plan: boolean
 }
 
 export function updateRecap(state: AppState, entry: RecapEntry, now: Date): AppState {
@@ -311,15 +544,23 @@ export function selectCompanion(state: AppState, creatureId: string): AppState {
   return { ...state, profile: { ...state.profile, activeCompanionId: creatureId } }
 }
 
+/**
+ * Name a companion. Naming also answers the offer a new egg arrives with,
+ * even when the name chosen is the one it already had: keeping the default
+ * is an answer too, and the offer should not be made again.
+ */
 export function renameCreature(state: AppState, creatureId: string, name: string): AppState {
   const trimmed = name.trim()
-  if (!trimmed) return state
-  return {
-    ...state,
-    creatures: state.creatures.map((creature) =>
-      creature.id === creatureId ? { ...creature, name: trimmed } : creature,
-    ),
+  const index = state.creatures.findIndex((creature) => creature.id === creatureId)
+  const creature = index === -1 ? undefined : state.creatures[index]
+  if (!trimmed || !creature || (creature.name === trimmed && !creature.awaitingName)) {
+    return state
   }
+  const named = { ...creature, name: trimmed }
+  delete named.awaitingName
+  const creatures = [...state.creatures]
+  creatures[index] = named
+  return { ...state, creatures }
 }
 
 export function selectBackdrop(
@@ -352,6 +593,66 @@ export function markReleaseSeen(state: AppState, releaseId: string): AppState {
   return { ...state, profile: { ...state.profile, lastSeenReleaseId: releaseId } }
 }
 
+/** Ask the next Sunlight to tend this plant, or the first one growing again. */
+export function chooseNextPlant(state: AppState, plantId: string | undefined): AppState {
+  if (!state.profile || state.profile.tendFirstPlantId === plantId) return state
+  // Only a plant that is here and still growing can be tended next.
+  if (
+    plantId !== undefined &&
+    !state.plants.some((plant) => plant.id === plantId && plant.growth < MAX_PLANT_GROWTH)
+  ) {
+    return state
+  }
+  return { ...state, profile: { ...state.profile, tendFirstPlantId: plantId } }
+}
+
+/** Make a day gentle, or not; a gentle day ends by itself at midnight. */
+export function setGentleDay(state: AppState, localDate: string | undefined): AppState {
+  if (!state.profile || state.profile.gentleDay === localDate) return state
+  return { ...state, profile: { ...state.profile, gentleDay: localDate } }
+}
+
+/**
+ * Move the gardener's evening: when the recap opens, and when a late night
+ * stops offering the day before. Hours outside the offered choices are ignored.
+ */
+export function setRecapHours(state: AppState, hours: RecapHours): AppState {
+  if (!state.profile) return state
+  if (
+    !RECAP_OPENS_CHOICES.includes(hours.opensHour) ||
+    !RECAP_GRACE_CHOICES.includes(hours.graceEndsHour)
+  ) {
+    return state
+  }
+  const current = recapHoursOf(state.profile)
+  if (
+    current.opensHour === hours.opensHour &&
+    current.graceEndsHour === hours.graceEndsHour
+  ) {
+    return state
+  }
+  return {
+    ...state,
+    profile: {
+      ...state.profile,
+      recapOpensHour: hours.opensHour,
+      recapGraceEndsHour: hours.graceEndsHour,
+    },
+  }
+}
+
+/** Show or hide day counts in the journal. Nothing counted is lost either way. */
+export function setDayCountsHidden(state: AppState, hidden: boolean): AppState {
+  if (!state.profile || (state.profile.hideDayCounts === true) === hidden) return state
+  return { ...state, profile: { ...state.profile, hideDayCounts: hidden } }
+}
+
+/** Sound on or off; the fade-out timer (hooks/useFadeOut) turns it off too. */
+export function setAmbientSound(state: AppState, on: boolean): AppState {
+  if (!state.profile || Boolean(state.profile.ambientSound) === on) return state
+  return { ...state, profile: { ...state.profile, ambientSound: on } }
+}
+
 export function toggleAmbientSound(state: AppState): AppState {
   if (!state.profile) return state
   return {
@@ -365,15 +666,67 @@ export function selectAmbientTrack(state: AppState, ambientTrack: AmbientTrackId
   return { ...state, profile: { ...state.profile, ambientTrack } }
 }
 
-export function toggleTheme(state: AppState): AppState {
-  if (!state.profile) return state
-  return {
-    ...state,
-    profile: {
-      ...state.profile,
-      theme: state.profile.theme === 'night' ? 'sunlight' : 'night',
-    },
+/**
+ * The theme Settings offers: Sunlight or Night by hand, or follow the device
+ * or the evening (lib/theme).
+ *
+ * Choosing by hand stops following. Following leaves the hand-chosen theme
+ * where it was, so an older build, which knows nothing of following, still
+ * opens on the gardener's last choice rather than on a guess.
+ */
+export function chooseTheme(state: AppState, choice: ThemeChoice): AppState {
+  const profile = state.profile
+  if (!profile) return state
+  if (choice === 'device' || choice === 'evening') {
+    if (profile.themeFollows === choice) return state
+    return { ...state, profile: { ...profile, themeFollows: choice } }
   }
+  if (profile.theme === choice && profile.themeFollows === undefined) return state
+  return { ...state, profile: { ...profile, theme: choice, themeFollows: undefined } }
+}
+
+/**
+ * The header's quick switch: the opposite of what is `showing`, chosen by
+ * hand. What is showing may come from following rather than from `theme`, so
+ * the shell says which; pressing it stops following, since a switch the next
+ * evening quietly undid would feel broken.
+ */
+export function toggleTheme(state: AppState, showing?: AppearanceTheme): AppState {
+  if (!state.profile) return state
+  const current = showing ?? state.profile.theme
+  return chooseTheme(state, current === 'night' ? 'sunlight' : 'night')
+}
+
+/**
+ * Keep giving, or Classic again (undefined). Classic stores nothing, so a
+ * garden that goes back to it is exactly as it was before there was a
+ * choice. Each blooming plant's count is kept either way: Classic only
+ * pauses it, so coming back to Keep giving loses no days of care.
+ */
+export function setGardenPace(state: AppState, pace: GardenPace | undefined): AppState {
+  if (!state.profile || state.profile.gardenPace === pace) return state
+  const profile = { ...state.profile }
+  if (pace === 'keep-giving') profile.gardenPace = pace
+  else delete profile.gardenPace
+  return { ...state, profile }
+}
+
+/**
+ * The region the gardener gardens in, or none again (undefined), which is how
+ * every garden began: the Guide then marks nothing.
+ */
+export function setRegion(state: AppState, region: RegionId | undefined): AppState {
+  if (!state.profile || state.profile.region === region) return state
+  const profile = { ...state.profile }
+  if (region === undefined) delete profile.region
+  else profile.region = region
+  return { ...state, profile }
+}
+
+/** Text larger than usual, or the usual size again (undefined). */
+export function setTextSize(state: AppState, size: TextSize | undefined): AppState {
+  if (!state.profile || state.profile.textSize === size) return state
+  return { ...state, profile: { ...state.profile, textSize: size } }
 }
 
 export function updateProfile(
@@ -393,4 +746,15 @@ export function updateProfile(
       calmMotion: motion === 'calm',
     },
   }
+}
+
+/**
+ * Remember that the gardener kept a copy of the garden as it was at `madeAt`:
+ * a backup saved, downloaded or shared, or a restore (see Profile.lastBackupAt).
+ */
+export function recordBackup(state: AppState, madeAt: Date): AppState {
+  if (!state.profile || Number.isNaN(madeAt.getTime())) return state
+  const lastBackupAt = madeAt.toISOString()
+  if (state.profile.lastBackupAt === lastBackupAt) return state
+  return { ...state, profile: { ...state.profile, lastBackupAt } }
 }

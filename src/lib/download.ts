@@ -1,3 +1,4 @@
+import { toLocalDate } from './date'
 import { saveTextDocument } from './native'
 
 /** How long a download's blob URL is kept alive so the browser can read it. */
@@ -30,7 +31,15 @@ export async function saveTextFile(
       ? 'saved'
       : 'cancelled'
   }
-  const blob = new Blob([text], { type: mimeType })
+  return downloadBlob(new Blob([text], { type: mimeType }), fileName)
+}
+
+/**
+ * A browser download of a blob: `started`, since the browser will not say
+ * whether it finished. A postcard's image is saved this way too
+ * (lib/saveImage), which keeps its Android path out of the first load.
+ */
+export function downloadBlob(blob: Blob, fileName: string): SaveOutcome {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -48,8 +57,12 @@ export async function saveTextFile(
   return 'started'
 }
 
-/** `butterfly-garden-<what>-2026-10-26.json` */
-export function datedFileName(what: string, extension = 'json'): string {
-  const day = new Date().toISOString().slice(0, 10)
+/**
+ * `butterfly-garden-<what>-2026-10-26.json`, dated by the gardener's own
+ * calendar day, the date written inside a journal copy too. A UTC date
+ * would name an evening's copy in the Americas after tomorrow.
+ */
+export function datedFileName(what: string, extension = 'json', now = new Date()): string {
+  const day = toLocalDate(now)
   return `butterfly-garden-${what ? `${what}-` : ''}${day}.${extension}`
 }

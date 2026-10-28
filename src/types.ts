@@ -40,11 +40,42 @@ export type AppView =
   /** Reached from Settings → About. */
   | 'privacy'
   | 'notices'
+  /** "If you need support now": from Settings, the Guide and Today. */
+  | 'support'
+  /** Breathing with a butterfly: from Today, the recap and the support page. */
+  | 'breathe'
+  /** "Your garden's year", a look back on a year: from the Journal. */
+  | 'year'
+  /** My comfort plan: from the support page, Settings, and a gentle day. */
+  | 'comfort'
 export type GoalSchedule = 'once' | 'daily' | 'weekdays'
 export type PlantKind = 'host' | 'nectar'
 export type CreatureStage = 'egg' | 'caterpillar' | 'chrysalis' | 'butterfly'
 export type AppearanceTheme = 'sunlight' | 'night'
-export type AmbientTrackId = 'garden-chimes' | 'garden' | 'piano-music'
+/**
+ * What the theme follows in place of the gardener's own choice: the device's
+ * dark setting, or the gardener's evening (lib/theme).
+ */
+export type ThemeFollows = 'device' | 'evening'
+/** A text size larger than the usual one (lib/textSize). */
+export type TextSize = 'larger' | 'largest'
+/**
+ * A garden pace other than Classic, the pace every garden has always had
+ * (lib/gardenPace). Classic is the absence of a choice, so it stores nothing.
+ */
+export type GardenPace = 'keep-giving'
+/**
+ * Where the gardener said they garden, chosen in Settings (lib/region): the
+ * Guide then marks which butterflies and plants are native there. Never
+ * worked out from a location.
+ */
+export type RegionId = 'north-america' | 'europe' | 'australasia' | 'elsewhere'
+export type AmbientTrackId =
+  | 'garden-chimes'
+  | 'garden'
+  | 'piano-music'
+  | 'soft-rain'
+  | 'dawn-birdsong'
 export type FlightPatternId =
   | 'gentle-drift'
   | 'petal-hop'
@@ -106,7 +137,35 @@ export interface Profile {
   ambientSound?: boolean
   /** Soundscape played while ambient sound is enabled. */
   ambientTrack?: AmbientTrackId
+  /**
+   * How loud the soundscape plays, a whole number from 0 to 100 (lib/sound).
+   * Optional: without it, 50, the level the garden has always played at.
+   */
+  ambientVolume?: number
+  /**
+   * Night brings the piano: while the theme on screen is night, Piano Music
+   * plays in place of `ambientTrack`, which returns with the sunlight.
+   * Optional, and only ever true.
+   */
+  soundFollowsTheme?: true
+  /**
+   * False pauses the sound while the page is hidden and picks it up again
+   * when it is seen. Optional, and only ever false: without it the sound keeps
+   * playing in the background, as it always has.
+   */
+  soundInBackground?: false
+  /**
+   * The theme chosen by hand. While `themeFollows` is set it waits underneath,
+   * so an older build, which follows nothing, still opens on this.
+   */
   theme?: AppearanceTheme
+  /**
+   * Follow the device's dark setting, or the gardener's evening, instead of
+   * `theme`. Optional: without it the theme is the one chosen by hand.
+   */
+  themeFollows?: ThemeFollows
+  /** Text larger than usual. Optional: without it, the usual size. */
+  textSize?: TextSize
   selectedBackdropId?: GardenBackdropId
   unlockedBackdropIds?: GardenBackdropId[]
   /**
@@ -115,9 +174,143 @@ export interface Profile {
    * built-in selection stays underneath as the fallback.
    */
   selectedCustomBackdropId?: string
+  /**
+   * One of the gardener's images to show while the garden is at night (the
+   * theme on screen, chosen or followed). Optional: without it, or while it
+   * names no image that is there, the night shows what the day does. An older
+   * build ignores it and shows `selectedCustomBackdropId` day and night.
+   */
+  nightCustomBackdropId?: string
   /** The newest release notes this gardener has already seen. */
   lastSeenReleaseId?: string
+  /**
+   * Keep the journal free of day counts: the rhythm card says nothing of how
+   * many days. Optional, so an older garden reads as counts shown.
+   */
+  hideDayCounts?: boolean
+  /**
+   * The local date of a gentle day, if today is one: Today shows a few small
+   * goals and no counts until midnight. Optional and self-expiring.
+   */
+  gentleDay?: string
+  /**
+   * The plant the gardener asked the next Sunlight to tend, while it is still
+   * growing. Without it, the first plant still growing is tended.
+   */
+  tendFirstPlantId?: string
+  /**
+   * The hour (12–23) the gardener's evening starts, when the Moonlight recap
+   * opens. Optional: without it the recap opens at 6pm.
+   */
+  recapOpensHour?: number
+  /**
+   * The hour (0–10) a late night ends: until then the recap still offers
+   * the day before. Optional: without it, 4am.
+   */
+  recapGraceEndsHour?: number
+  /**
+   * When the gardener last kept a copy of the garden (an ISO timestamp): a
+   * backup saved, downloaded or shared, or a restore, since the garden then
+   * is exactly a file they hold. Settings uses it to suggest a fresh copy
+   * now and then (lib/backupReminder). Optional: an older garden has no copy
+   * on record.
+   *
+   * A backup file is written before this is set, so the value inside any file
+   * is from the copy before it. A restore replaces that with the moment of
+   * the restore, so a file never brings a stale or hand-edited date that
+   * would keep the reminder quiet on a new device.
+   */
+  lastBackupAt?: string
+  /**
+   * Keep giving: a host plant in full bloom blooms again after a few more
+   * days of care, with another egg (lib/gardenPace). Optional: without it the
+   * garden keeps its Classic pace, exactly as before there was a choice.
+   */
+  gardenPace?: GardenPace
+  /**
+   * The local date the garden was last opened, noted at most once a day
+   * (lib/visits). Optional: an older garden has no visit on record, and so
+   * nothing to welcome anyone back from.
+   */
+  lastVisitOn?: string
+  /**
+   * The local date of a return after a few days away, while the garden's
+   * small welcome-back reveal is still out. Putting it away clears it, and on
+   * any other day it means nothing. It grants nothing and changes nothing.
+   */
+  welcomeBackOn?: string
+  /**
+   * When the garden began keeping its companions' diaries (an ISO timestamp):
+   * the care each received and the outfits each wore. Set when a garden is
+   * made, or by the first thing written down in an older one. A companion
+   * welcomed before it has a story with gaps, and Care says so rather than
+   * guessing. Optional: an older garden has kept nothing yet.
+   */
+  diarySince?: string
+  /**
+   * Looks saved from the wardrobe, at most MAX_OUTFIT_PRESETS
+   * (lib/outfitPresets). Kept in the profile rather than beside it in the
+   * stored meta record: an older build writes that record field by field,
+   * and would drop a field it did not know, but it carries the profile
+   * through whole. Optional, and absent rather than empty when there are
+   * none, so an older garden or backup simply has none.
+   */
+  outfitPresets?: OutfitPreset[]
+  /**
+   * The region the gardener chose in Settings, for the Guide's native marks
+   * and planting tips. Optional: without it the Guide shows neither.
+   */
+  region?: RegionId
+  /**
+   * The time of day ("HH:MM", 24-hour) of the daily garden visit last added
+   * to the gardener's calendar (lib/reminderTime), so Settings offers it
+   * again. Optional: without it, Settings offers 8:00. The calendar does the
+   * reminding; nothing else about the reminder is kept.
+   */
+  reminderTime?: string
+  /**
+   * The Sunday (a local date) ending the week of the newest letter from
+   * Marigold the gardener has read or put away (lib/letters). Letters
+   * themselves are worked out when read and never stored. Optional: without
+   * it no letter has been read.
+   */
+  lastLetterRead?: string
+  /**
+   * Never quote the gardener's words in a letter. Optional, and only ever
+   * 'never': without it a letter may quote a line the gardener starred, and
+   * nothing else.
+   */
+  letterQuotes?: 'never'
+  /**
+   * The gardener's comfort plan, written for harder days (lib/comfortPlan).
+   * Kept in the profile, as saved looks are, because an older build carries
+   * the profile through whole. Optional, and absent rather than empty when
+   * nothing is written, so an older garden or backup simply has none.
+   */
+  comfortPlan?: ComfortPlan
 }
+
+/** The comfort plan's lists, in the order its page shows them. */
+export type ComfortSection = 'helps' | 'people' | 'places' | 'kindWords' | 'matters'
+
+/** One line of a comfort plan, in the gardener's own words. */
+export interface ComfortItem {
+  id: string
+  /** The words, trimmed and at most COMFORT_TEXT_LENGTH; for a person, their name. */
+  text: string
+  /**
+   * For a person, a number to call: digits, plus signs, spaces and dashes.
+   * Optional, since someone to reach may be someone to visit.
+   */
+  phone?: string
+}
+
+/**
+ * A private page for harder days. Each list is short, in the order the
+ * gardener chose, and absent when empty; a plan with every list empty is not
+ * stored at all. It is never quoted anywhere else in the garden.
+ */
+export type ComfortPlan = Partial<Record<ComfortSection, ComfortItem[]>>
 
 /** Image formats a garden image may be stored as. */
 export type CustomBackdropMimeType = 'image/jpeg' | 'image/png' | 'image/webp'
@@ -160,6 +353,12 @@ export interface CustomBackdrop {
   /** Base64, without a data-URL prefix. */
   imageData: string
   crop: CustomBackdropCrop
+  /**
+   * Lighter or darker, in percent from -40 to +20, so the garden's heading
+   * reads well on it. Applied as the image is drawn, never baked into
+   * `imageData`, so it can be changed back. Optional: without it, as taken.
+   */
+  brightness?: number
 }
 
 export interface Goal {
@@ -175,6 +374,12 @@ export interface Goal {
   snoozedUntil?: string
   /** Local dates the user chose to skip — no pressure, no penalty. */
   skippedDates?: string[]
+  /**
+   * The same goal made small enough for two minutes ("Roll your shoulders"
+   * for "Stretch your shoulders"). A gentle day shows it in place of the
+   * title; completing it is completing the goal.
+   */
+  tinyTitle?: string
 }
 
 export interface DailyCompletion {
@@ -188,16 +393,55 @@ export interface MoodEntry {
   id: string
   localDate: string
   level: 1 | 2 | 3 | 4 | 5
+  /**
+   * The gardener chose "Not sure today". `level` is then the middle level,
+   * so a build that predates this field reads an ordinary, neutral day.
+   */
+  unsure?: true
   note: string
+  /**
+   * Feeling words chosen beside the weather: ids from data/feelings, each
+   * once, in that list's order, at most MAX_FEELINGS. Absent when none were
+   * chosen; an empty list is never stored. Optional, so an older build reads
+   * an ordinary check-in.
+   */
+  feelings?: string[]
+  /** How much energy the day had, when the gardener said. Absent means not answered. */
+  energy?: EnergyLevel
+  /**
+   * Written afterwards for this earlier day, from the Journal. It earns no
+   * Sunlight and is not a cared-for day: the care happened on the day it was
+   * written. Only ever stored as true; optional, so an older garden reads as
+   * written on the day.
+   */
+  writtenLater?: true
+  /**
+   * The gardener starred the note, so a letter from Marigold may quote it
+   * (lib/letters). Only ever stored as true; without it, never quoted.
+   */
+  starred?: true
   createdAt: string
   updatedAt: string
 }
+
+/** The three steps of the check-in's optional energy question. */
+export type EnergyLevel = 'low' | 'steady' | 'bright'
+
+/** A check-in answer: one of the five weathers, or not sure. */
+export type MoodChoice = MoodEntry['level'] | 'unsure'
+
+/** The optional extras a check-in may carry beside its weather and note. */
+export type CheckInDetails = Pick<MoodEntry, 'feelings' | 'energy'>
 
 export interface ReflectionEntry {
   id: string
   localDate: string
   promptId: string
   body: string
+  /** Written afterwards for this earlier day; see MoodEntry.writtenLater. */
+  writtenLater?: true
+  /** Starred, so a letter may quote it; see MoodEntry.starred. */
+  starred?: true
   createdAt: string
   updatedAt: string
 }
@@ -219,10 +463,15 @@ export interface RecapEntry {
   wentWell: string
   /** "What are you setting down?" */
   settingDown: string
-  /** "Anything for tomorrow?" */
+  /**
+   * "Anything for tomorrow?": up to three notes, one per line. A single
+   * string, so a build from before the lines reads them as one note.
+   */
   forTomorrow: string
-  /** Set when the tomorrow note was also planned as a goal. */
+  /** The first note planned as a goal; kept for builds that know only one. */
   plannedGoalId?: string
+  /** Every note planned as a goal, in order. */
+  plannedGoalIds?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -242,6 +491,13 @@ export interface PlantInstance {
   plantId: string
   growth: number
   plantedAt: string
+  /**
+   * Under Keep giving, the days of care this host plant has seen in full
+   * bloom since it last bloomed (lib/gardenPace), up to the number that
+   * opens its next bloom. Absent at the start of each count, and always
+   * under Classic, which never writes it.
+   */
+  careDaysSinceBloom?: number
 }
 
 export interface CreatureInstance {
@@ -265,6 +521,70 @@ export interface CreatureInstance {
   emergeAt?: string
   emergedAt?: string
   sourcePlantId?: string
+  /**
+   * Set on an egg the garden has just found, until the gardener names it or
+   * keeps the name it came with. Read only while the creature is an egg, so
+   * one that hatches without an answer simply leaves the offer behind.
+   */
+  awaitingName?: boolean
+  /**
+   * A flight pattern of its own, chosen in Care; without one it flies the
+   * garden's. Read through flightPatternFor (lib/flightPatterns): a pattern
+   * the garden no longer owns is kept here but not flown, so it returns if
+   * the pattern is owned again.
+   */
+  flightPatternId?: FlightPatternId
+  /**
+   * When the egg became a caterpillar, beside `chrysalisStartedAt` and
+   * `emergedAt`. Recorded from the diary on; an older companion's hatching
+   * is read from its last egg care day instead (lib/companionStory).
+   */
+  hatchedAt?: string
+  /**
+   * How many times each care action was given (action id -> count), from
+   * the diary on. Only the companion's story reads it: no reward ever
+   * depends on it.
+   */
+  careCounts?: Record<string, number>
+  /**
+   * Cosmetics this companion has worn (item ids), each once, in the order
+   * first put on, from the diary on. At most MAX_OUTFITS_WORN.
+   */
+  outfitsWorn?: string[]
+  /**
+   * The goal this companion is grown alongside while it grows: each day the
+   * goal is completed counts as a day of care for its current stage
+   * (careFromGoal in lib/lifecycle). Archiving or deleting the goal clears
+   * it, and so does emerging, with no stage left to grow; `grownAlongside`
+   * keeps the story. Optional: without it, care comes from the care menu
+   * alone, as it always has.
+   */
+  adoptedGoalId?: string
+  /**
+   * The goals this companion was grown alongside, from the diary on, and the
+   * days each counted as its care. Kept after the goal is archived or deleted
+   * and after the companion emerges, so its story keeps them. Only the story
+   * reads it, and careFromGoal, to count a day once.
+   */
+  grownAlongside?: GrownAlongside[]
+}
+
+/** A goal a companion was grown alongside, as its diary wrote it down. */
+export interface GrownAlongside {
+  goalId: string
+  /** The goal's title when it last counted, so a deleted goal keeps its name. */
+  title: string
+  /** Local dates (YYYY-MM-DD) it counted as a day of care, each once. */
+  dates: string[]
+}
+
+/** A look saved from a companion's outfit, to put on any companion later. */
+export interface OutfitPreset {
+  id: string
+  /** The gardener's name for it: trimmed, at most PRESET_NAME_LENGTH. */
+  name: string
+  /** Cosmetic item ids by slot, as a companion's `outfit` holds them. */
+  outfit: Partial<Record<OutfitSlot, string>>
 }
 
 export interface SunlightAward {
@@ -287,7 +607,11 @@ export interface JarPlacement {
 }
 
 export interface AppState {
-  version: 6
+  /**
+   * The version every garden is stored and exported at (storedVersionOf):
+   * 8, since the field book's sightings, which no earlier build knows.
+   */
+  version: 8
   profile?: Profile
   goals: Goal[]
   completions: DailyCompletion[]
@@ -311,6 +635,38 @@ export interface AppState {
   selectedFlightPatternId: FlightPatternId
   jars: JarInstance[]
   jarPlacements: JarPlacement[]
+  /**
+   * Real butterflies and plants the gardener noticed out in the world, in the
+   * order they were written down (lib/sightings). At most MAX_SIGHTINGS, and
+   * at most MAX_SIGHTING_PHOTOS of them with a photo (lib/customBackdrops).
+   */
+  sightings: Sighting[]
+}
+
+/** What a sighting names: a butterfly or a plant from the field guide. */
+export type SightingSubject =
+  | { kind: 'butterfly'; speciesId: string }
+  | { kind: 'plant'; plantId: string }
+
+/**
+ * A butterfly or plant seen in the wild and written in the field book. It
+ * earns nothing: no Sunlight, Nectar or Stardust. Noticing is the point.
+ */
+export type Sighting = SightingSubject & {
+  id: string
+  /** The local day it was seen (YYYY-MM-DD), never after the day it was written down. */
+  date: string
+  /** A few words, as the gardener wrote them. Absent rather than empty. */
+  note?: string
+  /**
+   * A photo, redrawn and re-encoded on this device as a personal image is
+   * (lib/imageImport), which leaves behind everything the camera wrote into
+   * the file, where it was taken included. Kept as a Blob, so fifty photos
+   * are not held in memory as text; a backup carries it as base64
+   * (lib/sightingPhotos), as it carries a personal image.
+   */
+  photo?: Blob
+  createdAt: string
 }
 
 export interface SpeciesDefinition {
@@ -321,7 +677,6 @@ export interface SpeciesDefinition {
   wingColors: [string, string]
   visualPattern: string
   wingShape: ButterflyWingShape
-  fact: string
 }
 
 export interface PlantDefinition {
@@ -334,9 +689,23 @@ export interface PlantDefinition {
   description: string
 }
 
+/** What kind of reflection a prompt invites. */
+export type ReflectionPromptFamily =
+  | 'noticing'
+  | 'savouring'
+  | 'gratitude'
+  | 'self-compassion'
+  | 'processing'
+  | 'rest'
+  | 'connection'
+  /** Good things noticed in nature, after McEwan et al. 2019. */
+  | 'nature'
+  | 'free'
+
 export interface ReflectionPrompt {
   id: string
   text: string
+  family: ReflectionPromptFamily
 }
 
 export interface Observation {
