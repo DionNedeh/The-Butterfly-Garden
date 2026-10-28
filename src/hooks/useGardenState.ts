@@ -1,604 +1,446 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { addDaysToLocalDate, toLocalDate } from '../lib/date'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { announce } from '../lib/announcer'
 import {
-  awardMoonlight,
-  awardSunlight,
-  createInitialState,
-  moonlightForDate,
-  plantSeed,
-  progressGarden,
-  type RecapDraft,
-} from '../lib/progression'
-import {
-  purchaseFlightPattern,
-  selectFlightPattern,
-} from '../lib/flightPatterns'
-import { placeJar, purchaseJar, removeJarPlacement } from '../lib/jars'
-import { availableBackdropIds } from '../lib/appearance'
-import {
-  putCustomBackdrop,
-  checkCustomBackdropRecord,
   canAddCustomBackdrop,
+  checkCustomBackdropRecord,
+  chooseNightCustomBackdrop,
+  putCustomBackdrop,
   removeCustomBackdrop,
   selectCustomBackdrop as selectCustomBackdropIn,
 } from '../lib/customBackdrops'
+import { toLocalDate, type RecapHours } from '../lib/date'
+import {
+  buyFlightPattern,
+  chooseCompanionFlight,
+  selectFlightPattern,
+} from '../lib/flightPatterns'
+import * as act from '../lib/gardenActions'
+import { gardenEvents } from '../lib/gardenEvents'
 import { hasGardenPassFeature } from '../lib/gardenPass'
-import { performCare } from '../lib/lifecycle'
 import {
-  equipOutfitItem,
-  purchaseShopItem,
-  unequipOutfitSlot,
-} from '../lib/wardrobe'
+  buyJar,
+  placeJar,
+  recycleJar,
+  removeJarPlacement,
+  restoreRecycledJar,
+  type JarRestoreOutcome,
+  type RecycledJar,
+  type RecycleOutcome,
+} from '../lib/jars'
+import { changeComfortPlan } from '../lib/comfortPlan'
+import { adoptGoal, performCare } from '../lib/lifecycle'
+import type { MotionPreference } from '../lib/motion'
+import type { ThemeChoice } from '../lib/theme'
+import * as looks from '../lib/outfitPresets'
 import { removePlant } from '../lib/plantManagement'
+import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
+import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
+import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
+import { setReminderTime } from '../lib/reminderTime'
+import { requestPersistentStorage } from '../lib/storage'
+import { markQuietWrite } from '../lib/quietWrites'
+import { noteVisit, putAwayWelcomeBack } from '../lib/visits'
 import {
-  gardenRepository,
-  readImportedState,
-  type GardenPart,
-  type LoadResult,
-} from '../repository/gardenRepository'
-import { createId } from '../lib/id'
+  readLetter,
+  setLetterQuotes,
+  setStarred,
+  type LetterQuotes,
+  type StarredKind,
+} from '../lib/letters'
+import {
+  buyShopItem,
+  equipOutfitItem,
+  unequipOutfitSlot,
+  wearOutfitPreset,
+  type WearLookResult,
+} from '../lib/wardrobe'
+import type { ChangeSightings } from '../lib/sightings'
+import type { FileCopy } from '../lib/sightingPhotos'
+import { gardenRepository } from '../repository/gardenRepository'
+import { storedVersionOf } from '../repository/validateGarden'
 import type {
   AmbientTrackId,
+  AppearanceTheme,
   AppState,
+  CheckInDetails,
+  ComfortPlan,
   CustomBackdrop,
   FlightPatternId,
   GardenBackdropId,
+  GardenPace,
   Goal,
   GoalSchedule,
   JarColorId,
+  MoodChoice,
   MoodEntry,
+  OutfitPreset,
   OutfitSlot,
   RecapEntry,
   ReflectionEntry,
+  RegionId,
+  TextSize,
 } from '../types'
+import { useMediaSaves, type MediaResult } from './useMediaSaves'
+import { usePersistence } from './usePersistence'
 
-/** Tabs tell each other when the shared garden changed underneath them. */
-const SYNC_CHANNEL = 'butterfly-garden-sync'
+export type { PersistenceStatus } from './usePersistence'
 
-export interface PersistenceStatus {
-  /**
-   * True when the stored garden could not be read. Saving stays disabled so
-   * this session can never overwrite data it failed to understand.
-   */
-  readOnly: boolean
-  reason?: LoadResult['reason']
-  /** Message from the most recent failed write, if any. */
-  writeError?: string
-}
+/** A goal chosen while the garden is made: a title, and perhaps its two-minute version. */
+export type StarterGoal = Pick<Goal, 'title' | 'tinyTitle'>
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message
-    ? error.message
-    : 'Your garden could not be saved to this device.'
-}
+/**
+ * The garden and everything that can be done to it.
+ *
+ * Composed from three parts, each with one job:
+ * - usePersistence: reading and writing the garden, other tabs, restores;
+ * - useMediaSaves: image saves that answer once their write lands;
+ * - lib/gardenActions and the other lib modules: what each action does,
+ *   as plain functions of the garden.
+ *
+ * What is left here is the wiring: reading the clock, routing each action
+ * through `update`, and marking the moments the gardener brought about.
+ */
+/** How many times a letter read is marked again after another tab wrote first. */
+const LETTER_READ_TRIES = 3
 
 export function useGardenState() {
-  const [state, setState] = useState<AppState>()
-  const [loading, setLoading] = useState(true)
-  const [persistence, setPersistence] = useState<PersistenceStatus>({
-    readOnly: false,
-  })
-  /** The exact object last known to be on disk; never re-saved as-is. */
-  const persistedRef = useRef<AppState>(undefined)
-  const mediaWaiters = useRef(
-    new Map<
-      CustomBackdrop,
-      (result: { ok: boolean; message?: string }) => void
-    >(),
+  const media = useMediaSaves()
+  const { state, setState, loading, persistence, setPersistence, readOnlyRef, lifecycle } =
+    usePersistence(gardenRepository, media)
+
+  /** Set by update(): the next state change is the gardener's own doing. */
+  const localChange = useRef(false)
+  const update = useCallback(
+    (recipe: (current: AppState) => AppState) => {
+      setState((current) => {
+        if (!current) return current
+        const next = recipe(current)
+        // Only a real change: a no-op left flagged would let the next sync
+        // from another tab be announced as this gardener's doing.
+        if (next !== current) localChange.current = true
+        return next
+      })
+    },
+    [setState],
   )
-  const readOnlyRef = useRef(false)
-  const channelRef = useRef<BroadcastChannel>(undefined)
 
-  const applyLoadResult = useCallback((result: LoadResult) => {
-    for (const resolve of mediaWaiters.current.values())
-      resolve({
-        ok: false,
-        message:
-          'The garden changed in another tab. Please try saving your image again.',
-      })
-    mediaWaiters.current.clear()
-    persistedRef.current = result.state
-    readOnlyRef.current = result.status === 'withheld'
-    setPersistence((current) => ({
-      ...current,
-      readOnly: result.status === 'withheld',
-      reason: result.reason,
-    }))
-    setState(
-      result.status === 'loaded' ? progressGarden(result.state) : result.state,
-    )
-  }, [])
-
+  // Mark what the gardener's own actions brought about. Only those: a sync
+  // from another tab, a load or a restore is not a moment to celebrate here.
+  const announcedFrom = useRef<AppState | undefined>(undefined)
   useEffect(() => {
-    let active = true
-    void gardenRepository.load().then((result) => {
-      if (!active) return
-      applyLoadResult(result)
-      setLoading(false)
-    })
-    const waiters = mediaWaiters.current
-    return () => {
-      active = false
-      for (const resolve of waiters.values())
-        resolve({ ok: false, message: 'Image saving was interrupted.' })
-      waiters.clear()
-    }
-  }, [applyLoadResult])
-
-  // Another tab wrote the shared garden; adopt its version instead of racing it.
-  useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return
-    const channel = new BroadcastChannel(SYNC_CHANNEL)
-    channelRef.current = channel
-    channel.onmessage = (
-      event: MessageEvent<{ type?: string; parts?: unknown }>,
-    ) => {
-      if (event.data?.type !== 'garden-saved' || readOnlyRef.current) return
-      // The sender names what it wrote, so only those parts are read back.
-      // A message without them -- an older tab -- falls back to a full load.
-      void gardenRepository.adopt(event.data.parts).then((result) => {
-        if (result.status === 'loaded') applyLoadResult(result)
-      })
-    }
-    return () => {
-      channel.close()
-      channelRef.current = undefined
-    }
-  }, [applyLoadResult])
-
-  const persist = useCallback(async (next: AppState) => {
-    try {
-      const written = await gardenRepository.save(next)
-      persistedRef.current = next
-      for (const [record, resolve] of mediaWaiters.current) {
-        if (next.customBackdrops.includes(record)) {
-          resolve({ ok: true })
-          mediaWaiters.current.delete(record)
-        }
-      }
-      setPersistence((current) =>
-        current.writeError ? { ...current, writeError: undefined } : current,
-      )
-      // Nothing changed on disk means nothing for another tab to pick up;
-      // announcing it anyway would make every other tab re-read for no reason.
-      if (written.length > 0) {
-        channelRef.current?.postMessage({
-          type: 'garden-saved',
-          parts: written,
-        })
-      }
-    } catch (error) {
-      for (const [record, resolve] of mediaWaiters.current) {
-        if (next.customBackdrops.includes(record)) {
-          const previous = persistedRef.current
-          // Keep the old scene active on quota/decode write failure. The editor
-          // still owns the unsaved draft; unrelated in-memory edits survive.
-          if (previous) setState((current) => current?.customBackdrops.includes(record) ? {
-            ...current,
-            customBackdrops: previous.customBackdrops,
-            profile: current.profile ? { ...current.profile, selectedCustomBackdropId: previous.profile?.selectedCustomBackdropId } : undefined,
-          } : current)
-          resolve({ ok: false, message: errorMessage(error) })
-          mediaWaiters.current.delete(record)
-        }
-      }
-      setPersistence((current) => ({
-        ...current,
-        writeError: errorMessage(error),
-      }))
-    }
-  }, [])
-
-  /**
-   * Written straight through rather than debounced. Coalescing writes would
-   * save a few milliseconds per action, but it also opens a window where a
-   * closed tab loses the reflection someone just wrote — a bad trade for a
-   * journal. The reference check below already skips redundant writes, so a
-   * state object that did not change is never re-serialised.
-   */
-  useEffect(() => {
-    if (loading || !state || persistence.readOnly) return
-    if (state === persistedRef.current) return
-    void persist(state)
-  }, [loading, state, persistence.readOnly, persist])
-
-  useEffect(() => {
-    const progress = () => {
-      setState((current) => (current ? progressGarden(current) : current))
-    }
-    const progressWhenVisible = () => {
-      if (document.visibilityState === 'visible') progress()
-    }
-
-    const interval = window.setInterval(progress, 60_000)
-    window.addEventListener('focus', progress)
-    document.addEventListener('visibilitychange', progressWhenVisible)
-
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', progress)
-      document.removeEventListener('visibilitychange', progressWhenVisible)
-    }
-  }, [])
-
-  const update = useCallback((recipe: (current: AppState) => AppState) => {
-    setState((current) => (current ? recipe(current) : current))
-  }, [])
+    const previous = announcedFrom.current
+    announcedFrom.current = state
+    if (!localChange.current) return
+    localChange.current = false
+    if (previous && state) announce(gardenEvents(previous, state))
+  }, [state])
 
   // Read-through to the newest state for actions that need to inspect it,
   // without giving those actions a new identity on every render.
   const stateRef = useRef(state)
-  stateRef.current = state
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
+  // Remember the day the garden was opened (lib/visits): once it has loaded,
+  // and whenever the page comes back into view, which is how an app left in
+  // the background for days is opened again. A day already noted hands back
+  // the same garden, so this writes at most once a day and never loops.
+  // Straight through setState: a visit is not the gardener's doing to mark.
+  const hasGarden = Boolean(state?.profile)
+  useEffect(() => {
+    if (loading || !hasGarden) return
+    const visit = () => {
+      if (document.visibilityState !== 'visible' || readOnlyRef.current) return
+      const today = toLocalDate()
+      // Most of the time today is already noted; then not even a render.
+      if (stateRef.current?.profile?.lastVisitOn === today) return
+      setState((current) => {
+        if (!current) return current
+        const next = noteVisit(current, today)
+        // Nothing of the gardener's is in this write (lib/quietWrites).
+        return next === current ? current : markQuietWrite(next)
+      })
+    }
+    visit()
+    window.addEventListener('focus', visit)
+    document.addEventListener('visibilitychange', visit)
+    return () => {
+      window.removeEventListener('focus', visit)
+      document.removeEventListener('visibilitychange', visit)
+    }
+  }, [loading, hasGarden, setState, readOnlyRef])
+
+  // The newest letter this tab read or put away. Marking it is a quiet write
+  // (lib/quietWrites), which a conflict with another tab drops without a word
+  // and replaces with that tab's garden. Unlike a visit, the other tab has not
+  // done this for us, so the mark is made again on the garden that arrived. A
+  // few tries at most: a write refused every time must not loop.
+  const letterRead = useRef<{ sunday: string; tries: number } | undefined>(undefined)
+  useEffect(() => {
+    const read = letterRead.current
+    if (!read || !state?.profile || readOnlyRef.current) return
+    if ((state.profile.lastLetterRead ?? '') >= read.sunday || read.tries >= LETTER_READ_TRIES) return
+    read.tries += 1
+    setState((current) => {
+      if (!current) return current
+      const next = readLetter(current, read.sunday)
+      return next === current ? current : markQuietWrite(next)
+    })
+  }, [state, setState, readOnlyRef])
 
   /**
    * Every action keeps a stable identity so memoized views (the month
    * planner in particular) are not re-rendered by the app shell.
    */
-  const actions = useMemo(
-    () => ({
-      onboard: (name: string, gardenName: string) => {
-        setState(createInitialState(name, gardenName))
+  const actions = useMemo(() => {
+    /**
+     * Run a reducer that says what it did, and say so: a purchase, or a jar
+     * recycled and its undo.
+     *
+     * The outcome is worked out on the newest garden, and that same result
+     * is what the update applies. The read-through moves on with it, so a
+     * second purchase made before React has drawn the first is told about
+     * the garden after the first, not the one before. Only if another tab's
+     * change lands in between does the reducer run again on the newer
+     * garden, which still refuses anything it cannot pay for.
+     */
+    const settle = <Outcome>(
+      run: (current: AppState) => { state: AppState; outcome: Outcome },
+      none: Outcome,
+    ): Outcome => {
+      const newest = stateRef.current
+      if (!newest) return none
+      const result = run(newest)
+      if (result.state !== newest) stateRef.current = result.state
+      update((current) => (current === newest ? result.state : run(current).state))
+      return result.outcome
+    }
+    /** Make a purchase and say how it went. */
+    const purchase = (buy: (current: AppState) => PurchaseResult): PurchaseOutcome =>
+      settle(buy, { kind: 'unavailable', reason: 'unknown' })
+    /**
+     * Change the field book's sightings, and say whether the garden took it.
+     * The field book's own rules (lib/sightings, fieldBookActions) arrive
+     * with the pages that log a sighting, never with the garden's first
+     * load; this applies what they work out, on the newest garden, as a
+     * purchase is. Only the sightings can change here: a sighting earns
+     * nothing.
+     */
+    const changeSightings: ChangeSightings = (change) => {
+      const now = new Date()
+      const run = (current: AppState) => {
+        const sightings = change(current.sightings, now)
+        const state = sightings === current.sightings ? current : { ...current, sightings }
+        return { state, outcome: state !== current }
+      }
+      return settle(run, false)
+    }
+    // A new photo is answered for as a personal image is (useMediaSaves):
+    // once it is on disk, or once it would not go in and has been taken back
+    // out, so that "saved" is said only of what was.
+    changeSightings.photoSaved = (photo) =>
+      media.waitFor(photo, (notCarried) => {
+        if (!stateRef.current?.sightings.some((sighting) => sighting.photo === photo)) notCarried()
+      })
+    return {
+      changeSightings,
+      /**
+       * Make the garden, with any starter goals chosen on the way in. They
+       * are added by the same reducer as a goal added on Today, as daily
+       * goals, in the one write that makes the garden.
+       */
+      onboard: (name: string, gardenName: string, starterGoals: readonly StarterGoal[] = []) => {
+        const today = toLocalDate()
+        setState(
+          starterGoals.reduce(
+            (garden, goal) =>
+              act.addGoal(garden, goal.title, 'daily', [], today, goal.tinyTitle),
+            createInitialState(name, gardenName),
+          ),
+        )
+        setPersistence((current) =>
+          current.notice ? { ...current, notice: undefined } : current,
+        )
+        // A new garden is the moment to ask the browser to keep it.
+        void requestPersistentStorage()
       },
       addGoal: (
         title: string,
         schedule: GoalSchedule,
         weekdays: number[] = [],
+        tinyTitle?: string,
       ) => {
-        update((current) => ({
-          ...current,
-          goals: [
-            ...current.goals,
-            {
-              id: createId(),
-              title: title.trim(),
-              schedule,
-              weekdays,
-              createdDate: toLocalDate(),
-              archived: false,
-            },
-          ],
-        }))
+        const today = toLocalDate()
+        update((current) => act.addGoal(current, title, schedule, weekdays, today, tinyTitle))
       },
-      updateGoal: (goal: Goal) => {
-        update((current) => ({
-          ...current,
-          goals: current.goals.map((item) =>
-            item.id === goal.id ? goal : item,
-          ),
-        }))
-      },
-      /** Retire a goal without discarding the days it was completed. */
-      setGoalArchived: (goalId: string, archived: boolean) => {
-        update((current) => ({
-          ...current,
-          goals: current.goals.map((goal) =>
-            goal.id === goalId ? { ...goal, archived } : goal,
-          ),
-        }))
-      },
+      updateGoal: (goal: Goal) => update((current) => act.updateGoal(current, goal)),
+      setGoalArchived: (goalId: string, archived: boolean) =>
+        update((current) => act.setGoalArchived(current, goalId, archived)),
       planGoal: (title: string, scheduledDate: string) => {
-        const trimmed = title.trim()
-        if (!trimmed) return
-        update((current) => ({
-          ...current,
-          goals: [
-            ...current.goals,
-            {
-              id: createId(),
-              title: trimmed,
-              schedule: 'once' as const,
-              weekdays: [],
-              createdDate: toLocalDate(),
-              archived: false,
-              scheduledDate,
-            },
-          ],
-        }))
+        if (!title.trim()) return
+        const today = toLocalDate()
+        update((current) => act.planGoal(current, title, scheduledDate, today))
       },
       skipGoal: (goalId: string) => {
-        const localDate = toLocalDate()
-        update((current) => ({
-          ...current,
-          goals: current.goals.map((goal) => {
-            if (goal.id !== goalId) return goal
-            const skipped = goal.skippedDates ?? []
-            return {
-              ...goal,
-              skippedDates: skipped.includes(localDate)
-                ? skipped.filter((date) => date !== localDate)
-                : [...skipped, localDate],
-            }
-          }),
-        }))
+        const today = toLocalDate()
+        update((current) => act.skipGoal(current, goalId, today))
       },
       snoozeGoal: (goalId: string, days: number) => {
-        const until = addDaysToLocalDate(toLocalDate(), Math.max(1, days))
-        update((current) => ({
-          ...current,
-          goals: current.goals.map((goal) => {
-            if (goal.id !== goalId) return goal
-            return {
-              ...goal,
-              snoozedUntil: until,
-              // A snoozed planned goal moves to its new day.
-              scheduledDate:
-                goal.schedule === 'once' && goal.scheduledDate
-                  ? until
-                  : goal.scheduledDate,
-            }
-          }),
-        }))
+        const today = toLocalDate()
+        update((current) => act.snoozeGoal(current, goalId, days, today))
       },
-      wakeGoal: (goalId: string) => {
-        update((current) => ({
-          ...current,
-          goals: current.goals.map((goal) =>
-            goal.id === goalId ? { ...goal, snoozedUntil: undefined } : goal,
-          ),
-        }))
-      },
-      deleteGoal: (goalId: string) => {
-        update((current) => ({
-          ...current,
-          goals: current.goals.filter((goal) => goal.id !== goalId),
-          completions: current.completions.filter(
-            (completion) => completion.goalId !== goalId,
-          ),
-        }))
-      },
+      wakeGoal: (goalId: string) => update((current) => act.wakeGoal(current, goalId)),
+      deleteGoal: (goalId: string) => update((current) => act.deleteGoal(current, goalId)),
       completeGoal: (goalId: string) => {
         const now = new Date()
-        const localDate = toLocalDate(now)
-        update((current) => {
-          const id = `${goalId}:${localDate}`
-          if (current.completions.some((item) => item.id === id)) return current
-          const completed = {
-            ...current,
-            completions: [
-              ...current.completions,
-              { id, goalId, localDate, completedAt: now.toISOString() },
-            ],
-          }
-          return awardSunlight(completed, `goal:${id}`, now)
-        })
+        update((current) => act.completeGoal(current, goalId, now))
       },
-      saveMood: (level: MoodEntry['level'], note: string) => {
+      uncompleteGoal: (goalId: string, localDate: string) =>
+        update((current) => act.uncompleteGoal(current, goalId, localDate)),
+      restoreGoal: (goal: Goal, index: number, completions: AppState['completions']) =>
+        update((current) => act.restoreGoal(current, goal, index, completions)),
+      saveMood: (choice: MoodChoice, note: string, details?: CheckInDetails) => {
         const now = new Date()
-        const localDate = toLocalDate(now)
-        update((current) => {
-          const existing = current.moods.find(
-            (item) => item.localDate === localDate,
-          )
-          const entry: MoodEntry = {
-            id: existing?.id ?? createId(),
-            localDate,
-            level,
-            note: note.trim(),
-            createdAt: existing?.createdAt ?? now.toISOString(),
-            updatedAt: now.toISOString(),
-          }
-          const moods = existing
-            ? current.moods.map((item) =>
-                item.id === existing.id ? entry : item,
-              )
-            : [...current.moods, entry]
-          return awardSunlight({ ...current, moods }, `mood:${localDate}`, now)
-        })
+        update((current) => act.saveMood(current, choice, note, now, details))
+        // The first thing written in the journal is the other moment to ask.
+        void requestPersistentStorage()
       },
-      deleteMood: (id: string) => {
-        update((current) => ({
-          ...current,
-          moods: current.moods.filter((item) => item.id !== id),
-        }))
-      },
+      deleteMood: (id: string) => update((current) => act.deleteMood(current, id)),
       updateMood: (entry: MoodEntry) => {
-        update((current) => ({
-          ...current,
-          moods: current.moods.map((item) =>
-            item.id === entry.id
-              ? { ...entry, updatedAt: new Date().toISOString() }
-              : item,
-          ),
-        }))
+        const now = new Date()
+        update((current) => act.updateMood(current, entry, now))
       },
       saveReflection: (promptId: string, body: string) => {
         const now = new Date()
-        const localDate = toLocalDate(now)
-        update((current) => {
-          const existing = current.reflections.find(
-            (item) => item.localDate === localDate,
-          )
-          const entry: ReflectionEntry = {
-            id: existing?.id ?? createId(),
-            localDate,
-            promptId,
-            body: body.trim(),
-            createdAt: existing?.createdAt ?? now.toISOString(),
-            updatedAt: now.toISOString(),
-          }
-          const reflections = existing
-            ? current.reflections.map((item) =>
-                item.id === existing.id ? entry : item,
-              )
-            : [...current.reflections, entry]
-          return awardSunlight(
-            { ...current, reflections },
-            `reflection:${localDate}`,
-            now,
-          )
-        })
+        update((current) => act.saveReflection(current, promptId, body, now))
+        void requestPersistentStorage()
       },
       updateReflection: (entry: ReflectionEntry) => {
-        update((current) => ({
-          ...current,
-          reflections: current.reflections.map((item) =>
-            item.id === entry.id
-              ? { ...entry, updatedAt: new Date().toISOString() }
-              : item,
-          ),
-        }))
+        const now = new Date()
+        update((current) => act.updateReflection(current, entry, now))
       },
-      deleteReflection: (id: string) => {
-        update((current) => ({
-          ...current,
-          reflections: current.reflections.filter((item) => item.id !== id),
-        }))
+      deleteReflection: (id: string) =>
+        update((current) => act.deleteReflection(current, id)),
+      /** A breathing session run to its end: its Sunlight, once a day. */
+      finishBreathing: () => {
+        const now = new Date()
+        update((current) => act.finishBreathing(current, now))
       },
-      /**
-       * Round out a day and collect its Moonlight.
-       *
-       * `localDate` is the day being closed, which is not always today: inside
-       * the after-midnight grace window it is yesterday, and the goal planned
-       * from the tomorrow note is relative to that day rather than to the
-       * clock. Closing Tuesday at 1:15am plans for Wednesday -- the day the
-       * gardener is standing in -- not Thursday.
-       */
+      /** A check-in for a day that has passed, marked as written later; it earns nothing. */
+      addEarlierMood: (localDate: string, choice: MoodChoice, note: string) => {
+        const now = new Date()
+        update((current) => act.addEarlierMood(current, localDate, choice, note, now))
+        void requestPersistentStorage()
+      },
+      /** A reflection for a day that has passed, marked as written later; it earns nothing. */
+      addEarlierReflection: (localDate: string, body: string) => {
+        const now = new Date()
+        update((current) => act.addEarlierReflection(current, localDate, body, now))
+        void requestPersistentStorage()
+      },
       collectMoonlight: (
         localDate: string,
-        draft: RecapDraft & { planForTomorrow?: boolean } = {},
+        draft: RecapDraft & { tomorrow?: readonly act.TomorrowNote[] } = {},
       ) => {
         const now = new Date()
-        update((current) => {
-          if (moonlightForDate(current, localDate)) return current
-
-          const title = draft.forTomorrow?.trim() ?? ''
-          const plannedGoal: Goal | undefined =
-            draft.planForTomorrow && title
-              ? {
-                  id: createId(),
-                  title,
-                  schedule: 'once',
-                  weekdays: [],
-                  createdDate: toLocalDate(now),
-                  archived: false,
-                  scheduledDate: addDaysToLocalDate(localDate, 1),
-                }
-              : undefined
-
-          const collected = awardMoonlight(
-            current,
-            localDate,
-            { ...draft, plannedGoalId: plannedGoal?.id },
-            now,
-          )
-          return plannedGoal
-            ? { ...collected, goals: [...collected.goals, plannedGoal] }
-            : collected
-        })
+        update((current) => act.collectMoonlight(current, localDate, draft, now))
       },
       updateRecap: (entry: RecapEntry) => {
-        update((current) => ({
-          ...current,
-          recaps: current.recaps.map((item) =>
-            item.id === entry.id
-              ? { ...entry, updatedAt: new Date().toISOString() }
-              : item,
-          ),
-        }))
+        const now = new Date()
+        update((current) => act.updateRecap(current, entry, now))
       },
-      /**
-       * Delete a recap. The `moonlight` ledger is deliberately untouched: the
-       * night has been collected, and rewriting what was said about it must not
-       * pay out again.
-       */
-      deleteRecap: (id: string) => {
-        update((current) => ({
-          ...current,
-          recaps: current.recaps.filter((item) => item.id !== id),
-        }))
-      },
-      plant: (plantId: string) => {
-        update((current) => plantSeed(current, plantId))
-      },
-      careForCreature: (creatureId: string, actionId: string) => {
-        update((current) => performCare(current, creatureId, actionId).state)
-      },
-      purchaseItem: (itemId: string) => {
-        update((current) => purchaseShopItem(current, itemId))
-      },
+      deleteRecap: (id: string) => update((current) => act.deleteRecap(current, id)),
+      plant: (plantId: string) => update((current) => plantSeed(current, plantId)),
+      careForCreature: (creatureId: string, actionId: string) =>
+        update((current) => performCare(current, creatureId, actionId).state),
+      purchaseItem: (itemId: string, quantity = 1) =>
+        purchase((current) => buyShopItem(current, itemId, quantity)),
       equipItem: (creatureId: string, itemId: string) => {
-        update((current) => equipOutfitItem(current, creatureId, itemId))
+        const now = new Date()
+        update((current) => equipOutfitItem(current, creatureId, itemId, undefined, now))
       },
-      unequipSlot: (creatureId: string, slot: OutfitSlot) => {
-        update((current) => unequipOutfitSlot(current, creatureId, slot))
+      unequipSlot: (creatureId: string, slot: OutfitSlot) =>
+        update((current) => unequipOutfitSlot(current, creatureId, slot)),
+      /** Save a companion's outfit as a look; an empty name takes the one suggested. */
+      savePreset: (creatureId: string, name: string) =>
+        update((current) => looks.saveOutfitPreset(current, creatureId, name)),
+      /**
+       * Put a saved look on a companion, and say which pieces were left off.
+       * Worked out on the newest garden, as a purchase is, so what Care says
+       * is what the update applies.
+       */
+      wearPreset: (creatureId: string, presetId: string): Omit<WearLookResult, 'state'> => {
+        const now = new Date()
+        const newest = stateRef.current
+        if (!newest) return { worn: [], skipped: [] }
+        const { state: next, ...outcome } = wearOutfitPreset(newest, creatureId, presetId, undefined, now)
+        if (next !== newest) stateRef.current = next
+        update((current) =>
+          current === newest
+            ? next
+            : wearOutfitPreset(current, creatureId, presetId, undefined, now).state,
+        )
+        return outcome
       },
-      removePlant: (plantId: string) => {
-        update((current) => removePlant(current, plantId))
-      },
-      purchaseFlightPattern: (patternId: FlightPatternId) => {
-        update((current) => purchaseFlightPattern(current, patternId))
-      },
-      selectFlightPattern: (patternId: FlightPatternId) => {
-        update((current) => selectFlightPattern(current, patternId))
-      },
+      renamePreset: (presetId: string, name: string) =>
+        update((current) => looks.renameOutfitPreset(current, presetId, name)),
+      deletePreset: (presetId: string) =>
+        update((current) => looks.deleteOutfitPreset(current, presetId)),
+      /** Put back a look just deleted, where it was: Undo. */
+      restorePreset: (preset: OutfitPreset, index: number) =>
+        update((current) => looks.restoreOutfitPreset(current, preset, index)),
+      removePlant: (plantId: string) => update((current) => removePlant(current, plantId)),
+      purchaseFlightPattern: (patternId: FlightPatternId) =>
+        purchase((current) => buyFlightPattern(current, patternId)),
+      selectFlightPattern: (patternId: FlightPatternId) =>
+        update((current) => selectFlightPattern(current, patternId)),
+      /** One companion's own pattern; none lets it fly the garden's again. */
+      chooseCompanionFlight: (creatureId: string, patternId: FlightPatternId | undefined) =>
+        update((current) => chooseCompanionFlight(current, creatureId, patternId)),
       purchaseJar: (character: string, colorId: JarColorId) => {
-        update((current) => purchaseJar(current, character, colorId))
+        const now = new Date()
+        return purchase((current) => buyJar(current, character, colorId, now))
       },
-      placeJar: (jarId: string, plantId: string) => {
-        update((current) => placeJar(current, jarId, plantId))
-      },
-      removeJarPlacement: (plantId: string) => {
-        update((current) => removeJarPlacement(current, plantId))
-      },
-      selectCompanion: (creatureId: string) => {
-        update((current) => ({
-          ...current,
-          profile: current.profile
-            ? { ...current.profile, activeCompanionId: creatureId }
-            : undefined,
-        }))
-      },
-      renameCreature: (creatureId: string, name: string) => {
-        const trimmed = name.trim()
-        if (!trimmed) return
-        update((current) => ({
-          ...current,
-          creatures: current.creatures.map((creature) =>
-            creature.id === creatureId
-              ? { ...creature, name: trimmed }
-              : creature,
-          ),
-        }))
-      },
+      placeJar: (jarId: string, plantId: string) =>
+        update((current) => placeJar(current, jarId, plantId)),
+      removeJarPlacement: (plantId: string) =>
+        update((current) => removeJarPlacement(current, plantId)),
+      /** Recycle a jar on no plant for half its Nectar, and say how it went. */
+      recycleJar: (jarId: string): RecycleOutcome =>
+        settle((current) => recycleJar(current, jarId), { kind: 'missing' }),
+      /** Undo a recycle, while the Nectar it brought is still there (lib/jars). */
+      restoreJar: (recycled: RecycledJar): JarRestoreOutcome =>
+        settle((current) => restoreRecycledJar(current, recycled), { kind: 'back' }),
+      selectCompanion: (creatureId: string) =>
+        update((current) => act.selectCompanion(current, creatureId)),
+      renameCreature: (creatureId: string, name: string) =>
+        update((current) => act.renameCreature(current, creatureId, name)),
+      /** Grow a companion alongside one of the goals, or none (undefined). */
+      adoptGoal: (creatureId: string, goalId: string | undefined) =>
+        update((current) => adoptGoal(current, creatureId, goalId)),
       selectBackdrop: (backdropId: GardenBackdropId) => {
-        update((current) => {
-          const progressed = progressGarden(current)
-          const profile = progressed.profile
-          // Availability, not stored unlocks: a pass scene is choosable while
-          // access holds without ever being written into the permanent list.
-          if (!profile || !availableBackdropIds(profile).includes(backdropId)) {
-            return progressed
-          }
-          return {
-            ...progressed,
-            profile: {
-              ...profile,
-              selectedBackdropId: backdropId,
-              // Choosing a built-in scene is a choice to stop showing the
-              // gardener's own image. The image itself is kept.
-              selectedCustomBackdropId: undefined,
-            },
-          }
-        })
+        const now = new Date()
+        update((current) => act.selectBackdrop(current, backdropId, now))
       },
       /**
        * Save one of the gardener's own images and show it.
        *
        * The record and the reference to it move in a single update, so the
-       * garden is never observed pointing at an image that is not there. It goes
-       * through the hook's ordinary update path rather than writing to the
+       * garden is never observed pointing at an image that is not there. It
+       * goes through the ordinary update path rather than writing to the
        * repository directly, which would race the save effect that owns
-       * persistence.
+       * persistence. The answer comes once that record reaches disk (see
+       * useMediaSaves).
        */
-      saveCustomBackdrop: async (
-        record: CustomBackdrop,
-      ): Promise<{ ok: boolean; message?: string }> => {
+      /** Saves an image, and chooses it for the day unless `select` is false. */
+      saveCustomBackdrop: async (record: CustomBackdrop, select = true): Promise<MediaResult> => {
         if (readOnlyRef.current)
           return {
             ok: false,
             message: 'This garden is read-only. Restore a valid backup first.',
           }
-        if (mediaWaiters.current.size)
+        if (media.waiting())
           return {
             ok: false,
             message: 'Another image is still saving. Please wait a moment.',
@@ -606,7 +448,11 @@ export function useGardenState() {
         if (!hasGardenPassFeature('custom-backdrops'))
           return {
             ok: false,
-            message: 'Custom backdrops are not available in this release.',
+            // Inline, so each build carries only its own wording.
+            message:
+              import.meta.env.VITE_PLATFORM === 'android'
+                ? 'Your own backdrops come with the Garden Pass.'
+                : 'Custom backdrops are not available in this release.',
           }
         const current = stateRef.current
         if (!current) return { ok: false, message: 'Open your garden first.' }
@@ -616,154 +462,148 @@ export function useGardenState() {
           const capacity = canAddCustomBackdrop(current)
           if (!capacity.ok) return capacity
         }
-        // The normal save effect owns the transaction. Resolve only after that
-        // exact image reaches disk, keeping quota failures visible in the editor.
-        return new Promise((resolve) => {
-          mediaWaiters.current.set(record, resolve)
-          update((state) => putCustomBackdrop(state, record))
+        return media.waitFor(record, (notCarried) => {
+          update((state) => {
+            const next = putCustomBackdrop(state, record, select)
+            if (!next.customBackdrops.includes(record)) notCarried()
+            return next
+          })
         })
       },
-      deleteCustomBackdrop: (id: string) => {
-        update((current) => removeCustomBackdrop(current, id))
-      },
+      deleteCustomBackdrop: (id: string) =>
+        update((current) => removeCustomBackdrop(current, id)),
       selectCustomBackdrop: (id: string | undefined) => {
         if (id === undefined || hasGardenPassFeature('custom-backdrops'))
           update((current) => selectCustomBackdropIn(current, id))
       },
-      /** Remember which release notes have been read. */
-      markReleaseSeen: (releaseId: string) => {
-        update((current) => {
-          if (!current.profile) return current
-          if (current.profile.lastSeenReleaseId === releaseId) return current
-          return {
-            ...current,
-            profile: { ...current.profile, lastSeenReleaseId: releaseId },
-          }
+      /** One of the gardener's images for the night, or undefined for the day's. */
+      chooseNightBackdrop: (id: string | undefined) => {
+        if (id === undefined || hasGardenPassFeature('custom-backdrops'))
+          update((current) => chooseNightCustomBackdrop(current, id))
+      },
+      markReleaseSeen: (releaseId: string) =>
+        update((current) => act.markReleaseSeen(current, releaseId)),
+      toggleAmbientSound: () => update(act.toggleAmbientSound),
+      setAmbientSound: (on: boolean) =>
+        update((current) => act.setAmbientSound(current, on)),
+      chooseNextPlant: (plantId: string | undefined) =>
+        update((current) => act.chooseNextPlant(current, plantId)),
+      setGentleDay: (gentle: boolean) => {
+        const today = toLocalDate()
+        update((current) => act.setGentleDay(current, gentle ? today : undefined))
+      },
+      setDayCountsHidden: (hidden: boolean) =>
+        update((current) => act.setDayCountsHidden(current, hidden)),
+      setRecapHours: (hours: RecapHours) =>
+        update((current) => act.setRecapHours(current, hours)),
+      selectAmbientTrack: (ambientTrack: AmbientTrackId) =>
+        update((current) => act.selectAmbientTrack(current, ambientTrack)),
+      /** How loud, 0 to 100 (lib/sound). */
+      setSoundVolume: (volume: number) =>
+        update((current) => setSoundVolume(current, volume)),
+      /** Night brings the piano, or not. */
+      setSoundFollowsTheme: (on: boolean) =>
+        update((current) => setSoundFollowsTheme(current, on)),
+      /** Keep playing in the background, or pause while hidden. */
+      setSoundInBackground: (on: boolean) =>
+        update((current) => setSoundInBackground(current, on)),
+      /** The header's switch, from the theme `showing` (it may be followed). */
+      toggleTheme: (showing?: AppearanceTheme) =>
+        update((current) => act.toggleTheme(current, showing)),
+      chooseTheme: (choice: ThemeChoice) =>
+        update((current) => act.chooseTheme(current, choice)),
+      setTextSize: (size: TextSize | undefined) =>
+        update((current) => act.setTextSize(current, size)),
+      /** Keep giving, or Classic again (undefined): see lib/gardenPace. */
+      setGardenPace: (pace: GardenPace | undefined) =>
+        update((current) => act.setGardenPace(current, pace)),
+      /** Where the gardener gardens, for the Guide's native marks, or none. */
+      setRegion: (region: RegionId | undefined) =>
+        update((current) => act.setRegion(current, region)),
+      /** The time of the daily visit just added to the calendar (lib/reminderTime). */
+      setReminderTime: (time: string) =>
+        update((current) => setReminderTime(current, time)),
+      /** Put the garden's welcome-back reveal away (lib/visits). */
+      putAwayWelcomeBack: () => update(putAwayWelcomeBack),
+      /**
+       * The letter for the week ending `sunday` was read, or put away
+       * (lib/letters). Straight through setState, like a visit: nothing of
+       * the gardener's is in this write, and an older letter read again
+       * hands back the same garden, so nothing is written.
+       */
+      readLetter: (sunday: string) => {
+        if (readOnlyRef.current) return
+        if (!letterRead.current || sunday > letterRead.current.sunday)
+          letterRead.current = { sunday, tries: 0 }
+        setState((current) => {
+          if (!current) return current
+          const next = readLetter(current, sunday)
+          return next === current ? current : markQuietWrite(next)
         })
       },
-      toggleAmbientSound: () => {
-        update((current) => ({
-          ...current,
-          profile: current.profile
-            ? {
-                ...current.profile,
-                ambientSound: !current.profile.ambientSound,
-              }
-            : undefined,
-        }))
-      },
-      selectAmbientTrack: (ambientTrack: AmbientTrackId) => {
-        update((current) => ({
-          ...current,
-          profile: current.profile
-            ? { ...current.profile, ambientTrack }
-            : undefined,
-        }))
-      },
-      toggleTheme: () => {
-        update((current) => ({
-          ...current,
-          profile: current.profile
-            ? {
-                ...current.profile,
-                theme: current.profile.theme === 'night' ? 'sunlight' : 'night',
-              }
-            : undefined,
-        }))
-      },
-      updateProfile: (
-        name: string,
-        gardenName: string,
-        reducedMotion: boolean,
-      ) => {
-        update((current) => ({
-          ...current,
-          profile: current.profile
-            ? {
-                ...current.profile,
-                name: name.trim() || current.profile.name,
-                gardenName: gardenName.trim() || current.profile.gardenName,
-                reducedMotion,
-              }
-            : undefined,
-        }))
-      },
-      /** A portable copy of the whole garden, for the gardener to keep. */
-      exportGarden: (): string => {
-        return JSON.stringify(
-          {
-            format: 'the-butterfly-garden',
-            exportedAt: new Date().toISOString(),
-            garden: stateRef.current,
-          },
-          null,
-          2,
-        )
-      },
-      /** Replace the garden with a previously exported backup. */
-      importGarden: async (
-        text: string,
-      ): Promise<{ ok: boolean; message: string }> => {
-        let parsed: unknown
-        try {
-          parsed = JSON.parse(text)
-        } catch {
-          return { ok: false, message: 'That file is not a garden backup.' }
+      /** Quote starred lines in letters, or never. */
+      setLetterQuotes: (quotes: LetterQuotes) =>
+        update((current) => setLetterQuotes(current, quotes)),
+      /** Star a check-in's note or a reflection for letters to quote, or not. */
+      setStarred: (kind: StarredKind, id: string, starred: boolean) =>
+        update((current) => setStarred(current, kind, id, starred)),
+      /**
+       * Change the comfort plan by one of its edits (lib/comfortPlanEdits),
+       * which its page brings with it, so the first load carries none of them.
+       */
+      changeComfortPlan: (change: (plan: ComfortPlan) => ComfortPlan) =>
+        update((current) => changeComfortPlan(current, change)),
+      updateProfile: (name: string, gardenName: string, motion: MotionPreference) =>
+        update((current) => act.updateProfile(current, name, gardenName, motion)),
+      /**
+       * A portable copy of the whole garden, for the gardener to keep.
+       *
+       * Refused while the garden is read-only: what is on screen then is a
+       * blank stand-in for a garden this build could not read, and a "backup"
+       * of it would be an empty file that a later restore trusts. The set-aside
+       * copy is what can be downloaded instead (see `quarantinedCopy`).
+       */
+      exportGarden: async (): Promise<FileCopy | undefined> => {
+        if (readOnlyRef.current) return undefined
+        // At the version an older app can tell apart (storedVersionOf).
+        const garden = stateRef.current && {
+          ...stateRef.current,
+          version: storedVersionOf(),
         }
-        const imported = readImportedState(parsed)
-        if (!imported) {
-          return {
-            ok: false,
-            message:
-              'That backup could not be read. It may be from a newer version of the garden.',
-          }
+        const file = {
+          format: 'the-butterfly-garden',
+          exportedAt: new Date().toISOString(),
+          appVersion: __APP_VERSION__,
+          garden,
         }
-        let written: GardenPart[]
-        try {
-          if (imported.customBackdrops.length) {
-            const { verifyBackdropImages } = await import('../lib/imageImport')
-            await verifyBackdropImages(imported.customBackdrops)
-          }
-          // Replaced rather than saved: a restore swaps the whole document, and
-          // writing only the difference from the garden being replaced can leave
-          // a collection's stored record behind.
-          written = await gardenRepository.replace(imported)
-        } catch (error) {
-          return { ok: false, message: errorMessage(error) }
-        }
-        persistedRef.current = imported
-        readOnlyRef.current = false
-        setPersistence({ readOnly: false })
-        setState(progressGarden(imported))
-        setLoading(false)
-        // Every other tab is holding the garden this one just replaced. Without
-        // this they keep it, and the next edit made in one of them writes part
-        // of it back over the restored garden.
-        channelRef.current?.postMessage({
-          type: 'garden-saved',
-          parts: written,
+        // A sighting's photo is a Blob, which goes into the file as text, as
+        // a personal image always has (lib/sightingPhotos); one that cannot
+        // be read is left out, and said so, rather than fail the backup.
+        return garden?.sightings.some((sighting) => sighting.photo)
+          ? (await import('../lib/sightingPhotos')).fileCopy(file)
+          : { text: JSON.stringify(file, null, 2) }
+      },
+      /**
+       * A copy from `exportGarden` reached the gardener: saved, downloaded or
+       * shared. `madeAt` is when it was exported, so anything written while
+       * the save screen was open still counts as new.
+       */
+      recordBackup: (madeAt: Date) =>
+        update((current) => act.recordBackup(current, madeAt)),
+      /**
+       * The backup file kept up to date was written (lib/autoBackupFile): a
+       * copy kept, made by the app on its own, so a quiet write.
+       */
+      recordAutomaticBackup: (madeAt: Date) => {
+        if (readOnlyRef.current) return
+        setState((current) => {
+          if (!current) return current
+          const next = act.recordBackup(current, madeAt)
+          return next === current ? current : markQuietWrite(next)
         })
-        return {
-          ok: true,
-          message: 'Your garden was restored from the backup.',
-        }
       },
-      deleteAll: async (): Promise<{ ok: boolean; message?: string }> => {
-        try {
-          await gardenRepository.clear()
-        } catch (error) {
-          return { ok: false, message: errorMessage(error) }
-        }
-        persistedRef.current = undefined
-        readOnlyRef.current = false
-        setPersistence({ readOnly: false })
-        setState(undefined)
-        setLoading(false)
-        return { ok: true }
-      },
-    }),
-    [update],
-  )
+    }
+  }, [update, media, setState, setPersistence, readOnlyRef])
 
-  return { state, loading, persistence, ...actions }
+  return { state, loading, persistence, ...lifecycle, ...actions }
 }

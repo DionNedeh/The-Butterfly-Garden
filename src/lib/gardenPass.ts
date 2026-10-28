@@ -1,4 +1,6 @@
 import type { ShopItemDefinition } from '../types'
+import { passStatus } from './passEntitlement'
+import { isAndroidApp } from './platform'
 
 /**
  * Things the Garden Pass covers.
@@ -21,11 +23,11 @@ export const GARDEN_PASS_FEATURES: readonly GardenPassFeature[] = [
 /**
  * Where access came from.
  *
- * `pwa-preview` is this release giving the features away and saying so.
- * `verified-provider` is reserved for a real, checked purchase and is never
- * produced by anything in this codebase -- there is no billing here to produce
- * it. Keeping the two apart is the whole point: a later project can add a
- * provider without any of this having quietly pretended to be one.
+ * `pwa-preview` is the PWA giving the features away and saying so.
+ * `verified-provider` is a purchase Google Play has confirmed on this device,
+ * and only playProvider -- the Android app's -- ever produces it. Keeping the
+ * two apart is the whole point: a preview can never pass itself off as a
+ * purchase.
  */
 export type GardenPassSource = 'pwa-preview' | 'verified-provider' | 'none'
 
@@ -65,6 +67,26 @@ export const previewProvider: GardenPassProvider = {
   }),
 }
 
+const PASS_REASON = 'Included with your Garden Pass.'
+const NOT_SUBSCRIBED_REASON = 'Part of the Garden Pass.'
+
+/**
+ * The Android app's provider: open exactly while Google Play, asked on this
+ * device, says the Garden Pass is active (passEntitlement.ts). It reads
+ * nothing from the garden, so a backup cannot open it either.
+ */
+export const playProvider: GardenPassProvider = {
+  source: 'verified-provider',
+  access: () =>
+    passStatus().state === 'active'
+      ? { allowed: true, source: 'verified-provider', reason: PASS_REASON }
+      : {
+          allowed: false,
+          source: 'verified-provider',
+          reason: NOT_SUBSCRIBED_REASON,
+        },
+}
+
 function previewEnabled(): boolean {
   // Release configuration, not user state. Absent means on: the 3.0 PWA ships
   // the preview, and a build can turn it off by setting this to "off".
@@ -73,13 +95,16 @@ function previewEnabled(): boolean {
 }
 
 /**
- * The provider in force, decided by how this build was configured.
+ * The provider in force, decided by how this build was configured: Google
+ * Play in the Android app (where the preview never applies), otherwise the
+ * PWA preview unless the build turned it off.
  *
  * Deliberately not derived from AppState. Reading entitlement out of the
  * garden would mean a hand-edited backup could grant it, and a backup is a
  * file the gardener owns and can write anything into.
  */
 export function releasePassProvider(): GardenPassProvider | undefined {
+  if (isAndroidApp()) return playProvider
   return previewEnabled() ? previewProvider : undefined
 }
 

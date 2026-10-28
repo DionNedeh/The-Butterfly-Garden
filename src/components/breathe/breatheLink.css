@@ -1,0 +1,19 @@
+/* The way into breathing from Today and the support page: small in its
+   line, but a full touch target. The colours are the theme's own link
+   colours, so night needs nothing more. */
+.breathe-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  /* Only as wide as its words, in a goal row's grid too. */
+  justify-self: start;
+  padding: 0 0.3rem;
+  color: var(--forest);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.breathe-link:hover {
+  color: var(--forest-dark);
+}

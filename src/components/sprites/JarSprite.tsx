@@ -1,5 +1,13 @@
 import { memo, useId } from 'react'
-import { jarColors } from '../../data/jars'
+import { JAR_LABEL, jarColors } from '../../data/jars'
+
+/**
+ * A mark above the letter (É, Å, Ñ): such a capital stands taller than the
+ * label is high at the usual size, and its accent would sit on the coloured
+ * glass, where the ink no longer has its contrast. It is drawn a little
+ * smaller and lower, so all of it stays on the cream.
+ */
+const MARK_ABOVE = /[\u0300-\u0314]/
 
 /** One piece of glassware, shared by the shop, plant bed and keepsake shelf. */
 export const JarSprite = memo(function JarSprite({
@@ -13,6 +21,7 @@ export const JarSprite = memo(function JarSprite({
 }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '')
   const color = jarColors.find((entry) => entry.id === colorId) ?? jarColors[0]
+  const raised = MARK_ABOVE.test(character.normalize('NFD'))
   return (
     <svg
       className="jar-sprite"
@@ -83,18 +92,18 @@ export const JarSprite = memo(function JarSprite({
         width="34"
         height="29"
         rx="9"
-        fill="#fff9e8"
+        fill={JAR_LABEL}
         stroke={color.border}
         strokeOpacity=".3"
       />
       <text
         x="40"
-        y="62"
+        y={raised ? 65 : 62}
         textAnchor="middle"
-        fill={color.border}
+        fill={color.text}
         fontFamily="Fraunces, Georgia, serif"
         fontWeight="650"
-        fontSize="25"
+        fontSize={raised ? 22 : 25}
       >
         {character}
       </text>

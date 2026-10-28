@@ -1,8 +1,10 @@
 import type {
   AppState,
+  AppearanceTheme,
   CustomBackdrop,
   CustomBackdropCrop,
   CustomBackdropMimeType,
+  Sighting,
 } from '../types'
 
 /**
@@ -27,6 +29,9 @@ export const CUSTOM_BACKDROP_LIMITS = {
   maxNameLength: 60,
   minZoom: 1,
   maxZoom: 3,
+  /** Brightness, in percent: darker for a light heading, lighter for a dark one. */
+  minBrightness: -40,
+  maxBrightness: 20,
 } as const
 
 export const SUPPORTED_MIME_TYPES: readonly CustomBackdropMimeType[] = [
@@ -65,75 +70,6 @@ function reject(
   message: string,
 ): CustomBackdropCheck {
   return { ok: false, reason, message }
-}
-
-/**
- * Whether a chosen file is worth decoding.
- *
- * Type and byte size are checked first because both are known without reading
- * the image, and decoding a very large file is the expensive, memory-hungry
- * step this is here to avoid.
- */
-export function checkSourceFile(file: {
-  type: string
-  size: number
-}): CustomBackdropCheck {
-  if (!isSupportedMimeType(file.type)) {
-    return reject(
-      'unsupported-type',
-      'Choose a JPEG, PNG or WebP image from your device.',
-    )
-  }
-  if (
-    !Number.isInteger(file.size) ||
-    file.size <= 0 ||
-    file.size > CUSTOM_BACKDROP_LIMITS.maxSourceBytes
-  ) {
-    return reject(
-      'too-large',
-      'That image is larger than 10 MB. Try a smaller copy.',
-    )
-  }
-  return OK
-}
-
-/** Whether decoded dimensions are within what can be resized safely. */
-export function checkDecodedSize(
-  width: number,
-  height: number,
-): CustomBackdropCheck {
-  if (
-    !Number.isInteger(width) ||
-    !Number.isInteger(height) ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return reject('invalid', 'That image could not be read.')
-  }
-  if (width * height > CUSTOM_BACKDROP_LIMITS.maxMegapixels * 1_000_000) {
-    return reject(
-      'too-many-pixels',
-      'That image has too many pixels to work with here.',
-    )
-  }
-  return OK
-}
-
-/**
- * The size to resize an image to, preserving its aspect ratio.
- *
- * Images already inside the limit are left alone rather than upscaled.
- */
-export function fitWithinMaxEdge(width: number, height: number) {
-  const longest = Math.max(width, height)
-  if (longest <= CUSTOM_BACKDROP_LIMITS.maxEdge) {
-    return { width: Math.round(width), height: Math.round(height) }
-  }
-  const factor = CUSTOM_BACKDROP_LIMITS.maxEdge / longest
-  return {
-    width: Math.max(1, Math.round(width * factor)),
-    height: Math.max(1, Math.round(height * factor)),
-  }
 }
 
 export const DEFAULT_CROP: CustomBackdropCrop = { x: 0.5, y: 0.5, zoom: 1 }
@@ -225,6 +161,15 @@ export function isValidBase64(value: unknown): value is string {
   )
 }
 
+/** A brightness the garden can show: a number within its range. */
+export function isValidBrightness(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    value >= CUSTOM_BACKDROP_LIMITS.minBrightness &&
+    value <= CUSTOM_BACKDROP_LIMITS.maxBrightness
+  )
+}
+
 /**
  * Whether a record is a usable stored image.
  *
@@ -267,6 +212,8 @@ export function isValidCustomBackdrop(value: unknown): value is CustomBackdrop {
   // The declared size has to match the data, or a quota decision made from it
   // would be based on a number the file simply asserted.
   if (decodedByteLength(record.imageData) !== byteLength) return false
+  if (record.brightness !== undefined && !isValidBrightness(record.brightness))
+    return false
 
   const crop = record.crop as Record<string, unknown> | undefined
   if (!crop || typeof crop !== 'object') return false
@@ -374,9 +321,17 @@ export function putCustomBackdrop(
  */
 export function removeCustomBackdrop(state: AppState, id: string): AppState {
   if (!state.customBackdrops.some((entry) => entry.id === id)) return state
+  // By day or by night: either choice that named it goes back to the default.
+  const forget = (chosen: string | undefined) => (chosen === id ? undefined : chosen)
   const profile =
-    state.profile && state.profile.selectedCustomBackdropId === id
-      ? { ...state.profile, selectedCustomBackdropId: undefined }
+    state.profile &&
+    (state.profile.selectedCustomBackdropId === id ||
+      state.profile.nightCustomBackdropId === id)
+      ? {
+          ...state.profile,
+          selectedCustomBackdropId: forget(state.profile.selectedCustomBackdropId),
+          nightCustomBackdropId: forget(state.profile.nightCustomBackdropId),
+        }
       : state.profile
   return {
     ...state,
@@ -405,17 +360,106 @@ export function selectCustomBackdrop(
 }
 
 /**
+ * Choose an image to show while the garden is at night, or `undefined` for
+ * the same as by day. An image that is not there is refused.
+ */
+export function chooseNightCustomBackdrop(
+  state: AppState,
+  id: string | undefined,
+): AppState {
+  if (!state.profile || state.profile.nightCustomBackdropId === id) return state
+  if (
+    id !== undefined &&
+    !state.customBackdrops.some((entry) => entry.id === id)
+  ) {
+    return state
+  }
+  return {
+    ...state,
+    profile: { ...state.profile, nightCustomBackdropId: id },
+  }
+}
+
+/**
  * The gardener's own image to draw, if there is one to draw.
  *
+ * At night (the theme on screen, which the caller knows), the night image
+ * when one is chosen and still there; otherwise, and by day, the selected one.
  * A reference to a missing record resolves to nothing rather than a blank
  * garden; the built-in backdrop remains underneath as the fallback.
  */
 export function activeCustomBackdrop(
   state: Pick<AppState, 'customBackdrops' | 'profile'>,
   allowed: boolean,
+  theme?: AppearanceTheme,
 ): CustomBackdrop | undefined {
   if (!allowed) return undefined
-  const id = state.profile?.selectedCustomBackdropId
-  if (!id) return undefined
-  return state.customBackdrops.find((entry) => entry.id === id)
+  const find = (id: string | undefined) =>
+    id ? state.customBackdrops.find((entry) => entry.id === id) : undefined
+  return (
+    (theme === 'night' ? find(state.profile?.nightCustomBackdropId) : undefined) ??
+    find(state.profile?.selectedCustomBackdropId)
+  )
+}
+
+/*
+ * The field book's photos (lib/sightings), and how many sightings it keeps.
+ * Kept here, beside the personal images' limits, because one pipeline makes
+ * both kinds of picture (lib/imageImport), and checking a stored garden
+ * needs both limits before any page that shows a sighting has loaded.
+ */
+
+/**
+ * Sightings a field book keeps. Generous: years of noticing, written down
+ * most days, still fit. A sighting without a photo is a few dozen bytes.
+ */
+export const MAX_SIGHTINGS = 2000
+
+/**
+ * Photos a field book keeps. Each is carried in every backup, so this keeps
+ * an ordinary backup small enough to send and to restore.
+ */
+export const MAX_SIGHTING_PHOTOS = 50
+
+/**
+ * A photo's longest edge, in pixels: enough to see what was seen, and half
+ * the edge a personal image keeps, since it is never a whole screen's backdrop.
+ */
+export const SIGHTING_PHOTO_MAX_EDGE = 1024
+
+/** A photo's largest size once re-encoded. */
+export const SIGHTING_PHOTO_MAX_BYTES = 400 * 1024
+
+/**
+ * Whether a value is a photo the field book can keep: a Blob in one of the
+ * formats a personal image may be, of a size a re-encoded photo can be.
+ */
+export function isSightingPhoto(value: unknown): value is Blob {
+  return (
+    value instanceof Blob &&
+    isSupportedMimeType(value.type) &&
+    value.size > 0 &&
+    value.size <= SIGHTING_PHOTO_MAX_BYTES
+  )
+}
+
+/** How many of these sightings have a photo, and how many bytes they take. */
+export function photosIn(sightings: readonly Sighting[]): { count: number; bytes: number } {
+  let count = 0
+  let bytes = 0
+  for (const sighting of sightings) {
+    if (!sighting.photo) continue
+    count += 1
+    bytes += sighting.photo.size
+  }
+  return { count, bytes }
+}
+
+/**
+ * Whether a garden brings pictures of the gardener's own, a personal image
+ * or a sighting's photo, which a restore checks as pictures before anything
+ * is replaced (lib/imageImport).
+ */
+export function hasPictures(garden: Pick<AppState, 'customBackdrops' | 'sightings'>): boolean {
+  return garden.customBackdrops.length > 0 || garden.sightings.some((sighting) => sighting.photo)
 }

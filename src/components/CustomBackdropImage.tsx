@@ -37,6 +37,14 @@ export function CustomBackdropImage({
       ref={ref}
       className="custom-scene-image"
       src={`data:${image.mimeType};base64,${image.imageData}`}
+      // On the picture only, never the heading over it. The image is still,
+      // under the moving layers, so the filter is painted once with it rather
+      // than every frame, and the stored pixels stay as taken.
+      style={
+        image.brightness
+          ? { filter: `brightness(${(100 + image.brightness) / 100})` }
+          : undefined
+      }
       alt=""
       onError={onError}
       draggable={false}

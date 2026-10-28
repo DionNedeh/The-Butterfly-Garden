@@ -1,0 +1,77 @@
+/* Settings' own rules. SettingsView imports this file, so it arrives with
+   Settings rather than in the stylesheet every page waits for. */
+
+/* How the garden looks: the theme and the text size, one group under the
+   other, each a column of the same choice rows as Garden motion. */
+.look-settings fieldset + fieldset {
+  margin-top: 1.4rem;
+}
+
+.look-settings .subtle-copy {
+  margin: 0.25rem 0 0;
+}
+
+/* The sound card: the volume, its value beside it, and when the sound plays. */
+.sound-volume {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 1.2rem;
+}
+
+.sound-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  max-width: 24rem;
+}
+
+/* A range is not a text box: none of the fields' padding, border or fill, and
+   the whole 44px height to press on. The accent follows the theme's forest,
+   which the night theme lightens. */
+.sound-volume input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  /* Never under 44px, whatever rounding the root size meets. */
+  height: max(44px, 2.75rem);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  accent-color: var(--forest);
+  cursor: pointer;
+}
+
+.sound-volume-value {
+  min-width: 3ch;
+  color: var(--forest-dark);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sound-volume .subtle-copy {
+  margin: 0;
+}
+
+.sound-switches {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.sound-switches .subtle-copy {
+  margin: 0;
+}
+
+/* Where you garden: the select with its words above, like Your rhythm's hours. */
+.region-select {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.8rem;
+  font-weight: 700;
+}
+
+.region-select select {
+  max-width: 18rem;
+}

@@ -1,0 +1,17 @@
+/* A companion's own flight pattern, on the Care page. CompanionFlight
+   imports this file, so it arrives with Care rather than in the stylesheet
+   every page waits for. Colours are the shared field's and the theme's. */
+.companion-flight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.7rem;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+.companion-flight select {
+  width: auto;
+  max-width: 100%;
+  font-weight: 400;
+}

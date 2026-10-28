@@ -1,0 +1,241 @@
+/* The Journal's newer rules. JournalView imports this file, so it arrives
+   with the Journal rather than in the stylesheet every page waits for.
+   Colours come from the theme's tokens, which the night theme already
+   redefines, so nothing here needs a .theme-night twin. */
+
+/* "On this day": quiet, so it reads as an offer rather than an alert. */
+.on-this-day h2 {
+  margin-bottom: 0.35rem;
+  font-size: clamp(1.2rem, 2.4vw, 1.5rem);
+}
+
+.on-this-day-date {
+  margin-bottom: 0.6rem;
+  color: var(--muted);
+}
+
+.on-this-day-weather {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-weight: 700;
+}
+
+.on-this-day-words {
+  border-left: 3px solid var(--line);
+  margin-bottom: 0.9rem;
+  padding-left: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.on-this-day-dismiss,
+.earlier-entry-cancel,
+.earlier-entry-problem .text-button {
+  min-height: 44px;
+}
+
+/* Add an entry for an earlier day. */
+.earlier-entry-start {
+  margin-bottom: 1rem;
+}
+
+.earlier-entry {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.earlier-entry h3 {
+  margin-bottom: 0;
+  font-size: 1.2rem;
+}
+
+.earlier-entry-explainer {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.earlier-entry-problem p,
+.earlier-entry-kept {
+  margin: 0;
+}
+
+.earlier-entry-kept {
+  font-weight: 700;
+}
+
+/* Live regions stay in the page while empty, so a screen reader is already
+   listening when they speak; they just give back the gap they would take. */
+.earlier-entry-problem:empty,
+.earlier-entry-kept:empty {
+  margin-top: -0.9rem;
+}
+
+.earlier-entry-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.earlier-entry-kinds legend {
+  margin-bottom: 0.35rem;
+  padding: 0;
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+/* The whole row is the target, at least 44px tall. */
+.earlier-entry-kind {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.earlier-entry-kind input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--forest);
+}
+
+.earlier-entry .subtle-copy {
+  margin: 0;
+}
+
+/* The mark on an entry written afterwards for its day. */
+.written-later {
+  display: block;
+  font-style: italic;
+}
+
+/* Field notes: what the summary counts, and when each species arrived. */
+.field-notes-counts {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.species-card small {
+  color: var(--muted);
+}
+
+/* Letters from Marigold (journal/Letters.tsx): folded at the top until
+   asked for, then the letter on a quiet rule, like a day given back above. */
+.letters > details > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.letters > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.letters-summary {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.letters-summary strong {
+  color: var(--forest-dark);
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2.4vw, 1.5rem);
+}
+
+.letters-status {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.letters-body {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.letters-weeks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* The chosen week keeps its colours and gains a heavier edge, so its
+   contrast is the same as every other week's in both themes. */
+.letters-week {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  background: transparent;
+  color: var(--forest-dark);
+  font-weight: 600;
+}
+
+.letters-week[aria-pressed='true'] {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 1px var(--forest);
+  font-weight: 800;
+}
+
+.letter {
+  border-left: 3px solid var(--line);
+  padding-left: 1rem;
+}
+
+.letter h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.15rem;
+}
+
+.letter p {
+  margin: 0 0 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+.letter-quote {
+  margin: 0 0 0.6rem;
+}
+
+.letter-quote figcaption {
+  color: var(--muted);
+}
+
+.letter-quote blockquote {
+  margin: 0.3rem 0 0;
+  font-style: italic;
+}
+
+.letter .letter-signature {
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.letters-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* "Star this line", beside an entry's Edit and Delete. */
+.journal-block .inline-actions {
+  flex-wrap: wrap;
+}
+
+.star-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 44px;
+}
+
+.star-toggle svg {
+  flex: none;
+}

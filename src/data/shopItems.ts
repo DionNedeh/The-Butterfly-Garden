@@ -420,12 +420,6 @@ export const shopItems: ShopItemDefinition[] = [
   },
 ]
 
-export const supplyItems = shopItems.filter((item) => item.kind === 'supply')
-export const cosmeticItems = shopItems.filter(
-  (item) => item.kind === 'cosmetic' && !item.premium,
-)
-export const premiumItems = shopItems.filter((item) => item.premium)
-
 export function getShopItem(itemId: string) {
   return shopItems.find((item) => item.id === itemId)
 }
