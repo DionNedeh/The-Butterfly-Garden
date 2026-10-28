@@ -1,81 +1,59 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { gainForVolume } from '../lib/sound'
+import type { Soundscape } from '../lib/soundscapes'
 import type { AmbientTrackId } from '../types'
 
 /**
- * Three on-device soundscapes built with the Web Audio API. The original
- * garden blend is preserved, the garden-only option omits its wind chimes,
- * and the piano option plays an original classical-style loop.
+ * The garden's sound: one audio context while the sound is on, its master
+ * gain (the gardener's volume and the fade-out timer), and the soundscape
+ * playing into it.
+ *
+ * The soundscapes themselves (lib/soundscapes) are loaded when the sound
+ * first starts, so the app's first load does not carry them. The context is
+ * made here, at once, inside the tap that turned the sound on: browsers let a
+ * page start sound only from a gesture, and one made later, once the module
+ * has arrived, could be held silent.
  */
 
 interface AmbientEngine {
   context: AudioContext
   master: GainNode
-  /** Pending timeouts only — entries are removed as they fire, so a long
-   *  listening session does not accumulate thousands of stale handles. */
-  timers: Set<number>
   stopped: boolean
+  /** The volume the master is at or on its way to; unset until first set. */
+  volume?: number
+  /** When the fade-out timer runs out, while one is running. */
+  fadeEndsAt?: number
+  /** The soundscape asked for, and the one playing once it has loaded. */
+  trackId?: AmbientTrackId
+  soundscape?: Soundscape
+  /** Suspended because the page was hidden, not held back by the browser. */
+  pausedWhileHidden: boolean
   /** Detaches the "resume on first gesture" listeners, if any are attached. */
   releaseGesture?: () => void
 }
 
-/** Schedule work on the engine, keeping the pending-timer set accurate. */
-function schedule(engine: AmbientEngine, run: () => void, delay: number) {
-  const id = window.setTimeout(() => {
-    engine.timers.delete(id)
-    run()
-  }, delay)
-  engine.timers.add(id)
+/** How long the fade-out timer takes to bring the sound down to nothing. */
+export const FADE_OUT_SECONDS = 60
+
+/** How long the sound takes to come in when it is switched on. */
+const FADE_IN_SECONDS = 3
+
+/** How long a change of volume takes: quick to follow, too slow to click. */
+const VOLUME_STEP_SECONDS = 0.12
+
+/** Taking the fade-out timer away brings the sound back over this long. */
+const RETURN_SECONDS = 2
+
+let soundscapes: Promise<typeof import('../lib/soundscapes')> | undefined
+
+/** The soundscapes' module, fetched once; a failed fetch is tried again next time. */
+function loadSoundscapes() {
+  soundscapes ??= import('../lib/soundscapes').catch((error: unknown) => {
+    soundscapes = undefined
+    throw error
+  })
+  return soundscapes
 }
-
-interface PianoNote {
-  beat: number
-  midi: number
-  duration: number
-  velocity?: number
-}
-
-const CHIME_NOTES = [523.25, 587.33, 659.25, 783.99, 880, 1046.5]
-const PIANO_BEAT_SECONDS = 60 / 72
-const PIANO_LOOP_BEATS = 24
-
-// An original eight-measure garden waltz in C major.
-const PIANO_CHORDS = [
-  [48, 55, 64],
-  [47, 55, 62],
-  [45, 52, 60],
-  [43, 52, 59],
-  [41, 48, 57],
-  [40, 48, 55],
-  [38, 45, 53],
-  [43, 50, 59],
-]
-
-const PIANO_MELODY: PianoNote[] = [
-  { beat: 0, midi: 64, duration: 1 },
-  { beat: 1, midi: 67, duration: 1 },
-  { beat: 2, midi: 72, duration: 1 },
-  { beat: 3, midi: 71, duration: 1.5 },
-  { beat: 4.5, midi: 67, duration: 0.5 },
-  { beat: 5, midi: 62, duration: 1 },
-  { beat: 6, midi: 64, duration: 1 },
-  { beat: 7, midi: 69, duration: 1 },
-  { beat: 8, midi: 72, duration: 1 },
-  { beat: 9, midi: 71, duration: 1 },
-  { beat: 10, midi: 67, duration: 1 },
-  { beat: 11, midi: 64, duration: 1 },
-  { beat: 12, midi: 65, duration: 1.5 },
-  { beat: 13.5, midi: 69, duration: 0.5 },
-  { beat: 14, midi: 72, duration: 1 },
-  { beat: 15, midi: 67, duration: 1 },
-  { beat: 16, midi: 64, duration: 1 },
-  { beat: 17, midi: 60, duration: 1 },
-  { beat: 18, midi: 62, duration: 1 },
-  { beat: 19, midi: 65, duration: 1 },
-  { beat: 20, midi: 69, duration: 1 },
-  { beat: 21, midi: 67, duration: 1 },
-  { beat: 22, midi: 62, duration: 1 },
-  { beat: 23, midi: 59, duration: 1 },
-]
 
 function createEngine(): AmbientEngine | undefined {
   const AudioContextClass =
@@ -85,10 +63,10 @@ function createEngine(): AmbientEngine | undefined {
   if (!AudioContextClass) return undefined
 
   // Browsers cap how many audio contexts a page may hold open at once, and
-  // stopEngine closes the previous one on a short delay, so toggling sound or
-  // switching tracks quickly can hit that ceiling. The constructor throws
-  // there, and this runs inside an effect, where an uncaught throw takes the
-  // whole app down. Falling silent is the right failure.
+  // stopEngine closes the previous one on a short delay, so toggling sound
+  // quickly can hit that ceiling. The constructor throws there, and this runs
+  // inside an effect, where an uncaught throw takes the whole app down.
+  // Falling silent is the right failure.
   let context: AudioContext
   try {
     context = new AudioContextClass()
@@ -98,13 +76,12 @@ function createEngine(): AmbientEngine | undefined {
   const master = context.createGain()
   master.gain.value = 0
   master.connect(context.destination)
-  master.gain.linearRampToValueAtTime(0.5, context.currentTime + 3)
 
   const engine: AmbientEngine = {
     context,
     master,
-    timers: new Set(),
     stopped: false,
+    pausedWhileHidden: false,
   }
 
   void context.resume().catch(() => undefined)
@@ -135,234 +112,10 @@ function createEngine(): AmbientEngine | undefined {
   return engine
 }
 
-function startGardenSound(engine: AmbientEngine, includeNotes: boolean) {
-  const { context, master } = engine
-
-  // Breeze: looped brown noise through a slowly wandering lowpass.
-  const seconds = 4
-  const buffer = context.createBuffer(
-    1,
-    context.sampleRate * seconds,
-    context.sampleRate,
-  )
-  const data = buffer.getChannelData(0)
-  let last = 0
-  for (let i = 0; i < data.length; i += 1) {
-    const white = Math.random() * 2 - 1
-    last = (last + 0.02 * white) / 1.02
-    data[i] = last * 3.2
-  }
-  const noise = context.createBufferSource()
-  noise.buffer = buffer
-  noise.loop = true
-  const breezeFilter = context.createBiquadFilter()
-  breezeFilter.type = 'lowpass'
-  breezeFilter.frequency.value = 320
-  const breezeGain = context.createGain()
-  breezeGain.gain.value = 0.06
-  const breezeLfo = context.createOscillator()
-  breezeLfo.frequency.value = 0.07
-  const breezeLfoGain = context.createGain()
-  breezeLfoGain.gain.value = 0.035
-  breezeLfo.connect(breezeLfoGain)
-  breezeLfoGain.connect(breezeGain.gain)
-  noise.connect(breezeFilter)
-  breezeFilter.connect(breezeGain)
-  breezeGain.connect(master)
-  noise.start()
-  breezeLfo.start()
-
-  if (includeNotes) {
-    const notes = () => {
-      if (engine.stopped) return
-      const strikes = 1 + Math.floor(Math.random() * 3)
-      for (let i = 0; i < strikes; i += 1) {
-        const when = context.currentTime + i * (0.18 + Math.random() * 0.3)
-        const note = CHIME_NOTES[Math.floor(Math.random() * CHIME_NOTES.length)]
-        const osc = context.createOscillator()
-        osc.type = 'sine'
-        osc.frequency.value = note
-        const shimmer = context.createOscillator()
-        shimmer.type = 'sine'
-        shimmer.frequency.value = note * 2.01
-        const gain = context.createGain()
-        const shimmerGain = context.createGain()
-        gain.gain.setValueAtTime(0, when)
-        gain.gain.linearRampToValueAtTime(0.055, when + 0.012)
-        gain.gain.exponentialRampToValueAtTime(0.0001, when + 2.8)
-        shimmerGain.gain.setValueAtTime(0, when)
-        shimmerGain.gain.linearRampToValueAtTime(0.018, when + 0.012)
-        shimmerGain.gain.exponentialRampToValueAtTime(0.0001, when + 1.6)
-        osc.connect(gain)
-        shimmer.connect(shimmerGain)
-        gain.connect(master)
-        shimmerGain.connect(master)
-        osc.start(when)
-        shimmer.start(when)
-        osc.stop(when + 3)
-        shimmer.stop(when + 2)
-      }
-      schedule(engine, notes, 3500 + Math.random() * 8000)
-    }
-    schedule(engine, notes, 1500)
-  }
-
-  // Rare, quiet birds from far away.
-  const bird = () => {
-    if (engine.stopped) return
-    const chirps = 2 + Math.floor(Math.random() * 3)
-    for (let i = 0; i < chirps; i += 1) {
-      const when = context.currentTime + i * (0.14 + Math.random() * 0.1)
-      const osc = context.createOscillator()
-      osc.type = 'sine'
-      const start = 2100 + Math.random() * 900
-      osc.frequency.setValueAtTime(start, when)
-      osc.frequency.exponentialRampToValueAtTime(start * 1.7, when + 0.06)
-      osc.frequency.exponentialRampToValueAtTime(start * 0.9, when + 0.11)
-      const gain = context.createGain()
-      gain.gain.setValueAtTime(0, when)
-      gain.gain.linearRampToValueAtTime(0.02, when + 0.015)
-      gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.13)
-      osc.connect(gain)
-      gain.connect(master)
-      osc.start(when)
-      osc.stop(when + 0.2)
-    }
-    schedule(engine, bird, 6000 + Math.random() * 14000)
-  }
-  schedule(engine, bird, 4000)
-}
-
-function midiToFrequency(midi: number) {
-  return 440 * 2 ** ((midi - 69) / 12)
-}
-
-function playPianoNote(
-  context: AudioContext,
-  output: AudioNode,
-  note: PianoNote,
-  loopStart: number,
-) {
-  const when = loopStart + note.beat * PIANO_BEAT_SECONDS
-  const duration = note.duration * PIANO_BEAT_SECONDS
-  const frequency = midiToFrequency(note.midi)
-  const envelope = context.createGain()
-  const filter = context.createBiquadFilter()
-  const peak = note.velocity ?? 0.035
-
-  filter.type = 'lowpass'
-  filter.frequency.value = Math.min(5200, 1800 + frequency * 5)
-  filter.Q.value = 0.7
-  envelope.gain.setValueAtTime(0.0001, when)
-  envelope.gain.exponentialRampToValueAtTime(peak, when + 0.012)
-  envelope.gain.exponentialRampToValueAtTime(peak * 0.48, when + 0.12)
-  envelope.gain.exponentialRampToValueAtTime(0.0001, when + duration + 1.15)
-  filter.connect(envelope)
-  envelope.connect(output)
-
-  const partials: Array<[number, OscillatorType, number]> = [
-    [1, 'triangle', 0.82],
-    [2.01, 'sine', 0.22],
-    [3.98, 'sine', 0.06],
-  ]
-  partials.forEach(([multiple, type, level]) => {
-    const oscillator = context.createOscillator()
-    const partialGain = context.createGain()
-    oscillator.type = type
-    oscillator.frequency.value = frequency * multiple
-    partialGain.gain.value = level
-    oscillator.connect(partialGain)
-    partialGain.connect(filter)
-    oscillator.start(when)
-    oscillator.stop(when + duration + 1.25)
-  })
-}
-
-function schedulePianoLoop(
-  engine: AmbientEngine,
-  pianoBus: AudioNode,
-  loopStart: number,
-) {
-  PIANO_CHORDS.forEach((chord, measure) => {
-    const measureBeat = measure * 3
-    playPianoNote(
-      engine.context,
-      pianoBus,
-      {
-        beat: measureBeat,
-        midi: chord[0] - 12,
-        duration: 2.7,
-        velocity: 0.022,
-      },
-      loopStart,
-    )
-    const pattern = [0, 1, 2, 1, 2, 1]
-    pattern.forEach((chordIndex, step) => {
-      playPianoNote(
-        engine.context,
-        pianoBus,
-        {
-          beat: measureBeat + step * 0.5,
-          midi: chord[chordIndex],
-          duration: 0.62,
-          velocity: step === 0 ? 0.026 : 0.02,
-        },
-        loopStart,
-      )
-    })
-  })
-
-  PIANO_MELODY.forEach((note) => {
-    playPianoNote(engine.context, pianoBus, note, loopStart)
-  })
-}
-
-function startPiano(engine: AmbientEngine) {
-  const { context, master } = engine
-  const pianoBus = context.createGain()
-  const delay = context.createDelay(1)
-  const echoGain = context.createGain()
-  pianoBus.gain.value = 0.82
-  delay.delayTime.value = 0.24
-  echoGain.gain.value = 0.12
-  pianoBus.connect(master)
-  pianoBus.connect(delay)
-  delay.connect(echoGain)
-  echoGain.connect(master)
-
-  const loopSeconds = PIANO_LOOP_BEATS * PIANO_BEAT_SECONDS
-  let nextLoopStart = context.currentTime + 0.12
-  const refill = () => {
-    if (engine.stopped) return
-    // Keep one loop queued ahead; refill halfway through to avoid a seam
-    // without holding two full arrangements in memory on mobile devices.
-    const horizon = context.currentTime + loopSeconds * 0.75
-    while (nextLoopStart < horizon) {
-      schedulePianoLoop(engine, pianoBus, nextLoopStart)
-      nextLoopStart += loopSeconds
-    }
-    schedule(engine, refill, (loopSeconds * 1000) / 2)
-  }
-  refill()
-}
-
-function startEngine(trackId: AmbientTrackId): AmbientEngine | undefined {
-  const engine = createEngine()
-  if (!engine) return undefined
-
-  if (trackId === 'piano-music') {
-    startPiano(engine)
-  } else {
-    startGardenSound(engine, trackId === 'garden-chimes')
-  }
-  return engine
-}
-
 function stopEngine(engine: AmbientEngine) {
   engine.stopped = true
   engine.releaseGesture?.()
-  engine.timers.forEach((timer) => window.clearTimeout(timer))
-  engine.timers.clear()
+  engine.soundscape?.stop()
   const { context, master } = engine
   try {
     master.gain.cancelScheduledValues(context.currentTime)
@@ -372,22 +125,171 @@ function stopEngine(engine: AmbientEngine) {
     // The context may already be closed.
   }
   window.setTimeout(() => {
+    engine.soundscape?.dispose()
+    master.disconnect()
     void context.close().catch(() => undefined)
   }, 900)
 }
 
-export function useAmbientSound(enabled: boolean, trackId: AmbientTrackId) {
+/**
+ * Play `trackId`, crossfading from whatever plays now, in the same context: a
+ * change of soundscape (night bringing the piano, say) may come with no tap
+ * to start a new one.
+ */
+function playTrack(engine: AmbientEngine, trackId: AmbientTrackId) {
+  engine.trackId = trackId
+  void loadSoundscapes()
+    .then(({ startSoundscape }) => {
+      if (engine.stopped || engine.trackId !== trackId) return
+      if (engine.soundscape?.trackId === trackId) return
+      engine.soundscape?.stop()
+      engine.soundscape = startSoundscape(engine.context, engine.master, trackId)
+    })
+    // The soundscapes could not be loaded: the garden stays quiet.
+    .catch(() => undefined)
+}
+
+/**
+ * Bring the master to the level it should have now, over `seconds`: the
+ * gardener's volume, or, within the fade-out timer's last minute, where the
+ * fade has reached by the clock, then on down to nothing as the timer runs
+ * out. Worked out from the wall clock each time, so it is right after a
+ * pause, when the audio clock stood still and the timer did not.
+ */
+function applyLevel(engine: AmbientEngine, seconds: number) {
+  if (engine.stopped || engine.volume === undefined) return
+  const { context, master } = engine
+  const full = gainForVolume(engine.volume)
+  const left =
+    engine.fadeEndsAt === undefined
+      ? Infinity
+      : (engine.fadeEndsAt - Date.now()) / 1000
+  const now = context.currentTime
+  try {
+    master.gain.cancelScheduledValues(now)
+    master.gain.setValueAtTime(master.gain.value, now)
+    if (left > FADE_OUT_SECONDS) {
+      master.gain.linearRampToValueAtTime(full, now + seconds)
+    } else {
+      const fading = (full * Math.max(0, left - seconds)) / FADE_OUT_SECONDS
+      master.gain.linearRampToValueAtTime(fading, now + seconds)
+      master.gain.linearRampToValueAtTime(0, now + Math.max(seconds, left))
+    }
+  } catch {
+    // The context may already be closed.
+  }
+}
+
+/** Carry on after a pause while the page was hidden. */
+function resumeAfterHiding(engine: AmbientEngine) {
+  engine.pausedWhileHidden = false
+  if (engine.stopped) return
+  void engine.context.resume().catch(() => undefined)
+  applyLevel(engine, VOLUME_STEP_SECONDS)
+}
+
+export interface AmbientSoundOptions {
+  /** Whether the sound plays. */
+  enabled: boolean
+  /** The soundscape that plays (lib/sound's heardTrack). */
+  trackId: AmbientTrackId
+  /** How loud, 0 to 100 (lib/sound). */
+  volume: number
+  /**
+   * When the fade-out timer runs out (ms since the epoch): the sound is
+   * lowered over the last FADE_OUT_SECONDS before then, and the caller turns
+   * it off at that time (hooks/useFadeOut). Taking it away brings the volume
+   * back.
+   */
+  fadeEndsAt?: number
+  /** Pause while the page is hidden, and pick up again when it is seen. */
+  pauseWhenHidden?: boolean
+}
+
+/**
+ * Play the garden's soundscape while `enabled`. Returns `hearVolume`, for a
+ * volume being chosen: heard at once, before it is stored.
+ */
+export function useAmbientSound({
+  enabled,
+  trackId,
+  volume,
+  fadeEndsAt,
+  pauseWhenHidden = false,
+}: AmbientSoundOptions) {
   const engineRef = useRef<AmbientEngine>(undefined)
 
+  // One context for as long as the sound is on.
   useEffect(() => {
-    if (enabled) {
-      engineRef.current = startEngine(trackId)
-    }
+    if (!enabled) return
+    const engine = createEngine()
+    engineRef.current = engine
     return () => {
-      if (engineRef.current) {
-        stopEngine(engineRef.current)
-        engineRef.current = undefined
+      if (engine) stopEngine(engine)
+      engineRef.current = undefined
+    }
+  }, [enabled])
+
+  useEffect(() => {
+    const engine = engineRef.current
+    if (enabled && engine) playTrack(engine, trackId)
+  }, [enabled, trackId])
+
+  // The first volume brings the sound in; each change after that glides.
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!enabled || !engine || engine.volume === volume) return
+    const first = engine.volume === undefined
+    engine.volume = volume
+    applyLevel(engine, first ? FADE_IN_SECONDS : VOLUME_STEP_SECONDS)
+  }, [enabled, volume])
+
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!enabled || !engine || fadeEndsAt === undefined) return
+    engine.fadeEndsAt = fadeEndsAt
+    const timer = window.setTimeout(
+      () => applyLevel(engine, VOLUME_STEP_SECONDS),
+      Math.max(0, fadeEndsAt - FADE_OUT_SECONDS * 1000 - Date.now()),
+    )
+    return () => {
+      window.clearTimeout(timer)
+      engine.fadeEndsAt = undefined
+      applyLevel(engine, RETURN_SECONDS)
+    }
+  }, [enabled, fadeEndsAt])
+
+  // Hidden, the context is suspended rather than closed, so the soundscape
+  // carries on where it was, with no new context to start without a tap.
+  // Only a sound that is playing is paused: one the browser is still holding
+  // back until a first tap is left to that tap.
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!enabled || !engine || !pauseWhenHidden) return
+    const follow = () => {
+      if (engine.stopped) return
+      if (document.visibilityState === 'hidden') {
+        if (engine.pausedWhileHidden || engine.context.state !== 'running') return
+        engine.pausedWhileHidden = true
+        void engine.context.suspend().catch(() => undefined)
+      } else if (engine.pausedWhileHidden) {
+        resumeAfterHiding(engine)
       }
     }
-  }, [enabled, trackId])
+    follow()
+    document.addEventListener('visibilitychange', follow)
+    return () => {
+      document.removeEventListener('visibilitychange', follow)
+      if (engine.pausedWhileHidden) resumeAfterHiding(engine)
+    }
+  }, [enabled, pauseWhenHidden])
+
+  const hearVolume = useCallback((chosen: number) => {
+    const engine = engineRef.current
+    if (!engine || engine.volume === chosen) return
+    engine.volume = chosen
+    applyLevel(engine, VOLUME_STEP_SECONDS)
+  }, [])
+
+  return { hearVolume }
 }

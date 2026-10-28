@@ -1,4 +1,6 @@
 import { memo, useId, type ReactNode } from 'react'
+import { auraMotion } from './auraMotion'
+import { SpriteLayer } from './SpriteFrame'
 import type { OutfitSlot } from '../../types'
 
 export interface OutfitAnchor {
@@ -391,10 +393,17 @@ function accessory(itemId: string): ReactNode {
 }
 
 function aura(itemId: string, glow: string): ReactNode {
+  const motion = auraMotion(itemId)
+  const art = auraArt(itemId, glow)
+  if (!motion || !art) return null
+  return <g className={`aura aura-${motion}`}>{art}</g>
+}
+
+function auraArt(itemId: string, glow: string): ReactNode {
   switch (itemId) {
     case 'clover-motes':
       return (
-        <g className="aura aura-petals">
+        <g>
           {[0, 90, 180, 270].map((angle) => (
             <g
               key={angle}
@@ -411,7 +420,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'dandelion-drift':
       return (
-        <g className="aura aura-petals" stroke="#bdb492" fill="none">
+        <g stroke="#bdb492" fill="none">
           {[30, 140, 250].map((angle) => (
             <g key={angle} transform={`rotate(${angle}) translate(0 -42)`}>
               <path d="M0 5V-5M-4-3L0 0L4-3M-3-5L0 0L3-5" />
@@ -421,7 +430,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'dew-orbit':
       return (
-        <g className="aura aura-fireflies">
+        <g>
           {[0, 120, 240].map((angle) => (
             <path
               key={angle}
@@ -435,7 +444,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'sun-pollen':
       return (
-        <g className="aura aura-sparkle">
+        <g>
           {[0, 50, 130, 190, 260, 310].map((angle, i) => (
             <circle
               key={angle}
@@ -450,7 +459,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'sparkle-aura':
       return (
-        <g className="aura aura-sparkle">
+        <g>
           {[0, 60, 120, 180, 240, 300].map((angle) => (
             <path
               key={angle}
@@ -464,7 +473,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'petal-swirl':
       return (
-        <g className="aura aura-petals">
+        <g>
           {[20, 110, 200, 290].map((angle) => (
             <ellipse
               key={angle}
@@ -482,7 +491,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'firefly-glow':
       return (
-        <g className="aura aura-fireflies">
+        <g>
           {[45, 225].map((angle) => (
             <g key={angle} transform={`rotate(${angle})`}>
               <circle cx="0" cy="-42" r="2.4" fill="#f5e08a" opacity="0.95" />
@@ -493,7 +502,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'rainbow-trail':
       return (
-        <g className="aura aura-rainbow">
+        <g>
           {['#dd7590', '#efb864', '#8fbfa3', '#80b1d3'].map((color, i) => (
             <path
               key={color}
@@ -509,7 +518,7 @@ function aura(itemId: string, glow: string): ReactNode {
       )
     case 'aurora-aura':
       return (
-        <g className="aura aura-aurora">
+        <g>
           <circle
             r="46"
             fill="none"
@@ -570,3 +579,60 @@ export const OutfitOverlay = memo(function OutfitOverlay({
     </g>
   )
 })
+
+/** `x% y%` of a point in a viewBox, for a layer's transform-origin. */
+function originOf(viewBox: string, x: number, y: number): string {
+  const [, , width, height] = viewBox.split(' ').map(Number)
+  return `${(x / width) * 100}% ${(y / height) * 100}%`
+}
+
+/**
+ * The aura on its own sprite layer, turning about the body. The motion is on
+ * the layer, not on the art inside it, so it runs on the compositor.
+ */
+export function AuraLayer({
+  viewBox,
+  outfit,
+  anchor,
+}: {
+  viewBox: string
+  outfit: Partial<Record<OutfitSlot, string>>
+  anchor: OutfitAnchor
+}) {
+  const motion = outfit.aura ? auraMotion(outfit.aura) : undefined
+  if (!motion) return null
+  return (
+    <SpriteLayer
+      viewBox={viewBox}
+      className={`aura-layer aura-motion-${motion}`}
+      style={{ transformOrigin: originOf(viewBox, anchor.bodyX, anchor.bodyY) }}
+    >
+      <OutfitOverlay outfit={outfit} anchor={anchor} layer="ambient" />
+    </SpriteLayer>
+  )
+}
+
+/**
+ * Everything a butterfly wears, as layers above its body: the aura, then
+ * the accessory and headwear, in the order they always drew.
+ */
+export function OutfitLayers({
+  viewBox,
+  outfit,
+  anchor,
+}: {
+  viewBox: string
+  outfit: Partial<Record<OutfitSlot, string>>
+  anchor: OutfitAnchor
+}) {
+  return (
+    <>
+      <AuraLayer viewBox={viewBox} outfit={outfit} anchor={anchor} />
+      {(outfit.accessory || outfit.headwear) && (
+        <SpriteLayer viewBox={viewBox}>
+          <OutfitOverlay outfit={outfit} anchor={anchor} layer="attached" />
+        </SpriteLayer>
+      )}
+    </>
+  )
+}

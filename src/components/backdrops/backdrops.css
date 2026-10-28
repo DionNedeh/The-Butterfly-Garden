@@ -1,0 +1,58 @@
+/* A gardener's own images: turning and brightness in the editor, and the
+   choice of image by night in the gallery. Both import this file, so it
+   arrives with them rather than in the stylesheet every page waits for.
+   Colours are the theme's tokens, which the night theme redefines, or the
+   garden heading's own, each with its .theme-night twin beside it. Nothing
+   here moves. */
+
+/* The preview's caption is drawn as the garden's heading is, with no backing
+   of its own, so brightness is judged by what it is for: the heading
+   reading well on the picture. */
+.backdrop-editor .crop-caption {
+  background: none;
+  color: #244a36;
+  font-size: 1.35rem;
+  text-shadow: 0 1px 12px #fffcdf;
+}
+.theme-night .backdrop-editor .crop-caption {
+  color: #f2efd9;
+  text-shadow: 0 2px 10px #142d30;
+}
+
+.image-adjustments {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.turn-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+/* Unavailable while a turn is made, but still focusable: see the editor. */
+.turn-controls .secondary-button[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: progress;
+}
+.brightness-control input {
+  width: 100%;
+  accent-color: var(--forest);
+}
+.adjustment-value {
+  color: var(--muted);
+  font-weight: 400;
+}
+@media (max-width: 600px) {
+  .image-adjustments {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.night-backdrop-choice {
+  margin-top: 1.5rem;
+}
+.night-backdrop-choice .subtle-copy {
+  margin: 0 0 0.25rem;
+}

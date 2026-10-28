@@ -101,9 +101,9 @@ describe('Garden Pass access', () => {
     expect(access.source).toBe('none')
   })
 
-  it('produces verified-provider from nothing in this codebase', () => {
-    // There is no billing here. Anything reporting a verified purchase would
-    // be a fake one.
+  it('never reports a verified purchase from the preview or no provider', () => {
+    // Only the Android app's Play provider may say "verified-provider"
+    // (gardenPass.play.test.ts); the preview reporting one would be a fake.
     for (const feature of GARDEN_PASS_FEATURES) {
       expect(gardenPassAccess(feature, previewProvider).source).not.toBe(
         'verified-provider',

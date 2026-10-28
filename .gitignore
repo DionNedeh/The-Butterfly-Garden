@@ -13,6 +13,7 @@ dist-ssr
 *.local
 test-results
 playwright-report
+coverage
 
 # Editor directories and files
 .vscode/*
@@ -25,3 +26,9 @@ playwright-report
 *.sln
 *.sw?
 BUTTERFLY_GARDEN_2.0_TO_3.0_PLAN.md
+dist-android
+
+# Signing keys never belong in the repository, wherever keytool was run.
+*.jks
+*.keystore
+*.p12

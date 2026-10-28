@@ -1,3 +1,4 @@
+import { daysBetweenLocalDates, toLocalDate } from './date'
 import { hasGardenPassFeature, type GardenPassProvider } from './gardenPass'
 import type {
   AppState,
@@ -6,7 +7,6 @@ import type {
   Profile,
 } from '../types'
 
-const DAY_MS = 86_400_000
 
 /** The scene every garden starts with, and the fallback for everything else. */
 export const DEFAULT_BACKDROP_ID: GardenBackdropId = 'sunlit-meadow'
@@ -83,10 +83,16 @@ export function backdropUnlockDays(
   return backdrop.unlock.kind === 'garden-age' ? backdrop.unlock.days : 0
 }
 
+/**
+ * How many calendar days old the garden is, by the gardener's own clock.
+ *
+ * Counted in local days, not 24-hour periods: a garden made on Monday evening
+ * is a day old on Tuesday morning, which is how "opens in 4 days" reads.
+ */
 export function elapsedGardenDays(profile: Profile, now = new Date()) {
-  const createdAt = new Date(profile.createdAt).getTime()
-  if (!Number.isFinite(createdAt)) return 0
-  return Math.max(0, Math.floor((now.getTime() - createdAt) / DAY_MS))
+  const createdAt = new Date(profile.createdAt)
+  if (!Number.isFinite(createdAt.getTime())) return 0
+  return Math.max(0, daysBetweenLocalDates(toLocalDate(createdAt), toLocalDate(now)))
 }
 
 /**

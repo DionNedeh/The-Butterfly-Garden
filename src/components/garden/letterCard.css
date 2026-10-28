@@ -1,0 +1,50 @@
+/* The garden's note that a letter from Marigold is waiting (LetterCard.tsx).
+   The component imports this file, so it arrives only while a letter waits,
+   never with the garden's first load. Colours come from the theme's tokens,
+   which the night theme redefines, so nothing here needs a .theme-night twin.
+   It rises in like every card (theme-aurora's card-rise, only opacity and
+   transform), which reduced motion already stills. */
+
+.letter-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  margin: 1rem 0 0;
+  padding: 0.9rem 1.1rem;
+}
+
+.letter-card-envelope {
+  flex: none;
+  /* The forest ink, not gold: AA against the card in both themes. */
+  color: var(--forest);
+}
+
+.letter-card-words {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.letter-card h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.1rem;
+}
+
+.letter-card p {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+}
+
+.letter-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.letter-card-dismiss {
+  min-width: 44px;
+  min-height: 44px;
+}

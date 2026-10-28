@@ -1,9 +1,16 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
-import { createInitialState } from '../lib/progression'
-import type { AppState, Goal } from '../types'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { goalSuggestions } from '../data/goalSuggestions'
+import { seasonalPrompts, type SeasonalPrompt } from '../data/prompts'
+import { addDaysToLocalDate, recapOpensAt } from '../lib/date'
+import { resetDrafts } from '../lib/drafts'
+import { createInitialState, MAX_PLANT_GROWTH } from '../lib/progression'
+import { promptForDay } from '../lib/prompts'
+import type { AppState, Goal, MoodEntry, PlantInstance, Profile } from '../types'
+import { NO_DAYS_CHOSEN } from './GoalEditor'
 import { TodayView } from './TodayView'
+import { UNDO_MS } from './UndoToast'
 
 const TODAY = '2026-09-05'
 const YESTERDAY = '2026-09-04'
@@ -18,8 +25,11 @@ function goal(overrides: Partial<Goal> & Pick<Goal, 'id' | 'title'>): Goal {
   }
 }
 
-function renderToday(state: AppState, overrides: Record<string, unknown> = {}) {
-  const handlers = {
+/** Everything Today is given, with a fresh mock for each handler. */
+function todayProps(state: AppState, overrides: Record<string, unknown> = {}) {
+  return {
+    state,
+    today: TODAY,
     onSaveMood: vi.fn(),
     onSaveReflection: vi.fn(),
     onAddGoal: vi.fn(),
@@ -31,12 +41,25 @@ function renderToday(state: AppState, overrides: Record<string, unknown> = {}) {
     onWakeGoal: vi.fn(),
     onPlanGoal: vi.fn(),
     onSetGoalArchived: vi.fn(),
+    onUncompleteGoal: vi.fn(),
+    onRestoreGoal: vi.fn(),
+    onAdoptGoal: vi.fn(),
     onOpenRecap: vi.fn(),
     moonlightCollected: false,
     ...overrides,
   }
-  render(<TodayView state={state} today={TODAY} {...handlers} />)
-  return handlers
+}
+
+function renderToday(state: AppState, overrides: Record<string, unknown> = {}) {
+  const props = todayProps(state, overrides)
+  render(<TodayView {...props} />)
+  return props
+}
+
+/** A new garden with some of the gardener's own settings, and anything else given. */
+function gardenWith(profile: Partial<Profile>, rest: Partial<AppState> = {}): AppState {
+  const state = createInitialState('Tester', 'Test Garden')
+  return { ...state, ...rest, profile: { ...state.profile!, ...profile } }
 }
 
 describe('TodayView goals', () => {
@@ -79,7 +102,7 @@ describe('TodayView goals', () => {
 
     expect(screen.getByText('Drink some water')).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /drink some water completed/i }),
+      screen.getByRole('button', { name: /done: drink some water/i }),
     ).toBeDisabled()
   })
 
@@ -101,8 +124,28 @@ describe('TodayView goals', () => {
     renderToday(state)
 
     expect(
-      screen.getByRole('button', { name: /complete three slow breaths/i }),
+      screen.getByRole('button', { name: /care for three slow breaths/i }),
     ).toBeEnabled()
+  })
+
+  it('names the companions each goal is growing, and not a butterfly', () => {
+    const base = createInitialState('Tester', 'Test Garden')
+    const sol = base.creatures[0]
+    renderToday({
+      ...base,
+      goals: [
+        goal({ id: 'walk', title: 'Walk outside', schedule: 'daily' }),
+        goal({ id: 'water', title: 'Drink water', schedule: 'daily' }),
+      ],
+      creatures: [
+        { ...sol, adoptedGoalId: 'walk' },
+        { ...sol, id: 'pip', name: 'Pip', stage: 'egg', adoptedGoalId: 'walk' },
+        { ...sol, id: 'fern', name: 'Fern', stage: 'butterfly', adoptedGoalId: 'water' },
+      ],
+    })
+    const badges = Array.from(document.querySelectorAll('.goal-companions'))
+    expect(badges.map((badge) => badge.textContent)).toEqual([', growing alongside Sol and Pip'])
+    expect(badges[0].closest('[data-goal-id]')).toHaveAttribute('data-goal-id', 'walk')
   })
 
   it('archives a goal instead of destroying the days it was completed', async () => {
@@ -113,7 +156,7 @@ describe('TodayView goals', () => {
     }
     const { onSetGoalArchived, onDeleteGoal } = renderToday(state)
 
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'More for Water the plants' }))
     await user.click(screen.getByRole('button', { name: 'Archive' }))
 
     expect(onSetGoalArchived).toHaveBeenCalledWith('weekly', true)
@@ -130,7 +173,7 @@ describe('TodayView goals', () => {
     }
     const { onSetGoalArchived } = renderToday(state)
 
-    expect(screen.queryByRole('button', { name: /complete old routine/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /care for old routine/i })).toBeNull()
     const archived = screen.getByText(/archived \(1\)/i).closest('details')
     expect(archived).not.toBeNull()
     await user.click(within(archived as HTMLElement).getByRole('button', { name: 'Restore' }))
@@ -144,6 +187,163 @@ describe('TodayView goals', () => {
     renderToday(createInitialState('Tester', 'Test Garden'))
     const todayCell = document.querySelector('.calendar-day.today')
     expect(todayCell?.querySelector('.calendar-day-number')?.textContent).toBe('5')
+  })
+
+  it('refuses a goal on "Selected days" until at least one day is chosen', async () => {
+    // Such a goal would never be due, so it would never be seen again.
+    const user = userEvent.setup()
+    const { onAddGoal } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.type(screen.getByRole('combobox', { name: 'Add a goal' }), 'Stretch')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Repeat' }), 'Selected days')
+    for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']) {
+      await user.click(screen.getByRole('checkbox', { name: day }))
+    }
+
+    expect(screen.getByRole('alert')).toHaveTextContent(NO_DAYS_CHOSEN)
+    const add = screen.getByRole('button', { name: 'Add goal' })
+    expect(add).toBeDisabled()
+    // Not even a submit that goes around the disabled button gets through.
+    fireEvent.submit(add.closest('form')!)
+    expect(onAddGoal).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Wed' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    await user.click(add)
+    expect(onAddGoal).toHaveBeenCalledWith('Stretch', 'weekdays', [3], undefined)
+  })
+
+  it('adds a goal with its two-minute version, trimmed', async () => {
+    const user = userEvent.setup()
+    const { onAddGoal } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.type(screen.getByRole('combobox', { name: 'Add a goal' }), 'Tidy the desk')
+    await user.type(
+      screen.getByRole('textbox', { name: 'A two-minute version (optional)' }),
+      '  Clear one corner  ',
+    )
+    await user.click(screen.getByRole('button', { name: 'Add goal' }))
+    expect(onAddGoal).toHaveBeenCalledWith('Tidy the desk', 'daily', [], 'Clear one corner')
+    // The form is ready for the next one.
+    expect(screen.getByRole('combobox', { name: 'Add a goal' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: 'A two-minute version (optional)' })).toHaveValue('')
+  })
+
+  it('still suggests every idea while a title is typed', () => {
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    const list = document.getElementById('suggested-goals')!
+    expect(
+      Array.from(list.querySelectorAll('option'), (option) => option.value),
+    ).toEqual(goalSuggestions.map((idea) => idea.title))
+  })
+})
+
+describe('ideas for a goal on Today', () => {
+  const tagOf = new Map(goalSuggestions.map((idea) => [idea.title, idea.tag]))
+  const ideasGroup = () => screen.getByRole('group', { name: 'Ideas' })
+  const shownIdeas = () =>
+    within(ideasGroup())
+      .getAllByRole('button')
+      .map((button) => button.textContent ?? '')
+      .filter((text) => text !== 'Other ideas')
+
+  it('offers three ideas, each from a different part of wellbeing', () => {
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    const ideas = shownIdeas()
+    expect(ideas).toHaveLength(3)
+    expect(new Set(ideas.map((title) => tagOf.get(title))).size).toBe(3)
+  })
+
+  it('never offers a goal the gardener already has, but does offer an archived one again', () => {
+    const rest = goalSuggestions.filter((idea) => idea.tag === 'rest')
+    const state: AppState = {
+      ...createInitialState('Tester', 'Test Garden'),
+      // Every rest idea but one is a goal already, one of them in other words' case.
+      goals: [
+        goal({ id: 'a', title: ` ${rest[0].title.toUpperCase()} `, schedule: 'daily' }),
+        goal({ id: 'b', title: rest[1].title, schedule: 'daily' }),
+        goal({ id: 'c', title: rest[2].title, schedule: 'daily', archived: true }),
+      ],
+    }
+    renderToday(state)
+    const ideas = shownIdeas()
+    expect(ideas).not.toContain(rest[0].title)
+    expect(ideas).not.toContain(rest[1].title)
+    // Rest is covered, so the first three ideas come from other parts.
+    expect(ideas.map((title) => tagOf.get(title))).not.toContain('rest')
+  })
+
+  it('shows a different mix for "Other ideas", the same way each time', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    const first = shownIdeas()
+    const more = within(ideasGroup()).getByRole('button', { name: 'Other ideas' })
+    const heard = () => document.querySelector('.goal-ideas-heard')!
+    expect(heard()).toHaveTextContent('')
+    await user.click(more)
+    const second = shownIdeas()
+    expect(second).toHaveLength(3)
+    expect(second.some((title) => first.includes(title))).toBe(false)
+    expect(more).toHaveFocus()
+    // Said aloud once, for the press; the page's own status is left alone.
+    expect(heard()).toHaveAttribute('aria-live', 'polite')
+    expect(heard()).toHaveTextContent(`New ideas: ${second.join(', ')}`)
+    cleanup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    expect(shownIdeas()).toEqual(first)
+  })
+
+  it('fills the form with an idea and its two-minute version, without adding it', async () => {
+    const user = userEvent.setup()
+    const { onAddGoal } = renderToday(createInitialState('Tester', 'Test Garden'))
+    const [title] = shownIdeas()
+    const idea = goalSuggestions.find((item) => item.title === title)!
+    await user.click(within(ideasGroup()).getByRole('button', { name: title }))
+    const field = screen.getByRole('combobox', { name: 'Add a goal' })
+    expect(field).toHaveValue(idea.title)
+    expect(field).toHaveFocus()
+    expect(screen.getByRole('textbox', { name: 'A two-minute version (optional)' })).toHaveValue(
+      idea.tinyTitle ?? '',
+    )
+    expect(onAddGoal).not.toHaveBeenCalled()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Repeat' }), 'Just once')
+    await user.click(screen.getByRole('button', { name: 'Add goal' }))
+    expect(onAddGoal).toHaveBeenCalledWith(idea.title, 'once', [], idea.tinyTitle)
+  })
+
+  it('clears an earlier two-minute version when an idea without one is chosen', async () => {
+    const user = userEvent.setup()
+    // Leave only ideas with no two-minute version, and one with.
+    const plain = goalSuggestions.filter((idea) => !idea.tinyTitle)
+    const withTiny = goalSuggestions.find((idea) => idea.tinyTitle)!
+    const state: AppState = {
+      ...createInitialState('Tester', 'Test Garden'),
+      goals: goalSuggestions
+        .filter((idea) => idea !== withTiny && !plain.includes(idea))
+        .map((idea, index) => goal({ id: `g${index}`, title: idea.title, schedule: 'daily' })),
+    }
+    renderToday(state)
+    await user.click(screen.getByRole('button', { name: withTiny.title }))
+    expect(screen.getByRole('textbox', { name: 'A two-minute version (optional)' })).toHaveValue(
+      withTiny.tinyTitle,
+    )
+    const shownPlain = shownIdeas().find((title) => plain.some((idea) => idea.title === title))!
+    await user.click(screen.getByRole('button', { name: shownPlain }))
+    expect(screen.getByRole('combobox', { name: 'Add a goal' })).toHaveValue(shownPlain)
+    expect(screen.getByRole('textbox', { name: 'A two-minute version (optional)' })).toHaveValue('')
+  })
+
+  it('offers no "Other ideas" when there are no others, and nothing once every idea is a goal', () => {
+    const all = goalSuggestions.map((idea, index) =>
+      goal({ id: `g${index}`, title: idea.title, schedule: 'daily' }),
+    )
+    const state = createInitialState('Tester', 'Test Garden')
+    renderToday({ ...state, goals: all.slice(2) })
+    expect(shownIdeas()).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Other ideas' })).toBeNull()
+    cleanup()
+    renderToday({ ...state, goals: all })
+    expect(screen.queryByRole('group', { name: 'Ideas' })).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Add a goal' })).toBeInTheDocument()
   })
 })
 
@@ -199,5 +399,1051 @@ describe('the Moonlight card on Today', () => {
 
     expect(screen.queryByText('Moonlight')).not.toBeInTheDocument()
   })
+
+  it("names the gardener's own evening hour while it waits", () => {
+    // A night owl who moved their evening to 9pm should not be told 6pm.
+    renderToday(gardenWith({ recapOpensHour: 21 }), { recap: { open: false, state: 'waiting' } })
+
+    const waiting = screen.getByText(/you can look back on the day/)
+    // "9 PM" in a 12-hour locale, "21" in a 24-hour one.
+    expect(waiting).toHaveTextContent(/^From (9|21)\b/)
+    expect(waiting).toHaveTextContent(`From ${recapOpensAt(21)},`)
+    expect(waiting).not.toHaveTextContent(recapOpensAt(18))
+  })
+
+  it('names the usual evening hour when the gardener has not chosen one', () => {
+    renderToday(state(), { recap: { open: false, state: 'waiting' } })
+
+    expect(screen.getByText(/you can look back on the day/)).toHaveTextContent(
+      `From ${recapOpensAt(18)},`,
+    )
+  })
 })
 
+
+describe('checking in', () => {
+  const mood = (level: 1 | 2 | 3 | 4 | 5, unsure?: true) => ({
+    id: 'm',
+    localDate: TODAY,
+    level,
+    ...(unsure ? { unsure } : {}),
+    note: '',
+    createdAt: '',
+    updatedAt: '',
+  })
+
+  it('chooses nothing for the gardener, and saves only once something is chosen', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    const save = screen.getByRole('button', { name: 'Save check-in' })
+    expect(save).toBeDisabled()
+    expect(screen.getByText(/Choose a weather, or Not sure today/)).toBeInTheDocument()
+    for (const button of screen.getAllByRole('button', { pressed: true })) {
+      expect(button).not.toHaveClass('mood-button')
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Not sure today' }))
+    expect(screen.getByRole('button', { name: 'Not sure today' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(save)
+    // Nothing beside the weather was answered, so nothing beside it is passed on.
+    expect(onSaveMood).toHaveBeenCalledWith('unsure', '', {})
+  })
+
+  it('starts at the weather question when opened by the "Check in" shortcut', () => {
+    renderToday(createInitialState('Tester', 'Test Garden'), { openAtCheckIn: true })
+    expect(screen.getByRole('heading', { name: 'What is your inner weather?' })).toHaveFocus()
+  })
+
+  it('leaves focus alone when Today is opened any other way', () => {
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    expect(screen.getByRole('heading', { name: 'What is your inner weather?' })).not.toHaveFocus()
+  })
+
+  it('opens on the answer already given today, "not sure" included', () => {
+    renderToday({ ...createInitialState('Tester', 'Test Garden'), moods: [mood(3, true)] })
+    expect(screen.getByRole('button', { name: 'Not sure today' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Update check-in' })).toBeEnabled()
+  })
+
+  it('offers support quietly after a stormy check-in, and only then', async () => {
+    const onOpenSupport = vi.fn()
+    renderToday({ ...createInitialState('Tester', 'Test Garden'), moods: [mood(1)] }, { onOpenSupport })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'If you need support now' }))
+    expect(onOpenSupport).toHaveBeenCalledOnce()
+  })
+
+  it('does not offer support after a brighter day', () => {
+    renderToday({ ...createInitialState('Tester', 'Test Garden'), moods: [mood(4)] }, { onOpenSupport: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'If you need support now' })).toBeNull()
+  })
+})
+
+describe('undo on Today', () => {
+  afterEach(() => vi.useRealTimers())
+
+  const withGoal = (): AppState => ({
+    ...createInitialState('Tester', 'Test Garden'),
+    goals: [
+      goal({ id: 'first', title: 'Open a window', schedule: 'daily' }),
+      goal({ id: 'g', title: 'Water the fern', schedule: 'daily' }),
+    ],
+    completions: [{ id: 'g:2026-09-01', goalId: 'g', localDate: '2026-09-01', completedAt: '' }],
+  })
+
+  it('takes back a goal marked done', async () => {
+    const user = userEvent.setup()
+    const handlers = renderToday(withGoal())
+    await user.click(screen.getByRole('button', { name: 'Care for Water the fern' }))
+    expect(handlers.onCompleteGoal).toHaveBeenCalledWith('g')
+    expect(screen.getByRole('status')).toHaveTextContent('Water the fern marked done.')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onUncompleteGoal).toHaveBeenCalledWith('g', TODAY)
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+
+  it('takes back a skip by skipping again', async () => {
+    const user = userEvent.setup()
+    const handlers = renderToday(withGoal())
+    await user.click(screen.getByRole('button', { name: 'More for Water the fern' }))
+    await user.click(screen.getByRole('button', { name: 'Skip today' }))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onSkipGoal).toHaveBeenCalledTimes(2)
+  })
+
+  it('puts back a deleted goal where it was, with its history', async () => {
+    const user = userEvent.setup()
+    const state = withGoal()
+    const handlers = renderToday(state)
+    await user.click(screen.getByRole('button', { name: 'More for Water the fern' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(handlers.onDeleteGoal).toHaveBeenCalledWith('g')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onRestoreGoal).toHaveBeenCalledWith(state.goals[1], 1, state.completions)
+  })
+
+  it('brings back an archived goal', async () => {
+    const user = userEvent.setup()
+    const handlers = renderToday(withGoal())
+    await user.click(screen.getByRole('button', { name: 'More for Open a window' }))
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Open a window archived.')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onSetGoalArchived).toHaveBeenLastCalledWith('first', false)
+  })
+
+  /** Sol, the starter caterpillar, grown alongside Water the fern. */
+  const growingWithFern = (): AppState => {
+    const state = withGoal()
+    return { ...state, creatures: [{ ...state.creatures[0], adoptedGoalId: 'g' }] }
+  }
+
+  it('brings back the companion an archived goal let go', async () => {
+    const user = userEvent.setup()
+    const state = growingWithFern()
+    const handlers = renderToday(state)
+    await user.click(screen.getByRole('button', { name: 'More for Water the fern' }))
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(handlers.onAdoptGoal).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onSetGoalArchived).toHaveBeenLastCalledWith('g', false)
+    expect(handlers.onAdoptGoal).toHaveBeenCalledWith(state.creatures[0].id, 'g')
+  })
+
+  it('brings back the companion a deleted goal let go', async () => {
+    const user = userEvent.setup()
+    const state = growingWithFern()
+    const handlers = renderToday(state)
+    await user.click(screen.getByRole('button', { name: 'More for Water the fern' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(handlers.onRestoreGoal).toHaveBeenCalledWith(state.goals[1], 1, state.completions)
+    expect(handlers.onAdoptGoal).toHaveBeenCalledWith(state.creatures[0].id, 'g')
+  })
+
+  it('lets the offer go after a few seconds, but not while it is being reached for', () => {
+    vi.useFakeTimers()
+    renderToday(withGoal())
+    act(() => screen.getByRole('button', { name: 'Care for Water the fern' }).click())
+    const toast = screen.getByText('Water the fern marked done.').parentElement!
+    fireEvent.pointerEnter(toast)
+    act(() => {
+      vi.advanceTimersByTime(UNDO_MS * 2)
+    })
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument()
+    fireEvent.pointerLeave(toast)
+    act(() => {
+      vi.advanceTimersByTime(UNDO_MS)
+    })
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+})
+
+describe('a gentle day on Today', () => {
+  // What a gentle day shows is kept as drafts for the day; none may leak.
+  afterEach(() => resetDrafts())
+  const titles = ['Open a window', 'Drink some water', 'Three slow breaths', 'Water the fern', 'Step outside']
+  /** Five daily goals, the first already done today. */
+  const withGoals = (gentleDay?: string): AppState =>
+    gardenWith(gentleDay ? { gentleDay } : {}, {
+      goals: titles.map((title, index) => goal({ id: `g${index}`, title, schedule: 'daily' })),
+      completions: [{ id: `g0:${TODAY}`, goalId: 'g0', localDate: TODAY, completedAt: '' }],
+    })
+  const shownGoals = () =>
+    titles.filter((title) => screen.queryByRole('button', { name: `More for ${title}` }))
+
+  it('turns a gentle day on from the goals card', async () => {
+    const onSetGentleDay = vi.fn()
+    renderToday(withGoals(), { onSetGentleDay })
+    const toggle = screen.getByRole('checkbox', { name: /gentle day/i })
+    expect(toggle).not.toBeChecked()
+
+    await userEvent.setup().click(toggle)
+    expect(onSetGentleDay).toHaveBeenCalledWith(true)
+  })
+
+  it('turns a gentle day back into an ordinary one', async () => {
+    const onSetGentleDay = vi.fn()
+    renderToday(withGoals(TODAY), { onSetGentleDay })
+    const toggle = screen.getByRole('checkbox', { name: /gentle day/i })
+    expect(toggle).toBeChecked()
+
+    await userEvent.setup().click(toggle)
+    expect(onSetGentleDay).toHaveBeenCalledWith(false)
+  })
+
+  it('offers the comfort plan quietly while the day is gentle, and only then', async () => {
+    const onOpenComfort = vi.fn()
+    renderToday(withGoals(), { onSetGentleDay: vi.fn(), onOpenComfort })
+    expect(screen.queryByRole('link', { name: /comfort plan/i })).toBeNull()
+    cleanup()
+
+    renderToday(withGoals(TODAY), { onSetGentleDay: vi.fn(), onOpenComfort })
+    const link = screen.getByRole('link', { name: 'Your comfort plan' })
+    expect(link).toHaveAttribute('href', '#/comfort')
+    expect(link.closest('p')).toHaveTextContent('Your comfort plan is here if you want it.')
+    await userEvent.setup().click(link)
+    expect(onOpenComfort).toHaveBeenCalledOnce()
+  })
+
+  it('offers no comfort plan where it cannot be opened', () => {
+    renderToday(withGoals(TODAY), { onSetGentleDay: vi.fn() })
+    expect(screen.getByText(/Today asks for very little/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /comfort plan/i })).toBeNull()
+  })
+
+  it('offers no toggle when the day cannot be changed', () => {
+    renderToday(withGoals())
+    expect(screen.queryByRole('checkbox', { name: /gentle day/i })).toBeNull()
+  })
+
+  it('shows a goal’s two-minute version, with the goal itself beneath it', async () => {
+    const onCompleteGoal = vi.fn()
+    const state = gardenWith(
+      { gentleDay: TODAY },
+      {
+        goals: [
+          goal({
+            id: 'stretch',
+            title: 'Stretch your shoulders',
+            tinyTitle: 'Roll your shoulders',
+            schedule: 'daily',
+          }),
+        ],
+      },
+    )
+    renderToday(state, { onSetGentleDay: vi.fn(), onCompleteGoal })
+    const check = screen.getByRole('button', { name: 'Care for Roll your shoulders' })
+    const row = check.closest('article')!
+    expect(within(row).getByText('Roll your shoulders').tagName).toBe('STRONG')
+    expect(within(row).getByText('Stretch your shoulders').tagName).toBe('SMALL')
+    // Doing the small version is doing the goal: nothing else changes.
+    await userEvent.setup().click(check)
+    expect(onCompleteGoal).toHaveBeenCalledWith('stretch')
+    expect(screen.getByText('Stretch your shoulders marked done.')).toBeInTheDocument()
+  })
+
+  it('keeps a two-minute version out of the row on an ordinary day', () => {
+    renderToday(
+      gardenWith(
+        {},
+        {
+          goals: [
+            goal({
+              id: 'stretch',
+              title: 'Stretch your shoulders',
+              tinyTitle: 'Roll your shoulders',
+              schedule: 'daily',
+            }),
+          ],
+        },
+      ),
+    )
+    const check = screen.getByRole('button', { name: 'Care for Stretch your shoulders' })
+    expect(screen.queryByText('Roll your shoulders')).toBeNull()
+    expect(within(check.closest('article')!).getByText('Every day')).toBeInTheDocument()
+  })
+
+  it('shows only a few goals, and no counts', () => {
+    renderToday(withGoals(TODAY), { onSetGentleDay: vi.fn() })
+
+    expect(shownGoals()).toEqual(['Open a window', 'Drink some water', 'Three slow breaths'])
+    expect(screen.getByText('Rest counts too')).toBeInTheDocument()
+    expect(screen.queryByText('0 / 5')).toBeNull()
+    expect(screen.queryByLabelText(/Sunlight earned/)).toBeNull()
+    expect(screen.queryByText('1 / 5')).toBeNull()
+  })
+
+  it('keeps its few goals in place as they are done or set aside', () => {
+    // A gentle day's list does not refill itself: finishing one is not a
+    // cue for the next to appear, and focus stays where it was.
+    const state = withGoals(TODAY)
+    const { rerender } = render(<TodayView {...todayProps(state)} />)
+    const before = shownGoals()
+    const after = {
+      ...state,
+      goals: state.goals.map((item, index) =>
+        index === 2 ? { ...item, skippedDates: [TODAY] } : item,
+      ),
+      completions: [
+        ...state.completions,
+        { id: `g1:${TODAY}`, goalId: 'g1', localDate: TODAY, completedAt: '' },
+      ],
+    }
+    rerender(<TodayView {...todayProps(after)} />)
+    expect(shownGoals()).toEqual(before)
+  })
+
+  it('keeps its few goals when one of them is snoozed or archived', async () => {
+    const user = userEvent.setup()
+    const onSetGentleDay = vi.fn()
+    const { rerender } = render(<TodayView {...todayProps(withGoals(), { onSetGentleDay })} />)
+    await user.click(screen.getByRole('checkbox', { name: /gentle day/i }))
+    expect(onSetGentleDay).toHaveBeenCalledWith(true)
+    // The day turns gentle, and then the second goal is snoozed away.
+    const gentle = withGoals(TODAY)
+    const later = {
+      ...gentle,
+      goals: gentle.goals.map((item, index) =>
+        index === 1 ? { ...item, snoozedUntil: '2026-09-12' } : item,
+      ),
+    }
+    rerender(<TodayView {...todayProps(later, { onSetGentleDay })} />)
+    // No other goal slides into its place.
+    expect(shownGoals()).toEqual(['Open a window', 'Three slow breaths'])
+  })
+
+  it('remembers "show the others" after leaving Today and coming back', async () => {
+    const user = userEvent.setup()
+    renderToday(withGoals(TODAY))
+    await user.click(screen.getByRole('button', { name: 'Show the other 2 goals' }))
+    cleanup()
+    renderToday(withGoals(TODAY))
+    expect(shownGoals()).toEqual(titles)
+  })
+
+  it('takes focus to the first goal it revealed', async () => {
+    const user = userEvent.setup()
+    renderToday(withGoals(TODAY))
+    await user.click(screen.getByRole('button', { name: 'Show the other 2 goals' }))
+    expect(screen.getByRole('button', { name: 'Care for Water the fern' })).toHaveFocus()
+  })
+
+  it('shows a few again after a gentle day is turned off and on', async () => {
+    const user = userEvent.setup()
+    const onSetGentleDay = vi.fn()
+    const { rerender } = render(<TodayView {...todayProps(withGoals(TODAY), { onSetGentleDay })} />)
+    await user.click(screen.getByRole('button', { name: 'Show the other 2 goals' }))
+    await user.click(screen.getByRole('checkbox', { name: /gentle day/i }))
+    rerender(<TodayView {...todayProps(withGoals(), { onSetGentleDay })} />)
+    rerender(<TodayView {...todayProps(withGoals(TODAY), { onSetGentleDay })} />)
+    expect(shownGoals()).toHaveLength(3)
+  })
+
+  it('shows the other goals when asked', async () => {
+    const user = userEvent.setup()
+    renderToday(withGoals(TODAY))
+
+    await user.click(screen.getByRole('button', { name: 'Show the other 2 goals' }))
+    expect(shownGoals()).toEqual(titles)
+    expect(screen.queryByRole('button', { name: /Show the other/ })).toBeNull()
+  })
+
+  it('counts a single other goal in the singular', () => {
+    const state = withGoals(TODAY)
+    renderToday({ ...state, goals: state.goals.slice(0, 4) })
+
+    expect(screen.getByRole('button', { name: 'Show the other 1 goal' })).toBeInTheDocument()
+  })
+
+  it('ends by itself at midnight', () => {
+    renderToday(withGoals(YESTERDAY), { onSetGentleDay: vi.fn() })
+
+    expect(screen.getByRole('checkbox', { name: /gentle day/i })).not.toBeChecked()
+    expect(shownGoals()).toEqual(titles)
+    expect(screen.getByText('1 / 5')).toBeInTheDocument()
+    expect(screen.getByLabelText('0 of 5 Sunlight earned')).toBeInTheDocument()
+    expect(screen.queryByText('Rest counts too')).toBeNull()
+  })
+
+  it('points to companion care, which costs nothing', async () => {
+    const onOpenCare = vi.fn()
+    renderToday(withGoals(TODAY), { onOpenCare })
+
+    await userEvent.setup().click(
+      screen.getByRole('button', { name: "Your companions' care is free" }),
+    )
+    expect(onOpenCare).toHaveBeenCalledOnce()
+  })
+
+  it('offers a gentle day after heavy weather, and not once it is one', async () => {
+    const heavy = { id: 'm', localDate: TODAY, level: 2 as const, note: '', createdAt: '', updatedAt: '' }
+    const onSetGentleDay = vi.fn()
+    renderToday({ ...withGoals(), moods: [heavy] }, { onSetGentleDay })
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Make today a gentle day' }))
+    expect(onSetGentleDay).toHaveBeenCalledWith(true)
+
+    cleanup()
+    renderToday({ ...withGoals(TODAY), moods: [heavy] }, { onSetGentleDay })
+    expect(screen.queryByRole('button', { name: 'Make today a gentle day' })).toBeNull()
+  })
+})
+
+describe('choosing the plant the next Sunlight tends', () => {
+  const plant = (id: string, plantId: string, growth: number): PlantInstance => ({
+    id,
+    plantId,
+    growth,
+    plantedAt: '',
+  })
+  const garden = (tendFirstPlantId?: string, growth = [MAX_PLANT_GROWTH, 1, 0]) =>
+    gardenWith(tendFirstPlantId ? { tendFirstPlantId } : {}, {
+      plants: [
+        plant('first-milkweed', 'milkweed', growth[0]),
+        plant('second-aster', 'aster', growth[1]),
+        plant('third-zinnia', 'zinnia', growth[2]),
+      ],
+    })
+  const chooser = () => screen.getByRole('combobox', { name: 'Your next Sunlight tends' })
+
+  it('lists only the plants still growing, named as the garden names them', () => {
+    renderToday(garden(), { onChooseNextPlant: vi.fn() })
+
+    expect(within(chooser()).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Aster 2',
+      'Zinnia 3',
+    ])
+    expect(chooser()).toHaveValue('second-aster')
+  })
+
+  it('opens on the plant the gardener chose', () => {
+    renderToday(garden('third-zinnia'), { onChooseNextPlant: vi.fn() })
+    expect(chooser()).toHaveValue('third-zinnia')
+  })
+
+  it('passes on the plant chosen', async () => {
+    const onChooseNextPlant = vi.fn()
+    renderToday(garden(), { onChooseNextPlant })
+
+    await userEvent.setup().selectOptions(chooser(), 'Zinnia 3')
+    expect(onChooseNextPlant).toHaveBeenCalledWith('third-zinnia')
+  })
+
+  it('says nothing once every plant is fully grown', () => {
+    const grown = Array(3).fill(MAX_PLANT_GROWTH)
+    renderToday(garden(undefined, grown), { onChooseNextPlant: vi.fn() })
+    expect(screen.queryByRole('combobox', { name: 'Your next Sunlight tends' })).toBeNull()
+  })
+
+  it('says nothing when the choice cannot be saved', () => {
+    renderToday(garden())
+    expect(screen.queryByRole('combobox', { name: 'Your next Sunlight tends' })).toBeNull()
+  })
+})
+
+describe('reflection prompts on Today', () => {
+  // Typed words are kept as drafts in memory; none may reach the next test.
+  afterEach(() => resetDrafts())
+
+  const todays = promptForDay(TODAY)
+  const another = promptForDay(TODAY, 1)
+  const promptHeading = (text: string) => screen.queryByRole('heading', { level: 2, name: text })
+
+  it('offers another prompt in place of the day’s own', async () => {
+    const user = userEvent.setup()
+    const { onSaveReflection } = renderToday(createInitialState('Tester', 'Test Garden'))
+    expect(promptHeading(todays.text)).toBeInTheDocument()
+    expect(another.text).not.toBe(todays.text)
+
+    await user.click(screen.getByRole('button', { name: 'Another prompt' }))
+    expect(promptHeading(another.text)).toBeInTheDocument()
+    expect(promptHeading(todays.text)).toBeNull()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your reflection' }), 'The light.')
+    await user.click(screen.getByRole('button', { name: 'Keep this reflection' }))
+    expect(onSaveReflection).toHaveBeenCalledWith(another.id, 'The light.')
+  })
+
+  it('lets the gardener write freely, without a prompt', async () => {
+    const user = userEvent.setup()
+    const { onSaveReflection } = renderToday(createInitialState('Tester', 'Test Garden'))
+
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    expect(promptHeading('Write freely')).toBeInTheDocument()
+    expect(promptHeading(todays.text)).toBeNull()
+    // It stays, pressed, so focus is not lost and it can be undone.
+    expect(screen.getByRole('button', { name: 'Write freely' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    await user.type(screen.getByRole('textbox', { name: 'Your reflection' }), 'Just a day.')
+    await user.click(screen.getByRole('button', { name: 'Keep this reflection' }))
+    expect(onSaveReflection).toHaveBeenCalledWith('free', 'Just a day.')
+  })
+
+  it('goes back to a prompt from free writing', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    await user.click(screen.getByRole('button', { name: 'Another prompt' }))
+    expect(promptHeading(todays.text)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Write freely' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    // And pressing "Write freely" again goes back to the day's prompt too.
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    expect(promptHeading(todays.text)).toBeInTheDocument()
+  })
+
+  it('returns from free writing to the prompt that was showing', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: 'Another prompt' }))
+    expect(promptHeading(another.text)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    expect(promptHeading(another.text)).toBeInTheDocument()
+  })
+
+  it('returns from free writing to the prompt already answered today', async () => {
+    const user = userEvent.setup()
+    renderToday({
+      ...createInitialState('Tester', 'Test Garden'),
+      reflections: [
+        { id: 'r', localDate: TODAY, promptId: another.id, body: 'Lighter.', createdAt: '', updatedAt: '' },
+      ],
+    })
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    cleanup()
+    // After a reload the prompt before free writing is no longer known; the
+    // one the reflection answered is.
+    renderToday({
+      ...createInitialState('Tester', 'Test Garden'),
+      reflections: [
+        { id: 'r', localDate: TODAY, promptId: another.id, body: 'Lighter.', createdAt: '', updatedAt: '' },
+      ],
+    })
+    expect(promptHeading('Write freely')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    expect(promptHeading(another.text)).toBeInTheDocument()
+  })
+
+  it('keeps the chosen prompt with the words through a reload', async () => {
+    const user = userEvent.setup()
+    const { onSaveReflection } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: 'Write freely' }))
+    await user.type(screen.getByRole('textbox', { name: 'Your reflection' }), 'Kept.')
+    cleanup()
+
+    renderToday(createInitialState('Tester', 'Test Garden'), { onSaveReflection })
+    expect(promptHeading('Write freely')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveValue('Kept.')
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveAccessibleDescription(
+      'Write freely',
+    )
+    await user.click(screen.getByRole('button', { name: 'Keep this reflection' }))
+    expect(onSaveReflection).toHaveBeenCalledWith('free', 'Kept.')
+  })
+
+  it('opens on the prompt a reflection was already written to today', () => {
+    const gratitude = 'What ordinary thing are you grateful for?'
+    expect(todays.text).not.toBe(gratitude)
+    renderToday({
+      ...createInitialState('Tester', 'Test Garden'),
+      reflections: [
+        {
+          id: 'r',
+          localDate: TODAY,
+          promptId: 'gratitude',
+          body: 'The kettle.',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    })
+
+    expect(promptHeading(gratitude)).toBeInTheDocument()
+    expect(promptHeading(todays.text)).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveValue('The kettle.')
+    expect(screen.getByRole('button', { name: 'Update reflection' })).toBeEnabled()
+  })
+
+  it('moves to a different prompt from one already answered today', async () => {
+    // Answered to the day's second prompt: "Another" must not land on it again.
+    renderToday({
+      ...createInitialState('Tester', 'Test Garden'),
+      reflections: [
+        { id: 'r', localDate: TODAY, promptId: another.id, body: 'Lighter.', createdAt: '', updatedAt: '' },
+      ],
+    })
+    expect(promptHeading(another.text)).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Another prompt' }))
+    expect(promptHeading(another.text)).toBeNull()
+    expect(promptHeading(promptForDay(TODAY, 2).text)).toBeInTheDocument()
+  })
+
+  it('opens on the day’s prompt when yesterday’s reflection is the latest', () => {
+    renderToday({
+      ...createInitialState('Tester', 'Test Garden'),
+      reflections: [
+        {
+          id: 'r',
+          localDate: YESTERDAY,
+          promptId: 'gratitude',
+          body: 'The kettle.',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    })
+
+    expect(promptHeading(todays.text)).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveValue('')
+  })
+})
+
+describe('the goal editor on Today', () => {
+  const withTwo = (): AppState => ({
+    ...createInitialState('Tester', 'Test Garden'),
+    goals: [
+      goal({ id: 'a', title: 'Alpha', schedule: 'daily' }),
+      goal({ id: 'b', title: 'Beta', schedule: 'daily' }),
+    ],
+  })
+
+  it('closes for good when its goal is archived from the row, so a restore does not reopen it', async () => {
+    const user = userEvent.setup()
+    const state = withTwo()
+    const props = todayProps(state)
+    const { rerender } = render(<TodayView {...props} />)
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('textbox', { name: /^Edit goal/ })).toBeInTheDocument()
+
+    const archived = { ...state, goals: state.goals.map((item) => (item.id === 'a' ? { ...item, archived: true } : item)) }
+    rerender(<TodayView {...props} state={archived} />)
+    expect(screen.queryByRole('textbox', { name: /^Edit goal/ })).toBeNull()
+    // Restored, by Undo or from the Archived list.
+    rerender(<TodayView {...props} state={state} />)
+    expect(screen.queryByRole('textbox', { name: /^Edit goal/ })).toBeNull()
+    expect(screen.getByLabelText('Add a goal')).toBeInTheDocument()
+  })
+
+  it('takes focus again when Edit is chosen for the goal already open', async () => {
+    const user = userEvent.setup()
+    renderToday(withTwo())
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('textbox', { name: /^Edit goal/ })).toHaveFocus()
+  })
+
+  it('keeps a skip made from the row while the editor is open', async () => {
+    const user = userEvent.setup()
+    const state = withTwo()
+    const props = todayProps(state)
+    const { rerender } = render(<TodayView {...props} />)
+    await user.click(screen.getByRole('button', { name: 'More for Alpha' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const skipped = {
+      ...state,
+      goals: state.goals.map((item) => (item.id === 'a' ? { ...item, skippedDates: [TODAY] } : item)),
+    }
+    rerender(<TodayView {...props} state={skipped} />)
+    await user.type(screen.getByRole('textbox', { name: /^Edit goal/ }), '!')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onUpdateGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'a', title: 'Alpha!', skippedDates: [TODAY] }),
+    )
+  })
+})
+
+/** Today's check-in as stored, Bright unless told otherwise. */
+function checkIn(overrides: Partial<MoodEntry> = {}): MoodEntry {
+  return {
+    id: 'm',
+    localDate: TODAY,
+    level: 4,
+    note: '',
+    createdAt: `${TODAY}T08:00:00.000Z`,
+    updatedAt: `${TODAY}T08:00:00.000Z`,
+    ...overrides,
+  }
+}
+
+describe('feelings and energy on Today', () => {
+  // The choices are drafts beside the note; none may reach the next test.
+  // Unmounted first, so forgetting the drafts redraws nothing.
+  afterEach(() => {
+    cleanup()
+    resetDrafts()
+  })
+
+  const openExtras = (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'Add feelings or energy' }))
+
+  it('offers them, and welcomes the weather, only once a weather is chosen', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    expect(screen.queryByText('All weather is welcome.')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add feelings or energy' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /^Rainy/ }))
+    expect(screen.getByText('All weather is welcome.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add feelings or energy' })).toBeInTheDocument()
+  })
+
+  it('saves the feelings and energy chosen with the check-in', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: /^Bright/ }))
+    await openExtras(user)
+    await user.click(screen.getByRole('button', { name: 'tired' }))
+    await user.click(screen.getByRole('button', { name: 'hopeful' }))
+    await user.click(screen.getByRole('radio', { name: 'low' }))
+    await user.click(screen.getByRole('button', { name: 'Save check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith(4, '', { feelings: ['hopeful', 'tired'], energy: 'low' })
+  })
+
+  it('lets "Not sure today" carry them too', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: 'Not sure today' }))
+    await openExtras(user)
+    await user.click(screen.getByRole('button', { name: 'numb' }))
+    await user.click(screen.getByRole('button', { name: 'Save check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith('unsure', '', { feelings: ['numb'] })
+  })
+
+  it('keeps unsaved choices through a reload, beside the note', async () => {
+    const user = userEvent.setup()
+    renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: /^Overcast/ }))
+    await openExtras(user)
+    await user.click(screen.getByRole('button', { name: 'restless' }))
+    await user.click(screen.getByRole('radio', { name: 'steady' }))
+    cleanup()
+
+    const { onSaveMood } = renderToday(createInitialState('Tester', 'Test Garden'))
+    await user.click(screen.getByRole('button', { name: /^Overcast/ }))
+    expect(screen.getByText('Feeling restless · Energy steady')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith(3, '', { feelings: ['restless'], energy: 'steady' })
+  })
+
+  it('opens on what was saved today, and lets it change', async () => {
+    const user = userEvent.setup()
+    const { onSaveMood } = renderToday(
+      gardenWith({}, { moods: [checkIn({ feelings: ['calm'], energy: 'steady' })] }),
+    )
+    expect(screen.getByText('Feeling calm · Energy steady')).toBeInTheDocument()
+    await openExtras(user)
+    expect(screen.getByRole('button', { name: 'calm' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'calm' }))
+    await user.click(screen.getByRole('button', { name: 'proud' }))
+    await user.click(screen.getByRole('button', { name: 'Clear energy' }))
+    await user.click(screen.getByRole('button', { name: 'Update check-in' }))
+    expect(onSaveMood).toHaveBeenCalledWith(4, '', { feelings: ['proud'] })
+  })
+})
+
+describe('the next step after a check-in', () => {
+  // Putting the offer away is a draft for the day; none may reach the next test.
+  // Unmounted first, so forgetting the drafts redraws nothing.
+  afterEach(() => {
+    cleanup()
+    resetDrafts()
+  })
+
+  const offer = () => screen.queryByRole('group', { name: /One small thing/ })
+  const everything = { onSetGentleDay: vi.fn(), onOpenCare: vi.fn() }
+
+  it('offers a gentle day, one line or a companion after heavy weather', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 2 })] }), everything)
+    const group = screen.getByRole('group', {
+      name: 'Heavy weather can make everything harder. One small thing, if it helps:',
+    })
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Make today a gentle day',
+      'Write one line',
+      'Visit your companion',
+      'Not now',
+    ])
+  })
+
+  it('offers the same after a day low on energy, whatever its weather', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 5, energy: 'low' })] }), everything)
+    const group = screen.getByRole('group', {
+      name: 'A low-energy day can ask for less. One small thing, if it helps:',
+    })
+    expect(within(group).getByRole('button', { name: 'Make today a gentle day' })).toBeInTheDocument()
+    expect(within(group).queryByRole('button', { name: 'Try today’s reflection' })).toBeNull()
+  })
+
+  it('offers today’s reflection after anything else, "not sure" included', () => {
+    for (const mood of [checkIn(), checkIn({ level: 3, unsure: true, energy: 'steady' })]) {
+      renderToday(gardenWith({}, { moods: [mood] }), everything)
+      const group = screen.getByRole('group', { name: 'One small thing next, if you like:' })
+      expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+        'Try today’s reflection',
+        'Not now',
+      ])
+      cleanup()
+    }
+  })
+
+  it('takes focus to the reflection, and puts itself away', async () => {
+    const user = userEvent.setup()
+    renderToday(gardenWith({}, { moods: [checkIn()] }), everything)
+    await user.click(screen.getByRole('button', { name: 'Try today’s reflection' }))
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveFocus()
+    expect(offer()).toBeNull()
+  })
+
+  it('starts one line of writing after heavy weather', async () => {
+    const user = userEvent.setup()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 1 })] }), everything)
+    await user.click(screen.getByRole('button', { name: 'Write one line' }))
+    expect(screen.getByRole('textbox', { name: 'Your reflection' })).toHaveFocus()
+    expect(offer()).toBeNull()
+  })
+
+  it('makes today a gentle day, handing focus to the switch it set', async () => {
+    const user = userEvent.setup()
+    const onSetGentleDay = vi.fn()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 2 })] }), { ...everything, onSetGentleDay })
+    await user.click(screen.getByRole('button', { name: 'Make today a gentle day' }))
+    expect(onSetGentleDay).toHaveBeenCalledWith(true)
+    expect(screen.getByRole('checkbox', { name: /gentle day/i })).toHaveFocus()
+    expect(offer()).toBeNull()
+  })
+
+  it('leaves out a gentle day once today is one', () => {
+    renderToday(gardenWith({ gentleDay: TODAY }, { moods: [checkIn({ level: 2 })] }), everything)
+    expect(screen.queryByRole('button', { name: 'Make today a gentle day' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Write one line' })).toBeInTheDocument()
+  })
+
+  it('goes to the companions for free care', async () => {
+    const user = userEvent.setup()
+    const onOpenCare = vi.fn()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 2 })] }), { ...everything, onOpenCare })
+    await user.click(screen.getByRole('button', { name: 'Visit your companion' }))
+    expect(onOpenCare).toHaveBeenCalledOnce()
+  })
+
+  it('suggests nothing already done', () => {
+    const written = {
+      id: 'r',
+      localDate: TODAY,
+      promptId: promptForDay(TODAY).id,
+      body: 'A line.',
+      createdAt: '',
+      updatedAt: '',
+    }
+    renderToday(gardenWith({}, { moods: [checkIn()], reflections: [written] }), everything)
+    expect(offer()).toBeNull()
+  })
+
+  it('goes for the day on "Not now", with focus on the check-in, until it is rewritten', async () => {
+    const user = userEvent.setup()
+    const state = gardenWith({}, { moods: [checkIn()] })
+    renderToday(state, everything)
+    await user.click(screen.getByRole('button', { name: 'Not now' }))
+    expect(offer()).toBeNull()
+    expect(screen.getByRole('button', { name: 'Update check-in' })).toHaveFocus()
+
+    cleanup()
+    renderToday(state, everything)
+    expect(offer()).toBeNull()
+
+    // A rewritten check-in is a new answer, with an offer of its own.
+    cleanup()
+    renderToday(
+      gardenWith({}, { moods: [checkIn({ level: 1, updatedAt: `${TODAY}T18:00:00.000Z` })] }),
+      everything,
+    )
+    expect(offer()).not.toBeNull()
+  })
+
+  it('says the check-in was kept, and offers the step without taking focus', async () => {
+    const user = userEvent.setup()
+    const empty = gardenWith({})
+    const props = todayProps(empty, everything)
+    const { rerender } = render(<TodayView {...props} />)
+    expect(screen.queryByText('Kept in your journal.')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /^Bright/ }))
+    const save = screen.getByRole('button', { name: 'Save check-in' })
+    await user.click(save)
+    rerender(<TodayView {...props} state={{ ...empty, moods: [checkIn()] }} />)
+
+    expect(screen.getByText('Kept in your journal.')).toBeInTheDocument()
+    expect(offer()).not.toBeNull()
+    // Both arrive in a polite live region, and focus stays where it was.
+    expect(screen.getByText('Kept in your journal.').closest('[aria-live="polite"]')).toContainElement(
+      offer(),
+    )
+    expect(screen.getByRole('button', { name: 'Update check-in' })).toHaveFocus()
+
+    // An update is said again: the line is put back, so the region hears it.
+    const first = screen.getByText('Kept in your journal.')
+    await user.click(screen.getByRole('button', { name: 'Update check-in' }))
+    expect(first).not.toBeInTheDocument()
+    expect(screen.getByText('Kept in your journal.')).toBeInTheDocument()
+  })
+
+  it('keeps the support line after a stormy check-in, below the offer', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 1 })] }), {
+      ...everything,
+      onOpenSupport: vi.fn(),
+    })
+    const support = screen.getByRole('button', { name: 'If you need support now' })
+    expect(offer()!.compareDocumentPosition(support) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('TodayView and the Guide', () => {
+  it('links the Sunlight meter to what Sunlight does', async () => {
+    const user = userEvent.setup()
+    const onOpenGuide = vi.fn()
+    renderToday(createInitialState('Tester', 'Test Garden'), { onOpenGuide })
+    const link = screen.getByRole('link', { name: 'What does this do? Sunlight, in the Guide' })
+    expect(link).toHaveAttribute('href', '#/guide/sunlight')
+    await user.click(link)
+    expect(onOpenGuide).toHaveBeenCalledWith('sunlight')
+  })
+})
+
+
+describe('breathing with a butterfly, from Today', () => {
+  afterEach(() => {
+    cleanup()
+    resetDrafts()
+  })
+
+  const breathing = { onSetGentleDay: vi.fn(), onOpenCare: vi.fn() }
+
+  it('is one of the steps after heavy weather, with whoever paces it', async () => {
+    const user = userEvent.setup()
+    const onOpenBreathe = vi.fn()
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 1 })] }), {
+      ...breathing,
+      onOpenBreathe,
+    })
+    const group = screen.getByRole('group', { name: /One small thing/ })
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Make today a gentle day',
+      'Breathe with Marigold',
+      'Write one line',
+      'Visit your companion',
+      'Not now',
+    ])
+    await user.click(within(group).getByRole('button', { name: 'Breathe with Marigold' }))
+    // Named, so that coming back finds the check-in it followed.
+    expect(onOpenBreathe).toHaveBeenCalledExactlyOnceWith('next-step')
+    expect(screen.queryByRole('group', { name: /One small thing/ })).toBeNull()
+  })
+
+  it('is not offered after an ordinary day', () => {
+    renderToday(gardenWith({}, { moods: [checkIn({ level: 4 })] }), {
+      ...breathing,
+      onOpenBreathe: vi.fn(),
+    })
+    expect(screen.queryByRole('button', { name: /^Breathe with/ })).toBeNull()
+  })
+
+  it('is a small link on a "Take three slow breaths" goal, until it is done', async () => {
+    const user = userEvent.setup()
+    const onOpenBreathe = vi.fn()
+    const breaths = goal({ id: 'b', title: 'Take three slow breaths', schedule: 'daily' })
+    const water = goal({ id: 'w', title: 'Drink a glass of water', schedule: 'daily' })
+    renderToday(gardenWith({}, { goals: [breaths, water] }), { onOpenBreathe })
+    const links = screen.getAllByRole('link', { name: 'Breathe now' })
+    expect(links).toHaveLength(1)
+    expect(links[0].closest('.goal-row')).toHaveAttribute('data-goal-id', 'b')
+    expect(links[0]).toHaveAttribute('href', '#/breathe')
+    await user.click(links[0])
+    // Named by its goal, so that coming back finds this link again.
+    expect(onOpenBreathe).toHaveBeenCalledExactlyOnceWith('goal', 'b')
+
+    cleanup()
+    renderToday(
+      gardenWith(
+        {},
+        {
+          goals: [breaths],
+          completions: [{ id: `b:${TODAY}`, goalId: 'b', localDate: TODAY, completedAt: '' }],
+        },
+      ),
+      { onOpenBreathe },
+    )
+    expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+  })
+
+  it('offers nothing where breathing cannot be opened', () => {
+    renderToday(
+      gardenWith({}, { goals: [goal({ id: 'b', title: 'Take three slow breaths', schedule: 'daily' })] }),
+    )
+    expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+  })
+})
+
+describe('the season’s prompts on Today', () => {
+  afterEach(() => resetDrafts())
+
+  /** The first autumn day whose own prompt, in North America, is autumn's. */
+  function autumnPromptDay(): string {
+    let day = '2026-09-01'
+    while (!seasonalPrompts.includes(promptForDay(day, 0, 'autumn') as SeasonalPrompt)) {
+      day = addDaysToLocalDate(day, 1)
+    }
+    return day
+  }
+
+  it('offers one where the gardener’s region says which season it is', () => {
+    const day = autumnPromptDay()
+    const seasonal = promptForDay(day, 0, 'autumn')
+    renderToday(gardenWith({ region: 'north-america' }), { today: day })
+    expect(screen.getByRole('heading', { level: 2, name: seasonal.text })).toBeInTheDocument()
+  })
+
+  it('offers none where the season is not known', () => {
+    const day = autumnPromptDay()
+    for (const region of [undefined, 'elsewhere'] as const) {
+      renderToday(gardenWith({ region }), { today: day })
+      expect(screen.getByRole('heading', { level: 2, name: promptForDay(day).text })).toBeInTheDocument()
+      for (const prompt of seasonalPrompts) {
+        expect(screen.queryByRole('heading', { level: 2, name: prompt.text })).toBeNull()
+      }
+      cleanup()
+    }
+  })
+})

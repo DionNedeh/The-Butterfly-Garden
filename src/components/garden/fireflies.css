@@ -1,0 +1,72 @@
+/* Fireflies over the night garden (components/garden/Fireflies), loaded with
+   them, only at night. Under the heading and the plants, like the day's
+   petals, and drawn only where the night theme is, which is their one theme. */
+.hero-fireflies {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* A warm yellow-green spark with a soft halo. Only transform and opacity
+   animate, so each firefly is a layer the compositor moves and fades alone. */
+.theme-night .hero-firefly {
+  --firefly-core: #fbf7c6;
+  --firefly-glow: rgba(212, 236, 116, 0.6);
+  --firefly-halo: rgba(212, 236, 116, 0.16);
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--firefly-core);
+  box-shadow:
+    0 0 6px 2px var(--firefly-glow),
+    0 0 18px 7px var(--firefly-halo);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation:
+    firefly-drift var(--drift) ease-in-out var(--wait) infinite alternate,
+    firefly-glow var(--glow) ease-in-out var(--wait) infinite;
+}
+
+.firefly-1 { left: 12%; top: 54%; --drift: 17s; --glow: 4.6s; --wait: -2s; }
+.firefly-2 { left: 31%; top: 66%; --drift: 21s; --glow: 5.4s; --wait: -9s; }
+.firefly-3 { left: 52%; top: 47%; --drift: 15s; --glow: 3.9s; --wait: -5s; }
+.firefly-4 { left: 71%; top: 61%; --drift: 19s; --glow: 6.1s; --wait: -12s; }
+.firefly-5 { left: 88%; top: 50%; --drift: 23s; --glow: 4.3s; --wait: -7s; }
+
+@keyframes firefly-drift {
+  0% { transform: translate(0, 0); }
+  30% { transform: translate(16px, -12px); }
+  65% { transform: translate(-8px, -24px); }
+  100% { transform: translate(10px, -6px); }
+}
+
+/* Mostly dark, with a slow glow now and then, as fireflies flash. */
+@keyframes firefly-glow {
+  0%, 100% { opacity: 0; }
+  25% { opacity: 0.15; }
+  45% { opacity: 1; }
+  65% { opacity: 0.3; }
+}
+
+/* Paused while nobody can see them: out of view, or in a hidden tab. */
+.hero-fireflies[data-offscreen] .hero-firefly,
+.page-hidden .hero-firefly {
+  animation-play-state: paused;
+}
+
+/* The garden draws none with reduced or calm motion; these hold if a page is
+   ever left drawn as the preference changes. */
+.reduce-motion .hero-fireflies,
+.calm-motion .hero-fireflies {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-fireflies {
+    display: none;
+  }
+}

@@ -1,0 +1,128 @@
+apply plugin: 'com.android.application'
+
+import groovy.json.JsonSlurper
+
+// One version for both builds: the name shown in the Play listing and in
+// Settings is package.json's.
+def packageJson = new JsonSlurper().parse(rootProject.file('../package.json'))
+
+// Google Play needs a strictly larger versionCode for every upload. The
+// release workflow passes one (-PversionCode=...); local builds use 1.
+def playVersionCode = (project.findProperty('versionCode') ?: '1') as Integer
+
+// The upload key reaches the build only as environment variables set by the
+// release workflow from GitHub environment secrets. Nothing about the key is
+// in this repository, and without it release builds come out unsigned.
+def uploadKeystore = System.getenv('BG_UPLOAD_KEYSTORE_FILE')
+
+android {
+    namespace = "io.github.dionnedeh.butterflygarden"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.github.dionnedeh.butterflygarden"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode playVersionCode
+        versionName packageJson.version
+    }
+    androidResources {
+        // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+        // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+        ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+    signingConfigs {
+        release {
+            if (uploadKeystore) {
+                storeFile file(uploadKeystore)
+                storePassword System.getenv('BG_UPLOAD_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('BG_UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('BG_UPLOAD_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (uploadKeystore) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    implementation "com.android.billingclient:billing:$playBillingVersion"
+    testImplementation "junit:junit:$junitVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// Google's own libraries (Play Billing, Play services, datatransport) ship
+// notices for the open-source code inside them, as third_party_licenses.json
+// and .txt in each AAR. Those notices must travel with the app, so every build
+// gathers them, deduplicated, into public/google-notices.txt, which
+// Capacitor serves and Settings → Open-source notices shows.
+abstract class GatherGoogleNotices extends DefaultTask {
+    @InputFiles
+    abstract ConfigurableFileCollection getAars()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDir()
+
+    @TaskAction
+    void gather() {
+        def notices = new TreeMap<String, String>()
+        aars.files.findAll { it.name.endsWith('.aar') }.each { aar ->
+            new java.util.zip.ZipFile(aar).withCloseable { zip ->
+                def index = zip.getEntry('third_party_licenses.json')
+                def text = zip.getEntry('third_party_licenses.txt')
+                if (index == null || text == null) return
+                byte[] body = zip.getInputStream(text).bytes
+                new JsonSlurper().parse(zip.getInputStream(index)).each { name, span ->
+                    notices.putIfAbsent(name as String, new String(body, span.start as int, span.length as int, 'UTF-8'))
+                }
+            }
+        }
+        def out = outputDir.get().file('public/google-notices.txt').asFile
+        out.parentFile.mkdirs()
+        out.setText(
+            'Notices for open-source components inside Google libraries used by the app\n' +
+            '(Google Play Billing Library, Google Play services, Google datatransport).\n\n' +
+            notices.collect { name, text -> "== ${name} ==\n\n${text.trim()}\n" }.join('\n'),
+            'UTF-8'
+        )
+    }
+}
+
+def googleNotices = tasks.register('gatherGoogleNotices', GatherGoogleNotices) {
+    aars.from(
+        configurations.getByName('releaseRuntimeClasspath').incoming.artifactView {
+            attributes { attribute(Attribute.of('artifactType', String), 'aar') }
+            lenient = true
+        }.files
+    )
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(googleNotices, { it.outputDir })
+    }
+}

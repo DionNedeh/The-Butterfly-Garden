@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The PWA manifest's background_color, shown behind the splash icon and page. -->
+    <color name="garden_cream">#F8F2DF</color>
+</resources>

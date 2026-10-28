@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { flightPatterns } from '../data/flightPatterns'
 import { createInitialState } from '../lib/progression'
-import type { AppState, FlightPatternId } from '../types'
+import type { AppState, CreatureInstance, FlightPatternId } from '../types'
 import { FlightPatternsView } from './FlightPatternsView'
 
 function renderPatterns(overrides: Partial<AppState> = {}) {
@@ -98,5 +98,42 @@ describe('FlightPatternsView', () => {
       screen.getByText(`Locked - ${stardustPattern.cost} Stardust in Shop`),
     )
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('says which companions fly a pattern of their own', () => {
+    const seed = createInitialState('Tester', 'Test Garden')
+    const flyer = (name: string, more: Partial<CreatureInstance> = {}): CreatureInstance => ({
+      ...seed.creatures[0],
+      id: name,
+      name,
+      stage: 'butterfly',
+      ...more,
+    })
+    renderPatterns({
+      ownedFlightPatternIds: ['gentle-drift', 'petal-hop', 'ribbon-loop'],
+      selectedFlightPatternId: 'gentle-drift',
+      creatures: [
+        flyer('Aster', { flightPatternId: 'petal-hop' }),
+        flyer('Briar', { flightPatternId: 'petal-hop' }),
+        flyer('Clove', { flightPatternId: 'ribbon-loop' }),
+        flyer('Dill', { flightPatternId: 'ribbon-loop' }),
+        flyer('Elm', { flightPatternId: 'ribbon-loop' }),
+        flyer('Fern', { flightPatternId: 'ribbon-loop' }),
+        // Flying the garden's, so not listed anywhere.
+        flyer('Gale'),
+        // Not owned, so it flies the garden's for now.
+        flyer('Hazel', { flightPatternId: 'canopy-dance' }),
+        // Still a caterpillar: nothing to fly yet.
+        { ...flyer('Iris', { flightPatternId: 'petal-hop' }), stage: 'caterpillar' },
+      ],
+    })
+    const card = (name: string) => screen.getByRole('button', { name: new RegExp(name) })
+    expect(within(card('Petal Hop')).getByText('Flown by Aster and Briar')).toBeInTheDocument()
+    expect(
+      within(card('Ribbon Loop')).getByText('Flown by Clove, Dill and 2 others'),
+    ).toBeInTheDocument()
+    expect(within(card('Gentle Drift')).queryByText(/^Flown by/)).toBeNull()
+    expect(within(card('Canopy Dance')).queryByText(/^Flown by/)).toBeNull()
+    expect(screen.queryByText(/Gale|Hazel|Iris/)).toBeNull()
   })
 })
