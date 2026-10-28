@@ -1,0 +1,225 @@
+/* Breathing with a butterfly (plan c.1). BreathingView imports this file, so
+   it arrives with the page rather than in the stylesheet every page waits
+   for. Colours come from the theme's tokens, which the night theme
+   redefines; each rule that names a colour of its own has its .theme-night
+   twin beside it. Nothing here animates: the wings are moved by the Web
+   Animations API on their own layers, and only while motion is allowed. */
+
+.breathe-view {
+  max-width: 780px;
+}
+
+/* A companion's name is the gardener's own, up to 40 letters with no space
+   to break at; it wraps rather than running off a phone's screen. */
+.breathe-view .page-header h1,
+.breathe-view .page-header p {
+  overflow-wrap: anywhere;
+}
+
+/* Start takes the choices away, and the page shortens beneath the count.
+   Chromium's scroll anchoring would answer by jumping the page to its end,
+   the count up under the header; on this page the page stays put. Set on the
+   root, which is what scrolls: on the view itself it does nothing. */
+html:has(.breathe-view) {
+  overflow-anchor: none;
+}
+
+/* Where the dock is fixed over the foot of the screen, whatever focus or a
+   session's start brings into view (Start, Stop, a choice) is brought clear
+   of the dock that is showing, as .undo-region sits above it: the two-row
+   dock below 1080px, and the one-row dock of a phone, upright or on its side
+   (garden-3.css), and of the Android app at every width it shows at
+   (android.css). */
+@media (max-width: 1080px) {
+  html:has(.breathe-view) {
+    scroll-padding-bottom: 9rem;
+  }
+}
+
+@media (max-width: 620px), (max-height: 520px) and (max-width: 1180px) {
+  html:has(.breathe-view) {
+    scroll-padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 1180px) {
+  html.android-app:has(.breathe-view) {
+    scroll-padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.breath-stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem 2.5rem;
+}
+
+/* Between sessions the wings rest folded, as a breath out leaves them, so
+   a session starts from the pose it ends on. */
+.breath-moving .butterfly-sprite .wing {
+  transform: scaleX(var(--breath-folded));
+}
+
+/* The count has a fixed width beside the butterfly, so a longer word ("In
+   again") never shifts the butterfly along; on a phone it sits beneath. */
+.breath-count-box {
+  flex: 0 0 16rem;
+  text-align: start;
+}
+
+/* On a short screen (a phone on its side) the count sits at the foot of the
+   butterfly, just above Stop, so the two fit together between the header
+   and the dock. */
+@media (max-height: 520px) {
+  .breath-stage {
+    align-items: flex-end;
+  }
+
+  .breath-actions {
+    margin-top: 0.25rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .breath-count-box {
+    flex-basis: 100%;
+    text-align: center;
+  }
+}
+
+.breath-count,
+.breath-timings {
+  margin: 0;
+  color: var(--forest-dark);
+  font-weight: 800;
+}
+
+.breath-count {
+  font-size: clamp(2rem, 7vw, 2.6rem);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* The number keeps its width, so the word beside it never shifts. */
+.breath-number {
+  display: inline-block;
+  min-width: 1.2ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.breath-timings {
+  font-size: 1.2rem;
+}
+
+.breath-done {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.breath-done h2 {
+  margin-bottom: 0.4rem;
+}
+
+.breath-counted {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  border-radius: 999px;
+  background: #fff3cf;
+  padding: 0.35rem 0.9rem;
+  color: #5c4210;
+  font-weight: 700;
+}
+
+.theme-night .breath-counted {
+  background: #3c3528;
+  color: #f6d477;
+}
+
+/* Stop takes Start's place, beneath the count. It is not sticky: lifted to
+   stay on a short screen, it could only rise over what is above it, which is
+   the count. A session's start brings both into view instead
+   (BreathingView), clear of the header and the dock. */
+.breath-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
+.breath-actions .primary-button {
+  min-width: 11rem;
+  min-height: 48px;
+}
+
+.breath-note,
+.breath-safety {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.breath-note:empty {
+  margin: 0;
+}
+
+.breath-settings {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.breath-settings h2 {
+  margin-bottom: 0;
+}
+
+.breath-timing-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+}
+
+.breath-hint {
+  margin: -0.4rem 0 0;
+}
+
+.breath-lengths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.breath-lengths legend {
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.breath-length {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 1rem 0 0.8rem;
+  cursor: pointer;
+}
+
+.breath-length input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.breath-length:has(input:checked) {
+  border-color: var(--forest);
+  background: rgba(49, 92, 75, 0.1);
+}
+
+.theme-night .breath-length:has(input:checked) {
+  background: rgba(140, 201, 171, 0.16);
+}

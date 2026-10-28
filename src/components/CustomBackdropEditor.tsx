@@ -1,17 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CustomBackdrop } from '../types'
-import { prepareBackdrop } from '../lib/imageImport'
-import { clampCrop, coverGeometry } from '../lib/customBackdrops'
+import { prepareBackdrop, turnBackdrop } from '../lib/imageImport'
+import {
+  clampCrop,
+  coverGeometry,
+  CUSTOM_BACKDROP_LIMITS,
+} from '../lib/customBackdrops'
+import {
+  addQuarterTurn,
+  brightnessWords,
+  turnCrop,
+  withBrightness,
+  type TurnStep,
+} from '../lib/backdropEdits'
 import { CustomBackdropImage } from './CustomBackdropImage'
+import './backdrops/backdrops.css'
 
 export default function CustomBackdropEditor({
   initial,
   onSave,
   onClose,
+  saveLabel = 'Save & use backdrop',
 }: {
   initial?: CustomBackdrop
   onSave: (image: CustomBackdrop) => Promise<{ ok: boolean; message?: string }>
   onClose: () => void
+  /** What saving does, when it is not also choosing the image for the day. */
+  saveLabel?: string
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const sequence = useRef(0)
@@ -22,7 +37,14 @@ export default function CustomBackdropEditor({
     cropY: number
   } | null>(null)
   const [draft, setDraft] = useState(initial)
+  // What a turn is made from: the chosen file, or the image as it was stored,
+  // with the total quarter turns asked of it. Turning from the source each
+  // time, never from the last turned copy, keeps the picture one encoding
+  // away from the original however often it is turned.
+  const source = useRef<File | CustomBackdrop | undefined>(initial)
+  const turns = useRef(0)
   const [busy, setBusy] = useState(false)
+  const [turning, setTurning] = useState(false)
   const [error, setError] = useState('')
   const [shape, setShape] = useState<'wide' | 'phone'>('wide')
   useEffect(() => {
@@ -38,12 +60,15 @@ export default function CustomBackdropEditor({
     setError('')
     try {
       const image = await prepareBackdrop(file)
-      if (ticket === sequence.current)
+      if (ticket === sequence.current) {
+        source.current = file
+        turns.current = 0
         setDraft(
           initial
             ? { ...image, id: initial.id, createdAt: initial.createdAt }
             : image,
         )
+      }
     } catch (cause) {
       if (ticket === sequence.current)
         setError(
@@ -58,11 +83,57 @@ export default function CustomBackdropEditor({
   const close = () => {
     if (!busy) onClose()
   }
+  const turn = async (step: TurnStep) => {
+    const from = source.current
+    if (busy || !from) return
+    const ticket = ++sequence.current
+    const next = addQuarterTurn(turns.current, step)
+    setBusy(true)
+    setTurning(true)
+    setError('')
+    try {
+      // Back to as it was stored: the stored copy itself, not a new one.
+      const pixels =
+        next === 0 && 'imageData' in from ? from : await turnBackdrop(from, next)
+      if (ticket === sequence.current) {
+        turns.current = next
+        const { mimeType, width, height, byteLength, imageData } = pixels
+        setDraft(
+          (current) =>
+            current && {
+              ...current,
+              mimeType,
+              width,
+              height,
+              byteLength,
+              imageData,
+              crop: turnCrop(current.crop, step),
+            },
+        )
+      }
+    } catch (cause) {
+      if (ticket === sequence.current)
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : 'That image could not be turned.',
+        )
+    } finally {
+      if (ticket === sequence.current) {
+        setBusy(false)
+        setTurning(false)
+      }
+    }
+  }
+  const brightness = draft?.brightness ?? 0
   return (
     <dialog
       ref={dialog}
       className="garden-dialog backdrop-editor"
       aria-labelledby="editor-title"
+      // The image being framed is no draft: the auto-lock waits while it is
+      // open (components/lock/LockWatch).
+      data-auto-lock-waits=""
       onCancel={(event) => {
         event.preventDefault()
         close()
@@ -203,6 +274,47 @@ export default function CustomBackdropEditor({
               </label>
             ))}
           </div>
+          <div className="image-adjustments">
+            {/* aria-disabled while a turn is made, so the button pressed
+                keeps focus rather than dropping it to the page. */}
+            <div className="turn-controls" role="group" aria-label="Turn the image">
+              {([
+                [-1, 'Turn left', '↺'],
+                [1, 'Turn right', '↻'],
+              ] as const).map(([step, label, glyph]) => (
+                <button
+                  key={label}
+                  className="secondary-button"
+                  aria-disabled={busy}
+                  onClick={() => void turn(step)}
+                >
+                  {label} <span aria-hidden="true">{glyph}</span>
+                </button>
+              ))}
+            </div>
+            <label className="brightness-control">
+              Brightness
+              <input
+                type="range"
+                min={CUSTOM_BACKDROP_LIMITS.minBrightness}
+                max={CUSTOM_BACKDROP_LIMITS.maxBrightness}
+                step="5"
+                value={brightness}
+                aria-valuetext={brightnessWords(brightness)}
+                disabled={busy}
+                onChange={(event) =>
+                  setDraft(withBrightness(draft, Number(event.target.value)))
+                }
+              />
+              <span className="adjustment-value" aria-hidden="true">
+                {brightnessWords(brightness)}
+              </span>
+            </label>
+          </div>
+          <p className="subtle-copy">
+            A little darker helps your garden’s name stand out at night, a
+            little lighter by day.
+          </p>
           <div className="form-actions">
             <button
               className="secondary-button"
@@ -241,13 +353,17 @@ export default function CustomBackdropEditor({
                 })()
               }}
             >
-              {busy ? 'Preparing…' : 'Save & use backdrop'}
+              {busy ? 'Preparing…' : saveLabel}
             </button>
           </div>
         </>
       )}
       {busy && (
-        <p role="status">Preparing your image. This may take a moment.</p>
+        <p role="status">
+          {turning
+            ? 'Turning your image.'
+            : 'Preparing your image. This may take a moment.'}
+        </p>
       )}
       {error && (
         <p role="alert" className="error">

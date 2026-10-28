@@ -10,7 +10,11 @@ export function FlyingButterfly({
   label = 'Butterfly',
   outfit,
   reduced = false,
+  calm = false,
+  settled = false,
   preview = false,
+  aloft = 1,
+  onMeet,
 }: {
   id: string
   pattern: FlightPatternId
@@ -19,7 +23,15 @@ export function FlyingButterfly({
   label?: string
   outfit?: Partial<Record<OutfitSlot, string>>
   reduced?: boolean
+  /** Calm motion: a smaller, slower loop (see lib/motion). */
+  calm?: boolean
+  /** Resting in calm motion: at its static pose, wings still. */
+  settled?: boolean
   preview?: boolean
+  /** How many fly together; each keeps to a lane of its own (lib/flightMotion). */
+  aloft?: number
+  /** A tap introduces the butterfly (ButterflyCard), where it can be petted. */
+  onMeet?: () => void
 }) {
   const size = preview ? 48 : 96
   const { travel, heading } = useFlightMotion(
@@ -27,14 +39,17 @@ export function FlyingButterfly({
     pattern,
     index,
     size,
-    reduced,
+    reduced || settled,
     preview,
+    calm,
+    aloft,
   )
   return (
     <div
       ref={travel}
       className="flight-traveller"
       data-pattern={pattern}
+      data-flyer={preview ? undefined : id}
       aria-hidden={preview || undefined}
     >
       <div ref={heading} className="flight-heading">
@@ -43,7 +58,8 @@ export function FlyingButterfly({
           label={label}
           outfit={outfit}
           size={size}
-          pettable={!preview}
+          onMeet={preview ? undefined : onMeet}
+          flapping={!settled}
         />
       </div>
     </div>
@@ -53,9 +69,11 @@ export function FlyingButterfly({
 export function FlightPreview({
   pattern,
   reduced = false,
+  calm = false,
 }: {
   pattern: FlightPatternId
   reduced?: boolean
+  calm?: boolean
 }) {
   return (
     <div className="motion-preview" aria-hidden="true">
@@ -64,6 +82,7 @@ export function FlightPreview({
         id={`preview-${pattern}`}
         pattern={pattern}
         reduced={reduced}
+        calm={calm}
         preview
       />
     </div>

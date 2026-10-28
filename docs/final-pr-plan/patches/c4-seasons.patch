@@ -1,0 +1,2656 @@
+From 80ca2e5ed60428f467012a5eb268e8dd114fef89 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 18:06:52 +0000
+Subject: [PATCH] Seasons and the night garden without new art: the season by
+ hemisphere, seasonal and night lines, Marigold's travels, seasonal prompts,
+ fireflies at night, and hooks for the art PR
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014AYJGjCKR2Fd84nMg3GYTH
+---
+ e2e/android.spec.ts                        |  25 ++
+ e2e/seasons.spec.ts                        | 131 +++++++
+ src/components/ButterflyCard.tsx           |  10 +-
+ src/components/GardenView.seasons.test.tsx | 202 +++++++++++
+ src/components/GardenView.tsx              |  62 +++-
+ src/components/TodayView.test.tsx          |  35 +-
+ src/components/TodayView.tsx               |   9 +-
+ src/components/garden/Fireflies.test.tsx   |  75 ++++
+ src/components/garden/Fireflies.tsx        |  43 +++
+ src/components/garden/GardenLine.tsx       |  18 +
+ src/components/garden/fireflies.css        |  72 ++++
+ src/data/catalog.test.ts                   |   3 +-
+ src/data/content.test.ts                   |   3 +-
+ src/data/content.ts                        | 103 ------
+ src/data/nightLines.ts                     |  70 ++++
+ src/data/observations.ts                   | 110 ++++++
+ src/data/prompts.ts                        |  32 ++
+ src/data/seasons.test.ts                   | 136 +++++++
+ src/data/seasons.ts                        | 400 +++++++++++++++++++++
+ src/data/whatToLookFor.ts                  |   5 +-
+ src/lib/gardenLines.test.ts                | 211 +++++++++++
+ src/lib/gardenLines.ts                     | 106 ++++++
+ src/lib/prompts.test.ts                    |  54 ++-
+ src/lib/prompts.ts                         |  44 ++-
+ src/lib/sealedBackup.test.ts               |   6 +-
+ src/lib/seasons.test.ts                    |  96 +++++
+ src/lib/seasons.ts                         |  54 +++
+ src/lib/whatToLookFor.test.ts              |   5 +-
+ src/lib/whatToLookFor.ts                   |  44 +--
+ src/test/nightWords.ts                     |   6 +
+ 30 files changed, 1985 insertions(+), 185 deletions(-)
+ create mode 100644 e2e/seasons.spec.ts
+ create mode 100644 src/components/GardenView.seasons.test.tsx
+ create mode 100644 src/components/garden/Fireflies.test.tsx
+ create mode 100644 src/components/garden/Fireflies.tsx
+ create mode 100644 src/components/garden/GardenLine.tsx
+ create mode 100644 src/components/garden/fireflies.css
+ create mode 100644 src/data/nightLines.ts
+ create mode 100644 src/data/observations.ts
+ create mode 100644 src/data/seasons.test.ts
+ create mode 100644 src/data/seasons.ts
+ create mode 100644 src/lib/gardenLines.test.ts
+ create mode 100644 src/lib/gardenLines.ts
+ create mode 100644 src/lib/seasons.test.ts
+ create mode 100644 src/lib/seasons.ts
+ create mode 100644 src/test/nightWords.ts
+
+diff --git a/e2e/android.spec.ts b/e2e/android.spec.ts
+index 5dbe78a..b93332f 100644
+--- a/e2e/android.spec.ts
++++ b/e2e/android.spec.ts
+@@ -555,3 +555,28 @@ test('a protected backup goes to the app’s own save screen, and says honestly
+   await expect(make).toBeFocused()
+   expect(errors).toEqual([])
+ })
++
++test.describe('the night garden in the app', () => {
++  // 14 July 2026 in UTC: summer in the north, and an ordinary day, so the
++  // night's line is known (e2e/seasons.spec.ts has the web's whole story).
++  test.use({ timezoneId: 'UTC', reducedMotion: 'no-preference' })
++
++  test('says a night line and lets the fireflies out, its words and lights loaded from the app’s own bundle', async ({
++    page,
++  }) => {
++    const errors: string[] = []
++    page.on('pageerror', (error) => errors.push(error.message))
++    await page.clock.setFixedTime(new Date('2026-07-14T21:00:00.000Z'))
++    await page.goto('/')
++    await enterGarden(page)
++    await expect(page.locator('.garden-hero')).toHaveAttribute('data-season', 'summer')
++    await expect(page.locator('.garden-observation')).toHaveText(
++      'A quiet garden can hold many kinds of weather.',
++    )
++    await page.getByRole('button', { name: 'Switch to night mode' }).click()
++    await expect(page.locator('.garden-observation')).toHaveText('The garden is resting under the moon.')
++    await expect(page.locator('.hero-firefly')).toHaveCount(5)
++    expect(await seriousViolations(page, 'Android, the night garden')).toEqual([])
++    expect(errors).toEqual([])
++  })
++})
+diff --git a/e2e/seasons.spec.ts b/e2e/seasons.spec.ts
+new file mode 100644
+index 0000000..3a40c40
+--- /dev/null
++++ b/e2e/seasons.spec.ts
+@@ -0,0 +1,131 @@
++import { expect, test, type Page } from '@playwright/test'
++import { seriousViolations } from './a11y'
++import { goTo } from './navigation'
++
++/*
++ * The garden's seasons (plan c.7) and its night (plan b G5), without new art:
++ * the season the scene carries for the art to come, the line under the
++ * garden's name by day, by night and on a season day, and fireflies at night
++ * with motion allowed and none without. Swept with axe at night.
++ *
++ * The zone and the instant are pinned, so the season and each day's line are
++ * known. 14 July 2026 is summer in the north and winter in the south, and not
++ * one of the days the garden speaks of the season; 15 July is. A new garden's
++ * companion is still a caterpillar, so its lines are the ones any garden says.
++ */
++const ORDINARY_EVENING = new Date('2026-07-14T21:00:00.000Z')
++const SEASON_DAY = new Date('2026-07-15T12:00:00.000Z')
++
++test.use({ timezoneId: 'UTC' })
++
++async function enterGarden(page: Page) {
++  await page.getByRole('button', { name: /enter the garden/i }).click()
++  await page.getByRole('button', { name: /meet your garden guide/i }).click()
++  await page.getByRole('button', { name: 'Skip for now' }).click()
++  await page.getByRole('button', { name: /plant my first seeds/i }).click()
++  await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
++}
++
++const scene = (page: Page) => page.locator('.garden-hero')
++const gardenLine = (page: Page) => page.locator('.garden-observation')
++const fireflies = (page: Page) => page.locator('.hero-firefly')
++const petals = (page: Page) => page.locator('.hero-petal')
++
++test.describe('the night garden', () => {
++  // About motion itself, so it is on where a project turns it off (WebKit in
++  // CI; see playwright.config.ts).
++  test.use({ reducedMotion: 'no-preference' })
++
++  test('says a night line, and fireflies drift in place of the petals while motion is allowed', async ({
++    page,
++  }) => {
++    test.slow()
++    await page.clock.setFixedTime(ORDINARY_EVENING)
++    await page.goto('/The-Butterfly-Garden/')
++    await enterGarden(page)
++
++    // By day, the day's own line, the petals, and the season for the art.
++    await expect(scene(page)).toHaveAttribute('data-season', 'summer')
++    await expect(gardenLine(page)).toHaveText('A quiet garden can hold many kinds of weather.')
++    await expect(petals(page)).toHaveCount(7)
++    await expect(fireflies(page)).toHaveCount(0)
++
++    await page.getByRole('button', { name: 'Switch to night mode' }).click()
++    await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
++    await expect(gardenLine(page)).toHaveText('The garden is resting under the moon.')
++    await expect(gardenLine(page)).not.toHaveText(/morning|sun/i)
++
++    // A handful of fireflies, each moving and glowing on the compositor.
++    await expect(fireflies(page)).toHaveCount(5)
++    await expect(petals(page)).toHaveCount(0)
++    const animations = await fireflies(page)
++      .first()
++      .evaluate((firefly) =>
++        firefly.getAnimations().map((animation) => ({
++          name: (animation as CSSAnimation).animationName,
++          state: animation.playState,
++        })),
++      )
++    expect(animations).toEqual([
++      { name: 'firefly-drift', state: 'running' },
++      { name: 'firefly-glow', state: 'running' },
++    ])
++    expect(await seriousViolations(page, 'Night garden with fireflies')).toEqual([])
++
++    // The device asking for reduced motion takes them away, and back.
++    await page.emulateMedia({ reducedMotion: 'reduce' })
++    await expect(fireflies(page)).toHaveCount(0)
++    await page.emulateMedia({ reducedMotion: 'no-preference' })
++    await expect(fireflies(page)).toHaveCount(5)
++
++    // Out of view, they pause, as the sprites do.
++    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
++    await expect(page.locator('.hero-fireflies')).toHaveAttribute('data-offscreen', '')
++    await page.evaluate(() => window.scrollTo(0, 0))
++    await expect(page.locator('.hero-fireflies')).not.toHaveAttribute('data-offscreen')
++
++    // Australia and New Zealand: July is winter there, and a winter night has
++    // no fireflies. The night's line is the same, for it is about the night.
++    await goTo(page, 'Settings')
++    await page.getByLabel('My region').selectOption('australasia')
++    await goTo(page, 'Garden')
++    await expect(scene(page)).toHaveAttribute('data-season', 'winter')
++    await expect(gardenLine(page)).toHaveText('The garden is resting under the moon.')
++    await expect(fireflies(page)).toHaveCount(0)
++    expect(await seriousViolations(page, 'Night garden in winter')).toEqual([])
++  })
++
++  test('keeps fireflies away with the garden’s own reduced or calm motion', async ({ page }) => {
++    test.slow()
++    await page.clock.setFixedTime(ORDINARY_EVENING)
++    await page.goto('/The-Butterfly-Garden/')
++    await enterGarden(page)
++    await page.getByRole('button', { name: 'Switch to night mode' }).click()
++    await expect(fireflies(page)).toHaveCount(5)
++
++    for (const label of ['Reduce garden motion', 'Calm garden motion']) {
++      await goTo(page, 'Settings')
++      await page.getByLabel(label).check()
++      await page.getByRole('button', { name: 'Save settings' }).click()
++      await goTo(page, 'Garden')
++      await expect(gardenLine(page)).toHaveText('The garden is resting under the moon.')
++      await expect(fireflies(page)).toHaveCount(0)
++      await expect(petals(page)).toHaveCount(0)
++    }
++    expect(await seriousViolations(page, 'Night garden in calm motion')).toEqual([])
++  })
++})
++
++test('one day in three, the garden says what the season is doing where the gardener gardens', async ({
++  page,
++}) => {
++  await page.clock.setFixedTime(SEASON_DAY)
++  await page.goto('/The-Butterfly-Garden/')
++  await enterGarden(page)
++  await goTo(page, 'Settings')
++  await page.getByLabel('My region').selectOption('europe')
++  await goTo(page, 'Garden')
++  await expect(scene(page)).toHaveAttribute('data-season', 'summer')
++  await expect(gardenLine(page)).toHaveText(/^In the UK, .*\.$/)
++  expect(await seriousViolations(page, 'Garden on a season day')).toEqual([])
++})
+diff --git a/src/components/ButterflyCard.tsx b/src/components/ButterflyCard.tsx
+index aafe998..98ea2aa 100644
+--- a/src/components/ButterflyCard.tsx
++++ b/src/components/ButterflyCard.tsx
+@@ -1,7 +1,9 @@
+ import { useEffect, useRef, useState } from 'react'
+ import { species } from '../data/content'
++import { toLocalDate } from '../lib/date'
++import { marigoldLine } from '../lib/gardenLines'
+ import { bondLevel, stageLabels } from '../lib/lifecycle'
+-import type { CreatureInstance, OutfitSlot } from '../types'
++import type { CreatureInstance, OutfitSlot, RegionId } from '../types'
+ import { ButterflySprite } from './sprites/ButterflySprite'
+ import './butterflyCard.css'
+ 
+@@ -21,12 +23,15 @@ import './butterflyCard.css'
+ export function ButterflyCard({
+   creature,
+   outfit,
++  region,
+   onCareFor,
+   onClose,
+ }: {
+   /** The companion, or none for Marigold, who is the garden's guide. */
+   creature?: CreatureInstance
+   outfit?: Partial<Record<OutfitSlot, string>>
++  /** Where the gardener gardens, whose seasons Marigold's travels follow. */
++  region?: RegionId
+   /** Opens Care with this companion chosen. */
+   onCareFor?: () => void
+   /** Called once the dialog has closed, however it was closed. */
+@@ -45,6 +50,8 @@ export function ButterflyCard({
+   const speciesId = creature?.speciesId ?? 'monarch'
+   const speciesName =
+     species.find((item) => item.id === speciesId)?.commonName ?? 'Butterfly'
++  // Marigold's season, in autumn and spring: words only, she never leaves.
++  const travels = creature ? undefined : marigoldLine(region, toLocalDate())
+ 
+   return (
+     <dialog
+@@ -77,6 +84,7 @@ export function ButterflyCard({
+             ? `Bond level ${bondLevel(creature.bond)}`
+             : 'Your garden guide, who looks after the garden with you.'}
+         </p>
++        {travels && <p>{travels}</p>}
+         <div className="form-actions butterfly-card-actions">
+           {creature && onCareFor && (
+             <button className="primary-button" onClick={onCareFor}>
+diff --git a/src/components/GardenView.seasons.test.tsx b/src/components/GardenView.seasons.test.tsx
+new file mode 100644
+index 0000000..2f112ce
+--- /dev/null
++++ b/src/components/GardenView.seasons.test.tsx
+@@ -0,0 +1,202 @@
++import { render, screen, waitFor } from '@testing-library/react'
++import userEvent from '@testing-library/user-event'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { nightLines } from '../data/nightLines'
++import { marigoldLines } from '../data/seasons'
++import { addDaysToLocalDate } from '../lib/date'
++import { dayLine, isSeasonDay, nightLine, seasonLine } from '../lib/gardenLines'
++import { createInitialState } from '../lib/progression'
++import { DAY_WORDS } from '../test/nightWords'
++import type { AppearanceTheme, CreatureInstance, Profile } from '../types'
++import { GardenView } from './GardenView'
++
++/** Midday on a local calendar day, as this device's clock would have it. */
++function at(localDate: string) {
++  const [year, month, day] = localDate.split('-').map(Number)
++  vi.useFakeTimers({ toFake: ['Date'], now: new Date(year, month - 1, day, 12) })
++}
++
++/** The first day from this one that is, or is not, a day the garden speaks of the season. */
++function firstDay(from: string, seasonDay: boolean): string {
++  let day = from
++  while (isSeasonDay(day) !== seasonDay) day = addDaysToLocalDate(day, 1)
++  return day
++}
++
++function butterfly(speciesId: string): CreatureInstance {
++  return {
++    id: 'flyer',
++    speciesId,
++    name: 'Juniper',
++    stage: 'butterfly',
++    careDates: {},
++    actionLog: {},
++    bond: 0,
++    outfit: {},
++    carePoints: 0,
++    discoveredAt: '2026-01-01T00:00:00.000Z',
++  }
++}
++
++function renderGarden(
++  profile: Partial<Profile> = {},
++  theme?: AppearanceTheme,
++  creatures?: CreatureInstance[],
++) {
++  const seed = createInitialState('Tester', 'Test Garden')
++  const state = {
++    ...seed,
++    ...(creatures ? { creatures } : {}),
++    profile: { ...seed.profile!, ...profile },
++  }
++  return render(
++    <GardenView
++      state={state}
++      theme={theme}
++      onPlant={vi.fn()}
++      onRemovePlant={vi.fn()}
++      onPlaceJar={vi.fn()}
++      onRemoveJarPlacement={vi.fn()}
++      onSelectCompanion={vi.fn()}
++      onRenameCreature={vi.fn()}
++      onOpenCare={vi.fn()}
++    />,
++  )
++}
++
++const line = (container: HTMLElement) => container.querySelector('.garden-observation')!
++const scene = (container: HTMLElement) => container.querySelector('.garden-hero')!
++
++afterEach(() => {
++  vi.useRealTimers()
++})
++
++describe('the season on the scene', () => {
++  it('is carried by the scene for its art, by the north’s calendar where no region is chosen', () => {
++    at('2026-07-15')
++    const { container } = renderGarden()
++    expect(scene(container)).toHaveAttribute('data-season', 'summer')
++  })
++
++  it('follows the gardener’s region: July is winter in Australia and New Zealand', () => {
++    at('2026-07-15')
++    const { container } = renderGarden({ region: 'australasia' })
++    expect(scene(container)).toHaveAttribute('data-season', 'winter')
++  })
++
++  it('turns with the calendar', () => {
++    at('2026-10-27')
++    const { container } = renderGarden({ region: 'europe' })
++    expect(scene(container)).toHaveAttribute('data-season', 'autumn')
++  })
++})
++
++describe('the line under the garden’s name', () => {
++  it('keeps the day’s own words by day on an ordinary day', async () => {
++    const day = firstDay('2026-07-01', false)
++    at(day)
++    const { container } = renderGarden({}, 'sunlight')
++    await waitFor(() => expect(line(container)).toHaveTextContent(dayLine(undefined, day)))
++  })
++
++  it('is a night line at night, never the day’s words while it loads', async () => {
++    const day = firstDay('2026-07-01', false)
++    at(day)
++    const { container } = renderGarden({}, 'night')
++    expect(line(container).textContent).not.toBe(dayLine(undefined, day))
++    await waitFor(() => expect(line(container)).toHaveTextContent(nightLine(undefined, day)))
++    expect(line(container).textContent).not.toMatch(DAY_WORDS)
++  })
++
++  it('is the active butterfly’s own night, or the garden’s', async () => {
++    const day = firstDay('2026-07-01', false)
++    at(day)
++    const { container } = renderGarden({ activeCompanionId: 'flyer' }, 'night', [butterfly('queen')])
++    const expected = nightLine('queen', day)
++    await waitFor(() => expect(line(container)).toHaveTextContent(expected))
++    const queenOrAny = nightLines
++      .filter(([speciesId]) => speciesId === 'queen' || speciesId === 'all')
++      .map(([, text]) => text)
++    expect(queenOrAny).toContain(expected)
++  })
++
++  it('says what the season is doing one day in three, where the gardener gardens', async () => {
++    const day = firstDay('2026-10-01', true)
++    at(day)
++    const { container } = renderGarden({ region: 'north-america' }, 'sunlight')
++    await waitFor(() =>
++      expect(line(container)).toHaveTextContent(seasonLine('north-america', day)),
++    )
++  })
++
++  it('in Australia and New Zealand, says the south’s season', async () => {
++    const day = firstDay('2026-10-01', true)
++    at(day)
++    const { container } = renderGarden({ region: 'australasia' }, 'night')
++    await waitFor(() =>
++      expect(line(container)).toHaveTextContent(seasonLine('australasia', day)),
++    )
++  })
++})
++
++describe('fireflies', () => {
++  const fireflies = (container: HTMLElement) => container.querySelectorAll('.hero-firefly')
++  const petals = (container: HTMLElement) => container.querySelectorAll('.hero-petal')
++
++  it('take the place of the petals at night', async () => {
++    at('2026-07-15')
++    const { container } = renderGarden({}, 'night')
++    await waitFor(() => expect(fireflies(container).length).toBeGreaterThan(0))
++    expect(petals(container)).toHaveLength(0)
++  })
++
++  it('are not there by day, when the petals fall', async () => {
++    at('2026-07-15')
++    const { container } = renderGarden({}, 'sunlight')
++    expect(petals(container).length).toBeGreaterThan(0)
++    // Long enough for a lazily loaded part to have arrived, had one been asked for.
++    await new Promise((resolve) => setTimeout(resolve, 50))
++    expect(fireflies(container)).toHaveLength(0)
++  })
++
++  it('never show with reduced motion or calm motion', async () => {
++    at('2026-07-15')
++    for (const profile of [{ reducedMotion: true }, { calmMotion: true }]) {
++      const { container, unmount } = renderGarden(profile, 'night')
++      await new Promise((resolve) => setTimeout(resolve, 50))
++      expect(fireflies(container)).toHaveLength(0)
++      unmount()
++    }
++  })
++
++  it('stay away on a winter night', async () => {
++    at('2026-01-15')
++    const { container } = renderGarden({}, 'night')
++    await new Promise((resolve) => setTimeout(resolve, 50))
++    expect(fireflies(container)).toHaveLength(0)
++    expect(petals(container)).toHaveLength(0)
++  })
++})
++
++describe('Marigold’s travels', () => {
++  it('are on her card in autumn, and she is still the garden’s guide', async () => {
++    at('2026-10-15')
++    const user = userEvent.setup()
++    renderGarden({ region: 'north-america' }, 'sunlight')
++    await user.click(screen.getByRole('button', { name: /^Meet Marigold/ }))
++    const card = await screen.findByRole('dialog', { name: 'Marigold' })
++    expect(card).toHaveTextContent('Your garden guide, who looks after the garden with you.')
++    expect(card).toHaveTextContent(marigoldLines.north.autumn!)
++    // She flies on, as ever.
++    expect(screen.getByRole('button', { name: /^Meet Marigold/ })).toBeInTheDocument()
++  })
++
++  it('say nothing of travel in summer', async () => {
++    at('2026-07-15')
++    const user = userEvent.setup()
++    renderGarden({ region: 'north-america' }, 'sunlight')
++    await user.click(screen.getByRole('button', { name: /^Meet Marigold/ }))
++    const card = await screen.findByRole('dialog', { name: 'Marigold' })
++    expect(card).not.toHaveTextContent(/travel|back from/)
++  })
++})
+diff --git a/src/components/GardenView.tsx b/src/components/GardenView.tsx
+index 3349c0d..7e39a09 100644
+--- a/src/components/GardenView.tsx
++++ b/src/components/GardenView.tsx
+@@ -8,7 +8,7 @@ import {
+   useState,
+   type CSSProperties,
+ } from 'react'
+-import { observations, plants, species } from '../data/content'
++import { plants, species } from '../data/content'
+ import { flightPatterns } from '../data/flightPatterns'
+ import { getDailyPromptIndex, toLocalDate } from '../lib/date'
+ import { distinctSpeciesRaised } from '../lib/speciesAcquisition'
+@@ -40,6 +40,7 @@ import { CreatureSprite } from './sprites/CreatureSprite'
+ import { FlowerSprite } from './sprites/FlowerSprite'
+ import { Icon } from './Icons'
+ import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
++import { currentSeason, hemisphereOf } from '../lib/seasons'
+ import { welcomeBackToday } from '../lib/visits'
+ import { homeScreenAdvice, isHomeScreenGuidePutAway, putAwayHomeScreenGuide } from '../lib/install'
+ 
+@@ -66,6 +67,22 @@ const SeedTray = lazy(() =>
+ const PlantPanel = lazy(() =>
+   import('./garden/PlantPanel').then((m) => ({ default: m.PlantPanel })),
+ )
++/** At night, with full motion, in place of the day's petals. */
++const Fireflies = lazy(() =>
++  import('./garden/Fireflies').then((m) => ({ default: m.Fireflies })),
++)
++/**
++ * The line under the garden's name, by day, by night and by season
++ * (lib/gardenLines): its words are the garden's alone, so they are not in the
++ * first load. Should they fail to load (an update half-arrived, say), the
++ * garden's quiet line stands in.
++ */
++const GardenLine = lazy(() =>
++  import('./garden/GardenLine').then(
++    (m) => ({ default: m.GardenLine }),
++    () => ({ default: () => 'The garden is finding its rhythm.' }),
++  ),
++)
+ 
+ /** Catalogs are static, so index them once at module load instead of scanning
+  *  them inside every render loop. */
+@@ -230,13 +247,13 @@ export function GardenView({
+     ).find((element) => element.dataset.flyer === closed.id)
+     flyer?.querySelector<HTMLElement>('[role="button"]')?.focus()
+   }
+-  const observationChoices = observations.filter(
+-    (item) => item.speciesId === 'all' || item.speciesId === active?.speciesId,
+-  )
+-  const observation =
+-    observationChoices[
+-      getDailyPromptIndex(toLocalDate(), observationChoices.length)
+-    ]
++  const today = toLocalDate()
++  const night = theme === 'night'
++  const region = state.profile?.region
++  // By the gardener's half of the world, or the north's when that is not
++  // known: only the scene reads it (its art's season, and fireflies), never
++  // words about the gardener's own season.
++  const season = currentSeason(today, hemisphereOf(region))
+   const selectedPlant = state.plants.find(
+     (plant) => plant.id === selectedPlantId,
+   )
+@@ -286,7 +303,6 @@ export function GardenView({
+   const gardenFull = state.plants.length >= PLANT_CAPACITY
+   const plantBlocker = plantingBlocker(state, PLANT_SEED_COST)
+   const gardenTitle = useRef<HTMLHeadingElement>(null)
+-  const today = toLocalDate()
+   const welcomeBack =
+     onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
+   // On an iPhone or iPad in a browser, how to keep the garden on the Home
+@@ -302,6 +318,9 @@ export function GardenView({
+         className={`garden-hero backdrop-${state.profile?.selectedBackdropId ?? 'sunlit-meadow'}`}
+         style={{ backgroundImage: `url(${backdropAssets[displayedScene].image})` }}
+         aria-labelledby="garden-title"
++        // A hook for the seasons' art (data/seasons): CSS and images alone can
++        // dress the scene by season, and by night with .theme-night around it.
++        data-season={season}
+       >
+         {customBackdrop && failedImage !== customBackdrop.id && (
+           <div className="custom-scene-layer">
+@@ -312,10 +331,18 @@ export function GardenView({
+           </div>
+         )}
+         <div className="hero-petals" aria-hidden="true">
+-          {Array.from({ length: 7 }, (_, index) => (
+-            <span key={index} className={`hero-petal petal-${index + 1}`} />
+-          ))}
++          {!night &&
++            Array.from({ length: 7 }, (_, index) => (
++              <span key={index} className={`hero-petal petal-${index + 1}`} />
++            ))}
+         </div>
++        {/* Fireflies in place of petals by night, never in winter, and only
++            with full motion: none with reduced or calm motion. */}
++        {night && motion === 'full' && season !== 'winter' && (
++          <Suspense fallback={null}>
++            <Fireflies />
++          </Suspense>
++        )}
+         <div className="garden-heading">
+           <p className="eyebrow">Your living sanctuary</p>
+           {/* Focusable by script only: the recap's fade to night lands here. */}
+@@ -323,7 +350,15 @@ export function GardenView({
+             {state.profile?.gardenName}
+           </h1>
+           <p className="garden-observation">
+-            {observation?.text ?? 'The garden is finding its rhythm.'}
++            {/* A space holds the line's place while its words load. */}
++            <Suspense fallback={'\u00a0'}>
++              <GardenLine
++                localDate={today}
++                speciesId={active?.speciesId}
++                night={night}
++                region={region}
++              />
++            </Suspense>
+           </p>
+         </div>
+ 
+@@ -412,6 +447,7 @@ export function GardenView({
+             key={meeting.opening}
+             creature={meetingCreature}
+             outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
++            region={region}
+             onCareFor={
+               meetingCreature && onCareFor
+                 ? () => onCareFor(meetingCreature.id)
+diff --git a/src/components/TodayView.test.tsx b/src/components/TodayView.test.tsx
+index ee8b291..3b1236b 100644
+--- a/src/components/TodayView.test.tsx
++++ b/src/components/TodayView.test.tsx
+@@ -2,7 +2,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
+ import userEvent from '@testing-library/user-event'
+ import { afterEach, describe, expect, it, vi } from 'vitest'
+ import { goalSuggestions } from '../data/goalSuggestions'
+-import { recapOpensAt } from '../lib/date'
++import { seasonalPrompts, type SeasonalPrompt } from '../data/prompts'
++import { addDaysToLocalDate, recapOpensAt } from '../lib/date'
+ import { resetDrafts } from '../lib/drafts'
+ import { createInitialState, MAX_PLANT_GROWTH } from '../lib/progression'
+ import { promptForDay } from '../lib/prompts'
+@@ -1414,3 +1415,35 @@ describe('breathing with a butterfly, from Today', () => {
+     expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+   })
+ })
++
++describe('the season’s prompts on Today', () => {
++  afterEach(() => resetDrafts())
++
++  /** The first autumn day whose own prompt, in North America, is autumn's. */
++  function autumnPromptDay(): string {
++    let day = '2026-09-01'
++    while (!seasonalPrompts.includes(promptForDay(day, 0, 'autumn') as SeasonalPrompt)) {
++      day = addDaysToLocalDate(day, 1)
++    }
++    return day
++  }
++
++  it('offers one where the gardener’s region says which season it is', () => {
++    const day = autumnPromptDay()
++    const seasonal = promptForDay(day, 0, 'autumn')
++    renderToday(gardenWith({ region: 'north-america' }), { today: day })
++    expect(screen.getByRole('heading', { level: 2, name: seasonal.text })).toBeInTheDocument()
++  })
++
++  it('offers none where the season is not known', () => {
++    const day = autumnPromptDay()
++    for (const region of [undefined, 'elsewhere'] as const) {
++      renderToday(gardenWith({ region }), { today: day })
++      expect(screen.getByRole('heading', { level: 2, name: promptForDay(day).text })).toBeInTheDocument()
++      for (const prompt of seasonalPrompts) {
++        expect(screen.queryByRole('heading', { level: 2, name: prompt.text })).toBeNull()
++      }
++      cleanup()
++    }
++  })
++})
+diff --git a/src/components/TodayView.tsx b/src/components/TodayView.tsx
+index ffd9e24..f913da0 100644
+--- a/src/components/TodayView.tsx
++++ b/src/components/TodayView.tsx
+@@ -34,6 +34,7 @@ import { isBreathingGoal, pacerFor } from '../lib/breathing'
+ import { nextStepsAfter, type NextStep } from '../lib/nextStep'
+ import { counted } from '../lib/plural'
+ import { promptAfter, promptById, promptForDay } from '../lib/prompts'
++import { knownSeason } from '../lib/seasons'
+ import type { BreatheWay } from '../lib/routes'
+ import type {
+   AppState,
+@@ -215,7 +216,9 @@ export function TodayView({
+   const reflectionPromptKey = `reflection-prompt:${today}`
+   const [chosenPromptId, setChosenPromptId] = useDraft(reflectionPromptKey, '')
+   const answered = existingReflection ? promptById(existingReflection.promptId) : undefined
+-  const prompt = promptById(chosenPromptId) ?? answered ?? promptForDay(today)
++  // The season's own prompts join the rotation where the region says which it is.
++  const season = knownSeason(state.profile?.region, today)
++  const prompt = promptById(chosenPromptId) ?? answered ?? promptForDay(today, 0, season)
+   const writingFreely = prompt.id === freeWritingPrompt.id
+   // Where focus goes once the page has redrawn: a goal's ⋯ button by its id,
+   // or '' for the Goals heading when the goal it was on has gone. Only set by
+@@ -844,7 +847,7 @@ export function TodayView({
+         <div className="prompt-choices">
+           <button
+             className="text-button"
+-            onClick={() => setChosenPromptId(promptAfter(prompt, today).id)}
++            onClick={() => setChosenPromptId(promptAfter(prompt, today, season).id)}
+           >
+             Another prompt
+           </button>
+@@ -862,7 +865,7 @@ export function TodayView({
+               const back =
+                 beforeFreeWriting ??
+                 (answered && answered.id !== freeWritingPrompt.id ? answered.id : undefined)
+-              setChosenPromptId(back ?? promptForDay(today).id)
++              setChosenPromptId(back ?? promptForDay(today, 0, season).id)
+             }}
+           >
+             Write freely
+diff --git a/src/components/garden/Fireflies.test.tsx b/src/components/garden/Fireflies.test.tsx
+new file mode 100644
+index 0000000..332a6bd
+--- /dev/null
++++ b/src/components/garden/Fireflies.test.tsx
+@@ -0,0 +1,75 @@
++import { act, render } from '@testing-library/react'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { Fireflies, FIREFLY_COUNT } from './Fireflies'
++
++/** A device whose reduced-motion preference is as given, and can change. */
++function preferReducedMotion(reduce: boolean) {
++  const listeners = new Set<() => void>()
++  const list = {
++    matches: reduce,
++    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
++    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
++  }
++  vi.stubGlobal('matchMedia', (query: string) => {
++    expect(query).toBe('(prefers-reduced-motion: reduce)')
++    return list
++  })
++  return (next: boolean) => {
++    list.matches = next
++    listeners.forEach((listener) => listener())
++  }
++}
++
++afterEach(() => {
++  vi.unstubAllGlobals()
++})
++
++describe('fireflies', () => {
++  it('are a handful of small lights, hidden from assistive technology', () => {
++    preferReducedMotion(false)
++    const { container } = render(<Fireflies />)
++    const field = container.querySelector('.hero-fireflies')
++    expect(field).toHaveAttribute('aria-hidden', 'true')
++    expect(container.querySelectorAll('.hero-firefly')).toHaveLength(FIREFLY_COUNT)
++    expect(FIREFLY_COUNT).toBeLessThanOrEqual(6)
++  })
++
++  it('are not drawn at all where the device asks for reduced motion, and leave when it does', () => {
++    const change = preferReducedMotion(true)
++    const { container } = render(<Fireflies />)
++    expect(container.querySelector('.hero-firefly')).toBeNull()
++
++    act(() => change(false))
++    expect(container.querySelectorAll('.hero-firefly')).toHaveLength(FIREFLY_COUNT)
++    act(() => change(true))
++    expect(container.querySelector('.hero-fireflies')).toBeNull()
++  })
++
++  it('pause while out of view, like the scene’s sprites', () => {
++    preferReducedMotion(false)
++    let report: IntersectionObserverCallback | undefined
++    const observed: Element[] = []
++    vi.stubGlobal(
++      'IntersectionObserver',
++      class {
++        constructor(callback: IntersectionObserverCallback) {
++          report = callback
++        }
++        observe(element: Element) {
++          observed.push(element)
++        }
++        disconnect() {}
++      },
++    )
++    const { container } = render(<Fireflies />)
++    const field = container.querySelector('.hero-fireflies')!
++    expect(observed).toContain(field)
++
++    const seen = (isIntersecting: boolean) =>
++      report?.([{ target: field, isIntersecting } as unknown as IntersectionObserverEntry], {} as IntersectionObserver)
++    seen(false)
++    expect(field).toHaveAttribute('data-offscreen')
++    seen(true)
++    expect(field).not.toHaveAttribute('data-offscreen')
++  })
++})
+diff --git a/src/components/garden/Fireflies.tsx b/src/components/garden/Fireflies.tsx
+new file mode 100644
+index 0000000..77c3574
+--- /dev/null
++++ b/src/components/garden/Fireflies.tsx
+@@ -0,0 +1,43 @@
++import { useEffect, useRef } from 'react'
++import { useMediaQuery } from '../../hooks/useMediaQuery'
++import './fireflies.css'
++
++/** A handful, so the night stays calm and the compositor's work small. */
++export const FIREFLY_COUNT = 5
++
++/**
++ * Fireflies drifting low over the night garden, in place of the day's falling
++ * petals (plan b G5). GardenView loads them only at night and only with full
++ * motion: never with reduced motion (the setting, which is the shell's
++ * `.reduce-motion`) or Calm motion. The device's own reduced-motion
++ * preference is checked here, where the garden itself does not look.
++ *
++ * Each firefly is a small glowing dot whose drift is a transform and whose
++ * glow is its opacity, both on its own composited layer, so the main thread
++ * does nothing while they move; no React render happens per frame. Out of
++ * view they pause, marked `data-offscreen` as the sprites are (SpriteFrame),
++ * and a hidden tab pauses them with everything else (`.page-hidden`). Their
++ * observer is their own, so the garden's first load gains nothing for them.
++ */
++export function Fireflies() {
++  const reduced = useMediaQuery('(prefers-reduced-motion: reduce)')
++  const field = useRef<HTMLDivElement>(null)
++  useEffect(() => {
++    const element = field.current
++    if (!element || typeof IntersectionObserver === 'undefined') return
++    const observer = new IntersectionObserver(
++      ([entry]) => element.toggleAttribute('data-offscreen', !entry.isIntersecting),
++      { rootMargin: '64px' },
++    )
++    observer.observe(element)
++    return () => observer.disconnect()
++  }, [reduced])
++  if (reduced) return null
++  return (
++    <div className="hero-fireflies" aria-hidden="true" ref={field}>
++      {Array.from({ length: FIREFLY_COUNT }, (_, index) => (
++        <span key={index} className={`hero-firefly firefly-${index + 1}`} />
++      ))}
++    </div>
++  )
++}
+diff --git a/src/components/garden/GardenLine.tsx b/src/components/garden/GardenLine.tsx
+new file mode 100644
+index 0000000..98d8def
+--- /dev/null
++++ b/src/components/garden/GardenLine.tsx
+@@ -0,0 +1,18 @@
++import { gardenLine } from '../../lib/gardenLines'
++import type { RegionId } from '../../types'
++
++/**
++ * The line under the garden's name (lib/gardenLines): by day, by night, or
++ * what the season is doing. Loaded with the garden rather than in the first
++ * load every page waits for, so none of its words are there.
++ */
++export function GardenLine(day: {
++  localDate: string
++  /** The active butterfly's species, if one is flying. */
++  speciesId?: string
++  /** Whether the theme on screen is night. */
++  night: boolean
++  region?: RegionId
++}) {
++  return gardenLine(day)
++}
+diff --git a/src/components/garden/fireflies.css b/src/components/garden/fireflies.css
+new file mode 100644
+index 0000000..ae8d053
+--- /dev/null
++++ b/src/components/garden/fireflies.css
+@@ -0,0 +1,72 @@
++/* Fireflies over the night garden (components/garden/Fireflies), loaded with
++   them, only at night. Under the heading and the plants, like the day's
++   petals, and drawn only where the night theme is, which is their one theme. */
++.hero-fireflies {
++  position: absolute;
++  z-index: 4;
++  inset: 0;
++  overflow: hidden;
++  border-radius: inherit;
++  pointer-events: none;
++}
++
++/* A warm yellow-green spark with a soft halo. Only transform and opacity
++   animate, so each firefly is a layer the compositor moves and fades alone. */
++.theme-night .hero-firefly {
++  --firefly-core: #fbf7c6;
++  --firefly-glow: rgba(212, 236, 116, 0.6);
++  --firefly-halo: rgba(212, 236, 116, 0.16);
++  position: absolute;
++  width: 5px;
++  height: 5px;
++  border-radius: 50%;
++  background: var(--firefly-core);
++  box-shadow:
++    0 0 6px 2px var(--firefly-glow),
++    0 0 18px 7px var(--firefly-halo);
++  opacity: 0;
++  will-change: transform, opacity;
++  animation:
++    firefly-drift var(--drift) ease-in-out var(--wait) infinite alternate,
++    firefly-glow var(--glow) ease-in-out var(--wait) infinite;
++}
++
++.firefly-1 { left: 12%; top: 54%; --drift: 17s; --glow: 4.6s; --wait: -2s; }
++.firefly-2 { left: 31%; top: 66%; --drift: 21s; --glow: 5.4s; --wait: -9s; }
++.firefly-3 { left: 52%; top: 47%; --drift: 15s; --glow: 3.9s; --wait: -5s; }
++.firefly-4 { left: 71%; top: 61%; --drift: 19s; --glow: 6.1s; --wait: -12s; }
++.firefly-5 { left: 88%; top: 50%; --drift: 23s; --glow: 4.3s; --wait: -7s; }
++
++@keyframes firefly-drift {
++  0% { transform: translate(0, 0); }
++  30% { transform: translate(16px, -12px); }
++  65% { transform: translate(-8px, -24px); }
++  100% { transform: translate(10px, -6px); }
++}
++
++/* Mostly dark, with a slow glow now and then, as fireflies flash. */
++@keyframes firefly-glow {
++  0%, 100% { opacity: 0; }
++  25% { opacity: 0.15; }
++  45% { opacity: 1; }
++  65% { opacity: 0.3; }
++}
++
++/* Paused while nobody can see them: out of view, or in a hidden tab. */
++.hero-fireflies[data-offscreen] .hero-firefly,
++.page-hidden .hero-firefly {
++  animation-play-state: paused;
++}
++
++/* The garden draws none with reduced or calm motion; these hold if a page is
++   ever left drawn as the preference changes. */
++.reduce-motion .hero-fireflies,
++.calm-motion .hero-fireflies {
++  display: none;
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .hero-fireflies {
++    display: none;
++  }
++}
+diff --git a/src/data/catalog.test.ts b/src/data/catalog.test.ts
+index 6c471f3..0051104 100644
+--- a/src/data/catalog.test.ts
++++ b/src/data/catalog.test.ts
+@@ -1,7 +1,8 @@
+ import { describe, expect, it } from 'vitest'
+ import { careActions } from './careActions'
+ import { getShopItem, shopItems } from './shopItems'
+-import { observations, plants, species } from './content'
++import { plants, species } from './content'
++import { observations } from './observations'
+ import { flightPatterns } from './flightPatterns'
+ import { jarCharacters, jarColors } from './jars'
+ import { ambientTracks } from './ambientTracks'
+diff --git a/src/data/content.test.ts b/src/data/content.test.ts
+index ea63745..71d17d1 100644
+--- a/src/data/content.test.ts
++++ b/src/data/content.test.ts
+@@ -1,5 +1,6 @@
+ import { describe, expect, it } from 'vitest'
+-import { observations, plants, species } from './content'
++import { plants, species } from './content'
++import { observations } from './observations'
+ 
+ describe('butterfly collection content', () => {
+   it('offers twenty-five butterflies including blue morpho and glasswing', () => {
+diff --git a/src/data/content.ts b/src/data/content.ts
+index dd41d3a..fac8b94 100644
+--- a/src/data/content.ts
++++ b/src/data/content.ts
+@@ -1,6 +1,5 @@
+ import type {
+   MoodEntry,
+-  Observation,
+   PlantDefinition,
+   ReflectionPrompt,
+   SpeciesDefinition,
+@@ -322,108 +321,6 @@ export const moodLevels: Array<{
+ /** Just the names, in level order, for places that only label a level. */
+ export const moodNames = moodLevels.map((mood) => mood.name)
+ 
+-const observationTexts: Array<[string, string]> = [
+-  ['monarch', 'The milkweed leaves are warm in the morning light.'],
+-  ['monarch', 'A monarch tastes the air with its antennae.'],
+-  ['monarch', 'Orange wings open like a small sunrise.'],
+-  ['monarch', 'Marigold rests where the garden feels quietest.'],
+-  ['monarch', 'Even long journeys are made one wingbeat at a time.'],
+-  ['black-swallowtail', 'A swallowtail traces a patient circle over the parsley.'],
+-  ['black-swallowtail', 'Golden spots flash when the dark wings turn.'],
+-  ['black-swallowtail', 'The parsley patch makes a fine sheltered nursery.'],
+-  ['black-swallowtail', 'Two delicate tails steer through the afternoon air.'],
+-  ['black-swallowtail', 'The swallowtail chooses a sunlit leaf and settles.'],
+-  ['tiger-swallowtail', 'Tiger stripes glow between the branches.'],
+-  ['tiger-swallowtail', 'Large wings drift as lightly as falling petals.'],
+-  ['tiger-swallowtail', 'The tulip tree keeps a green room high above the path.'],
+-  ['tiger-swallowtail', 'A swallowtail glides without hurrying.'],
+-  ['tiger-swallowtail', 'The garden feels wider beneath these yellow wings.'],
+-  ['red-admiral', 'A red admiral guards a bright patch of sunlight.'],
+-  ['red-admiral', 'Scarlet bands flicker near the nettle leaves.'],
+-  ['red-admiral', 'A folded leaf can be a safe beginning.'],
+-  ['red-admiral', 'The admiral returns to the same warm stone.'],
+-  ['red-admiral', 'Strong colors can belong to gentle moments.'],
+-  ['painted-lady', 'Painted wings carry a map of distant places.'],
+-  ['painted-lady', 'The thistle nods under a welcome visitor.'],
+-  ['painted-lady', 'Soft orange wings pause beside the asters.'],
+-  ['painted-lady', 'A traveler can still make a place feel like home.'],
+-  ['painted-lady', 'The painted lady follows the warm edge of the path.'],
+-  ['cloudless-sulphur', 'A yellow wing passes like sunlight set free.'],
+-  ['cloudless-sulphur', 'The partridge pea glows beneath a sulphur butterfly.'],
+-  ['cloudless-sulphur', 'This visitor prefers the high, open air.'],
+-  ['cloudless-sulphur', 'Pale wings settle among the zinnias.'],
+-  ['blue-morpho', 'Blue light shimmers across the morpho’s wing scales.'],
+-  ['blue-morpho', 'The morpho folds its wings and becomes quietly brown.'],
+-  ['blue-morpho', 'A flash of rainforest blue passes between the flowers.'],
+-  ['blue-morpho', 'The morpho rests near fallen fruit at the garden edge.'],
+-  ['blue-morpho', 'Brilliant color can come from the way light is reflected.'],
+-  ['glasswing', 'A glasswing passes like a window carried on the breeze.'],
+-  ['glasswing', 'Transparent wings catch only a faint green shimmer.'],
+-  ['glasswing', 'The glasswing rests quietly beneath a shaded leaf.'],
+-  ['queen', 'A queen glides low over the milkweed patch.'],
+-  ['queen', 'Chestnut wings carry neat rows of pale spots.'],
+-  ['queen', 'The queen pauses where the afternoon light is warm.'],
+-  ['gulf-fritillary', 'Silver spots gleam beneath a gulf fritillary’s wings.'],
+-  ['gulf-fritillary', 'A bright orange visitor circles the passionflower vine.'],
+-  ['gulf-fritillary', 'The fritillary follows a curling tendril toward the sun.'],
+-  ['zebra-longwing', 'Long striped wings drift through the garden shade.'],
+-  ['zebra-longwing', 'A zebra longwing lingers over the passionflowers.'],
+-  ['zebra-longwing', 'Black and yellow bands move with an unhurried rhythm.'],
+-  ['common-buckeye', 'A buckeye opens its many watchful eyespots to the sun.'],
+-  ['common-buckeye', 'Brown wings settle neatly beside the plantain leaves.'],
+-  ['common-buckeye', 'The path brightens with a flash of orange and blue.'],
+-  ['viceroy', 'A viceroy traces the willow’s softly bending branches.'],
+-  ['viceroy', 'Orange wings open to reveal one careful black line.'],
+-  ['viceroy', 'The viceroy drinks from a damp place near the path.'],
+-  ['mourning-cloak', 'A pale gold border frames the mourning cloak’s dark wings.'],
+-  ['mourning-cloak', 'One of spring’s earliest visitors rests on the willow bark.'],
+-  ['mourning-cloak', 'Deep velvet wings warm themselves in a patch of sun.'],
+-  ['spicebush-swallowtail', 'Blue-green scales glow across a spicebush swallowtail.'],
+-  ['spicebush-swallowtail', 'A folded spicebush leaf shelters a hidden beginning.'],
+-  ['spicebush-swallowtail', 'The swallowtail sweeps past with two dark tails steering.'],
+-  ['giant-swallowtail', 'A giant swallowtail sails above the citrus leaves.'],
+-  ['giant-swallowtail', 'Broad black wings carry bands of warm yellow.'],
+-  ['giant-swallowtail', 'The garden’s largest visitor glides without effort.'],
+-  ['cabbage-white', 'A cabbage white bobs lightly over the garden beds.'],
+-  ['cabbage-white', 'Creamy wings flicker beside the brassica leaves.'],
+-  ['cabbage-white', 'A familiar white butterfly makes the ordinary feel bright.'],
+-  ['baltimore-checkerspot', 'A checkered wing opens like tiny stained glass.'],
+-  ['baltimore-checkerspot', 'The turtlehead patch holds a bright black-and-orange visitor.'],
+-  ['baltimore-checkerspot', 'Small squares of color move together in the sun.'],
+-  ['pipevine-swallowtail', 'A pipevine swallowtail flashes blue where the light catches it.'],
+-  ['pipevine-swallowtail', 'Dark wings sweep low over the pipevine leaves.'],
+-  ['pipevine-swallowtail', 'Two slender tails steer through a patch of shade.'],
+-  ['american-lady', 'An American lady opens two watchful eyespots to the path.'],
+-  ['american-lady', 'Orange wings settle near the soft pussytoes leaves.'],
+-  ['american-lady', 'A silk shelter begins as a careful folded leaf.'],
+-  ['great-spangled-fritillary', 'Black spots scatter across warm orange wings.'],
+-  ['great-spangled-fritillary', 'The violets keep a quiet nursery close to the soil.'],
+-  ['great-spangled-fritillary', 'A fritillary glows like copper beside the coneflowers.'],
+-  ['spring-azure', 'A tiny blue wing flickers at the garden edge.'],
+-  ['spring-azure', 'The dogwood blossoms seem to have lent the azure their softness.'],
+-  ['spring-azure', 'Small things can brighten an entire path.'],
+-  ['red-spotted-purple', 'Blue-black wings shine with a hidden purple sheen.'],
+-  ['red-spotted-purple', 'Red-orange spots glimmer along the dark wing edge.'],
+-  ['red-spotted-purple', 'The black cherry leaves shelter a quiet beginning.'],
+-  ['california-sister', 'A bold white band crosses the California sister’s dark wings.'],
+-  ['california-sister', 'Orange tips flash as the butterfly turns near the oak.'],
+-  ['california-sister', 'The oak canopy holds a warm western visitor.'],
+-  ['atala', 'An atala carries jewel-blue spots through the garden air.'],
+-  ['atala', 'The coontie leaves shelter a rare bright beginning.'],
+-  ['atala', 'Dark wings open with a flash of turquoise and red.'],
+-  ['all', 'The garden does not ask the day to be anything else.'],
+-  ['all', 'Something is always growing, even when it is hard to see.'],
+-  ['all', 'A quiet garden can hold many kinds of weather.'],
+-]
+-
+-export const observations: Observation[] = observationTexts.map(
+-  ([speciesId, text], index) => ({
+-    id: `observation-${index + 1}`,
+-    speciesId,
+-    text,
+-  }),
+-)
+-
+ export const butterflyNames = [
+   'Juniper',
+   'Clover',
+diff --git a/src/data/nightLines.ts b/src/data/nightLines.ts
+new file mode 100644
+index 0000000..7e793a5
+--- /dev/null
++++ b/src/data/nightLines.ts
+@@ -0,0 +1,70 @@
++/**
++ * The garden's line under its name at night (plan b G5): "The milkweed is
++ * resting under the moon", where the day says it is "warm in the morning
++ * light". The day's lines (data/observations) stay exactly as they are; these
++ * are chosen by the same rule, the gardener's active butterfly or any garden,
++ * so every species has its own, each naming its host plant (lib/gardenLines).
++ * Loaded with the garden's line, never in the first load.
++ *
++ * Butterflies fly by day and rest at night, so no line has one flying, and
++ * none speaks of the sun or the hour. Where a line says what a butterfly or
++ * caterpillar does, it is one of its checked facts in data/speciesFacts:
++ * cloudless sulphurs roost alone, queens and zebra longwings together, and
++ * spicebush and American lady caterpillars come out to feed at night.
++ */
++export const nightLines: ReadonlyArray<readonly [speciesId: string, text: string]> = [
++  ['monarch', 'The milkweed is resting under the moon.'],
++  ['monarch', 'A monarch hangs still beneath a leaf, wings folded for the night.'],
++  ['black-swallowtail', 'The parsley patch is quiet under the stars.'],
++  ['black-swallowtail', 'A swallowtail rests with its dark wings folded tight.'],
++  ['tiger-swallowtail', 'The tulip tree keeps its green room dark and still tonight.'],
++  ['tiger-swallowtail', 'Yellow stripes are folded away until the garden warms again.'],
++  ['red-admiral', 'Dew gathers on the nettle leaves tonight.'],
++  ['red-admiral', 'The red admiral has folded its scarlet bands away for the night.'],
++  ['painted-lady', 'The thistle stands silver in the moonlight.'],
++  ['painted-lady', 'A painted lady rests low among the leaves, her travels paused.'],
++  ['cloudless-sulphur', 'The partridge pea is still beneath the stars.'],
++  ['cloudless-sulphur', 'A sulphur roosts alone tonight, all but lost against a yellow leaf.'],
++  ['blue-morpho', 'Night air settles over the rainforest legume.'],
++  ['blue-morpho', 'The morpho rests with its wings closed, brown as the shadows.'],
++  ['glasswing', 'The nightshade keeps its shaded corner quiet tonight.'],
++  ['glasswing', 'A glasswing rests beneath a leaf, almost invisible in the dark.'],
++  ['queen', 'Queens rest together tonight in a shared roost near the milkweed.'],
++  ['queen', 'Chestnut wings are folded away until the garden warms.'],
++  ['gulf-fritillary', 'The passionflower vine curls quietly in the dark.'],
++  ['gulf-fritillary', 'Silver spots catch a little moonlight on folded wings.'],
++  ['zebra-longwing', 'Zebra longwings gather in a small group to roost together for the night.'],
++  ['zebra-longwing', 'The passionflowers rest under a quiet moon.'],
++  ['common-buckeye', 'The plantain leaves are cool and still tonight.'],
++  ['common-buckeye', 'A buckeye rests with its watchful eyespots closed away.'],
++  ['viceroy', 'The willow’s branches sway softly in the night air.'],
++  ['viceroy', 'A viceroy rests among the willow leaves until the garden warms.'],
++  ['mourning-cloak', 'The willow bark holds the night’s quiet.'],
++  ['mourning-cloak', 'The mourning cloak rests, as dark and still as the bark around it.'],
++  ['spicebush-swallowtail', 'The spicebush stands quiet in the cool night air.'],
++  ['spicebush-swallowtail', 'Spicebush caterpillars leave their folded leaves to feed in the dark.'],
++  ['giant-swallowtail', 'The citrus leaves shine a little under the moon.'],
++  ['giant-swallowtail', 'The garden’s largest visitor rests, folded small for the night.'],
++  ['cabbage-white', 'Night dew beads the brassica leaves.'],
++  ['cabbage-white', 'A cabbage white rests, a pale shape among the leaves.'],
++  ['baltimore-checkerspot', 'The turtlehead patch is still under the stars.'],
++  ['baltimore-checkerspot', 'Checkered wings are folded away until the garden warms.'],
++  ['pipevine-swallowtail', 'The pipevine’s heart-shaped leaves rest in the dark.'],
++  ['pipevine-swallowtail', 'A pipevine swallowtail hangs still, its blue sheen waiting for the light.'],
++  ['american-lady', 'The pussytoes glow softly silver under the moon.'],
++  ['american-lady', 'An American lady caterpillar slips out of its silk shelter to feed tonight.'],
++  ['great-spangled-fritillary', 'The violets keep their nursery close to the soil tonight.'],
++  ['great-spangled-fritillary', 'A fritillary rests with silver spangles on its folded wings.'],
++  ['spring-azure', 'The dogwood stands pale in the moonlight.'],
++  ['spring-azure', 'A tiny azure rests with its wings closed, pale as the moon.'],
++  ['red-spotted-purple', 'The black cherry leaves rustle softly in the night breeze.'],
++  ['red-spotted-purple', 'Red-orange spots rest along a folded wing in the dark.'],
++  ['california-sister', 'The oak keeps watch over the garden through the night.'],
++  ['california-sister', 'A California sister rests among the oak leaves for the night.'],
++  ['atala', 'The coontie’s leaves stand dark and glossy under the moon.'],
++  ['atala', 'An atala rests, a few blue spots glinting on its folded wings.'],
++  ['all', 'The garden is resting under the moon.'],
++  ['all', 'Something is still growing tonight, even in the dark.'],
++  ['all', 'Butterflies rest through the night, folded under leaves and in tall grass.'],
++  ['all', 'A quiet garden can hold the night gently.'],
++]
+diff --git a/src/data/observations.ts b/src/data/observations.ts
+new file mode 100644
+index 0000000..01a0b15
+--- /dev/null
++++ b/src/data/observations.ts
+@@ -0,0 +1,110 @@
++import type { Observation } from '../types'
++
++/**
++ * The garden's line under its name by day: one a day, from the active
++ * butterfly's own and those any garden says (lib/gardenLines). Loaded with
++ * the night's lines and the season's, once the garden is first shown, rather
++ * than with every page's first load: words only the garden shows. The ids are
++ * the ones these lines have always had.
++ */
++const observationTexts: Array<[string, string]> = [
++  ['monarch', 'The milkweed leaves are warm in the morning light.'],
++  ['monarch', 'A monarch tastes the air with its antennae.'],
++  ['monarch', 'Orange wings open like a small sunrise.'],
++  ['monarch', 'Marigold rests where the garden feels quietest.'],
++  ['monarch', 'Even long journeys are made one wingbeat at a time.'],
++  ['black-swallowtail', 'A swallowtail traces a patient circle over the parsley.'],
++  ['black-swallowtail', 'Golden spots flash when the dark wings turn.'],
++  ['black-swallowtail', 'The parsley patch makes a fine sheltered nursery.'],
++  ['black-swallowtail', 'Two delicate tails steer through the afternoon air.'],
++  ['black-swallowtail', 'The swallowtail chooses a sunlit leaf and settles.'],
++  ['tiger-swallowtail', 'Tiger stripes glow between the branches.'],
++  ['tiger-swallowtail', 'Large wings drift as lightly as falling petals.'],
++  ['tiger-swallowtail', 'The tulip tree keeps a green room high above the path.'],
++  ['tiger-swallowtail', 'A swallowtail glides without hurrying.'],
++  ['tiger-swallowtail', 'The garden feels wider beneath these yellow wings.'],
++  ['red-admiral', 'A red admiral guards a bright patch of sunlight.'],
++  ['red-admiral', 'Scarlet bands flicker near the nettle leaves.'],
++  ['red-admiral', 'A folded leaf can be a safe beginning.'],
++  ['red-admiral', 'The admiral returns to the same warm stone.'],
++  ['red-admiral', 'Strong colors can belong to gentle moments.'],
++  ['painted-lady', 'Painted wings carry a map of distant places.'],
++  ['painted-lady', 'The thistle nods under a welcome visitor.'],
++  ['painted-lady', 'Soft orange wings pause beside the asters.'],
++  ['painted-lady', 'A traveler can still make a place feel like home.'],
++  ['painted-lady', 'The painted lady follows the warm edge of the path.'],
++  ['cloudless-sulphur', 'A yellow wing passes like sunlight set free.'],
++  ['cloudless-sulphur', 'The partridge pea glows beneath a sulphur butterfly.'],
++  ['cloudless-sulphur', 'This visitor prefers the high, open air.'],
++  ['cloudless-sulphur', 'Pale wings settle among the zinnias.'],
++  ['blue-morpho', 'Blue light shimmers across the morpho’s wing scales.'],
++  ['blue-morpho', 'The morpho folds its wings and becomes quietly brown.'],
++  ['blue-morpho', 'A flash of rainforest blue passes between the flowers.'],
++  ['blue-morpho', 'The morpho rests near fallen fruit at the garden edge.'],
++  ['blue-morpho', 'Brilliant color can come from the way light is reflected.'],
++  ['glasswing', 'A glasswing passes like a window carried on the breeze.'],
++  ['glasswing', 'Transparent wings catch only a faint green shimmer.'],
++  ['glasswing', 'The glasswing rests quietly beneath a shaded leaf.'],
++  ['queen', 'A queen glides low over the milkweed patch.'],
++  ['queen', 'Chestnut wings carry neat rows of pale spots.'],
++  ['queen', 'The queen pauses where the afternoon light is warm.'],
++  ['gulf-fritillary', 'Silver spots gleam beneath a gulf fritillary’s wings.'],
++  ['gulf-fritillary', 'A bright orange visitor circles the passionflower vine.'],
++  ['gulf-fritillary', 'The fritillary follows a curling tendril toward the sun.'],
++  ['zebra-longwing', 'Long striped wings drift through the garden shade.'],
++  ['zebra-longwing', 'A zebra longwing lingers over the passionflowers.'],
++  ['zebra-longwing', 'Black and yellow bands move with an unhurried rhythm.'],
++  ['common-buckeye', 'A buckeye opens its many watchful eyespots to the sun.'],
++  ['common-buckeye', 'Brown wings settle neatly beside the plantain leaves.'],
++  ['common-buckeye', 'The path brightens with a flash of orange and blue.'],
++  ['viceroy', 'A viceroy traces the willow’s softly bending branches.'],
++  ['viceroy', 'Orange wings open to reveal one careful black line.'],
++  ['viceroy', 'The viceroy drinks from a damp place near the path.'],
++  ['mourning-cloak', 'A pale gold border frames the mourning cloak’s dark wings.'],
++  ['mourning-cloak', 'One of spring’s earliest visitors rests on the willow bark.'],
++  ['mourning-cloak', 'Deep velvet wings warm themselves in a patch of sun.'],
++  ['spicebush-swallowtail', 'Blue-green scales glow across a spicebush swallowtail.'],
++  ['spicebush-swallowtail', 'A folded spicebush leaf shelters a hidden beginning.'],
++  ['spicebush-swallowtail', 'The swallowtail sweeps past with two dark tails steering.'],
++  ['giant-swallowtail', 'A giant swallowtail sails above the citrus leaves.'],
++  ['giant-swallowtail', 'Broad black wings carry bands of warm yellow.'],
++  ['giant-swallowtail', 'The garden’s largest visitor glides without effort.'],
++  ['cabbage-white', 'A cabbage white bobs lightly over the garden beds.'],
++  ['cabbage-white', 'Creamy wings flicker beside the brassica leaves.'],
++  ['cabbage-white', 'A familiar white butterfly makes the ordinary feel bright.'],
++  ['baltimore-checkerspot', 'A checkered wing opens like tiny stained glass.'],
++  ['baltimore-checkerspot', 'The turtlehead patch holds a bright black-and-orange visitor.'],
++  ['baltimore-checkerspot', 'Small squares of color move together in the sun.'],
++  ['pipevine-swallowtail', 'A pipevine swallowtail flashes blue where the light catches it.'],
++  ['pipevine-swallowtail', 'Dark wings sweep low over the pipevine leaves.'],
++  ['pipevine-swallowtail', 'Two slender tails steer through a patch of shade.'],
++  ['american-lady', 'An American lady opens two watchful eyespots to the path.'],
++  ['american-lady', 'Orange wings settle near the soft pussytoes leaves.'],
++  ['american-lady', 'A silk shelter begins as a careful folded leaf.'],
++  ['great-spangled-fritillary', 'Black spots scatter across warm orange wings.'],
++  ['great-spangled-fritillary', 'The violets keep a quiet nursery close to the soil.'],
++  ['great-spangled-fritillary', 'A fritillary glows like copper beside the coneflowers.'],
++  ['spring-azure', 'A tiny blue wing flickers at the garden edge.'],
++  ['spring-azure', 'The dogwood blossoms seem to have lent the azure their softness.'],
++  ['spring-azure', 'Small things can brighten an entire path.'],
++  ['red-spotted-purple', 'Blue-black wings shine with a hidden purple sheen.'],
++  ['red-spotted-purple', 'Red-orange spots glimmer along the dark wing edge.'],
++  ['red-spotted-purple', 'The black cherry leaves shelter a quiet beginning.'],
++  ['california-sister', 'A bold white band crosses the California sister’s dark wings.'],
++  ['california-sister', 'Orange tips flash as the butterfly turns near the oak.'],
++  ['california-sister', 'The oak canopy holds a warm western visitor.'],
++  ['atala', 'An atala carries jewel-blue spots through the garden air.'],
++  ['atala', 'The coontie leaves shelter a rare bright beginning.'],
++  ['atala', 'Dark wings open with a flash of turquoise and red.'],
++  ['all', 'The garden does not ask the day to be anything else.'],
++  ['all', 'Something is always growing, even when it is hard to see.'],
++  ['all', 'A quiet garden can hold many kinds of weather.'],
++]
++
++export const observations: Observation[] = observationTexts.map(
++  ([speciesId, text], index) => ({
++    id: `observation-${index + 1}`,
++    speciesId,
++    text,
++  }),
++)
+diff --git a/src/data/prompts.ts b/src/data/prompts.ts
+index faf31ae..727889e 100644
+--- a/src/data/prompts.ts
++++ b/src/data/prompts.ts
+@@ -1,3 +1,4 @@
++import type { Season } from '../lib/seasons'
+ import type { ReflectionPrompt, ReflectionPromptFamily } from '../types'
+ 
+ /*
+@@ -91,3 +92,34 @@ const reflectionPromptRows: ReadonlyArray<
+ export const reflectionPrompts: ReflectionPrompt[] = reflectionPromptRows.map(
+   ([id, text, family]) => ({ id, text, family }),
+ )
++
++/** A prompt that joins the rotation only in its own season (plan c.7). */
++export interface SeasonalPrompt extends ReflectionPrompt {
++  season: Season
++}
++
++/**
++ * A few prompts for each season, offered only where the garden knows the
++ * gardener's season: with a region chosen (lib/seasons, knownSeason), since
++ * spring in March would be wrong for half the world. Concrete "what" and
++ * "which" questions, like the rest, about the season where the gardener is.
++ * Stored by id like any other prompt, so the same rule holds: never reused
++ * or removed. (A build from before these shows such a reflection without its
++ * question, as it does any prompt it does not know.)
++ */
++const seasonalPromptRows: ReadonlyArray<
++  readonly [id: string, text: string, family: ReflectionPromptFamily, season: Season]
++> = [
++  ['spring-first-sign', 'What is the first sign of spring you have noticed near you?', 'nature', 'spring'],
++  ['spring-growing', 'What is starting to grow or flower where you are?', 'nature', 'spring'],
++  ['summer-noticed', 'Which flowers or insects of summer caught your eye lately?', 'nature', 'summer'],
++  ['summer-evenings', 'What do you enjoy most about the longer evenings?', 'savouring', 'summer'],
++  ['autumn-changing', 'What is changing in the trees and gardens near you this season?', 'nature', 'autumn'],
++  ['autumn-comfort', 'What small comfort helps you settle into the cooler days?', 'rest', 'autumn'],
++  ['winter-green', 'What is still green or alive outside, even in winter?', 'nature', 'winter'],
++  ['winter-rest', 'What helps you rest and keep warm through the darker days?', 'rest', 'winter'],
++]
++
++export const seasonalPrompts: SeasonalPrompt[] = seasonalPromptRows.map(
++  ([id, text, family, season]) => ({ id, text, family, season }),
++)
+diff --git a/src/data/seasons.test.ts b/src/data/seasons.test.ts
+new file mode 100644
+index 0000000..7f6d4d0
+--- /dev/null
++++ b/src/data/seasons.test.ts
+@@ -0,0 +1,136 @@
++import { describe, expect, it } from 'vitest'
++import type { Season } from '../lib/seasons'
++import { DAY_WORDS } from '../test/nightWords'
++import { plants, species } from './content'
++import { observations } from './observations'
++import { nightLines } from './nightLines'
++import { marigoldLines, seasonArt, seasonLines } from './seasons'
++import { shopItems } from './shopItems'
++
++const SEASONS: readonly Season[] = ['spring', 'summer', 'autumn', 'winter']
++const REGIONS = ['north-america', 'europe', 'australasia'] as const
++
++/** A butterfly on the wing, which it is not at night. */
++const FLYING = /\b(fly|flies|flying|flew|glides?|gliding|soars?|sails?|flutters?|flickers?|drifts?|sweeps?)\b/i
++
++const CATCHING = /\b(catch|net|nets|handle|hold|pick up|collect)\b/i
++
++describe('the season’s lines', () => {
++  it('say something for every season in every region', () => {
++    for (const region of REGIONS) {
++      for (const season of SEASONS) {
++        const lines = seasonLines.filter((line) => line.region === region && line.season === season)
++        expect(lines.length, `${region} ${season}`).toBeGreaterThanOrEqual(2)
++      }
++    }
++  })
++
++  it('name their place, cite a source, and say it plainly', () => {
++    for (const line of seasonLines) {
++      // The place first ("In much of North America, …"), and a full stop.
++      expect(line.text, line.text).toMatch(
++        /^In [^,]*\b(North America|United States|Florida|UK|England|Australia|New Zealand), .*\.$/,
++      )
++      expect(line.text.length, line.text).toBeLessThanOrEqual(130)
++      expect(line.sources.length).toBeGreaterThan(0)
++      for (const source of line.sources) expect(new URL(source).protocol).toBe('https:')
++      expect(line.text).not.toMatch(CATCHING)
++    }
++    const texts = seasonLines.map((line) => line.text)
++    expect(new Set(texts).size).toBe(texts.length)
++  })
++
++  it('can all be said at night: none speaks of the sun or the hour', () => {
++    for (const line of seasonLines) expect(line.text, line.text).not.toMatch(DAY_WORDS)
++    for (const hemisphere of Object.values(marigoldLines)) {
++      for (const text of Object.values(hemisphere)) expect(text).not.toMatch(DAY_WORDS)
++    }
++  })
++})
++
++describe('Marigold’s travels', () => {
++  it('get her ready in autumn and bring her back in spring, in both halves of the world', () => {
++    for (const hemisphere of ['north', 'south'] as const) {
++      expect(marigoldLines[hemisphere].autumn).toMatch(/^Marigold is getting ready to travel/)
++      expect(marigoldLines[hemisphere].spring).toMatch(/^Marigold is back/)
++      expect(marigoldLines[hemisphere].summer).toBeUndefined()
++      expect(marigoldLines[hemisphere].winter).toBeUndefined()
++    }
++    expect(marigoldLines.north.spring).toMatch(/back from the south/)
++    // In the south, monarchs go to winter roosts, not south.
++    expect(marigoldLines.south.autumn).not.toMatch(/south|north/)
++    expect(marigoldLines.south.spring).not.toMatch(/south|north/)
++  })
++
++  it('never has her leave: she stays to guide the gardener', () => {
++    for (const hemisphere of ['north', 'south'] as const) {
++      expect(marigoldLines[hemisphere].autumn).toMatch(/She will stay to guide you/)
++      for (const text of Object.values(marigoldLines[hemisphere])) {
++        expect(text).not.toMatch(/\b(gone|left|leaves|away|goodbye)\b/i)
++      }
++    }
++  })
++})
++
++describe('the night’s lines', () => {
++  const speciesIds = new Set(species.map((item) => item.id))
++
++  it('belong to a butterfly of the garden, or to any garden', () => {
++    for (const [speciesId] of nightLines) {
++      expect(speciesId === 'all' || speciesIds.has(speciesId), speciesId).toBe(true)
++    }
++    expect(nightLines.filter(([speciesId]) => speciesId === 'all').length).toBeGreaterThanOrEqual(3)
++  })
++
++  it('give every butterfly its own, at least one naming its host plant', () => {
++    // A plant's own name, without the words many names share.
++    const generic = new Set(['native', 'tree', 'vine', 'garden', 'tropical', 'flowering', 'stinging', 'white', 'black'])
++    for (const butterfly of species) {
++      const own = nightLines.filter(([speciesId]) => speciesId === butterfly.id).map(([, text]) => text)
++      expect(own.length, butterfly.id).toBeGreaterThanOrEqual(2)
++      const plantWords = plants
++        .filter((plant) => butterfly.hostPlantIds.includes(plant.id))
++        .flatMap((plant) => plant.name.toLowerCase().split(/\s+/))
++        .filter((word) => word.length >= 3 && !generic.has(word))
++      expect(
++        own.some((text) => plantWords.some((word) => text.toLowerCase().includes(word))),
++        `${butterfly.id}: ${plantWords.join(', ')}`,
++      ).toBe(true)
++    }
++  })
++
++  it('keep the night: no sun, no hour of the day, and nobody on the wing', () => {
++    for (const [, text] of nightLines) {
++      expect(text, text).not.toMatch(DAY_WORDS)
++      expect(text, text).not.toMatch(FLYING)
++      expect(text, text).toMatch(/^[A-Z].*\.$/)
++    }
++  })
++
++  it('are new words, never the day’s', () => {
++    const day = new Set(observations.map((item) => item.text))
++    const texts = nightLines.map(([, text]) => text)
++    for (const text of texts) expect(day.has(text), text).toBe(false)
++    expect(new Set(texts).size).toBe(texts.length)
++  })
++})
++
++describe('the art each season will want', () => {
++  it('names an overlay, a free keepsake and a Pass outfit for every season, with ids of their own', () => {
++    const ids: string[] = []
++    for (const season of SEASONS) {
++      const art = seasonArt[season]
++      for (const piece of [art.overlay, art.keepsake, art.passOutfit]) {
++        expect(piece.id).toMatch(/^[a-z0-9-]+$/)
++        expect(piece.name.trim()).not.toBe('')
++        expect(piece.brief).toMatch(/\.$/)
++        ids.push(piece.id)
++      }
++      expect(['headwear', 'accessory', 'aura']).toContain(art.passOutfit.slot)
++    }
++    expect(new Set(ids).size).toBe(ids.length)
++    // None may be mistaken for something the shop already sells.
++    const sold = new Set(shopItems.map((item) => item.id))
++    for (const id of ids) expect(sold.has(id), id).toBe(false)
++  })
++})
+diff --git a/src/data/seasons.ts b/src/data/seasons.ts
+new file mode 100644
+index 0000000..ee451c4
+--- /dev/null
++++ b/src/data/seasons.ts
+@@ -0,0 +1,400 @@
++import type { MarkedRegion } from '../lib/regionMarks'
++import type { Hemisphere, Season } from '../lib/seasons'
++import type { OutfitSlot } from '../types'
++
++/*
++ * The seasons in the garden (plan c.7): what real butterflies and plants are
++ * doing in each season, Marigold's travels, and the art each season will
++ * want. Loaded with the garden's line (lib/gardenLines), never in the first
++ * load every page waits for.
++ */
++
++/** A line about the season where it is said, and where it was checked. */
++export interface SeasonLine {
++  /** The region it is about, which every line names. */
++  region: MarkedRegion
++  /** The season it belongs to, in that region's own half of the world. */
++  season: Season
++  text: string
++  sources: readonly string[]
++}
++
++const BAMONA = 'https://www.butterfliesandmoths.org/species/'
++const EDIS = 'https://edis.ifas.ufl.edu/publication/'
++const BC = 'https://butterfly-conservation.org/butterflies/'
++const BC_GARDENING =
++  'https://butterfly-conservation.org/sites/default/files/habitat-gardening-for-butterflies-and-moths.pdf'
++const SA_PAINTED_LADY = 'https://sabutterflies.org.au/nymp/kershawi.html'
++const NZ = 'https://www.nzbutterflies.org.nz/species-info/'
++
++/**
++ * What the season is doing, in broad and gentle terms. Phenology varies with
++ * latitude and with the year, so each line names the place it is true of
++ * ("In much of North America…") and says only what its sources say: true on
++ * the day it is shown, wherever the gardener is, so a garden whose region is
++ * not known can show any of them without guessing its season.
++ *
++ * Checked in October 2026. Most lines repeat, more briefly, what the garden
++ * already says in data/whatToLookFor, data/speciesFacts or data/regions,
++ * from the same sources; the rest were read against the source listed with
++ * them. Nothing here suggests catching or handling anything. Every line can
++ * be shown at night, so none speaks of the sun or the hour.
++ */
++export const seasonLines: readonly SeasonLine[] = [
++  // North America: Butterflies and Moths of North America, as data/whatToLookFor
++  // and data/speciesFacts cite it, and data/regions' planting tips.
++  {
++    region: 'north-america',
++    season: 'spring',
++    text: 'In much of North America, monarchs are heading north again, laying eggs on milkweed as they go.',
++    sources: [`${BAMONA}Danaus-plexippus`],
++  },
++  {
++    region: 'north-america',
++    season: 'spring',
++    text: 'In much of North America, mourning cloaks that spent the winter as adults come out on the first warm days.',
++    sources: [`${BAMONA}Nymphalis-antiopa`, `${EDIS}IN821`],
++  },
++  {
++    region: 'north-america',
++    season: 'spring',
++    text: 'In much of North America, small blue spring azures are out early in the warm season.',
++    sources: [`${BAMONA}Celastrina-ladon`],
++  },
++  {
++    region: 'north-america',
++    season: 'spring',
++    text: 'In the eastern United States, great spangled fritillary caterpillars that waited all winter start on young violet leaves.',
++    sources: [`${BAMONA}Speyeria-cybele`],
++  },
++  {
++    region: 'north-america',
++    season: 'summer',
++    text: 'In much of North America, summer brings new generations of monarchs to the milkweed.',
++    sources: [`${BAMONA}Danaus-plexippus`],
++  },
++  {
++    region: 'north-america',
++    season: 'summer',
++    text: 'In much of North America, late summer is when monarchs begin their long flight south.',
++    sources: [`${BAMONA}Danaus-plexippus`],
++  },
++  {
++    region: 'north-america',
++    season: 'summer',
++    text: 'In North America, cloudless sulphurs may wander as far as the northern states by late summer.',
++    sources: [`${BAMONA}Phoebis-sennae`, `${EDIS}IN929`],
++  },
++  {
++    region: 'north-america',
++    season: 'autumn',
++    text: 'In much of North America, monarchs are on the move south, roosting together at night.',
++    sources: [`${BAMONA}Danaus-plexippus`],
++  },
++  {
++    region: 'north-america',
++    season: 'autumn',
++    // As data/regions' North American planting tips have it ("Asters and
++    // goldenrods in the fall"), from the extension guides it lists.
++    text: 'In much of North America, asters and goldenrods feed butterflies late into the fall.',
++    sources: [`${EDIS}IN1107`, `${EDIS}IN1170`, `${EDIS}IN804`, `${EDIS}IN823`],
++  },
++  {
++    region: 'north-america',
++    season: 'autumn',
++    text: 'In much of North America, cloudless sulphurs fly south in the fall, low over the ground.',
++    sources: [`${BAMONA}Phoebis-sennae`, `${EDIS}IN929`],
++  },
++  {
++    region: 'north-america',
++    season: 'autumn',
++    text: 'In Florida, huge numbers of common buckeyes arrive from the north each fall.',
++    sources: [`${BAMONA}Junonia-coenia`, `${EDIS}IN801`],
++  },
++  {
++    region: 'north-america',
++    season: 'winter',
++    text: 'In much of North America, monarchs are spending the winter in central Mexico and along the California coast.',
++    sources: [`${BAMONA}Danaus-plexippus`],
++  },
++  {
++    region: 'north-america',
++    season: 'winter',
++    text: 'In much of North America, mourning cloaks spend the winter as adults, tucked away until spring.',
++    sources: [`${BAMONA}Nymphalis-antiopa`, `${EDIS}IN821`],
++  },
++  {
++    region: 'north-america',
++    season: 'winter',
++    text: 'In much of North America, young viceroy caterpillars spend the winter in a rolled willow leaf.',
++    sources: [`${BAMONA}Limenitis-archippus`, `${EDIS}IN828`],
++  },
++  {
++    region: 'north-america',
++    season: 'winter',
++    text: 'In eastern North America, Baltimore checkerspot caterpillars spend the winter rolled up in fallen leaves.',
++    sources: [`${BAMONA}Euphydryas-phaeton`],
++  },
++
++  // The UK: Butterfly Conservation, which speaks of Britain, so the lines do too.
++  {
++    region: 'europe',
++    season: 'spring',
++    text: 'In the UK, small tortoiseshells are one of the first butterflies to be seen in spring.',
++    sources: [`${BC}small-tortoiseshell`],
++  },
++  {
++    region: 'europe',
++    season: 'spring',
++    text: 'In the UK, holly blues are out early in spring, flying high around holly and other bushes.',
++    sources: [`${BC}holly-blue`],
++  },
++  {
++    region: 'europe',
++    season: 'spring',
++    text: 'In the UK, red admirals start arriving from the south, from North Africa and the continent.',
++    sources: [`${BC}red-admiral`],
++  },
++  {
++    region: 'europe',
++    season: 'spring',
++    text: 'In the UK, primroses and cuckooflower are spring nectar for butterflies.',
++    sources: [BC_GARDENING],
++  },
++  {
++    region: 'europe',
++    season: 'summer',
++    text: 'In the UK, more red admirals arrive from the south through the summer.',
++    sources: [`${BC}red-admiral`],
++  },
++  {
++    region: 'europe',
++    season: 'summer',
++    text: 'In the UK, fresh red admirals emerge from about July, raised from the spring’s arrivals.',
++    sources: [`${BC}red-admiral`],
++  },
++  {
++    region: 'europe',
++    season: 'summer',
++    text: 'In the UK, peacocks are familiar visitors to garden buddleias in late summer.',
++    sources: [`${BC}peacock`],
++  },
++  {
++    region: 'europe',
++    season: 'summer',
++    text: 'In the UK, knapweed, marjoram, scabious and thyme are late summer nectar for butterflies.',
++    sources: [BC_GARDENING],
++  },
++  {
++    region: 'europe',
++    season: 'autumn',
++    text: 'In the UK, red admirals feed on ivy flowers and rotting fruit into the autumn.',
++    sources: [`${BC}red-admiral`],
++  },
++  {
++    region: 'europe',
++    season: 'autumn',
++    text: 'In the UK, small tortoiseshells often visit garden flowers in large numbers in autumn.',
++    sources: [`${BC}small-tortoiseshell`],
++  },
++  {
++    region: 'europe',
++    season: 'autumn',
++    text: 'In the UK, commas roam more widely, often into gardens, before they settle for the winter.',
++    sources: [`${BC}comma`],
++  },
++  {
++    region: 'europe',
++    season: 'winter',
++    text: 'In the UK, commas spend the winter as adults, their ragged wings hidden among dead leaves.',
++    sources: [`${BC}comma`],
++  },
++  {
++    region: 'europe',
++    season: 'winter',
++    text: 'In the far south of England, red admirals have been known to survive the winter.',
++    sources: [`${BC}red-admiral`],
++  },
++
++  // Australia and New Zealand: the South Australian Butterflies site, Butterfly
++  // House and the Moths and Butterflies of New Zealand Trust. Each line names
++  // the country, or the state, its source speaks of.
++  {
++    region: 'australasia',
++    season: 'spring',
++    text: 'In Australia, Australian painted ladies migrate with the spring, mostly heading south.',
++    sources: [SA_PAINTED_LADY],
++  },
++  {
++    region: 'australasia',
++    season: 'spring',
++    text: 'In southern parts of South Australia, spring is one of the best times to see Australian painted ladies.',
++    sources: [SA_PAINTED_LADY],
++  },
++  {
++    region: 'australasia',
++    season: 'summer',
++    text: 'In eastern Australia, caper whites often fly south in summer, sometimes in great numbers.',
++    sources: ['https://www.lepidoptera.butterflyhouse.com.au/pier/java.html'],
++  },
++  {
++    region: 'australasia',
++    season: 'summer',
++    text: 'In New Zealand, the kahukura, a red admiral found nowhere else, is most often seen in summer.',
++    sources: [`${NZ}red-admiral/`],
++  },
++  {
++    region: 'australasia',
++    season: 'autumn',
++    text: 'In Australia, Australian painted ladies make a smaller migration north in autumn.',
++    sources: [SA_PAINTED_LADY],
++  },
++  {
++    region: 'australasia',
++    season: 'autumn',
++    text: 'In southern parts of South Australia, autumn is one of the best times to see Australian painted ladies.',
++    sources: [SA_PAINTED_LADY],
++  },
++  {
++    region: 'australasia',
++    season: 'winter',
++    text: 'In New Zealand, monarchs spend the winter as adults, resting in conifer trees.',
++    sources: [`${NZ}monarch/`],
++  },
++  {
++    region: 'australasia',
++    season: 'winter',
++    text: 'In New Zealand, the kahukura spends the winter as an adult, and can live for up to nine months.',
++    sources: [`${NZ}red-admiral/`],
++  },
++  {
++    region: 'australasia',
++    season: 'winter',
++    text: 'In southern parts of South Australia, Australian painted ladies sometimes rest through the winter as adults.',
++    sources: [SA_PAINTED_LADY],
++  },
++]
++
++/**
++ * Marigold's own seasons. She is a monarch, so in autumn she gets ready to
++ * travel and in spring she is back. Words only: she never leaves, never stops
++ * guiding, and no rule of the garden changes with them. In the south, where
++ * monarchs move to winter roosts rather than to Mexico, she travels without
++ * a direction.
++ */
++export const marigoldLines: Readonly<Record<Hemisphere, Partial<Record<Season, string>>>> = {
++  north: {
++    autumn: 'Marigold is getting ready to travel south, as monarchs do. She will stay to guide you all the same.',
++    spring: 'Marigold is back from the south, and glad to be in the garden again.',
++  },
++  south: {
++    autumn: 'Marigold is getting ready to travel, as monarchs do. She will stay to guide you all the same.',
++    spring: 'Marigold is back from her travels, and glad to be in the garden again.',
++  },
++}
++
++/** One piece of a season's art, named before it is drawn. */
++interface ArtPiece {
++  /** Stable, since a keepsake or outfit id is stored once it is given. */
++  id: string
++  name: string
++  /** What the art should show, for whoever draws it. */
++  brief: string
++}
++
++/**
++ * The art each season will want, for the art PR to draw: nothing here has an
++ * image yet, and nothing in the app reads this list. The scene already carries
++ * the hooks it needs, so the art only adds pictures and CSS:
++ * `.garden-hero[data-season="autumn"]` for the season, and `.theme-night`
++ * around it at night (GardenView).
++ *
++ * - The overlay is a layer over the scene, drawn by CSS from that hook: the
++ *   falling petals (`.hero-petal`, by day only) can be dressed as each
++ *   season's, and `.hero-petals::before` is free for a still layer such as
++ *   frost. At night the fireflies (components/garden/Fireflies) take the
++ *   petals' place, as now.
++ * - The keepsake is free, one each season, for every gardener: wellbeing and
++ *   seasons are never paywalled.
++ * - The outfit is the Garden Pass's for the season: cosmetic, like the rest.
++ */
++export interface SeasonArt {
++  overlay: ArtPiece
++  keepsake: ArtPiece
++  passOutfit: ArtPiece & { slot: OutfitSlot }
++}
++
++export const seasonArt: Readonly<Record<Season, SeasonArt>> = {
++  spring: {
++    overlay: {
++      id: 'overlay-spring-blossom',
++      name: 'Spring blossom',
++      brief: 'Pale blossom petals drifting down through the scene.',
++    },
++    keepsake: {
++      id: 'keepsake-spring-nest',
++      name: 'Spring Nest',
++      brief: 'A small woven nest with a sprig of new leaves.',
++    },
++    passOutfit: {
++      id: 'season-spring-blossom-crown',
++      name: 'Blossom Crown',
++      brief: 'A light crown of fruit-tree blossom.',
++      slot: 'headwear',
++    },
++  },
++  summer: {
++    overlay: {
++      id: 'overlay-summer-petals',
++      name: 'Summer petals',
++      brief: 'Warm-coloured petals and a little pollen on the breeze.',
++    },
++    keepsake: {
++      id: 'keepsake-summer-seed-head',
++      name: 'Summer Seed Head',
++      brief: 'A round seed head, ready to blow.',
++    },
++    passOutfit: {
++      id: 'season-summer-sun-hat',
++      name: 'Meadow Sun Hat',
++      brief: 'A wide straw hat with a poppy at the band.',
++      slot: 'headwear',
++    },
++  },
++  autumn: {
++    overlay: {
++      id: 'overlay-autumn-leaves',
++      name: 'Falling leaves',
++      brief: 'Amber and red leaves turning slowly as they fall.',
++    },
++    keepsake: {
++      id: 'keepsake-autumn-acorn',
++      name: 'Autumn Acorn',
++      brief: 'A polished acorn with its cap.',
++    },
++    passOutfit: {
++      id: 'season-autumn-leaf-scarf',
++      name: 'Leaf Scarf',
++      brief: 'A scarf of russet leaves for a traveller.',
++      slot: 'accessory',
++    },
++  },
++  winter: {
++    overlay: {
++      id: 'overlay-winter-frost',
++      name: 'Frost',
++      brief: 'Frost at the scene’s edges and a few slow snowflakes.',
++    },
++    keepsake: {
++      id: 'keepsake-winter-holly',
++      name: 'Winter Holly',
++      brief: 'A sprig of holly with two berries.',
++    },
++    passOutfit: {
++      id: 'season-winter-knit-cap',
++      name: 'Knitted Cap',
++      brief: 'A soft knitted cap with a pompom.',
++      slot: 'headwear',
++    },
++  },
++}
+diff --git a/src/data/whatToLookFor.ts b/src/data/whatToLookFor.ts
+index 301aabc..d33ba61 100644
+--- a/src/data/whatToLookFor.ts
++++ b/src/data/whatToLookFor.ts
+@@ -1,4 +1,5 @@
+ import type { MarkedRegion } from '../lib/regionMarks'
++import type { Season } from '../lib/seasons'
+ 
+ /**
+  * A gentle line for each month, of what a gardener in a region might look
+@@ -10,12 +11,10 @@ import type { MarkedRegion } from '../lib/regionMarks'
+  * Every line says only what its source says; where a source speaks of one
+  * country, so does the line. Nothing here suggests catching or handling.
+  */
+-export type Season = 'winter' | 'spring' | 'summer' | 'autumn'
+-
+ export interface MonthLine {
+   /** The months it is said in, 1 for January to 12 for December. */
+   months: readonly number[]
+-  /** The season those months are, where the region is (lib/whatToLookFor checks it). */
++  /** The season those months are, where the region is (lib/seasons; the tests check it). */
+   season: Season
+   text: string
+   sources: readonly string[]
+diff --git a/src/lib/gardenLines.test.ts b/src/lib/gardenLines.test.ts
+new file mode 100644
+index 0000000..8f4d7b3
+--- /dev/null
++++ b/src/lib/gardenLines.test.ts
+@@ -0,0 +1,211 @@
++import { describe, expect, it } from 'vitest'
++import { species } from '../data/content'
++import { observations } from '../data/observations'
++import { nightLines } from '../data/nightLines'
++import { marigoldLines, seasonLines } from '../data/seasons'
++import { DAY_WORDS } from '../test/nightWords'
++import type { RegionId } from '../types'
++import { addDaysToLocalDate, getDailyPromptIndex } from './date'
++import {
++  dayLine,
++  gardenLine,
++  isSeasonDay,
++  marigoldLine,
++  nightLine,
++  seasonLine,
++  seasonLinesFor,
++} from './gardenLines'
++import type { Season } from './seasons'
++
++/** The next day, from this one on, that is (or is not) a season day. */
++function firstDay(from: string, seasonDay: boolean): string {
++  let day = from
++  while (isSeasonDay(day) !== seasonDay) day = addDaysToLocalDate(day, 1)
++  return day
++}
++
++const lineTexts = (region: RegionId, season: Season) =>
++  seasonLines.filter((line) => line.region === region && line.season === season).map((line) => line.text)
++
++const nightTexts = (speciesId: string | undefined) =>
++  nightLines.filter(([id]) => id === 'all' || id === speciesId).map(([, text]) => text)
++
++describe('the night’s line', () => {
++  it('comes from the night’s own words for every butterfly, and for a garden with none flying', () => {
++    // No butterfly flying: a companion still an egg, a caterpillar or a
++    // chrysalis, whose garden says the lines any garden says.
++    const gardens = [...species.map((item) => item.id), undefined]
++    for (const speciesId of gardens) {
++      for (let offset = 0; offset < 12; offset += 1) {
++        const day = addDaysToLocalDate('2026-07-01', offset)
++        const line = nightLine(speciesId, day)
++        expect(nightTexts(speciesId), `${speciesId} ${day}`).toContain(line)
++        expect(line).not.toMatch(DAY_WORDS)
++      }
++    }
++  })
++
++  it('shows each butterfly’s own lines in time, as the day does', () => {
++    for (const butterfly of species) {
++      const seen = new Set(
++        Array.from({ length: 40 }, (_, offset) =>
++          nightLine(butterfly.id, addDaysToLocalDate('2026-01-01', offset)),
++        ),
++      )
++      const own = nightLines.filter(([id]) => id === butterfly.id).map(([, text]) => text)
++      for (const text of own) expect(seen.has(text), text).toBe(true)
++    }
++  })
++
++  it('holds still all night, and moves on with the next day', () => {
++    expect(nightLine('monarch', '2026-07-01')).toBe(nightLine('monarch', '2026-07-01'))
++    const week = Array.from({ length: 7 }, (_, offset) =>
++      nightLine(undefined, addDaysToLocalDate('2026-07-01', offset)),
++    )
++    expect(new Set(week).size).toBeGreaterThan(1)
++  })
++})
++
++describe('the season’s lines, by region and half of the world', () => {
++  it('give a region its own season’s lines, and Marigold’s in autumn and spring', () => {
++    expect(seasonLinesFor('north-america', '2026-10-15')).toEqual([
++      ...lineTexts('north-america', 'autumn'),
++      marigoldLines.north.autumn,
++    ])
++    expect(seasonLinesFor('europe', '2026-01-20')).toEqual(lineTexts('europe', 'winter'))
++    expect(seasonLinesFor('europe', '2026-07-20')).toEqual(lineTexts('europe', 'summer'))
++    expect(seasonLinesFor('north-america', '2026-04-02')).toEqual([
++      ...lineTexts('north-america', 'spring'),
++      marigoldLines.north.spring,
++    ])
++  })
++
++  it('follow the south’s seasons in Australia and New Zealand', () => {
++    // October is spring there, and July winter.
++    expect(seasonLinesFor('australasia', '2026-10-15')).toEqual([
++      ...lineTexts('australasia', 'spring'),
++      marigoldLines.south.spring,
++    ])
++    expect(seasonLinesFor('australasia', '2026-07-15')).toEqual(lineTexts('australasia', 'winter'))
++    expect(seasonLinesFor('australasia', '2026-04-15')).toEqual([
++      ...lineTexts('australasia', 'autumn'),
++      marigoldLines.south.autumn,
++    ])
++  })
++
++  it('without a region, or for Elsewhere, give every region’s lines in its own season', () => {
++    for (const region of [undefined, 'elsewhere'] as const) {
++      expect(seasonLinesFor(region, '2026-10-15')).toEqual([
++        ...lineTexts('north-america', 'autumn'),
++        ...lineTexts('europe', 'autumn'),
++        ...lineTexts('australasia', 'spring'),
++        marigoldLines.north.autumn,
++      ])
++      expect(seasonLinesFor(region, '2026-01-15')).toEqual([
++        ...lineTexts('north-america', 'winter'),
++        ...lineTexts('europe', 'winter'),
++        ...lineTexts('australasia', 'summer'),
++      ])
++    }
++  })
++
++  it('every line naming its place, so none says the gardener’s own season as fact', () => {
++    for (const region of [undefined, 'elsewhere'] as const) {
++      for (const month of ['01', '04', '07', '10']) {
++        for (const text of seasonLinesFor(region, `2026-${month}-15`)) {
++          expect(text, text).toMatch(/^(In |Marigold )/)
++        }
++      }
++    }
++  })
++
++  it('moves on to the next line with each season day, through every one', () => {
++    const start = firstDay('2026-10-01', true)
++    const choices = seasonLinesFor('north-america', start)
++    const shown = Array.from({ length: choices.length }, (_, turn) =>
++      seasonLine('north-america', addDaysToLocalDate(start, turn * 3)),
++    )
++    expect(new Set(shown)).toEqual(new Set(choices))
++  })
++})
++
++describe('Marigold’s season', () => {
++  it('follows the gardener’s half of the world, and the north’s when it is not known', () => {
++    expect(marigoldLine('north-america', '2026-10-15')).toBe(marigoldLines.north.autumn)
++    expect(marigoldLine('europe', '2026-04-15')).toBe(marigoldLines.north.spring)
++    expect(marigoldLine('australasia', '2026-10-15')).toBe(marigoldLines.south.spring)
++    expect(marigoldLine('australasia', '2026-04-15')).toBe(marigoldLines.south.autumn)
++    expect(marigoldLine(undefined, '2026-10-15')).toBe(marigoldLines.north.autumn)
++    expect(marigoldLine('elsewhere', '2026-04-15')).toBe(marigoldLines.north.spring)
++  })
++
++  it('says nothing in summer or winter', () => {
++    expect(marigoldLine('north-america', '2026-07-15')).toBeUndefined()
++    expect(marigoldLine('north-america', '2026-01-15')).toBeUndefined()
++    expect(marigoldLine('australasia', '2026-07-15')).toBeUndefined()
++  })
++})
++
++describe('the day’s line', () => {
++  it('is chosen as it always was: the active butterfly’s own lines and any garden’s, one a day', () => {
++    for (const speciesId of ['monarch', 'atala', undefined]) {
++      const choices = observations.filter(
++        (item) => item.speciesId === 'all' || item.speciesId === speciesId,
++      )
++      for (let offset = 0; offset < 10; offset += 1) {
++        const day = addDaysToLocalDate('2026-07-01', offset)
++        expect(dayLine(speciesId, day)).toBe(
++          choices[getDailyPromptIndex(day, choices.length)].text,
++        )
++      }
++    }
++  })
++})
++
++describe('the garden’s line', () => {
++  it('is the day’s own on an ordinary day', () => {
++    const day = firstDay('2026-07-01', false)
++    expect(gardenLine({ localDate: day, speciesId: 'monarch', night: false })).toBe(
++      dayLine('monarch', day),
++    )
++  })
++
++  it('is the night’s line at night on an ordinary day', () => {
++    const day = firstDay('2026-07-01', false)
++    expect(gardenLine({ localDate: day, speciesId: 'queen', night: true })).toBe(nightLine('queen', day))
++    expect(gardenLine({ localDate: day, night: true })).toBe(nightLine(undefined, day))
++  })
++
++  it('is the season’s line on a season day, by day and by night', () => {
++    const day = firstDay('2026-07-01', true)
++    for (const night of [false, true]) {
++      expect(gardenLine({ localDate: day, night, region: 'australasia' })).toBe(
++        seasonLine('australasia', day),
++      )
++      expect(gardenLine({ localDate: day, night })).toBe(seasonLine(undefined, day))
++    }
++  })
++
++  it('never says the day’s words at night', () => {
++    const day = new Set(observations.map((item) => item.text))
++    for (let offset = 0; offset < 30; offset += 1) {
++      const date = addDaysToLocalDate('2026-03-01', offset)
++      for (const speciesId of ['monarch', 'zebra-longwing', undefined]) {
++        const line = gardenLine({ localDate: date, speciesId, night: true, region: 'europe' })
++        expect(day.has(line), line).toBe(false)
++        expect(line).not.toMatch(DAY_WORDS)
++      }
++    }
++  })
++})
++
++describe('the days the garden speaks of the season', () => {
++  it('come every third day, across a month’s and a year’s end', () => {
++    const days = Array.from({ length: 60 }, (_, offset) => addDaysToLocalDate('2026-12-10', offset))
++    const seasonDays = days.filter(isSeasonDay)
++    expect(seasonDays).toHaveLength(20)
++    for (let index = 1; index < seasonDays.length; index += 1) {
++      expect(addDaysToLocalDate(seasonDays[index - 1], 3)).toBe(seasonDays[index])
++    }
++  })
++})
+diff --git a/src/lib/gardenLines.ts b/src/lib/gardenLines.ts
+new file mode 100644
+index 0000000..b6f19a2
+--- /dev/null
++++ b/src/lib/gardenLines.ts
+@@ -0,0 +1,106 @@
++import { nightLines } from '../data/nightLines'
++import { observations } from '../data/observations'
++import { marigoldLines, seasonLines } from '../data/seasons'
++import type { RegionId } from '../types'
++import { daysBetweenLocalDates, getDailyPromptIndex } from './date'
++import type { MarkedRegion } from './regionMarks'
++import { currentSeason, hemisphereOf } from './seasons'
++
++/*
++ * The garden's line under its name: the day's own (data/observations), the
++ * night's (plan b G5), and one day in three what the season is doing (plan
++ * c.7). Loaded with the garden's line (components/garden/GardenLine), not in
++ * the first load every page waits for.
++ */
++
++const MARKED_REGIONS: readonly MarkedRegion[] = ['north-america', 'europe', 'australasia']
++
++/**
++ * Whether the line speaks of the season on this day: one day in three, so
++ * the other days keep the lines they have always had.
++ */
++export function isSeasonDay(localDate: string): boolean {
++  return getDailyPromptIndex(localDate, 3) === 0
++}
++
++/**
++ * The day's own line, chosen as it always has been: from the active
++ * butterfly's lines and those any garden says, one a day.
++ */
++export function dayLine(speciesId: string | undefined, localDate: string): string {
++  const choices = observations.filter(
++    (item) => item.speciesId === 'all' || item.speciesId === speciesId,
++  )
++  return choices[getDailyPromptIndex(localDate, choices.length)].text
++}
++
++/**
++ * The night's line: the active butterfly's own and those any garden says,
++ * chosen by the day as the day's lines are, so it holds still all night.
++ */
++export function nightLine(speciesId: string | undefined, localDate: string): string {
++  const choices = nightLines.filter(([id]) => id === 'all' || id === speciesId)
++  return choices[getDailyPromptIndex(localDate, choices.length)][1]
++}
++
++/**
++ * Marigold in her season, by the gardener's half of the world: getting
++ * ready to travel in autumn, back in spring. Words only; she never leaves.
++ * With no region known she follows the north, where her kind's long flight
++ * is, and says nothing of the gardener's own season.
++ */
++export function marigoldLine(region: RegionId | undefined, localDate: string): string | undefined {
++  const hemisphere = hemisphereOf(region)
++  return marigoldLines[hemisphere][currentSeason(localDate, hemisphere)]
++}
++
++/**
++ * Every line the season could bring on a day: the gardener's region's, in its
++ * own season, and Marigold's. Without a region, or for Elsewhere, the lines of
++ * every region in each one's own season: each names its place, so each is
++ * true wherever the gardener is, and none guesses their season.
++ */
++export function seasonLinesFor(region: RegionId | undefined, localDate: string): string[] {
++  const places = region === undefined || region === 'elsewhere' ? MARKED_REGIONS : [region]
++  const lines = seasonLines
++    .filter(
++      (line) =>
++        places.includes(line.region) &&
++        line.season === currentSeason(localDate, hemisphereOf(line.region)),
++    )
++    .map((line) => line.text)
++  const marigold = marigoldLine(region, localDate)
++  return marigold ? [...lines, marigold] : lines
++}
++
++/**
++ * The season's line for a day. Season days come every third day, so they are
++ * counted in threes: each one moves on to the next line, rather than landing
++ * on the same few as the day count would.
++ */
++export function seasonLine(region: RegionId | undefined, localDate: string): string {
++  const choices = seasonLinesFor(region, localDate)
++  const turn = Math.floor(daysBetweenLocalDates('1970-01-01', localDate) / 3)
++  return choices[turn % choices.length]
++}
++
++/**
++ * The garden's line: the season's on a season day, by day and by night (none
++ * of them speaks of the sun), else the night's at night and the day's by day.
++ */
++export function gardenLine({
++  localDate,
++  speciesId,
++  night,
++  region,
++}: {
++  localDate: string
++  /** The active butterfly's species, if one is flying. */
++  speciesId?: string
++  /** Whether the theme on screen is night. */
++  night: boolean
++  region?: RegionId
++}): string {
++  if (isSeasonDay(localDate)) return seasonLine(region, localDate)
++  return night ? nightLine(speciesId, localDate) : dayLine(speciesId, localDate)
++}
+diff --git a/src/lib/prompts.test.ts b/src/lib/prompts.test.ts
+index 51f52bd..e671c16 100644
+--- a/src/lib/prompts.test.ts
++++ b/src/lib/prompts.test.ts
+@@ -1,9 +1,10 @@
+ import { describe, expect, it } from 'vitest'
+ import { freeWritingPrompt } from '../data/content'
+-import { reflectionPrompts } from '../data/prompts'
++import { reflectionPrompts, seasonalPrompts } from '../data/prompts'
+ import type { ReflectionPromptFamily } from '../types'
+ import { addDaysToLocalDate } from './date'
+ import { promptAfter, promptById, promptForDay } from './prompts'
++import type { Season } from './seasons'
+ 
+ const DAY = '2026-10-27'
+ 
+@@ -86,7 +87,7 @@ describe('the day’s prompt', () => {
+ })
+ 
+ describe('the prompts themselves', () => {
+-  const everyPrompt = [...reflectionPrompts, freeWritingPrompt]
++  const everyPrompt = [...reflectionPrompts, ...seasonalPrompts, freeWritingPrompt]
+ 
+   it('gives every prompt its own id', () => {
+     const ids = everyPrompt.map((prompt) => prompt.id)
+@@ -131,3 +132,52 @@ describe('three good things in nature', () => {
+     for (const prompt of nature) expect(offered).toContain(prompt)
+   })
+ })
++
++describe('the season’s own prompts', () => {
++  const seasons: readonly Season[] = ['spring', 'summer', 'autumn', 'winter']
++  const offeredIn = (season?: Season) => {
++    const count = reflectionPrompts.length + (season ? 2 : 0)
++    return Array.from({ length: count }, (_, skipped) => promptForDay(DAY, skipped, season))
++  }
++
++  it('gives every season a few, asking concretely, never why', () => {
++    for (const season of seasons) {
++      const own = seasonalPrompts.filter((prompt) => prompt.season === season)
++      expect(own.length, season).toBeGreaterThanOrEqual(2)
++      for (const prompt of own) expect(prompt.text).toMatch(/^(What|Which|Where|How)\b.*\?$/)
++    }
++  })
++
++  it('come round only in their own season, and every one of them then', () => {
++    for (const season of seasons) {
++      const offered = offeredIn(season)
++      for (const prompt of seasonalPrompts) {
++        expect(offered.includes(prompt), `${prompt.id} in ${season}`).toBe(prompt.season === season)
++      }
++      // Every other prompt still comes round too, once.
++      expect(new Set(offered).size).toBe(offered.length)
++      for (const prompt of reflectionPrompts) expect(offered).toContain(prompt)
++    }
++  })
++
++  it('stay out where the season is not known', () => {
++    const offered = offeredIn(undefined)
++    for (const prompt of seasonalPrompts) expect(offered).not.toContain(prompt)
++    expect(promptForDay(DAY)).toBe(promptForDay(DAY, 0, undefined))
++  })
++
++  it('step on from one to the next with another prompt, in their season', () => {
++    for (const prompt of offeredIn('autumn')) {
++      expect(promptAfter(prompt, DAY, 'autumn')).not.toBe(prompt)
++    }
++    const [first, second] = seasonalPrompts.filter((prompt) => prompt.season === 'autumn')
++    expect(promptAfter(first, DAY, 'autumn')).toBe(second)
++    expect(promptAfter(second, DAY, 'autumn')).toBe(reflectionPrompts[0])
++    // Out of its season, a prompt is not offered, so another is the day's own.
++    expect(promptAfter(first, DAY, 'spring')).toBe(promptForDay(DAY, 0, 'spring'))
++  })
++
++  it('are found by the id stored with a reflection, in any season', () => {
++    for (const prompt of seasonalPrompts) expect(promptById(prompt.id)).toBe(prompt)
++  })
++})
+diff --git a/src/lib/prompts.ts b/src/lib/prompts.ts
+index f8352b4..8170478 100644
+--- a/src/lib/prompts.ts
++++ b/src/lib/prompts.ts
+@@ -1,34 +1,54 @@
+ import { freeWritingPrompt } from '../data/content'
+-import { reflectionPrompts } from '../data/prompts'
++import { reflectionPrompts, seasonalPrompts } from '../data/prompts'
+ import type { ReflectionPrompt } from '../types'
+ import { getDailyPromptIndex } from './date'
++import type { Season } from './seasons'
+ 
+ const byId = new Map(
+-  [...reflectionPrompts, freeWritingPrompt].map((prompt) => [prompt.id, prompt]),
++  [...reflectionPrompts, ...seasonalPrompts, freeWritingPrompt].map((prompt) => [prompt.id, prompt]),
+ )
+ 
+-/** A prompt by the id stored with a reflection, free writing included. */
++/**
++ * A prompt by the id stored with a reflection, free writing and every
++ * season's prompts included, so a spring reflection still shows its question
++ * in autumn.
++ */
+ export function promptById(id: string): ReflectionPrompt | undefined {
+   return byId.get(id)
+ }
+ 
++/**
++ * The prompts offered in a season: every season's, and that season's own
++ * after them, where the gardener's season is known (lib/seasons).
++ */
++function rotation(season: Season | undefined): readonly ReflectionPrompt[] {
++  return season
++    ? [...reflectionPrompts, ...seasonalPrompts.filter((prompt) => prompt.season === season)]
++    : reflectionPrompts
++}
++
+ /**
+  * The day's prompt, or a later one when the gardener asked for another.
+  * The day decides where the rotation starts, so everyone's Tuesday prompt is
+  * the same Tuesday prompt, and a reload does not reshuffle it.
+  */
+-export function promptForDay(localDate: string, skipped = 0): ReflectionPrompt {
+-  const start = getDailyPromptIndex(localDate, reflectionPrompts.length)
+-  return reflectionPrompts[(start + skipped) % reflectionPrompts.length]
++export function promptForDay(localDate: string, skipped = 0, season?: Season): ReflectionPrompt {
++  const prompts = rotation(season)
++  const start = getDailyPromptIndex(localDate, prompts.length)
++  return prompts[(start + skipped) % prompts.length]
+ }
+ 
+ /**
+  * The prompt after this one in the rotation, for "Another prompt". From free
+- * writing, or a prompt no longer in the set, it is the day's own prompt.
++ * writing, or a prompt not offered now (no longer, or not this season), it is
++ * the day's own prompt.
+  */
+-export function promptAfter(prompt: ReflectionPrompt, localDate: string): ReflectionPrompt {
+-  const index = reflectionPrompts.findIndex((item) => item.id === prompt.id)
+-  return index === -1
+-    ? promptForDay(localDate)
+-    : reflectionPrompts[(index + 1) % reflectionPrompts.length]
++export function promptAfter(
++  prompt: ReflectionPrompt,
++  localDate: string,
++  season?: Season,
++): ReflectionPrompt {
++  const prompts = rotation(season)
++  const index = prompts.findIndex((item) => item.id === prompt.id)
++  return index === -1 ? promptForDay(localDate, 0, season) : prompts[(index + 1) % prompts.length]
+ }
+diff --git a/src/lib/sealedBackup.test.ts b/src/lib/sealedBackup.test.ts
+index f082fb9..dbc731e 100644
+--- a/src/lib/sealedBackup.test.ts
++++ b/src/lib/sealedBackup.test.ts
+@@ -16,6 +16,7 @@ import {
+ } from './sealedBackup'
+ import { deriveKey, fromBase64, seal, toBase64 } from './sealing'
+ import { withPhotosAsText } from './sightingPhotos'
++import { ArrayBufferFileReader } from '../test/fileReader'
+ 
+ // Fast for every case but the one that checks the real count.
+ const FAST = 1_000
+@@ -23,8 +24,9 @@ const PASSPHRASE = 'quiet meadow lantern'
+ const PHOTO = [82, 73, 70, 70, 9, 8, 7, 6]
+ 
+ beforeEach(() => {
+-  // A Blob with arrayBuffer(), as a browser's has.
++  // A Blob with arrayBuffer(), as a browser's has, and a reader for it.
+   vi.stubGlobal('Blob', NodeBlob)
++  vi.stubGlobal('FileReader', ArrayBufferFileReader)
+ })
+ afterEach(() => {
+   vi.unstubAllGlobals()
+@@ -65,7 +67,7 @@ async function plainBackup(): Promise<string> {
+       format: 'the-butterfly-garden',
+       exportedAt: '2026-10-27T09:00:00.000Z',
+       appVersion: '3.3.0',
+-      garden: await withPhotosAsText(garden),
++      garden: (await withPhotosAsText(garden)).value,
+     },
+     null,
+     2,
+diff --git a/src/lib/seasons.test.ts b/src/lib/seasons.test.ts
+new file mode 100644
+index 0000000..e6094f1
+--- /dev/null
++++ b/src/lib/seasons.test.ts
+@@ -0,0 +1,96 @@
++import { describe, expect, it } from 'vitest'
++import { currentSeason, hemisphereOf, knownSeason, seasonOf, type Season } from './seasons'
++
++/** The north's season by month, January first, as the meteorologists count. */
++const NORTH: readonly Season[] = [
++  'winter',
++  'winter',
++  'spring',
++  'spring',
++  'spring',
++  'summer',
++  'summer',
++  'summer',
++  'autumn',
++  'autumn',
++  'autumn',
++  'winter',
++]
++const SOUTH_OF: Record<Season, Season> = {
++  winter: 'summer',
++  spring: 'autumn',
++  summer: 'winter',
++  autumn: 'spring',
++}
++
++/** The last day of a month in 2026 (not a leap year) and 2028 (a leap year). */
++function lastDay(year: number, month: number): string {
++  const day = new Date(Date.UTC(year, month, 0)).getUTCDate()
++  return `${year}-${String(month).padStart(2, '0')}-${day}`
++}
++
++describe('the season on a day', () => {
++  it('turns on the first of March, June, September and December in the north', () => {
++    expect(currentSeason('2026-02-28', 'north')).toBe('winter')
++    expect(currentSeason('2026-03-01', 'north')).toBe('spring')
++    expect(currentSeason('2026-05-31', 'north')).toBe('spring')
++    expect(currentSeason('2026-06-01', 'north')).toBe('summer')
++    expect(currentSeason('2026-08-31', 'north')).toBe('summer')
++    expect(currentSeason('2026-09-01', 'north')).toBe('autumn')
++    expect(currentSeason('2026-11-30', 'north')).toBe('autumn')
++    expect(currentSeason('2026-12-01', 'north')).toBe('winter')
++    expect(currentSeason('2026-12-31', 'north')).toBe('winter')
++    expect(currentSeason('2027-01-01', 'north')).toBe('winter')
++  })
++
++  it('is the other way round in the south: spring is September to November', () => {
++    expect(currentSeason('2026-02-28', 'south')).toBe('summer')
++    expect(currentSeason('2026-03-01', 'south')).toBe('autumn')
++    expect(currentSeason('2026-05-31', 'south')).toBe('autumn')
++    expect(currentSeason('2026-06-01', 'south')).toBe('winter')
++    expect(currentSeason('2026-08-31', 'south')).toBe('winter')
++    expect(currentSeason('2026-09-01', 'south')).toBe('spring')
++    expect(currentSeason('2026-11-30', 'south')).toBe('spring')
++    expect(currentSeason('2026-12-01', 'south')).toBe('summer')
++    expect(currentSeason('2027-01-01', 'south')).toBe('summer')
++  })
++
++  it('holds from the first to the last day of every month, leap days included, in both halves', () => {
++    for (const year of [2026, 2028]) {
++      for (let month = 1; month <= 12; month += 1) {
++        const first = `${year}-${String(month).padStart(2, '0')}-01`
++        const last = lastDay(year, month)
++        const north = NORTH[month - 1]
++        expect(currentSeason(first, 'north'), first).toBe(north)
++        expect(currentSeason(last, 'north'), last).toBe(north)
++        expect(currentSeason(first, 'south'), first).toBe(SOUTH_OF[north])
++        expect(currentSeason(last, 'south'), last).toBe(SOUTH_OF[north])
++        expect(seasonOf(month, 'north')).toBe(north)
++        expect(seasonOf(month, 'south')).toBe(SOUTH_OF[north])
++      }
++    }
++    expect(currentSeason('2028-02-29', 'north')).toBe('winter')
++    expect(currentSeason('2028-02-29', 'south')).toBe('summer')
++  })
++})
++
++describe('the gardener’s half of the world', () => {
++  it('is the south for Australia and New Zealand, the north for North America and Europe', () => {
++    expect(hemisphereOf('australasia')).toBe('south')
++    expect(hemisphereOf('north-america')).toBe('north')
++    expect(hemisphereOf('europe')).toBe('north')
++  })
++
++  it('takes the north’s when no region says otherwise', () => {
++    expect(hemisphereOf(undefined)).toBe('north')
++    expect(hemisphereOf('elsewhere')).toBe('north')
++  })
++
++  it('is said in words only where the region makes it known', () => {
++    expect(knownSeason('australasia', '2026-07-15')).toBe('winter')
++    expect(knownSeason('europe', '2026-07-15')).toBe('summer')
++    expect(knownSeason('north-america', '2026-10-27')).toBe('autumn')
++    expect(knownSeason(undefined, '2026-07-15')).toBeUndefined()
++    expect(knownSeason('elsewhere', '2026-07-15')).toBeUndefined()
++  })
++})
+diff --git a/src/lib/seasons.ts b/src/lib/seasons.ts
+new file mode 100644
+index 0000000..326c6bb
+--- /dev/null
++++ b/src/lib/seasons.ts
+@@ -0,0 +1,54 @@
++import type { RegionId } from '../types'
++
++/*
++ * The garden's seasons (plan c.7). Kept small, since the garden reads it as it
++ * first draws: the season's lines and the art each season will want are in
++ * data/seasons, loaded with the garden's line (lib/gardenLines).
++ */
++
++export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
++
++export type Hemisphere = 'north' | 'south'
++
++/** In the order a year turns, from December's winter in the north. */
++const SEASONS: readonly Season[] = ['winter', 'spring', 'summer', 'autumn']
++
++/**
++ * The season a month (1 to 12) falls in. Meteorological seasons, three whole
++ * months each, as weather services count them: in the north, winter is
++ * December to February and spring March to May. They turn on the first of a
++ * month, never on a solstice or equinox that moves by a day from year to
++ * year. The south's are the north's six months on: June is summer in the
++ * north and winter in the south.
++ */
++export function seasonOf(month: number, hemisphere: Hemisphere): Season {
++  return SEASONS[Math.floor(((month + (hemisphere === 'south' ? 6 : 0)) % 12) / 3)]
++}
++
++/** The season on a local calendar day ('2026-10-27', the app's one date shape). */
++export function currentSeason(localDate: string, hemisphere: Hemisphere): Season {
++  return seasonOf(Number(localDate.slice(5, 7)), hemisphere)
++}
++
++/**
++ * Which half of the world a gardener's seasons follow, from the region they
++ * chose by hand (lib/region): Australia and New Zealand are southern. With
++ * no region, or Elsewhere, the garden cannot know, so it takes the north's.
++ * That guess decides only what the scene shows (GardenView's `data-season`
++ * for the art, and whether fireflies come out) and when Marigold, a monarch,
++ * travels; no words say it of the gardener's own season (see knownSeason).
++ */
++export function hemisphereOf(region: RegionId | undefined): Hemisphere {
++  return region === 'australasia' ? 'south' : 'north'
++}
++
++/**
++ * The gardener's own season, for words that speak of it ("What is the first
++ * sign of spring…?"), or nothing where the region does not say which half of
++ * the world they garden in.
++ */
++export function knownSeason(region: RegionId | undefined, localDate: string): Season | undefined {
++  return region === undefined || region === 'elsewhere'
++    ? undefined
++    : currentSeason(localDate, hemisphereOf(region))
++}
+diff --git a/src/lib/whatToLookFor.test.ts b/src/lib/whatToLookFor.test.ts
+index 338baaa..a047f74 100644
+--- a/src/lib/whatToLookFor.test.ts
++++ b/src/lib/whatToLookFor.test.ts
+@@ -1,6 +1,7 @@
+ import { describe, expect, it } from 'vitest'
+ import { whatToLookFor } from '../data/whatToLookFor'
+-import { HEMISPHERES, lookForThisMonth, seasonOf } from './whatToLookFor'
++import { hemisphereOf, seasonOf } from './seasons'
++import { lookForThisMonth } from './whatToLookFor'
+ 
+ const REGIONS = ['north-america', 'europe', 'australasia'] as const
+ 
+@@ -21,7 +22,7 @@ describe('what to look for this month', () => {
+     for (const region of REGIONS) {
+       for (const line of whatToLookFor[region]) {
+         for (const month of line.months) {
+-          expect(seasonOf(month, HEMISPHERES[region]), `${region} ${month}: ${line.text}`).toBe(line.season)
++          expect(seasonOf(month, hemisphereOf(region)), `${region} ${month}: ${line.text}`).toBe(line.season)
+         }
+       }
+     }
+diff --git a/src/lib/whatToLookFor.ts b/src/lib/whatToLookFor.ts
+index 40084d0..b3ccef0 100644
+--- a/src/lib/whatToLookFor.ts
++++ b/src/lib/whatToLookFor.ts
+@@ -1,49 +1,11 @@
+-import { whatToLookFor, type MonthLine, type Season } from '../data/whatToLookFor'
++import { whatToLookFor, type MonthLine } from '../data/whatToLookFor'
+ import type { RegionId } from '../types'
+-import type { MarkedRegion } from './regionMarks'
+-
+-export type Hemisphere = 'north' | 'south'
+-
+-/** Which half of the world each region's seasons follow. */
+-export const HEMISPHERES: Readonly<Record<MarkedRegion, Hemisphere>> = {
+-  'north-america': 'north',
+-  europe: 'north',
+-  australasia: 'south',
+-}
+-
+-/** The north's seasons, January first, three months each by the calendar. */
+-const NORTHERN_SEASONS: readonly Season[] = [
+-  'winter',
+-  'winter',
+-  'spring',
+-  'spring',
+-  'spring',
+-  'summer',
+-  'summer',
+-  'summer',
+-  'autumn',
+-  'autumn',
+-  'autumn',
+-  'winter',
+-]
+-
+-const OPPOSITE: Readonly<Record<Season, Season>> = {
+-  winter: 'summer',
+-  spring: 'autumn',
+-  summer: 'winter',
+-  autumn: 'spring',
+-}
+-
+-/** The season a month (1 to 12) falls in, in a hemisphere: June is winter in the south. */
+-export function seasonOf(month: number, hemisphere: Hemisphere): Season {
+-  const north = NORTHERN_SEASONS[month - 1]
+-  return hemisphere === 'north' ? north : OPPOSITE[north]
+-}
+ 
+ /**
+  * What to look for this month, where the gardener said they garden, or
+  * nothing: without a region, or for "Elsewhere", whose hemisphere, and so
+- * whose seasons, the garden cannot know.
++ * whose seasons, the garden cannot know. Each line's season is the one its
++ * months are where it is said (lib/seasons; checked by the tests).
+  */
+ export function lookForThisMonth(
+   region: RegionId | undefined,
+diff --git a/src/test/nightWords.ts b/src/test/nightWords.ts
+new file mode 100644
+index 0000000..d9c16c0
+--- /dev/null
++++ b/src/test/nightWords.ts
+@@ -0,0 +1,6 @@
++/**
++ * Words for the daylight hours, which no line the garden shows at night may
++ * use: "warm in the morning light" is exactly what the night garden replaces.
++ */
++export const DAY_WORDS =
++  /\b(sun|suns|sunny|sunlit|sunlight|sunshine|sunrise|sunbeams?|morning|afternoon|noon|midday|daylight)\b/i
+-- 
+2.43.0
+

@@ -5,13 +5,12 @@ import {
   activeCustomBackdrop,
   canAddCustomBackdrop,
   checkCustomBackdropRecord,
-  checkDecodedSize,
-  checkSourceFile,
+  chooseNightCustomBackdrop,
   clampCrop,
   coverGeometry,
   decodedByteLength,
-  fitWithinMaxEdge,
   isValidBase64,
+  isValidBrightness,
   isValidCustomBackdrop,
   isValidCustomBackdropCollection,
   putCustomBackdrop,
@@ -46,44 +45,6 @@ function image(overrides: Partial<CustomBackdrop> = {}): CustomBackdrop {
 function garden(overrides: Partial<AppState> = {}): AppState {
   return { ...createInitialState('Tester', 'Test Garden'), ...overrides }
 }
-
-describe('accepting a file from the device', () => {
-  it('takes JPEG, PNG and WebP and refuses everything else', () => {
-    for (const type of ['image/jpeg', 'image/png', 'image/webp']) {
-      expect(checkSourceFile({ type, size: 1000 }).ok).toBe(true)
-    }
-    // SVG can carry script, GIF is animated, HTML is not an image at all.
-    for (const type of ['image/svg+xml', 'image/gif', 'text/html', '']) {
-      const check = checkSourceFile({ type, size: 1000 })
-      expect(check.ok).toBe(false)
-      expect(check.reason).toBe('unsupported-type')
-    }
-  })
-
-  it('refuses an oversized file before decoding it', () => {
-    const check = checkSourceFile({
-      type: 'image/jpeg',
-      size: CUSTOM_BACKDROP_LIMITS.maxSourceBytes + 1,
-    })
-    expect(check.reason).toBe('too-large')
-    expect(check.message).toContain('10 MB')
-  })
-
-  it('refuses an image with too many pixels', () => {
-    // 24 megapixels exactly is allowed; past it is not.
-    expect(checkDecodedSize(6000, 4000).ok).toBe(true)
-    expect(checkDecodedSize(7000, 4000).reason).toBe('too-many-pixels')
-    expect(checkDecodedSize(0, 100).reason).toBe('invalid')
-    expect(checkDecodedSize(Number.NaN, 100).reason).toBe('invalid')
-  })
-
-  it('resizes only what is bigger than the limit', () => {
-    expect(fitWithinMaxEdge(1000, 500)).toEqual({ width: 1000, height: 500 })
-    // Aspect ratio preserved, longest edge brought to the limit.
-    expect(fitWithinMaxEdge(4096, 2048)).toEqual({ width: 2048, height: 1024 })
-    expect(fitWithinMaxEdge(2048, 4096)).toEqual({ width: 1024, height: 2048 })
-  })
-})
 
 describe('crop maths', () => {
   it('brings any nonsense back into range', () => {
@@ -209,6 +170,19 @@ describe('validating a stored image', () => {
     expect(isValidCustomBackdrop({})).toBe(false)
   })
 
+  it('takes a brightness only as a number within its range', () => {
+    for (const brightness of [-40, -12.5, 0, 20]) {
+      expect(isValidBrightness(brightness)).toBe(true)
+      expect(isValidCustomBackdrop(image({ brightness }))).toBe(true)
+    }
+    for (const brightness of [-41, 21, Number.NaN, Infinity, '10', null]) {
+      expect(isValidBrightness(brightness)).toBe(false)
+      expect(isValidCustomBackdrop(image({ brightness: brightness as number }))).toBe(false)
+    }
+    // An image never adjusted has none at all, and is as valid as ever.
+    expect(isValidCustomBackdrop(image())).toBe(true)
+  })
+
   it('refuses a record larger than a slot allows', () => {
     const big = CUSTOM_BACKDROP_LIMITS.maxEncodedBytes + 8
     expect(isValidCustomBackdrop(image({ byteLength: big }))).toBe(false)
@@ -304,5 +278,78 @@ describe('keeping images and the selection together', () => {
       profile: { ...garden().profile!, selectedCustomBackdropId: 'gone' },
     })
     expect(activeCustomBackdrop(dangling, true)).toBeUndefined()
+  })
+
+  it('saves an image without choosing it, when asked to', () => {
+    const state = putCustomBackdrop(garden(), image({ id: 'day' }))
+    const saved = putCustomBackdrop(state, image({ id: 'night' }), false)
+    expect(saved.customBackdrops).toHaveLength(2)
+    expect(saved.profile?.selectedCustomBackdropId).toBe('day')
+  })
+})
+
+describe('an image by day and another by night', () => {
+  function pictured() {
+    let state = putCustomBackdrop(garden(), image({ id: 'day' }))
+    state = putCustomBackdrop(state, image({ id: 'night' }), false)
+    return chooseNightCustomBackdrop(state, 'night')
+  }
+
+  it('shows the night image while the garden is at night, and the day image otherwise', () => {
+    const state = pictured()
+    expect(activeCustomBackdrop(state, true, 'night')?.id).toBe('night')
+    expect(activeCustomBackdrop(state, true, 'sunlight')?.id).toBe('day')
+    // A caller that knows no theme gets the day's, as every garden did.
+    expect(activeCustomBackdrop(state, true)?.id).toBe('day')
+    expect(activeCustomBackdrop(state, false, 'night')).toBeUndefined()
+  })
+
+  it('shows the same by night as by day when no night image is chosen', () => {
+    const state = putCustomBackdrop(garden(), image({ id: 'day' }))
+    expect(activeCustomBackdrop(state, true, 'night')?.id).toBe('day')
+  })
+
+  it('shows the night image over a built-in scene by day', () => {
+    let state = putCustomBackdrop(garden(), image({ id: 'night' }), false)
+    state = chooseNightCustomBackdrop(state, 'night')
+    expect(state.profile?.selectedCustomBackdropId).toBeUndefined()
+    expect(activeCustomBackdrop(state, true, 'sunlight')).toBeUndefined()
+    expect(activeCustomBackdrop(state, true, 'night')?.id).toBe('night')
+  })
+
+  it('falls back to the day image when the night one is not there', () => {
+    const state = pictured()
+    const dangling = {
+      ...state,
+      customBackdrops: state.customBackdrops.filter((entry) => entry.id !== 'night'),
+    }
+    expect(activeCustomBackdrop(dangling, true, 'night')?.id).toBe('day')
+  })
+
+  it('chooses and clears the night image, refusing one that is not there', () => {
+    const state = pictured()
+    expect(state.profile?.nightCustomBackdropId).toBe('night')
+    // Nothing to change: the very same garden.
+    expect(chooseNightCustomBackdrop(state, 'night')).toBe(state)
+    expect(chooseNightCustomBackdrop(state, 'missing')).toBe(state)
+    expect(chooseNightCustomBackdrop(state, undefined).profile?.nightCustomBackdropId).toBeUndefined()
+    const empty = garden({ profile: undefined })
+    expect(chooseNightCustomBackdrop(empty, 'night')).toBe(empty)
+  })
+
+  it('stops pointing at a removed image, by day or by night, and at nothing else', () => {
+    const state = pictured()
+    const withoutNight = removeCustomBackdrop(state, 'night')
+    expect(withoutNight.profile?.nightCustomBackdropId).toBeUndefined()
+    expect(withoutNight.profile?.selectedCustomBackdropId).toBe('day')
+    const withoutDay = removeCustomBackdrop(state, 'day')
+    expect(withoutDay.profile?.selectedCustomBackdropId).toBeUndefined()
+    expect(withoutDay.profile?.nightCustomBackdropId).toBe('night')
+  })
+
+  it('keeps the profile as it was when the image removed was neither', () => {
+    let state = pictured()
+    state = putCustomBackdrop(state, image({ id: 'spare' }), false)
+    expect(removeCustomBackdrop(state, 'spare').profile).toBe(state.profile)
   })
 })

@@ -184,19 +184,27 @@ export interface FlightSpriteSize {
 }
 
 export interface FlightMotionInput {
-  /** Seeds every per-creature choice. Never the visible index: reordering
-   *  companions must not change how any of them fly. */
+  /** Seeds every per-creature choice: size, pace, and the shape and heading
+   *  of the loop. Never the visible index: reordering companions must not
+   *  change how any of them fly, only where in the sky they do it. */
   creatureId: string
   patternId: FlightPatternId
   bounds: FlightSceneBounds
   sprite: FlightSpriteSize
-  /** Used only to spread starting phase and static rest slots apart. */
+  /** This butterfly's place among those aloft: it picks the patch of sky its
+   *  loop sits in, where in the loop it starts, and its rest slot. */
   densityIndex?: number
+  /** How many butterflies are aloft together. With more of them each loop is
+   *  narrower and has a lane of its own across the sky band, so a full garden
+   *  spreads out instead of crowding the middle. One flies the whole pattern. */
+  aloft?: number
   /** Extra clearance for an aura, so decoration stays inside the scene too. */
   auraMargin?: number
   /** Pixels to keep clear at the top for the title and controls. */
   safeTop?: number
   reducedMotion?: boolean
+  /** Calm motion (lib/motion): a smaller, slower loop with softer banking. */
+  calm?: boolean
   /** Number of emitted keyframes. Enough to read as smooth, few enough to
    *  hand to the animation API without cost. */
   samples?: number
@@ -227,9 +235,29 @@ export interface FlightTrack {
 
 const DEFAULT_SAMPLES = 24
 const MAX_BANK_DEGREES = 7
+/** Calm motion keeps this share of a pattern's reach about its centre... */
+const CALM_REACH = 0.7
+/** ...takes this much longer over each loop... */
+const CALM_PACE = 1.6
+/** ...and banks this much as steeply. */
+const CALM_BANK = 0.5
 /** Below this horizontal movement the previous facing is kept, so a sprite
  *  hovering near a turn does not flicker between headings. */
 const FACING_HYSTERESIS = 0.004
+/** Lanes are stacked at most this many rows deep in the sky band. */
+const MAX_LANE_ROWS = 3
+/** A loop in a lane is never narrower than this many sprites, or the
+ *  butterfly would seem to hover in place rather than fly. */
+const MIN_LOOP_SPRITES = 1.2
+/** The golden ratio's fraction: stepping by it hands out lanes so that any
+ *  first few butterflies (the guide, the companion, calm motion's flyers)
+ *  are already spread across the band. */
+const GOLDEN_STEP = 0.6180339887498949
+/** Starting phases drift across the band by this share of a loop, so the
+ *  garden opens as a gentle wave, neither in lockstep nor bunched. */
+const PHASE_WAVE = 0.25
+/** And each butterfly's own draw nudges its start by up to this much. */
+const PHASE_JITTER = 0.02
 
 function stableHash(input: string): number {
   let hash = 2166136261
@@ -327,6 +355,85 @@ function hoverOffsets(motion: PatternMotion, samples: number): number[] {
   return offsets
 }
 
+/** How far through the animation (0..1) a share `u` of the samples falls. */
+function progressAt(offsets: number[], u: number): number {
+  const samples = offsets.length - 1
+  const position = u * samples
+  const index = Math.min(samples - 1, Math.floor(position))
+  return offsets[index] + (offsets[index + 1] - offsets[index]) * (position - index)
+}
+
+/**
+ * Which of `count` lanes, left to right, the butterfly at `index` takes.
+ *
+ * Ranked by stepping round a circle by the golden ratio, so the lanes of
+ * the first few are already far apart: in calm motion only the first four
+ * fly, and they should not all be on the left.
+ */
+function laneSlot(index: number, count: number): number {
+  const key = (other: number) => (0.5 + other * GOLDEN_STEP) % 1
+  const mine = key(index)
+  let slot = 0
+  for (let other = 0; other < count; other += 1) {
+    if (other !== index && key(other) < mine) slot += 1
+  }
+  return slot
+}
+
+/** The low and high ends of a loop's reach about its centre, on one axis. */
+function extent(values: number[]) {
+  return { low: Math.min(...values), high: Math.max(...values) }
+}
+
+/**
+ * Where a loop sits, and how far it reaches, with `count` butterflies aloft.
+ *
+ * The sky band is shared out in lanes, one per butterfly, evenly across the
+ * width and stacked in up to three rows by the band's shape. Lanes are taken
+ * in turn across the width, so side-by-side neighbours are in different rows.
+ * A loop is narrowed to about the width of its lane, though never so small
+ * that the butterfly would seem to hover in place, and its centre is placed
+ * so that the whole loop stays inside the band. Rows spread about the
+ * pattern's own height, so a low meander stays mostly low. A garden with one
+ * butterfly flies the pattern exactly as drawn.
+ */
+function laneFor(
+  excursions: Array<{ x: number; y: number }>,
+  center: { x: number; y: number },
+  slot: number,
+  count: number,
+  room: { width: number; height: number; spriteWidth: number; spriteHeight: number },
+) {
+  if (count <= 1) return { x: center.x, y: center.y, reachX: 1, reachY: 1 }
+  const rows = Math.max(
+    1,
+    Math.min(MAX_LANE_ROWS, Math.round(Math.sqrt((count * room.height) / room.width))),
+  )
+  const columns = Math.ceil(count / rows)
+  const row = slot % rows
+  const across = extent(excursions.map((point) => point.x))
+  const down = extent(excursions.map((point) => point.y))
+  const wide = Math.max(1e-6, across.high - across.low)
+  const tall = Math.max(1e-6, down.high - down.low)
+  const reachX = Math.min(
+    1,
+    Math.max(1 / columns, (MIN_LOOP_SPRITES * room.spriteWidth) / room.width) / wide,
+  )
+  const reachY = Math.min(1, Math.max(1 / rows, room.spriteHeight / room.height) / tall)
+  // The centres a loop of that reach can take without leaving the band.
+  const lowX = -across.low * reachX
+  const highX = 1 - across.high * reachX
+  const lowY = -down.low * reachY
+  const highY = 1 - down.high * reachY
+  const y = center.y + (rows === 1 ? 0 : (row / (rows - 1) - 0.5) * (highY - lowY))
+  return {
+    x: lowX + (highX - lowX) * (slot / (count - 1)),
+    y: Math.min(highY, Math.max(lowY, y)),
+    reachX,
+    reachY,
+  }
+}
+
 /**
  * A closed, bounded flight track for one creature.
  *
@@ -340,9 +447,11 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
     bounds,
     sprite,
     densityIndex = 0,
+    aloft = 1,
     auraMargin = 0,
     safeTop = 0,
     reducedMotion = false,
+    calm = false,
     samples = DEFAULT_SAMPLES,
   } = input
 
@@ -385,13 +494,25 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
     raw.push(sampleAt(motion, index / samples, phaseShift))
   }
 
-  const factor = fitFactor(raw, motion.center)
-  const toScene = (point: { x: number; y: number }) => ({
-    x: left + (motion.center.x + (point.x - motion.center.x) * factor) * usableWidth,
-    y: top + (motion.center.y + (point.y - motion.center.y) * factor) * usableHeight,
+  const factor = fitFactor(raw, motion.center) * (calm ? CALM_REACH : 1)
+  const maxBank = MAX_BANK_DEGREES * (calm ? CALM_BANK : 1)
+  // The loop about its own centre, fitted to the band, then given its lane.
+  const excursions = raw.map((point) => ({
+    x: (point.x - motion.center.x) * factor,
+    y: (point.y - motion.center.y) * factor,
+  }))
+  const count = Math.max(1, Number.isFinite(aloft) ? Math.floor(aloft) : 1, densityIndex + 1)
+  const slot = laneSlot(densityIndex, count)
+  const lane = laneFor(excursions, motion.center, slot, count, {
+    width: usableWidth,
+    height: usableHeight,
+    spriteWidth: sprite.width * scale,
+    spriteHeight: sprite.height * scale,
   })
-
-  const scenePoints = raw.map(toScene)
+  const scenePoints = excursions.map((point) => ({
+    x: left + (lane.x + point.x * lane.reachX) * usableWidth,
+    y: top + (lane.y + point.y * lane.reachY) * usableHeight,
+  }))
   const offsets = hoverOffsets(motion, samples)
 
   const facingAt = (index: number) => {
@@ -428,10 +549,7 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
       facing = dx >= 0 ? 1 : -1
     }
     const slope = Math.abs(dx) < 1e-6 ? 0 : dy / dx
-    const bank = Math.max(
-      -MAX_BANK_DEGREES,
-      Math.min(MAX_BANK_DEGREES, slope * facing * MAX_BANK_DEGREES),
-    )
+    const bank = Math.max(-maxBank, Math.min(maxBank, slope * facing * maxBank))
     keyframes.push({
       offset: offsets[index],
       x: Number(point.x.toFixed(2)),
@@ -441,10 +559,21 @@ export function generateFlightTrack(input: FlightMotionInput): FlightTrack {
     })
   }
 
-  const durationMs = Math.round(motion.baseDurationMs * (0.88 + drawDuration * 0.28))
-  const delayMs = -Math.round(
-    (drawDelay * durationMs + densityIndex * (durationMs / 12)) % durationMs,
+  const durationMs = Math.round(
+    motion.baseDurationMs * (0.88 + drawDuration * 0.28) * (calm ? CALM_PACE : 1),
   )
+  // Where in its loop the butterfly is when the garden opens. Alone, it is
+  // wherever its own draw put it. With others, the phase steps gently from
+  // lane to lane, so neighbours start apart and drift further as their paces
+  // differ; the keyframes begin at the creature's own phase, so the delay is
+  // whatever reaches the chosen point from there.
+  const startPhase = (slot / count) * PHASE_WAVE + drawDelay * PHASE_JITTER
+  const intoLoop = (((startPhase - drawPhase) % 1) + 1) % 1
+  const delayMs =
+    0 -
+    (count === 1
+      ? Math.round(drawDelay * durationMs)
+      : Math.round(progressAt(offsets, intoLoop) * durationMs) % durationMs)
 
   return {
     patternId,

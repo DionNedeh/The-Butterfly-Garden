@@ -128,9 +128,3 @@ export function distinctSpeciesDiscovered(
   return new Set(state.creatures.map((creature) => creature.speciesId)).size
 }
 
-/** Plants that produce eggs, as opposed to the nectar plants that only feed. */
-export function hostPlantIds(): string[] {
-  return plantCatalog
-    .filter((plant) => plant.kind === 'host')
-    .map((plant) => plant.id)
-}

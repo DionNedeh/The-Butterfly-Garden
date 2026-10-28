@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  currentRelease,
-  getRelease,
-  hasUnseenRelease,
-  releases,
-} from './releases'
+import { currentRelease, hasUnseenRelease, releaseName } from './currentRelease'
+import { getRelease, releases } from './releases'
 
 describe('release notes', () => {
   it('gives every release a unique id and some content', () => {
@@ -22,9 +18,50 @@ describe('release notes', () => {
   })
 
   it('describes the release this build is', () => {
-    expect(currentRelease).toBe(releases[0])
-    expect(getRelease(currentRelease.id)).toBe(currentRelease)
+    // The first load knows only the id and version; the newest notes must be
+    // the ones for that release, or What's new would describe another build.
+    expect(releases[0].id).toBe(currentRelease.id)
+    expect(releases[0].version).toBe(currentRelease.version)
+    expect(getRelease(currentRelease.id)).toBe(releases[0])
     expect(getRelease('release-from-the-future')).toBeUndefined()
+  })
+
+  it('is the version the app reports', () => {
+    expect(currentRelease.version).toBe(__APP_VERSION__)
+  })
+
+  it('keeps the 3.3 notes as they went out', () => {
+    const three = getRelease('release-3-3')
+    expect(three?.version).toBe('3.3.0')
+    expect(three?.releasedOn).toBe('2026-10-27')
+    expect(three?.sections.flatMap((section) => section.items).join(' ')).not.toMatch(/passcode|passphrase/)
+  })
+
+  it('keeps the 3.2 notes as they went out', () => {
+    const three = getRelease('release-3-2')
+    expect(three?.version).toBe('3.2.0')
+    expect(three?.sections.flatMap((section) => section.items).join(' ')).not.toMatch(
+      /field book|comfort plan|postcard/,
+    )
+  })
+
+  it('keeps the 3.1 notes as they went out', () => {
+    // 3.1 has been read on the live site; a later release adds an entry of
+    // its own, so What's new opens again for gardeners who read 3.1.
+    const three = getRelease('release-3-1')
+    expect(three?.version).toBe('3.1.0')
+    expect(three?.releasedOn).toBe('2026-10-27')
+    expect(three?.sections.map((section) => section.title)).not.toContain('In the garden')
+  })
+
+  it('keeps the 3.0 notes as they were', () => {
+    const three = getRelease('release-3-0')
+    expect(three?.version).toBe('3.0.0')
+    expect(three?.title).toBe('A livelier garden')
+  })
+
+  it('leaves the date off a release still to go out', () => {
+    expect(releases[0].releasedOn).toBeUndefined()
   })
 
   it('carries no markup to render', () => {
@@ -53,5 +90,13 @@ describe('release notes', () => {
     // this build cannot place would leave no way to read them at all.
     expect(hasUnseenRelease('release-from-the-future')).toBe(true)
     expect(hasUnseenRelease(currentRelease.id)).toBe(false)
+  })
+})
+
+describe('speaking of a release', () => {
+  it('names it by major and minor version', () => {
+    expect(releaseName({ version: '3.0.0' })).toBe('3.0')
+    expect(releaseName({ version: '3.12.4' })).toBe('3.12')
+    expect(releaseName()).toBe(currentRelease.version.split('.').slice(0, 2).join('.'))
   })
 })

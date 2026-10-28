@@ -1,0 +1,272 @@
+===== move
+c.6 part 1, "Move to a new device", is built and committed as one commit, `4b513d9`, on branch `c4-move`, not pushed. Typecheck, lint, knip and the full unit suite all pass. The new e2e tests have not been run, and no Gradle or Android checks were run.
+
+## What I built
+**Old device.** Settings → Backup and restore has a new button, "Move my garden to another device…". It loads lazily and works in three steps:
+1. **Start.** Explains that the file can travel through any app because the code never travels with it.
+2. **Make and send.** Makes the file, then hands it over with a second tap: download, the share sheet where the browser offers it, or "Save the move file" through the app's own save screen in the Android app.
+3. **The code.** Shows the code as 12 numbered words and as a QR code. It says the code is shown once, only on this screen, is kept nowhere, and should be sent apart from the file. "Send the file another way" re-sends the same file, which keeps the same code.
+
+When the garden lock is on, the move is still allowed (the file is sealed). The dialog then says: "Your garden lock stays on this device. The garden on your new device will not be locked until you turn the lock on there, in Settings."
+
+**The move file** is the existing sealed envelope from `lib/sealedBackup`, with one optional extra field in the file, `"opensWith": "move-code"`.
+
+**The code** (`lib/moveCode.ts`):
+- 16 random bytes (128 bits), plus a 4-bit check (the first 4 bits of their SHA-256), the same layout as BIP-39. That is 132 bits, read 11 at a time into 12 words from `data/recoveryWords`. The strength stays at 128 bits.
+- The key is made from the words, in lower case with one space between them, by the protected backup's own derivation: PBKDF2-SHA-256 at 600,000 rounds with a fresh salt, then AES-256-GCM.
+- Reading is forgiving: capitals, extra spaces, line breaks and numbers beside the words are all ignored (input is NFKC-normalised first).
+- A word not on the list is named, with up to three nearest words (two edits at most, a swap of two letters counting as one).
+- The check refuses a wrong-but-valid word, or two swapped words, before the slow derivation starts. About 1 in 16 such mistakes gets past the check, and AES-GCM then refuses it.
+
+**QR encoder** (`lib/qrCode.ts`, no dependency, only in the MoveDialog chunk):
+- Byte mode, error correction M, versions 1–40, the smallest version that fits. A 12-word code comes out at version 5–7.
+- Includes Reed-Solomon over GF(256), the version and format bits, and all eight masks scored by the standard's four penalty rules.
+- It is drawn as one SVG path, black on white in both themes.
+
+**New device.** "Arrive from another device" is on the welcome, in Settings' restore (as "Arrive from another device…") and on the recovery screen:
+1. Choose the file.
+2. Type the 12 words, or tap "Scan the QR code".
+3. The garden goes into that screen's usual restore: Settings shows its usual preview, now with "A move file, opened with its one-time code". The welcome and the recovery screen restore straight away, as they already do for any backup.
+
+The scan button only appears where `BarcodeDetector` reports `qr_code` support and `getUserMedia` exists. The camera opens only after the tap, using the rear camera. It is released when a code is read, on Stop, Cancel, Escape or Android back, on "Choose another file", on submitting typed words, when the app goes out of sight, or when the dialog unmounts. On Android the scan button is simply absent because the WebView has no `BarcodeDetector`; no permissions or native code were added.
+
+## Decisions where the plan was ambiguous
+- **The move file reuses the passphrase envelope unchanged.** PBKDF2 is more stretching than a 128-bit random secret needs, but it means a build that doesn't know move files can still open one by typing the words exactly as its passphrase. The `opensWith` mark is only a hint for which question to ask; it is not bound to the cipher. Builds 3.0–3.3 refuse the file as "not a garden this version can read" and replace nothing.
+- **Other files chosen in Arrive** go where they belong: a plain backup goes straight to the usual restore, and a passphrase backup goes to the passphrase prompt.
+- **A move file chosen through the ordinary Restore** (Settings, the welcome, the recovery screen, safe mode) is sent to the code prompt by `SealedBackupPrompt`, which loads it by hand.
+- **A move file does not count as a backup** for the backup reminder, because it opens for nobody once its code is gone. Nothing is stored at any point.
+- **Which reference the QR encoder matches.** It matches Project Nayuki's `qrcodegen` 1.8.0 exactly. I checked it against segno and zxing-cpp too, but segno adds a non-standard extra zero byte of padding, and both choose masks by different rules. The fixtures come from qrcodegen, run in a throwaway environment outside the repo.
+
+## Stored data
+Nothing new. No new field, no new store, `DATABASE_VERSION` unchanged, nothing in meta, and `validateGarden.ts` untouched.
+
+## Files
+- **New:**
+  - `src/lib/qrCode.ts`, `src/lib/moveCode.ts`, `src/lib/qrScan.ts`
+  - `src/components/move/` (`MoveDialog`, `ArriveDialog`, `ArriveRestore`, `CodeScanner`, `QrPicture`, `move.css`)
+  - `src/test/qrFixtures.json`
+  - tests (`*.test.ts(x)` beside the new code)
+- **Modified:**
+  - `src/lib/sealedBackup.ts`: writes and reads the mark.
+  - `src/components/backup/SealedBackupPrompt.tsx`: routes move files to the code prompt.
+  - `src/components/backup/ProtectedRestore.tsx`: type change only.
+  - `src/components/SettingsView.tsx`, `src/components/Onboarding.tsx`, `src/components/RecoveryScreen.tsx`: additions only.
+  - `src/lib/sealedBackup.test.ts`: a fix to a test that was already failing on the branch base. It used the old return shape of `withPhotosAsText` and had no FileReader stub.
+
+## E2E, written but not run
+- **`e2e/move.spec.ts`:**
+  - A file downloaded in one context, then a fresh context arriving from the welcome by typing the words (with a misspelling first), checking the journal note arrived.
+  - A night-mode run through Settings' restore and preview.
+  - The scan path with a stand-in detector and canvas camera, checking the camera is opened only on tap and released.
+  - A layout check at the Largest text size on a 360px phone.
+  - Axe sweeps in both themes.
+- **`e2e/android.spec.ts`:** one test added for the app's save screen, no Share button, no scan button, and Android back.
+
+## Not finished
+- No pure-JS QR decoder, so iOS Safari and Firefox have no scanning; the 12 words work everywhere.
+- Safe mode gets no Arrive button, though its existing restore opens move files through the routing above.
+
+## Bundle (`npm run build && node scripts/check-budgets.mjs`)
+| | Entry | CSS | First load |
+|---|---|---|---|
+| Before | 97.3 kB | 22.8 kB | 159.7 kB |
+| After | 97.4 kB | 22.8 kB | 159.8 kB (limit 160.7) |
+
+The 0.1 kB is only the preload list in the entry naming the new shared chunk and its stylesheet; all the new code loads lazily. Lazy chunks, gzipped: MoveDialog with the QR encoder 4.7 kB, ArriveDialog 3.2 kB, ArriveRestore 0.7 kB, moveCode 1.1 kB, CSS 0.7 kB.
+
+## Checks
+- `npm run typecheck`, `npm run lint`, `npm run knip`: clean.
+- `npm test`:
+  ```
+  Test Files  231 passed (231)
+  Tests  2769 passed (2769)
+  Statements 95.25% · Branches 91.89% · Functions 93.85% · Lines 96.4%
+  ```
+- Earlier runs on the shared machine (load up to 16 on 4 cores) had timing failures in sightings, jars, soundscapes, the protected-backup tests and `App.test.tsx`. Each of those files passed when run alone, and the third full run was green.
+
+## Suggested ARCHITECTURE row
+| Moving the garden to a new device: a move file and its one-time code | `lib/moveCode.ts` (12 words: 128 random bits and a 4-bit check; the file is a protected backup locked with the words), `lib/sealedBackup.ts` (the `opensWith: 'move-code'` hint), `lib/qrCode.ts` (byte mode, level M, drawn on the device), `lib/qrScan.ts` (BarcodeDetector and the camera, feature-detected), `components/move/` (`MoveDialog` from Settings; `ArriveRestore`/`ArriveDialog` on the welcome, Settings' restore and the recovery screen; `CodeScanner`); a move file chosen through Restore is sent to its code by `SealedBackupPrompt` |
+
+===== keep
+I've built both parts of c.6 and committed them as one commit, 027903a, on `c4-keep` (not pushed). Typecheck, lint, knip and `npm test` all pass. One problem: the Android first load is now 161.2 kB, over the 160.7 kB growth line that `android.yml` checks. It was already at 160.6 kB before this change, with 0.1 kB to spare. The web build is still under budget.
+
+## What I built
+
+**c.6 part 3, earlier copies on every device (web and Android)**
+- **When a copy is taken:** before the first change you make on a local day, the garden as it stood is kept as that day's copy. It goes into the same IndexedDB transaction as the change. Writes the app makes on its own (a visit or letter noted, the automatic backup recorded) don't trigger one.
+- **How many are kept:** up to seven, oldest dropped. If copies get large, fewer are kept (never fewer than two).
+- **Restore copies stay separate:** the existing pre-restore snapshots (limit 2) are pruned apart from the daily ones, so neither pushes the other out. `snapshots()` now returns pre-restore copies only, as its comment always said.
+- **Settings → "Earlier copies on this device":** lists each day with "N check-ins, N reflections and N goals".
+  - "Look at this copy" opens the usual restore preview ("This copy holds…").
+  - "Put this copy back" is a normal restore: the current garden is kept first and "Undo the restore" takes focus.
+  - The wording says plainly these copies are for undoing a mistake, not protection from the browser clearing site storage.
+  - Their size is added to the web storage line ("…of it for earlier copies"); the Android app shows it in the section instead.
+- **Under the garden lock:** copies taken while locked are sealed the same way restore snapshots are, and turning the lock on or off seals or opens existing copies. Both are tested, including a check that no journal text is readable at rest.
+
+**c.6 part 2, a backup file kept up to date (Chromium on a computer only)**
+- **Where it shows:** only where `window.showSaveFilePicker` is a function. It is left out of the Android bundle entirely, and Safari, Firefox and phones keep the ordinary Download.
+- **Setting up:** "Choose a backup file…" writes the plain backup straight away.
+- **When it writes after that:**
+  - An earlier day's changes, when the garden is opened or looked at again.
+  - Today's changes when the page is hidden, at most every 10 minutes.
+  - Never on every save, never while saving is paused, and never while the lock is on.
+- **Status and problems:** Settings says when the file was last written and when it couldn't be (lost permission, file moved, disk full). Permission is checked before every write and only requested when you tap "Keep updating my backup file". Chrome's "Allow on every visit" isn't relied on.
+- **While locked:** it shows "Automatic backups pause while your garden is locked, because the file would not be." A write that is under way when the lock goes on is abandoned, so the file on disk is never replaced.
+- **Other behaviour:** "Stop updating this file" forgets the file handle. Each write counts as a backup for the reminder (`lastBackupAt`), recorded as a quiet write.
+
+## Stored data and older builds
+
+- **No new store, and `DATABASE_VERSION` stays at 8.** I kept the file handle as a second record in the existing drafts store (key `backup-file`), which is simpler than a new store and the version rules that come with it, and it is deleted with the garden. The lock switch leaves that record unsealed because a file handle can't be sealed and holds nothing from the journal. The previous build (C3) would seal it into an unusable value when the lock is turned on, so its file would have to be chosen again.
+- **Snapshot records** gain `reason: 'daily'` plus optional `day` and `bytes`. The previous build prunes only pre-restore snapshots and can seal and open daily ones normally. It will list them, but its own after-restore lookup takes the newest snapshot, which is always the one it just took.
+- **Nothing new in the garden itself, in meta, or in the backup format.**
+
+## Decisions where the plan was open
+
+- **Photos:** daily copies leave out the field book's photos, which could make a week of copies 20 times larger than the journal. A copy put back keeps the photos the garden has now, and keeps the newest `lastBackupAt`. Everything else, including custom backdrops, is kept whole.
+- **Size cap:** a 24 MB budget for all daily copies, with seven at most and two at least.
+- **Restores:** a restore or a put-back also takes that day's copy if there isn't one yet.
+- **Disk full:** if a copy would make a write fail, the change is written again without it. A copy can never cost a change.
+- **Two tabs:** writes to the file go through `navigator.locks`, so tabs never write it at the same time.
+
+## Outside my items
+
+- **Fixed a broken test:** `src/lib/sealedBackup.test.ts` was already failing on the base branch (C2 changed what `withPhotosAsText` returns and the C3 test wasn't updated). I fixed it so `npm test` could pass.
+- **`vite.config.ts`:** one regex change so `repository/dailyCopies` loads lazily like `sealedStores`.
+- **`usePersistence`:** the put-back repeats the restore's undo-offer lines rather than sharing them, to avoid reorganising code the other branches may also touch.
+
+## Not finished
+
+- **Android budget:** over by 0.5 kB as above. The new code that has to load with the app is the daily-copy hook in `save`/`replace` (+0.4 kB) and the Settings wiring (+0.2 kB). The integrator will need to either update the baseline (`npm run budgets -- --update`) or find room elsewhere.
+- **Not run:** Playwright and Gradle, as instructed.
+
+## e2e changes (written, not run)
+
+- **New `e2e/keep.spec.ts`:**
+  - **Daily copies:** a check-in, then a simulated next day with `page.clock` and a reload, another check-in, then Settings lists both days with the right counts. A copy is looked at, kept as is with focus returning to its button, then put back and undone. Two axe sweeps.
+  - **Hidden:** with `showSaveFilePicker` removed, the backup-file section doesn't appear.
+  - **Shown:** with the picker stubbed to hand back a real file in the browser's own private file system, the file is written on choosing, rewritten as the page is hidden after a change, and then let go. Two axe sweeps.
+- **`e2e/android.spec.ts`:** the Android Settings shows earlier copies and never the backup-file section.
+
+## Bundle (gzip)
+
+| | Entry | CSS | First load |
+|---|---|---|---|
+| Web before | 97.3 kB | 22.8 kB | 159.7 kB |
+| Web after | 97.6 kB | 22.8 kB | 160.4 kB (limit 160.7) |
+| Android before | 97.0 kB | 22.8 kB | 160.6 kB |
+| Android after | 97.2 kB | 22.8 kB | 161.2 kB (over 160.7) |
+
+## Test results
+
+- `Test Files  226 passed (226)`
+- `Tests  2759 passed (2759)`
+- Coverage: Statements 95.24%, Branches 92.11%, Functions 93.75%, Lines 96.33%
+
+An earlier full run failed 17 tests on timeouts while the machine was heavily loaded. Re-run alone, every affected file passed, and the final full run was clean.
+
+## Suggested ARCHITECTURE row
+
+| Keeping copies on their own: a backup file kept up to date (Chromium on a computer), and up to seven daily copies on every device | `lib/autoBackup.ts` (when a write is due, problems, wording), `lib/autoBackupFile.ts` (choose, permission on a tap, write, the record beside the drafts under `BACKUP_FILE_KEY`), `components/backup/AutoBackupKeeper.tsx` (loaded by the app where the browser can keep a file; paused while read-only or locked), `components/backup/AutoBackupSetting.tsx`; `repository/dailyCopies.ts` (loaded once a day at most: photos left out, sealed under the lock, seven kept within a budget, kept apart from pre-restore snapshots), `components/backup/EarlierCopies.tsx` (put back through the restore preview and its undo) |
+
+Files are in the `c4-keep` worktree:
+- `src/repository/dailyCopies.ts`
+- `src/repository/gardenRepository.ts`
+- `src/repository/sealedStores.ts`
+- `src/lib/autoBackup.ts`
+- `src/lib/autoBackupFile.ts`
+- `src/components/backup/AutoBackupKeeper.tsx`
+- `src/components/backup/AutoBackupSetting.tsx`
+- `src/components/backup/EarlierCopies.tsx`
+- `src/components/backup/keep.css`
+- `src/components/SettingsView.tsx`
+- `src/hooks/usePersistence.ts`
+- `src/hooks/useGardenState.ts`
+- `src/App.tsx`
+- `src/lib/backupPreview.ts`
+- `vite.config.ts`
+- `e2e/keep.spec.ts`
+- `e2e/android.spec.ts`
+
+===== seasons
+The seasons engine, the season and night lines, Marigold's travels, the seasonal prompts, the fireflies and the hooks for the art PR are all built and committed on `c4-seasons` as one commit, 80ca2e5 (not pushed). Typecheck, lint, knip and `npm test` all pass. Playwright and Gradle were not run, as instructed.
+
+**One change to existing behaviour.** The garden's day lines (`observations`) moved out of `data/content.ts` into a lazily loaded chunk. Without this, my additions put the Android first load over its limit: 161.0 kB against 160.7 kB. The cost is that the line under the garden's name appears a moment after the garden first draws, once per session. A non-breaking space holds its place while it loads. The words and the rule that picks them are unchanged, and a unit test checks the rule.
+
+**Bundle (gzip, `npm run build && node scripts/check-budgets.mjs`)**
+
+| | Before | After |
+|---|---|---|
+| Web entry | 97.3 kB | 97.7 kB |
+| Web CSS | 22.8 kB | 22.8 kB |
+| Web first load | 159.7 kB | 158.0 kB |
+| Android entry (`--dist dist-android`) | 97.0 kB | 97.3 kB |
+| Android first load | 160.6 kB | 158.8 kB |
+
+The web first load was 159.7 kB at the start, not about 158 kB as the brief said. The Android build was already within 0.1 kB of its limit, so the other two C4 branches should measure Android too. Everything new loads lazily: the lines chunk (`gardenLines`, 5.4 kB), `GardenLine` (0.1 kB), and the fireflies (0.4 kB of script and 0.6 kB of CSS).
+
+**Test results**
+- `Test Files  224 passed (224)` / `Tests  2732 passed (2732)`
+- Coverage: statements 95.18%, branches 91.97%, functions 93.74%, lines 96.25%.
+- `src/lib/sealedBackup.test.ts` was already failing on the base commit (checked on a clean copy of HEAD). It was a test-only C2×C3 merge bug: the fixture had not caught up with `withPhotosAsText` now returning `{ value, unreadable }`, and it lacked the `FileReader` stub the other photo tests use. I fixed both in that test file. Another C4 agent may make the same fix.
+
+**What I built**
+1. **Seasons** (`src/lib/seasons.ts`): meteorological seasons, with the south six months on.
+   - Australia and New Zealand are southern. With no region or "Elsewhere" the garden assumes the north, and only the scene and Marigold's travels use that guess.
+   - `knownSeason` returns nothing when the region doesn't say, so no words state the gardener's own season as fact.
+   - `currentSeason` takes a local date string, the app's one date shape.
+   - The duplicate season code in `lib/whatToLookFor.ts` now uses this module.
+   - Tests cover every first and last day of each month, leap day included, in both hemispheres.
+2. **Season lines** (`src/data/seasons.ts`): at least two per region per season, each naming its place ("In much of North America…"), with sources.
+   - They reuse lines already checked in `whatToLookFor`, `speciesFacts` and `regions`, plus a few I read against Butterfly Conservation, the South Australian butterflies site and the NZ butterflies trust today.
+   - They show one day in three, by day and by night, in the garden's line under its name. That is the only place they appear; the field book's "What to look for" line is unchanged.
+   - Without a known region, the line comes from any region, each in its own season, so every line stays true wherever the gardener is.
+3. **Seasonal prompts**: two per season in `data/prompts.ts`. They join the rotation only when a region makes the season known.
+4. **Marigold's travels**: "getting ready to travel… She will stay to guide you all the same" in autumn and "back from the south" in spring.
+   - In the south it says "back from her travels", since monarchs there move to winter roosts rather than south.
+   - It appears in the season rotation and on her card. Words only; no game rule changes.
+5. **Night garden words**: two night lines for each of the 25 butterflies, each naming its host plant, plus four that any garden says.
+   - They are chosen by the same rule as the day lines and follow the theme on screen. Day wording is unchanged.
+   - The facts in them come from `speciesFacts`. Tests check every species with no butterfly flying, and that no night line uses sun or hour words.
+6. **Fireflies**: five glowing dots that replace the petals at night (`components/garden/Fireflies.tsx`).
+   - They animate transform and opacity only, and pause offscreen and in a hidden tab.
+   - None show with reduced motion (the setting or the device's), Calm motion, or on a winter night.
+7. **Art hooks**: `.garden-hero[data-season]`, plus `seasonArt` in `data/seasons.ts`, a typed list of overlay, free keepsake and Pass outfit ids with no images. Nothing reads the list, and nothing visible changes from these hooks.
+
+**Stored data:** no new fields, no new stores, no `DATABASE_VERSION` change. The only thing written is the existing reflection `promptId`, which can now hold a seasonal prompt's id. An older build shows such a reflection without its question, as it already does for any prompt id it doesn't know. With the garden lock on, this feature writes nothing anywhere, so nothing needed adapting.
+
+**Decisions where the plan was ambiguous**
+- The day line was never chosen per plant or stage; it is chosen by the active butterfly's species. So "night variants for each plant and stage" became: every species gets its own night lines naming its host plant. A garden whose companion is still an egg, caterpillar or chrysalis gets the lines any garden says.
+- Night means the theme on screen, not the clock. "Follow evening" already ties the two together.
+- No fireflies in winter. This goes beyond the brief; I chose it because it is truer to real fireflies and fits the frost overlay planned for the art PR.
+- The keepsake and outfit names in `seasonArt` are placeholders for the art PR to change.
+
+**Not done:** new art of any kind. The art PR can draw overlays on `.hero-petals::before`, which is unused, or restyle `.hero-petal` per season.
+
+**E2E tests written but not run**
+- New `e2e/seasons.spec.ts` (pinned UTC dates, motion on, axe sweeps):
+  - the day line and night line by exact text;
+  - five fireflies with both animations running, and none under the device's reduced-motion setting;
+  - fireflies pausing offscreen;
+  - Australia turning July to winter with no fireflies;
+  - the app's own Reduce and Calm motion settings showing no fireflies;
+  - a UK line on a season day.
+- One test added at the end of `e2e/android.spec.ts`: the night line and fireflies in the Android build, with an axe sweep.
+
+**Suggested ARCHITECTURE row:**
+| Seasons and the night garden: the season by hemisphere, the line under the garden's name by day, night and season, Marigold's travels, fireflies, and hooks for seasonal art | `lib/seasons.ts` (first load: `currentSeason`, `hemisphereOf`, `knownSeason`), `lib/gardenLines.ts` with `data/observations.ts`, `data/nightLines.ts` and `data/seasons.ts` (lines, Marigold, the art list), loaded through `components/garden/GardenLine.tsx`; `components/garden/Fireflies.tsx`; `data-season` on `.garden-hero` in `GardenView`; seasonal prompts in `data/prompts.ts` |
+
+Files are in the `c4-seasons` worktree:
+- **New:**
+  - `src/lib/seasons.ts`, `src/lib/gardenLines.ts`
+  - `src/data/seasons.ts`, `src/data/nightLines.ts`, `src/data/observations.ts`
+  - `src/components/garden/GardenLine.tsx`, `src/components/garden/Fireflies.tsx`, `src/components/garden/fireflies.css`
+  - `src/test/nightWords.ts`
+  - `e2e/seasons.spec.ts`
+  - tests: `src/lib/seasons.test.ts`, `src/lib/gardenLines.test.ts`, `src/data/seasons.test.ts`, `src/components/garden/Fireflies.test.tsx`, `src/components/GardenView.seasons.test.tsx`
+- **Changed:**
+  - `src/components/GardenView.tsx`, `src/components/ButterflyCard.tsx`, `src/components/TodayView.tsx`
+  - `src/data/content.ts`, `src/data/prompts.ts`, `src/data/whatToLookFor.ts`
+  - `src/lib/prompts.ts`, `src/lib/whatToLookFor.ts`
+  - `e2e/android.spec.ts`
+  - tests: `src/components/TodayView.test.tsx`, `src/data/catalog.test.ts`, `src/data/content.test.ts`, `src/lib/prompts.test.ts`, `src/lib/whatToLookFor.test.ts`, `src/lib/sealedBackup.test.ts`
+

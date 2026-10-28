@@ -1,0 +1,215 @@
+/* The garden lock: its lock screen, its part of Settings, and the recovery
+   sheet. Loaded with them, never with the garden. Colours come from the
+   theme's own tokens, so night needs only what is restated below. */
+
+.lock-screen {
+  align-content: center;
+}
+
+.lock-card {
+  gap: 0.75rem;
+  width: min(520px, 100%);
+  text-align: left;
+}
+
+.lock-emblem {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+}
+
+.lock-card h1 {
+  margin-bottom: 0;
+  font-size: clamp(1.7rem, 6vw, 2.3rem);
+  overflow-wrap: anywhere;
+}
+
+.lock-card h2 {
+  font-size: 1.3rem;
+}
+
+.lock-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.lock-form p,
+.lock-dialog p {
+  margin-bottom: 0;
+}
+
+.lock-form label,
+.lock-dialog label {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+.lock-card .text-button,
+.lock-settings .text-button,
+.lock-dialog .text-button {
+  min-height: 44px;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+}
+
+/* Busy while a key is made: still focusable, so focus stays where it was. */
+.lock-card [aria-disabled='true'],
+.lock-dialog [aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.lock-card .form-actions > *,
+.lock-dialog .form-actions > * {
+  max-width: 100%;
+  white-space: normal;
+}
+
+/* Present before it speaks, so a screen reader hears it when it does. */
+.lock-progress {
+  min-height: 1.6em;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.lock-progress:empty {
+  min-height: 0;
+}
+
+.field-hint {
+  margin: -0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.lock-help {
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+.lock-help summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  cursor: pointer;
+  color: var(--forest);
+  font-weight: 800;
+}
+
+.lock-help p {
+  margin: 0.5rem 0;
+  font-size: 0.92rem;
+}
+
+/* Said twice, before the passcode and beside the code: plain, and not alarming. */
+.lock-warning {
+  margin: 0;
+  border-left: 4px solid var(--gold);
+  border-radius: 0 12px 12px 0;
+  background: var(--surface-soft);
+  padding: 0.75rem 0.9rem;
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+/* Settings' part. */
+.lock-settings {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1.1rem;
+}
+
+.lock-settings h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.lock-settings p {
+  margin: 0;
+}
+
+.lock-settings label {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 26rem;
+  font-size: 0.95rem;
+}
+
+.lock-small-print {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+/* Laid out only while open: a closed dialog stays hidden, as the browser
+   has it, should one ever be closed before it is taken away. */
+.lock-dialog[open] {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.lock-dialog form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+/* The 24 words: numbered, in reading order, three columns where they fit. */
+.recovery-words {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.35rem 1rem;
+  margin: 0;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  padding: 0.85rem 1rem 0.85rem 2.6rem;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 1rem;
+}
+
+.recovery-words li {
+  padding-left: 0.25rem;
+  color: var(--ink);
+}
+
+.theme-night .lock-warning {
+  border-left-color: #e7c27a;
+}
+
+/* Printing the sheet prints the sheet alone: a plain copy of it stands at
+   the top of the page (RecoverySheet), and everything else is hidden. */
+.recovery-print {
+  display: none;
+}
+
+@media print {
+  body.printing-recovery * {
+    visibility: hidden !important;
+  }
+
+  body.printing-recovery dialog::backdrop {
+    background: none !important;
+    backdrop-filter: none !important;
+  }
+
+  body.printing-recovery .recovery-print {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
+    margin: 0;
+    visibility: visible !important;
+    color: #000;
+    background: #fff;
+    white-space: pre-wrap;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11pt;
+  }
+}
