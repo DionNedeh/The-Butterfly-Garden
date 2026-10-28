@@ -5,6 +5,13 @@ import cottage from '../assets/garden-cottage-bloom.webp'
 import pond from '../assets/garden-rain-kissed-pond.webp'
 import orchard from '../assets/garden-twilight-orchard.webp'
 import cloud from '../assets/garden-cloud-garden.webp'
+import meadowNight from '../assets/garden-sunlit-meadow-night.webp'
+import woodlandNight from '../assets/garden-woodland-brook-night.webp'
+import conservatoryNight from '../assets/garden-secret-conservatory-night.webp'
+import cottageNight from '../assets/garden-cottage-bloom-night.webp'
+import pondNight from '../assets/garden-rain-kissed-pond-night.webp'
+import orchardNight from '../assets/garden-twilight-orchard-night.webp'
+import cloudNight from '../assets/garden-cloud-garden-night.webp'
 import meadowThumb from '../assets/thumb-sunlit-meadow.webp'
 import woodlandThumb from '../assets/thumb-woodland-brook.webp'
 import conservatoryThumb from '../assets/thumb-secret-conservatory.webp'
@@ -17,28 +24,28 @@ import { isAndroidApp } from '../lib/platform'
 
 export const backdropAssets: Record<
   GardenBackdropId,
-  { image: string; thumbnail: string }
+  { image: string; night: string; thumbnail: string }
 > = {
-  'sunlit-meadow': { image: meadow, thumbnail: meadowThumb },
-  'woodland-brook': { image: woodland, thumbnail: woodlandThumb },
-  'secret-conservatory': { image: conservatory, thumbnail: conservatoryThumb },
-  'cottage-bloom': { image: cottage, thumbnail: cottageThumb },
-  'rain-kissed-pond': { image: pond, thumbnail: pondThumb },
-  'twilight-orchard': { image: orchard, thumbnail: orchardThumb },
-  'cloud-garden': { image: cloud, thumbnail: cloudThumb },
+  'sunlit-meadow': { image: meadow, night: meadowNight, thumbnail: meadowThumb },
+  'woodland-brook': { image: woodland, night: woodlandNight, thumbnail: woodlandThumb },
+  'secret-conservatory': { image: conservatory, night: conservatoryNight, thumbnail: conservatoryThumb },
+  'cottage-bloom': { image: cottage, night: cottageNight, thumbnail: cottageThumb },
+  'rain-kissed-pond': { image: pond, night: pondNight, thumbnail: pondThumb },
+  'twilight-orchard': { image: orchard, night: orchardNight, thumbnail: orchardThumb },
+  'cloud-garden': { image: cloud, night: cloudNight, thumbnail: cloudThumb },
 }
 
 /** How long a scene may take before the gallery stops waiting for it. */
 export const BACKDROP_TIMEOUT_MS = 8000
 
 /** Scenes already downloaded and decoded this session. */
-const decoded = new Set<GardenBackdropId>()
+const decoded = new Set<string>()
 /** Loads under way, so two callers share one download. */
-const loading = new Map<GardenBackdropId, Promise<void>>()
+const loading = new Map<string, Promise<void>>()
 
 /** Whether a scene can be shown at once, with nothing left to fetch or decode. */
-export function isBackdropReady(id: GardenBackdropId): boolean {
-  return decoded.has(id)
+export function isBackdropReady(id: GardenBackdropId, night = false): boolean {
+  return decoded.has(night ? backdropAssets[id].night : backdropAssets[id].image)
 }
 
 /**
@@ -49,9 +56,11 @@ export function isBackdropReady(id: GardenBackdropId): boolean {
 export function loadBackdrop(
   id: GardenBackdropId,
   timeoutMs = BACKDROP_TIMEOUT_MS,
+  night = false,
 ): Promise<void> {
-  if (decoded.has(id)) return Promise.resolve()
-  const pending = loading.get(id)
+  const url = night ? backdropAssets[id].night : backdropAssets[id].image
+  if (decoded.has(url)) return Promise.resolve()
+  const pending = loading.get(url)
   if (pending) return pending
   const load = new Promise<void>((resolve, reject) => {
     const image = new Image()
@@ -60,12 +69,12 @@ export function loadBackdrop(
       if (settled) return
       settled = true
       window.clearTimeout(timer)
-      loading.delete(id)
+      loading.delete(url)
       if (error) {
         reject(error)
         return
       }
-      decoded.add(id)
+      decoded.add(url)
       resolve()
     }
     const timer = window.setTimeout(
@@ -93,8 +102,8 @@ export function loadBackdrop(
             : 'This scene is not available offline yet. Reconnect once to download it.',
         ),
       )
-    image.src = backdropAssets[id].image
+    image.src = url
   })
-  loading.set(id, load)
+  loading.set(url, load)
   return load
 }

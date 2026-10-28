@@ -1,3 +1,4 @@
+import type { Season } from '../lib/seasons'
 import type { ReflectionPrompt, ReflectionPromptFamily } from '../types'
 
 /*
@@ -90,4 +91,35 @@ const reflectionPromptRows: ReadonlyArray<
 
 export const reflectionPrompts: ReflectionPrompt[] = reflectionPromptRows.map(
   ([id, text, family]) => ({ id, text, family }),
+)
+
+/** A prompt that joins the rotation only in its own season (plan c.7). */
+export interface SeasonalPrompt extends ReflectionPrompt {
+  season: Season
+}
+
+/**
+ * A few prompts for each season, offered only where the garden knows the
+ * gardener's season: with a region chosen (lib/seasons, knownSeason), since
+ * spring in March would be wrong for half the world. Concrete "what" and
+ * "which" questions, like the rest, about the season where the gardener is.
+ * Stored by id like any other prompt, so the same rule holds: never reused
+ * or removed. (A build from before these shows such a reflection without its
+ * question, as it does any prompt it does not know.)
+ */
+const seasonalPromptRows: ReadonlyArray<
+  readonly [id: string, text: string, family: ReflectionPromptFamily, season: Season]
+> = [
+  ['spring-first-sign', 'What is the first sign of spring you have noticed near you?', 'nature', 'spring'],
+  ['spring-growing', 'What is starting to grow or flower where you are?', 'nature', 'spring'],
+  ['summer-noticed', 'Which flowers or insects of summer caught your eye lately?', 'nature', 'summer'],
+  ['summer-evenings', 'What do you enjoy most about the longer evenings?', 'savouring', 'summer'],
+  ['autumn-changing', 'What is changing in the trees and gardens near you this season?', 'nature', 'autumn'],
+  ['autumn-comfort', 'What small comfort helps you settle into the cooler days?', 'rest', 'autumn'],
+  ['winter-green', 'What is still green or alive outside, even in winter?', 'nature', 'winter'],
+  ['winter-rest', 'What helps you rest and keep warm through the darker days?', 'rest', 'winter'],
+]
+
+export const seasonalPrompts: SeasonalPrompt[] = seasonalPromptRows.map(
+  ([id, text, family, season]) => ({ id, text, family, season }),
 )

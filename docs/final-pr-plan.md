@@ -55,6 +55,13 @@ To find it, every item of the Voyager plan and every PR log was swept, along wit
 
 ## 1. The art PR
 
+**Artwork implementation in progress (27 October 2026).** See
+[the artwork record](art/night-season-art.md) and [local art review](art/index.html).
+The owner chose art only for keepsakes and outfits; their product rules remain
+pending. The heart symbol is also an art asset only, without a jar schema change.
+The seasons patch has been applied locally as the art prerequisite. Merge and
+validation status must be read from the final handoff, not inferred from this note.
+
 Made by the owner's drawing agent, as agreed when the plan began. Land the seasons patch first (1.1): it adds the hooks the art fills. The code for night images and moths (1.2) can come in the same PR as the art, or just before it. The full art brief, with every image to make, follows the steps.
 
 ### 1.1 Land the seasons and night garden without art (`c4-seasons.patch`)

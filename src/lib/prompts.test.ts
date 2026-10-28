@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { freeWritingPrompt } from '../data/content'
-import { reflectionPrompts } from '../data/prompts'
+import { reflectionPrompts, seasonalPrompts } from '../data/prompts'
 import type { ReflectionPromptFamily } from '../types'
 import { addDaysToLocalDate } from './date'
 import { promptAfter, promptById, promptForDay } from './prompts'
+import type { Season } from './seasons'
 
 const DAY = '2026-10-27'
 
@@ -86,7 +87,7 @@ describe('the day’s prompt', () => {
 })
 
 describe('the prompts themselves', () => {
-  const everyPrompt = [...reflectionPrompts, freeWritingPrompt]
+  const everyPrompt = [...reflectionPrompts, ...seasonalPrompts, freeWritingPrompt]
 
   it('gives every prompt its own id', () => {
     const ids = everyPrompt.map((prompt) => prompt.id)
@@ -129,5 +130,54 @@ describe('three good things in nature', () => {
     // Each comes round in the rotation like any other.
     const offered = reflectionPrompts.map((_, skipped) => promptForDay(DAY, skipped))
     for (const prompt of nature) expect(offered).toContain(prompt)
+  })
+})
+
+describe('the season’s own prompts', () => {
+  const seasons: readonly Season[] = ['spring', 'summer', 'autumn', 'winter']
+  const offeredIn = (season?: Season) => {
+    const count = reflectionPrompts.length + (season ? 2 : 0)
+    return Array.from({ length: count }, (_, skipped) => promptForDay(DAY, skipped, season))
+  }
+
+  it('gives every season a few, asking concretely, never why', () => {
+    for (const season of seasons) {
+      const own = seasonalPrompts.filter((prompt) => prompt.season === season)
+      expect(own.length, season).toBeGreaterThanOrEqual(2)
+      for (const prompt of own) expect(prompt.text).toMatch(/^(What|Which|Where|How)\b.*\?$/)
+    }
+  })
+
+  it('come round only in their own season, and every one of them then', () => {
+    for (const season of seasons) {
+      const offered = offeredIn(season)
+      for (const prompt of seasonalPrompts) {
+        expect(offered.includes(prompt), `${prompt.id} in ${season}`).toBe(prompt.season === season)
+      }
+      // Every other prompt still comes round too, once.
+      expect(new Set(offered).size).toBe(offered.length)
+      for (const prompt of reflectionPrompts) expect(offered).toContain(prompt)
+    }
+  })
+
+  it('stay out where the season is not known', () => {
+    const offered = offeredIn(undefined)
+    for (const prompt of seasonalPrompts) expect(offered).not.toContain(prompt)
+    expect(promptForDay(DAY)).toBe(promptForDay(DAY, 0, undefined))
+  })
+
+  it('step on from one to the next with another prompt, in their season', () => {
+    for (const prompt of offeredIn('autumn')) {
+      expect(promptAfter(prompt, DAY, 'autumn')).not.toBe(prompt)
+    }
+    const [first, second] = seasonalPrompts.filter((prompt) => prompt.season === 'autumn')
+    expect(promptAfter(first, DAY, 'autumn')).toBe(second)
+    expect(promptAfter(second, DAY, 'autumn')).toBe(reflectionPrompts[0])
+    // Out of its season, a prompt is not offered, so another is the day's own.
+    expect(promptAfter(first, DAY, 'spring')).toBe(promptForDay(DAY, 0, 'spring'))
+  })
+
+  it('are found by the id stored with a reflection, in any season', () => {
+    for (const prompt of seasonalPrompts) expect(promptById(prompt.id)).toBe(prompt)
   })
 })

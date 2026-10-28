@@ -87,6 +87,13 @@ tells other tabs which parts it wrote.
 
 ## Invariants
 
+Night and season artwork is loaded by `GardenView`: `data/backdropAssets.ts`
+caches decoded day/night URLs separately; `garden/SeasonArt` loads the seasonal
+CSS, and `garden/Moth` and `garden/Fireflies` load only where motion is allowed.
+`lib/seasons.ts` supplies the region's hemisphere; `garden/GardenLine` loads the
+day/night/season words separately. Pending keepsake/outfit art and provenance:
+`docs/art/night-season-art.md` (no ownership or gift rules are enabled).
+
 Each is pinned by tests, and each guards against a way to lose or corrupt a
 journal. If a change makes one awkward, the change is wrong.
 

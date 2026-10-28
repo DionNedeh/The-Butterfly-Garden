@@ -1,4 +1,5 @@
 import type { MarkedRegion } from '../lib/regionMarks'
+import type { Season } from '../lib/seasons'
 
 /**
  * A gentle line for each month, of what a gardener in a region might look
@@ -10,12 +11,10 @@ import type { MarkedRegion } from '../lib/regionMarks'
  * Every line says only what its source says; where a source speaks of one
  * country, so does the line. Nothing here suggests catching or handling.
  */
-export type Season = 'winter' | 'spring' | 'summer' | 'autumn'
-
 export interface MonthLine {
   /** The months it is said in, 1 for January to 12 for December. */
   months: readonly number[]
-  /** The season those months are, where the region is (lib/whatToLookFor checks it). */
+  /** The season those months are, where the region is (lib/seasons; the tests check it). */
   season: Season
   text: string
   sources: readonly string[]

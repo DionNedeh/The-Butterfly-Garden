@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { whatToLookFor } from '../data/whatToLookFor'
-import { HEMISPHERES, lookForThisMonth, seasonOf } from './whatToLookFor'
+import { hemisphereOf, seasonOf } from './seasons'
+import { lookForThisMonth } from './whatToLookFor'
 
 const REGIONS = ['north-america', 'europe', 'australasia'] as const
 
@@ -21,7 +22,7 @@ describe('what to look for this month', () => {
     for (const region of REGIONS) {
       for (const line of whatToLookFor[region]) {
         for (const month of line.months) {
-          expect(seasonOf(month, HEMISPHERES[region]), `${region} ${month}: ${line.text}`).toBe(line.season)
+          expect(seasonOf(month, hemisphereOf(region)), `${region} ${month}: ${line.text}`).toBe(line.season)
         }
       }
     }

@@ -8,7 +8,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react'
-import { observations, plants, species } from '../data/content'
+import { plants, species } from '../data/content'
 import { flightPatterns } from '../data/flightPatterns'
 import { getDailyPromptIndex, toLocalDate } from '../lib/date'
 import { distinctSpeciesRaised } from '../lib/speciesAcquisition'
@@ -40,6 +40,7 @@ import { CreatureSprite } from './sprites/CreatureSprite'
 import { FlowerSprite } from './sprites/FlowerSprite'
 import { Icon } from './Icons'
 import { CALM_AIRBORNE, motionPreference } from '../lib/motion'
+import { currentSeason, hemisphereOf } from '../lib/seasons'
 import { welcomeBackToday } from '../lib/visits'
 import { homeScreenAdvice, isHomeScreenGuidePutAway, putAwayHomeScreenGuide } from '../lib/install'
 
@@ -65,6 +66,24 @@ const SeedTray = lazy(() =>
 /** A plant's field guide and its jars, only once a plant is chosen. */
 const PlantPanel = lazy(() =>
   import('./garden/PlantPanel').then((m) => ({ default: m.PlantPanel })),
+)
+const Moth = lazy(() => import('./garden/Moth').then((m) => ({ default: m.Moth })))
+const SeasonArt = lazy(() => import('./garden/SeasonArt').then((m) => ({ default: m.SeasonArt })))
+/** At night, with full motion, in place of the day's petals. */
+const Fireflies = lazy(() =>
+  import('./garden/Fireflies').then((m) => ({ default: m.Fireflies })),
+)
+/**
+ * The line under the garden's name, by day, by night and by season
+ * (lib/gardenLines): its words are the garden's alone, so they are not in the
+ * first load. Should they fail to load (an update half-arrived, say), the
+ * garden's quiet line stands in.
+ */
+const GardenLine = lazy(() =>
+  import('./garden/GardenLine').then(
+    (m) => ({ default: m.GardenLine }),
+    () => ({ default: () => 'The garden is finding its rhythm.' }),
+  ),
 )
 
 /** Catalogs are static, so index them once at module load instead of scanning
@@ -230,13 +249,13 @@ export function GardenView({
     ).find((element) => element.dataset.flyer === closed.id)
     flyer?.querySelector<HTMLElement>('[role="button"]')?.focus()
   }
-  const observationChoices = observations.filter(
-    (item) => item.speciesId === 'all' || item.speciesId === active?.speciesId,
-  )
-  const observation =
-    observationChoices[
-      getDailyPromptIndex(toLocalDate(), observationChoices.length)
-    ]
+  const today = toLocalDate()
+  const night = theme === 'night'
+  const region = state.profile?.region
+  // By the gardener's half of the world, or the north's when that is not
+  // known: only the scene reads it (its art's season, and fireflies), never
+  // words about the gardener's own season.
+  const season = currentSeason(today, hemisphereOf(region))
   const selectedPlant = state.plants.find(
     (plant) => plant.id === selectedPlantId,
   )
@@ -244,6 +263,9 @@ export function GardenView({
     ? plantsById.get(selectedPlant.plantId)
     : undefined
   const visiblePlants = state.plants.slice(0, PLANT_CAPACITY)
+  const mothPlants = new Set(visiblePlants.filter(
+    (plant) => plant.growth === MAX_PLANT_GROWTH && plantsById.get(plant.plantId)?.kind === 'nectar',
+  ).slice(0, 3).map((plant) => plant.id))
   const visiblePlantIds = new Set(visiblePlants.map((plant) => plant.id))
   const selectedPlantIsVisible = selectedPlant
     ? visiblePlantIds.has(selectedPlant.id)
@@ -260,20 +282,32 @@ export function GardenView({
   // The chosen scene from the first frame. Starting from Sunlit Meadow and
   // swapping once the chosen one loaded flashed the wrong garden on every
   // visit. A scene changed while the garden is open swaps only once decoded.
-  const [displayedScene, setDisplayedScene] = useState<typeof sceneId>(sceneId)
+  const [displayedScene, setDisplayedScene] = useState({ id: sceneId, night })
   const [sceneUnavailable, setSceneUnavailable] = useState(false)
   useEffect(() => {
     let active = true
-    void loadBackdrop(sceneId).then(
+    void loadBackdrop(sceneId, undefined, night).then(
       () => {
         if (active) {
-          setDisplayedScene(sceneId)
+          setDisplayedScene({ id: sceneId, night })
           setSceneUnavailable(false)
         }
       },
-      () => {
+      async () => {
+        // A night painting not yet downloaded can fall back to this scene's
+        // day painting. Keep the previous decoded image until it is ready.
+        if (night) {
+          try {
+            await loadBackdrop(sceneId)
+            if (active) {
+              setDisplayedScene({ id: sceneId, night: false })
+              setSceneUnavailable(true)
+            }
+            return
+          } catch { /* The free meadow remains the final offline fallback. */ }
+        }
         if (active) {
-          setDisplayedScene('sunlit-meadow')
+          setDisplayedScene({ id: 'sunlit-meadow', night: false })
           setSceneUnavailable(true)
         }
       },
@@ -281,12 +315,11 @@ export function GardenView({
     return () => {
       active = false
     }
-  }, [sceneId])
+  }, [sceneId, night])
 
   const gardenFull = state.plants.length >= PLANT_CAPACITY
   const plantBlocker = plantingBlocker(state, PLANT_SEED_COST)
   const gardenTitle = useRef<HTMLHeadingElement>(null)
-  const today = toLocalDate()
   const welcomeBack =
     onPutAwayWelcomeBack && welcomeBackToday(state.profile, today)
   // On an iPhone or iPad in a browser, how to keep the garden on the Home
@@ -299,10 +332,16 @@ export function GardenView({
   return (
     <div className="view garden-view">
       <section
-        className={`garden-hero backdrop-${state.profile?.selectedBackdropId ?? 'sunlit-meadow'}`}
-        style={{ backgroundImage: `url(${backdropAssets[displayedScene].image})` }}
+        className={`garden-hero backdrop-${displayedScene.id}`}
+        style={{ backgroundImage: `url(${backdropAssets[displayedScene.id][displayedScene.night ? 'night' : 'image']})` }}
+        data-night-art={displayedScene.night && !customBackdrop ? '' : undefined}
         aria-labelledby="garden-title"
+        // A hook for the seasons' art (data/seasons): CSS and images alone can
+        // dress the scene by season, and by night with .theme-night around it.
+        data-season={season}
+        data-personal-art={customBackdrop ? '' : undefined}
       >
+        <Suspense fallback={null}><SeasonArt /></Suspense>
         {customBackdrop && failedImage !== customBackdrop.id && (
           <div className="custom-scene-layer">
             <CustomBackdropImage
@@ -312,10 +351,18 @@ export function GardenView({
           </div>
         )}
         <div className="hero-petals" aria-hidden="true">
-          {Array.from({ length: 7 }, (_, index) => (
-            <span key={index} className={`hero-petal petal-${index + 1}`} />
-          ))}
+          {!night &&
+            Array.from({ length: 7 }, (_, index) => (
+              <span key={index} className={`hero-petal petal-${index + 1}`} />
+            ))}
         </div>
+        {/* Fireflies in place of petals by night, never in winter, and only
+            with full motion: none with reduced or calm motion. */}
+        {night && motion === 'full' && season !== 'winter' && (
+          <Suspense fallback={null}>
+            <Fireflies />
+          </Suspense>
+        )}
         <div className="garden-heading">
           <p className="eyebrow">Your living sanctuary</p>
           {/* Focusable by script only: the recap's fade to night lands here. */}
@@ -323,7 +370,15 @@ export function GardenView({
             {state.profile?.gardenName}
           </h1>
           <p className="garden-observation">
-            {observation?.text ?? 'The garden is finding its rhythm.'}
+            {/* A space holds the line's place while its words load. */}
+            <Suspense fallback={'\u00a0'}>
+              <GardenLine
+                localDate={today}
+                speciesId={active?.speciesId}
+                night={night}
+                region={region}
+              />
+            </Suspense>
           </p>
         </div>
 
@@ -392,6 +447,10 @@ export function GardenView({
                   size={PLANT_SPRITE_SIZE}
                   swayDelay={index * -0.7}
                 />
+                {night && motion === 'full' && season !== 'winter' &&
+                  mothPlants.has(plant.id) && (
+                    <Suspense fallback={null}><Moth resting={index % 2 === 1} /></Suspense>
+                  )}
                 {placedJar && (
                   <span className="jar-display plant-jar" aria-hidden="true">
                     <JarSprite
@@ -412,6 +471,7 @@ export function GardenView({
             key={meeting.opening}
             creature={meetingCreature}
             outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
+            region={region}
             onCareFor={
               meetingCreature && onCareFor
                 ? () => onCareFor(meetingCreature.id)
@@ -473,8 +533,8 @@ export function GardenView({
         <p role="status">
           {/* Inline, so each build carries only its own wording. */}
           {import.meta.env.VITE_PLATFORM === 'android'
-            ? 'This scene could not be opened. Sunlit Meadow is shown instead.'
-            : 'This scene is not available offline yet. Sunlit Meadow is shown until you reconnect.'}
+            ? 'This scene could not be opened. An available painting is shown instead.'
+            : 'This scene is not available offline yet. An available painting is shown until you reconnect.'}
         </p>
       )}
       {(state.profile?.selectedCustomBackdropId ||

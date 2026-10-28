@@ -27,6 +27,7 @@
  */
 import { mkdir } from 'node:fs/promises'
 import { chromium } from 'playwright'
+import { fileURLToPath } from 'node:url'
 
 const BASE = process.env.ASSETS_URL ?? 'http://127.0.0.1:4180/The-Butterfly-Garden'
 const ICONS = new URL('../public/icons/', import.meta.url)
@@ -61,7 +62,7 @@ async function shortcutIcons() {
            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</g>
       </svg>`)
     await page.screenshot({
-      path: new URL(`shortcut-${name}.png`, ICONS).pathname,
+      path: fileURLToPath(new URL(`shortcut-${name}.png`, ICONS)),
       omitBackground: true,
     })
   }
@@ -220,7 +221,7 @@ async function screenshots() {
   await phone.clock.setFixedTime(morning())
   const page = await phone.newPage()
   await grownGarden(page)
-  await page.screenshot({ path: new URL('garden-narrow.png', SHOTS).pathname })
+  await page.screenshot({ path: fileURLToPath(new URL('garden-narrow.png', SHOTS)) })
 
   await page.goto(`${BASE}/#/today`)
   await page.getByRole('heading', { level: 1, name: 'Today' }).waitFor()
@@ -236,7 +237,7 @@ async function screenshots() {
   await page.locator('.undo-toast').waitFor({ state: 'detached', timeout: 15_000 })
   await scrollToCard(page, '#mood-title')
   await page.waitForTimeout(1800)
-  await page.screenshot({ path: new URL('today-narrow.png', SHOTS).pathname })
+  await page.screenshot({ path: fileURLToPath(new URL('today-narrow.png', SHOTS)) })
   await phone.close()
 
   const desktop = await browser.newContext({
@@ -246,7 +247,7 @@ async function screenshots() {
   await desktop.clock.setFixedTime(morning())
   const wide = await desktop.newPage()
   await grownGarden(wide)
-  await wide.screenshot({ path: new URL('garden-wide.png', SHOTS).pathname })
+  await wide.screenshot({ path: fileURLToPath(new URL('garden-wide.png', SHOTS)) })
   await desktop.close()
 }
 

@@ -618,3 +618,15 @@ them. The Android build gathers those notices, deduplicated, into
 `google-notices.txt` (see `android/app/build.gradle`), and the app shows them
 in Settings → Open-source notices.
 
+## Garden 3.5 night and season illustrations
+
+Seven `src/assets/garden-*-night.webp` paintings and their matching
+`thumb-*-night.webp` thumbnails were created with the built-in OpenAI image
+generation tool on 27 October 2026, using the corresponding existing day
+paintings as references. The tool did not expose a model identifier. No external
+source image, third-party texture or brush was supplied. These are AI-generated
+illustrations, not photographs. The moths, seasonal CSS, and standalone seasonal
+SVG drawings were drawn directly as original code-native shapes. Project artwork
+licence terms apply. The file list, prompt set, source-output identifiers and
+pending product decisions are recorded in `docs/art/night-season-art.md`.
+
