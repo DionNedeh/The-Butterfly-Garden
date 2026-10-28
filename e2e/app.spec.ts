@@ -787,9 +787,8 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
   await expect(
     page.getByRole('button', { name: 'Switch to sunlight mode' }),
   ).toBeVisible()
-  // Stars belong to the garden scene; the shell only takes on the night veil.
-  // Polled: the scene's veil eases in, and WebKit reports the daytime layers
-  // until that transition is done.
+  // The decoded painting belongs to the scene, with a contrast veil. The
+  // shell itself never takes on a scene image.
   const starLayers = () =>
     page.evaluate(() => ({
       shell: getComputedStyle(document.querySelector('.app-shell')!)
@@ -799,7 +798,9 @@ test('toggles starry night mode and unlocks selectable monthly backdrops', async
         '::before',
       ).backgroundImage,
     }))
-  await expect.poll(async () => (await starLayers()).garden).toContain('radial-gradient')
+  await expect(page.locator('.garden-hero')).toHaveAttribute('data-night-art', '')
+  await expect(page.locator('.garden-hero')).toHaveCSS('background-image', /garden-sunlit-meadow-night/)
+  await expect.poll(async () => (await starLayers()).garden).toContain('gradient')
   expect((await starLayers()).shell).not.toContain('url(')
   expect(await seriousViolations(page, 'Night garden')).toEqual([])
 

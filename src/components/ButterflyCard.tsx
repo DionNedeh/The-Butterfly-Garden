@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { species } from '../data/content'
+import { toLocalDate } from '../lib/date'
+import { marigoldLine } from '../lib/gardenLines'
 import { bondLevel, stageLabels } from '../lib/lifecycle'
-import type { CreatureInstance, OutfitSlot } from '../types'
+import type { CreatureInstance, OutfitSlot, RegionId } from '../types'
 import { ButterflySprite } from './sprites/ButterflySprite'
 import './butterflyCard.css'
 
@@ -21,12 +23,15 @@ import './butterflyCard.css'
 export function ButterflyCard({
   creature,
   outfit,
+  region,
   onCareFor,
   onClose,
 }: {
   /** The companion, or none for Marigold, who is the garden's guide. */
   creature?: CreatureInstance
   outfit?: Partial<Record<OutfitSlot, string>>
+  /** Where the gardener gardens, whose seasons Marigold's travels follow. */
+  region?: RegionId
   /** Opens Care with this companion chosen. */
   onCareFor?: () => void
   /** Called once the dialog has closed, however it was closed. */
@@ -45,6 +50,8 @@ export function ButterflyCard({
   const speciesId = creature?.speciesId ?? 'monarch'
   const speciesName =
     species.find((item) => item.id === speciesId)?.commonName ?? 'Butterfly'
+  // Marigold's season, in autumn and spring: words only, she never leaves.
+  const travels = creature ? undefined : marigoldLine(region, toLocalDate())
 
   return (
     <dialog
@@ -77,6 +84,7 @@ export function ButterflyCard({
             ? `Bond level ${bondLevel(creature.bond)}`
             : 'Your garden guide, who looks after the garden with you.'}
         </p>
+        {travels && <p>{travels}</p>}
         <div className="form-actions butterfly-card-actions">
           {creature && onCareFor && (
             <button className="primary-button" onClick={onCareFor}>

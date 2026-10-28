@@ -2,7 +2,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { goalSuggestions } from '../data/goalSuggestions'
-import { recapOpensAt } from '../lib/date'
+import { seasonalPrompts, type SeasonalPrompt } from '../data/prompts'
+import { addDaysToLocalDate, recapOpensAt } from '../lib/date'
 import { resetDrafts } from '../lib/drafts'
 import { createInitialState, MAX_PLANT_GROWTH } from '../lib/progression'
 import { promptForDay } from '../lib/prompts'
@@ -1412,5 +1413,37 @@ describe('breathing with a butterfly, from Today', () => {
       gardenWith({}, { goals: [goal({ id: 'b', title: 'Take three slow breaths', schedule: 'daily' })] }),
     )
     expect(screen.queryByRole('link', { name: 'Breathe now' })).toBeNull()
+  })
+})
+
+describe('the season’s prompts on Today', () => {
+  afterEach(() => resetDrafts())
+
+  /** The first autumn day whose own prompt, in North America, is autumn's. */
+  function autumnPromptDay(): string {
+    let day = '2026-09-01'
+    while (!seasonalPrompts.includes(promptForDay(day, 0, 'autumn') as SeasonalPrompt)) {
+      day = addDaysToLocalDate(day, 1)
+    }
+    return day
+  }
+
+  it('offers one where the gardener’s region says which season it is', () => {
+    const day = autumnPromptDay()
+    const seasonal = promptForDay(day, 0, 'autumn')
+    renderToday(gardenWith({ region: 'north-america' }), { today: day })
+    expect(screen.getByRole('heading', { level: 2, name: seasonal.text })).toBeInTheDocument()
+  })
+
+  it('offers none where the season is not known', () => {
+    const day = autumnPromptDay()
+    for (const region of [undefined, 'elsewhere'] as const) {
+      renderToday(gardenWith({ region }), { today: day })
+      expect(screen.getByRole('heading', { level: 2, name: promptForDay(day).text })).toBeInTheDocument()
+      for (const prompt of seasonalPrompts) {
+        expect(screen.queryByRole('heading', { level: 2, name: prompt.text })).toBeNull()
+      }
+      cleanup()
+    }
   })
 })

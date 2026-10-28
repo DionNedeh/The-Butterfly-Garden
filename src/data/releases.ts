@@ -40,6 +40,18 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-5',
+    version: '3.5.0',
+    title: 'Under the moon, through the seasons',
+    sections: [{
+      title: 'In the garden',
+      items: [
+        'Seven painted night scenes, with moonlight and a few moths visiting flowers in bloom. Your own chosen image still comes first.',
+        'Seasonal petals, autumn leaves and a quiet winter frost, with night words and fireflies when the season and motion settings allow.',
+      ],
+    }],
+  },
+  {
     id: 'release-3-4',
     version: '3.4.0',
     title: 'Private by design',

@@ -34,6 +34,7 @@ import { isBreathingGoal, pacerFor } from '../lib/breathing'
 import { nextStepsAfter, type NextStep } from '../lib/nextStep'
 import { counted } from '../lib/plural'
 import { promptAfter, promptById, promptForDay } from '../lib/prompts'
+import { knownSeason } from '../lib/seasons'
 import type { BreatheWay } from '../lib/routes'
 import type {
   AppState,
@@ -215,7 +216,9 @@ export function TodayView({
   const reflectionPromptKey = `reflection-prompt:${today}`
   const [chosenPromptId, setChosenPromptId] = useDraft(reflectionPromptKey, '')
   const answered = existingReflection ? promptById(existingReflection.promptId) : undefined
-  const prompt = promptById(chosenPromptId) ?? answered ?? promptForDay(today)
+  // The season's own prompts join the rotation where the region says which it is.
+  const season = knownSeason(state.profile?.region, today)
+  const prompt = promptById(chosenPromptId) ?? answered ?? promptForDay(today, 0, season)
   const writingFreely = prompt.id === freeWritingPrompt.id
   // Where focus goes once the page has redrawn: a goal's ⋯ button by its id,
   // or '' for the Goals heading when the goal it was on has gone. Only set by
@@ -844,7 +847,7 @@ export function TodayView({
         <div className="prompt-choices">
           <button
             className="text-button"
-            onClick={() => setChosenPromptId(promptAfter(prompt, today).id)}
+            onClick={() => setChosenPromptId(promptAfter(prompt, today, season).id)}
           >
             Another prompt
           </button>
@@ -862,7 +865,7 @@ export function TodayView({
               const back =
                 beforeFreeWriting ??
                 (answered && answered.id !== freeWritingPrompt.id ? answered.id : undefined)
-              setChosenPromptId(back ?? promptForDay(today).id)
+              setChosenPromptId(back ?? promptForDay(today, 0, season).id)
             }}
           >
             Write freely

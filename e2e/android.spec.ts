@@ -664,3 +664,28 @@ test('a protected backup goes to the app’s own save screen, and says honestly 
   await expect(make).toBeFocused()
   expect(errors).toEqual([])
 })
+
+test.describe('the night garden in the app', () => {
+  // 14 July 2026 in UTC: summer in the north, and an ordinary day, so the
+  // night's line is known (e2e/seasons.spec.ts has the web's whole story).
+  test.use({ timezoneId: 'UTC', reducedMotion: 'no-preference' })
+
+  test('says a night line and lets the fireflies out, its words and lights loaded from the app’s own bundle', async ({
+    page,
+  }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.clock.setFixedTime(new Date('2026-07-14T21:00:00.000Z'))
+    await page.goto('/')
+    await enterGarden(page)
+    await expect(page.locator('.garden-hero')).toHaveAttribute('data-season', 'summer')
+    await expect(page.locator('.garden-observation')).toHaveText(
+      'A quiet garden can hold many kinds of weather.',
+    )
+    await page.getByRole('button', { name: 'Switch to night mode' }).click()
+    await expect(page.locator('.garden-observation')).toHaveText('The garden is resting under the moon.')
+    await expect(page.locator('.hero-firefly')).toHaveCount(5)
+    expect(await seriousViolations(page, 'Android, the night garden')).toEqual([])
+    expect(errors).toEqual([])
+  })
+})

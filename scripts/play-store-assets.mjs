@@ -20,6 +20,7 @@
  */
 import { mkdir, readdir } from 'node:fs/promises'
 import { chromium } from 'playwright'
+import { fileURLToPath } from 'node:url'
 
 const BASE = process.env.ASSETS_URL ?? 'http://127.0.0.1:4174'
 const OUT = new URL('../docs/play-store/', import.meta.url)
@@ -194,7 +195,7 @@ async function screenshots() {
   await page.getByRole('heading', { name: 'Willowlight Garden' }).waitFor()
 
   await settle(page, 7000)
-  await page.screenshot({ path: new URL('01-garden.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
+  await page.screenshot({ path: fileURLToPath(new URL('01-garden.jpg', SHOTS)), type: 'jpeg', quality: 92 })
 
   await nav(page).getByRole('button', { name: 'Today', exact: true }).click()
   await page.getByRole('button', { name: /bright/i }).click()
@@ -207,32 +208,32 @@ async function screenshots() {
   await page.getByRole('button', { name: /care for drink some water/i }).click()
   await scrollToSection(page, '#mood-title')
   await settle(page)
-  await page.screenshot({ path: new URL('02-today.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
+  await page.screenshot({ path: fileURLToPath(new URL('02-today.jpg', SHOTS)), type: 'jpeg', quality: 92 })
 
   await nav(page).getByRole('button', { name: 'Care', exact: true }).click()
   await settle(page)
-  await page.screenshot({ path: new URL('03-care.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
+  await page.screenshot({ path: fileURLToPath(new URL('03-care.jpg', SHOTS)), type: 'jpeg', quality: 92 })
 
   await nav(page).getByRole('button', { name: 'Journal', exact: true }).click()
   await scrollToSection(page, '.timeline')
   await settle(page)
-  await page.screenshot({ path: new URL('04-journal.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
+  await page.screenshot({ path: fileURLToPath(new URL('04-journal.jpg', SHOTS)), type: 'jpeg', quality: 92 })
 
   await open(page, 'Shop')
   await page.getByRole('button', { name: 'Boutique', exact: true }).click()
   await scrollToSection(page, '.boutique-card')
   await settle(page)
-  await page.screenshot({ path: new URL('05-boutique.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
+  await page.screenshot({ path: fileURLToPath(new URL('05-boutique.jpg', SHOTS)), type: 'jpeg', quality: 92 })
 
   await nav(page).getByRole('button', { name: 'Garden', exact: true }).click()
   await page.getByRole('button', { name: 'Switch to night mode' }).click()
   await settle(page, 5000)
-  await page.screenshot({ path: new URL('06-night-garden.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
+  await page.screenshot({ path: fileURLToPath(new URL('06-night-garden.jpg', SHOTS)), type: 'jpeg', quality: 92 })
 
   await open(page, 'Guide')
   await scrollToSection(page, '.species-grid', { exact: true })
   await settle(page)
-  await page.screenshot({ path: new URL('07-guide.jpg', SHOTS).pathname, type: 'jpeg', quality: 92 })
+  await page.screenshot({ path: fileURLToPath(new URL('07-guide.jpg', SHOTS)), type: 'jpeg', quality: 92 })
   await context.close()
 }
 
@@ -258,7 +259,7 @@ async function icon() {
      <img src="${BASE}/icons/icon-512.webp" alt="">`,
   )
   await page.locator('img').evaluate((img) => img.decode())
-  await page.screenshot({ path: new URL('icon-512.png', OUT).pathname, omitBackground: true })
+  await page.screenshot({ path: fileURLToPath(new URL('icon-512.png', OUT)), omitBackground: true })
   await context.close()
 }
 
@@ -298,7 +299,7 @@ async function featureGraphic() {
   await page.evaluate(() => document.fonts.ready)
   await page.locator('img').evaluate((img) => img.decode())
   await page.waitForTimeout(300)
-  await page.screenshot({ path: new URL('feature-graphic.jpg', OUT).pathname, type: 'jpeg', quality: 94 })
+  await page.screenshot({ path: fileURLToPath(new URL('feature-graphic.jpg', OUT)), type: 'jpeg', quality: 94 })
   await context.close()
 }
 
