@@ -1,11 +1,14 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type ComponentType, type FormEvent } from 'react'
 import { sealedKind } from '../../lib/backupFile'
 import {
   openSealedBackup,
   readSealedBackup,
+  type SealedBackup,
   type SealedProblem,
+  type SealedRead,
   type SealingStep,
 } from '../../lib/sealedBackup'
+import type { ArriveDialogProps } from '../move/ArriveDialog'
 import { LockedCopyPrompt } from './LockedCopyPrompt'
 import type { ProtectedRestoreProps } from './ProtectedRestore'
 import { useModal } from './useModal'
@@ -21,7 +24,49 @@ import './backup.css'
 export function SealedBackupPrompt(props: ProtectedRestoreProps) {
   // Decided once: the file chosen does not change while it is asked about.
   const [kind] = useState(() => sealedKind(props.text))
-  return kind === 'copy' ? <LockedCopyPrompt {...props} /> : <PassphrasePrompt {...props} />
+  const [read] = useState(() => kind === 'copy' ? undefined : readSealedBackup(props.text))
+  if (kind === 'copy') return <LockedCopyPrompt {...props} />
+  if (!read) return null
+  if (read.ok && read.backup.opensWith === 'move-code')
+    return <MoveCodePrompt {...props} backup={read.backup} />
+  return <PassphrasePrompt {...props} read={read} />
+}
+
+function MoveCodePrompt({
+  next,
+  backup,
+  onOpened,
+  onClose,
+  returnFocus,
+}: Omit<ProtectedRestoreProps, 'text'> & { backup: SealedBackup }) {
+  const [Dialog, setDialog] = useState<ComponentType<ArriveDialogProps>>()
+  const close = useRef(onClose)
+  useEffect(() => {
+    close.current = onClose
+  })
+  useEffect(() => {
+    let live = true
+    import('../move/ArriveDialog').then(
+      (module) => {
+        if (live) setDialog(() => module.ArriveDialog)
+      },
+      () => {
+        if (live) close.current('This move file could not be opened just now. Please try again.')
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [])
+  return Dialog ? (
+    <Dialog
+      next={next}
+      backup={backup}
+      onOpened={(plain) => onOpened(plain, 'move')}
+      onClose={onClose}
+      returnFocus={returnFocus}
+    />
+  ) : null
 }
 
 /** Why a protected backup cannot be opened at all, before any passphrase. */
@@ -46,14 +91,11 @@ const UNOPENABLE: Record<SealedProblem, string> = {
  * Escape and Android's back gesture put it away (through its cancel event;
  * see lib/backNavigation), except while it is opening the file.
  */
-function PassphrasePrompt({ text, next, onOpened, onClose, returnFocus }: ProtectedRestoreProps) {
+function PassphrasePrompt({ read, next, onOpened, onClose, returnFocus }: Omit<ProtectedRestoreProps, 'text'> & { read: SealedRead }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const field = useRef<HTMLInputElement>(null)
   const ids = useId()
-  // Checked once, without the passphrase: a file that could never open says
-  // so before anyone types anything.
-  const [read] = useState(() => readSealedBackup(text))
   const [passphrase, setPassphrase] = useState('')
   const [shown, setShown] = useState(false)
   const [step, setStep] = useState<SealingStep>()

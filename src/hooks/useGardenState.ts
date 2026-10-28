@@ -590,6 +590,18 @@ export function useGardenState() {
        */
       recordBackup: (madeAt: Date) =>
         update((current) => act.recordBackup(current, madeAt)),
+      /**
+       * The backup file kept up to date was written (lib/autoBackupFile): a
+       * copy kept, made by the app on its own, so a quiet write.
+       */
+      recordAutomaticBackup: (madeAt: Date) => {
+        if (readOnlyRef.current) return
+        setState((current) => {
+          if (!current) return current
+          const next = act.recordBackup(current, madeAt)
+          return next === current ? current : markQuietWrite(next)
+        })
+      },
     }
   }, [update, media, setState, setPersistence, readOnlyRef])
 

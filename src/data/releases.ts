@@ -40,6 +40,19 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-6',
+    version: '3.6.0',
+    title: 'Bring your garden, keep a way back',
+    sections: [{
+      title: 'Moving and keeping copies',
+      items: [
+        'Move your garden with a protected file and 12 words, typed on your new device. Arrival is also available in safe mode.',
+        'Earlier copies keep the garden from before a day’s first change, and before a restore. Look at them, put one back, or discard a copy in Settings, even after reopening the garden.',
+        'On supported desktop browsers, choose a backup file to keep up to date. Automatic file backups pause while your garden is locked.',
+      ],
+    }],
+  },
+  {
     id: 'release-3-5',
     version: '3.5.0',
     title: 'Under the moon, through the seasons',

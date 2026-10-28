@@ -95,6 +95,17 @@ test('Settings speaks of the app on this phone, with an About section', async ({
   await expect(
     page.getByRole('checkbox', { name: /^Keep playing when the app is in the background/ }),
   ).toHaveCount(0)
+  // The earlier copies speak of the app; a file kept up to date is the
+  // browser's alone, never the app's, even where its WebView has the API.
+  await expect(
+    page.getByRole('heading', { name: 'Earlier copies on this device' }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/cannot help if the app is uninstalled or its storage cleared/),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Keep a backup file up to date' }),
+  ).toHaveCount(0)
   await page.getByRole('button', { name: 'Restore from a backup' }).click()
   await expect(page.getByLabel('Backup file')).toHaveAttribute(
     'accept',
@@ -688,4 +699,56 @@ test.describe('the night garden in the app', () => {
     expect(await seriousViolations(page, 'Android, the night garden')).toEqual([])
     expect(errors).toEqual([])
   })
+})
+
+test('a move file goes to the app’s own save screen, and arriving offers no camera the WebView cannot use', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  let downloads = 0
+  page.on('download', () => (downloads += 1))
+
+  // The welcome offers to arrive; the WebView has no BarcodeDetector, so
+  // the code is typed, and nothing asks for the camera.
+  const arrive = page.getByRole('button', { name: 'Arrive from another device' })
+  await arrive.click()
+  const arriving = page.getByRole('dialog', { name: 'Arrive from another device' })
+  await expect(arriving.getByRole('heading', { name: 'Arrive from another device' })).toBeFocused()
+  expect(await seriousViolations(page, 'Android arriving, choosing the file')).toEqual([])
+  await pressBack(page)
+  await expect(arriving).toHaveCount(0)
+  await expect(arrive).toBeFocused()
+
+  await enterGarden(page)
+  await goTo(page, 'Settings')
+  const make = page.getByRole('button', { name: 'Move my garden to another device…' })
+  await make.click()
+  const dialog = page.getByRole('dialog', { name: /^(Move my garden to another device|Send the move file)$/ })
+  await expect(dialog.getByRole('heading', { name: 'Move my garden to another device' })).toBeFocused()
+  // Back puts it away, with focus where it began.
+  await pressBack(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(make).toBeFocused()
+
+  await make.click()
+  await dialog.getByRole('button', { name: 'Make the move file' }).click()
+  const save = dialog.getByRole('button', { name: 'Save the move file' })
+  await expect(save).toBeFocused({ timeout: 15_000 })
+  await expect(dialog.getByRole('button', { name: /Share/ })).toHaveCount(0)
+  expect(await seriousViolations(page, 'Android move file, ready to save')).toEqual([])
+
+  // A browser has no native side, so the app says the file could not be
+  // saved rather than claiming it was, keeps it, and shows no code yet.
+  await save.click()
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'The move file could not be saved there. Try choosing another place.',
+  )
+  await expect(page.getByRole('heading', { name: 'Your one-time code' })).toHaveCount(0)
+  expect(downloads).toBe(0)
+
+  await pressBack(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(make).toBeFocused()
+  expect(errors).toEqual([])
 })

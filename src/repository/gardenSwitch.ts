@@ -2,9 +2,11 @@ import { unwrap, wrap, type IDBPDatabase } from 'idb'
 import type { LockRecord } from '../lib/gardenLock'
 import {
   DATABASE_VERSION,
+  BACKUP_FILE_KEY,
   GardenConflictError,
   GardenLockedError,
   isSwitchMark,
+  isSealed,
   OBJECT_STORES,
   RAW_EXPORT_FORMAT,
   revisionOf,
@@ -177,7 +179,7 @@ async function freeze(
   const tx = db.transaction(OBJECT_STORES, 'readwrite', STRICT)
   const raw = unwrap(tx)
   try {
-    const [unchanged, meta, lock, drafts] = await Promise.all([
+    const [unchanged, meta, lock, drafts, backupFile] = await Promise.all([
       Promise.all(
         OBJECT_STORES.map(async (name) =>
           sameKeys(await storeOf(raw, name).getAllKeys(), read.keys.get(name)),
@@ -186,12 +188,14 @@ async function freeze(
       tx.objectStore('meta').get('current'),
       tx.objectStore('lock').get('current'),
       tx.objectStore('drafts').get('current'),
+      tx.objectStore('drafts').get(BACKUP_FILE_KEY),
     ])
     if (
       !unchanged.every(Boolean) ||
       revisionOf(meta) !== revisionOf(valueAt(read.entries, 'meta')) ||
       !sameLock(lock, valueAt(read.entries, 'lock')) ||
-      JSON.stringify(drafts) !== JSON.stringify(valueAt(read.entries, 'drafts'))
+      JSON.stringify(drafts) !== JSON.stringify(valueAt(read.entries, 'drafts')) ||
+      JSON.stringify(backupFile) !== JSON.stringify(read.entries.find(([store, key]) => store === 'drafts' && key === BACKUP_FILE_KEY)?.[2])
     ) {
       throw new GardenConflictError()
     }
@@ -442,7 +446,9 @@ async function runSwitch({
       read.entries
         .filter(([store]) => store !== 'lock')
         .map(async ([store, key, value]): Promise<Entry> => {
-          const stored = await restoreValue(store, value, from?.key, next?.key)
+          const stored = store === 'drafts' && key === BACKUP_FILE_KEY && !isSealed(value)
+            ? value
+            : await restoreValue(store, value, from?.key, next?.key)
           return [store, key, store === 'meta' ? { ...(stored as object), revision } : stored]
         }),
     )

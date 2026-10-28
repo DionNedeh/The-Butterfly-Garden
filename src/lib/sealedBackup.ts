@@ -32,6 +32,14 @@
  * What the file does not hide: that it is a garden backup, when it was made,
  * by which version, and roughly how large the garden is.
  *
+ * A move file (components/move) is this same envelope, locked with a
+ * one-time code's words (lib/moveCode) rather than a chosen passphrase, and
+ * marked `"opensWith": "move-code"` so a restore asks for the code rather
+ * than a passphrase. The mark is only a hint for which question to ask: it
+ * is not bound to the cipher, so a build that does not know it opens the
+ * file as any protected backup, with the words typed as its passphrase, and
+ * a mark taken off or added by hand changes nothing but the question.
+ *
  * Loaded only when a protected backup is made or opened.
  */
 import { MAX_BACKUP_BYTES, SEALED_BACKUP_FORMAT } from './backupFile'
@@ -60,6 +68,9 @@ export type SealingStep = 'deriving' | 'locking' | 'opening'
 
 export type SealOutcome = { ok: true; text: string } | { ok: false; problem: 'too-large' }
 
+/** What a move file's envelope says opens it: its one-time code. */
+const MOVE_CODE_MARK = 'move-code'
+
 /**
  * Lock a plain backup's text with a passphrase, as the text of a protected
  * backup file.
@@ -81,6 +92,8 @@ export async function sealBackup(
     onStep?: (step: SealingStep) => void
     /** The largest file to write; a chosen backup's limit unless a test says. */
     maxBytes?: number
+    /** Mark it as a move file, opened by a one-time code (lib/moveCode). */
+    opensWith?: typeof MOVE_CODE_MARK
   } = {},
 ): Promise<SealOutcome> {
   const iterations =
@@ -105,6 +118,7 @@ export async function sealBackup(
       formatVersion: SEALED_FORMAT_VERSION,
       createdAt: (options.now ?? new Date()).toISOString(),
       appVersion: __APP_VERSION__,
+      ...(options.opensWith ? { opensWith: options.opensWith } : {}),
       kdf: {
         name: PASSPHRASE_KDF.name,
         hash: PASSPHRASE_KDF.hash,
@@ -128,6 +142,8 @@ export interface SealedBackup {
   salt: Uint8Array
   iv: Uint8Array
   ciphertext: Uint8Array
+  /** A move file, by its envelope's mark: ask for its one-time code. */
+  opensWith?: typeof MOVE_CODE_MARK
 }
 
 /**
@@ -196,7 +212,16 @@ export function readSealedBackup(text: string): SealedRead {
   // AES-GCM's, and at least the 16-byte tag every ciphertext ends with.
   if (!salt || salt.length < SALT_BYTES || !iv || iv.length !== 12 || !ciphertext || ciphertext.length < 16)
     return { ok: false, problem: 'damaged' }
-  return { ok: true, backup: { iterations, salt, iv, ciphertext } }
+  return {
+    ok: true,
+    backup: {
+      iterations,
+      salt,
+      iv,
+      ciphertext,
+      ...(value.opensWith === MOVE_CODE_MARK ? { opensWith: MOVE_CODE_MARK } : {}),
+    },
+  }
 }
 
 /**

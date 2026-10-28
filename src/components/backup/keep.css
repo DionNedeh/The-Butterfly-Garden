@@ -1,0 +1,58 @@
+/* What Backup and restore keeps on its own: a backup file kept up to date,
+   and the earlier copies on this device. Loaded with Settings. No colour is
+   added here: ink, notes and buttons are the card's own in both themes, and
+   --muted is the theme's. An empty live region keeps its place, so what
+   arrives in it is heard. */
+
+.auto-backup,
+.earlier-copies {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1.4rem;
+}
+
+.auto-backup h3,
+.earlier-copies h3 {
+  margin: 0;
+}
+
+.auto-backup .subtle-copy,
+.earlier-copies .subtle-copy,
+.auto-backup .settings-note,
+.earlier-copies .settings-note {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.auto-backup .text-button,
+.earlier-copies .text-button {
+  min-height: 44px;
+}
+
+.earlier-copies-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The day and what it held, with its button beside it, or under it when the
+   row runs out of room (a phone, the largest text). */
+.earlier-copies-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.2rem 0.8rem;
+}
+
+.earlier-copies-list li > span {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.earlier-copies-list small {
+  color: var(--muted);
+}

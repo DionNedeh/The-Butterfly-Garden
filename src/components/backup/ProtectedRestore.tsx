@@ -20,7 +20,7 @@ export interface ProtectedRestoreProps {
    * It opened: carry on with the plain backup inside. `openedWith` says how:
    * a protected backup's passphrase, or a locked garden's own lock.
    */
-  onOpened: (plainText: string, openedWith: 'passphrase' | 'lock') => void
+  onOpened: (plainText: string, openedWith: 'passphrase' | 'lock' | 'move') => void
   /** Put away without opening; `note` says why, when there is a reason. */
   onClose: (note?: string) => void
   /** Where focus goes as the prompt closes, if nothing had it before (the file field). */

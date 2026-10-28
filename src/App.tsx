@@ -95,6 +95,18 @@ const UpdatePrompt = lazy(() =>
     () => ({ default: () => null }),
   ),
 )
+// The backup file kept up to date, where the browser can keep a file: it
+// arrives after the garden, and does nothing until a file has been chosen.
+// Never in the Android app, whose bundle leaves it out altogether.
+const AutoBackupKeeper =
+  import.meta.env.VITE_PLATFORM === 'android'
+    ? undefined
+    : lazy(() =>
+        import('./components/backup/AutoBackupKeeper').then(
+          (m) => ({ default: m.AutoBackupKeeper }),
+          () => ({ default: () => null }),
+        ),
+      )
 import { ambientTrackName } from './data/ambientTracks'
 import { useAmbientSound } from './hooks/useAmbientSound'
 import { useEffectiveTheme } from './hooks/useEffectiveTheme'
@@ -1073,6 +1085,9 @@ function App() {
               reminderAt={reminderAt}
               onImportGarden={garden.importGarden}
               onUndoRestore={garden.undoRestore}
+              onListEarlierCopies={garden.earlierCopies}
+              onReadCopy={garden.readCopy}
+              onPutBackCopy={garden.putBackCopy}
               onDownloadSetAside={garden.quarantinedCopy}
               onDiscardSetAside={garden.discardQuarantine}
               onCountSetAside={garden.countQuarantined}
@@ -1123,6 +1138,18 @@ function App() {
       {import.meta.env.VITE_PLATFORM !== 'android' && (
         <Suspense fallback={null}>
           <UpdatePrompt />
+        </Suspense>
+      )}
+      {/* Chromium on a computer: a save screen that hands the page a file to keep. */}
+      {AutoBackupKeeper &&
+        typeof (window as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function' && (
+        <Suspense fallback={null}>
+          <AutoBackupKeeper
+            state={state}
+            readOnly={garden.persistence.readOnly}
+            onExportGarden={garden.exportGarden}
+            onWritten={garden.recordAutomaticBackup}
+          />
         </Suspense>
       )}
     </div>
