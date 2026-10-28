@@ -497,6 +497,35 @@ export function usePersistence(
           message: 'Your garden is back to how it was before the restore.',
         }
       },
+      /** The daily copies kept on this device, and the room every copy takes. */
+      earlierCopies: () => repository.earlierCopies(),
+      /** A daily copy as it would be put back: with the field book's photos of now. */
+      readCopy: (id: string) => repository.dailyCopy(id, persistedRef.current),
+      /**
+       * Put a daily copy back, as a restore is made: the garden it replaces
+       * is kept first, and the restore's undo offered.
+       */
+      putBackCopy: async (id: string): Promise<{ ok: boolean; message: string }> => {
+        const startedAt = new Date().toISOString()
+        let copy: AppState | undefined
+        let written: GardenPart[]
+        try {
+          copy = await repository.dailyCopy(id, persistedRef.current)
+          if (!copy) return { ok: false, message: 'That copy could not be read.' }
+          written = await repository.replace(copy, { snapshot: true })
+        } catch (error) {
+          return { ok: false, message: errorMessage(error) }
+        }
+        // As after any restore: the undo offered, if its copy can be found.
+        const [snapshot] = await repository.snapshots().catch(() => [])
+        setPersistence({
+          readOnly: false,
+          lastRestoreSnapshotId:
+            snapshot && snapshot.takenAt >= startedAt ? snapshot.id : undefined,
+        })
+        adoptReplacement(copy, written)
+        return { ok: true, message: 'Your garden is back to that earlier copy.' }
+      },
       /**
        * Start a new garden over one this build could not read.
        *

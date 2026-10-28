@@ -15,6 +15,7 @@ async function renderAndroidSettings(
     onChooseTheme?: () => void
     onSetTextSize?: () => void
     onSetSoundInBackground?: () => void
+    onListEarlierCopies?: () => Promise<{ copies: []; bytes: number }>
   } = {},
 ) {
   vi.stubEnv('VITE_PLATFORM', 'android')
@@ -68,6 +69,24 @@ describe('SettingsView in the Android app', () => {
     // Android's WebView ignores download links; none is used.
     expect(click).not.toHaveBeenCalled()
     expect(onBackupMade).toHaveBeenCalledOnce()
+  })
+
+  it('keeps its own save screen, never a file kept up to date, whatever the WebView has', async () => {
+    vi.stubGlobal('showSaveFilePicker', vi.fn())
+    try {
+      await renderAndroidSettings(undefined, {
+        onListEarlierCopies: () => Promise.resolve({ copies: [], bytes: 2 * 1024 * 1024 }),
+      })
+      expect(screen.getByRole('button', { name: 'Save a backup' })).toBeInTheDocument()
+      // The earlier copies say what room they take here, where there is no storage line.
+      expect(await screen.findByText('The copies kept in this app take about 2.0 MB.')).toBeInTheDocument()
+      expect(screen.getByText(/cannot help if the app is uninstalled or its storage cleared/)).toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: 'Keep a backup file up to date' }),
+      ).not.toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('says nothing was saved when the gardener backs out', async () => {

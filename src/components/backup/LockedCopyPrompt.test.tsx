@@ -170,13 +170,13 @@ describe('opening a locked copy with its recovery code', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Type the 24 words of your recovery code.')
     expect(openLockedCopy).not.toHaveBeenCalled()
 
-    await user.type(field, WORDS.slice(0, 23).join(' '))
+    await user.paste(WORDS.slice(0, 23).join(' '))
     await user.click(screen.getByRole('button', { name: 'Open the copy' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('That is 23 words. A recovery code has 24.'))
 
     // Real words, but another code's.
     await user.clear(field)
-    await user.type(field, newRecoveryCode().join(' '))
+    await user.paste(newRecoveryCode().join(' '))
     await user.click(screen.getByRole('button', { name: 'Open the copy' }))
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
@@ -187,7 +187,7 @@ describe('opening a locked copy with its recovery code', () => {
 
     // The sheet's own layout: numbered, a word a line.
     await user.clear(field)
-    await user.type(field, WORDS.map((word, index) => `${index + 1}. ${word}`).join('{enter}'))
+    await user.paste(WORDS.map((word, index) => `${index + 1}. ${word}`).join('\n'))
     await user.click(screen.getByRole('button', { name: 'Open the copy' }))
     await waitFor(() => expect(onOpened).toHaveBeenCalledOnce())
     expect(onOpened.mock.calls[0][1]).toBe('lock')

@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ArriveRestore } from './move/ArriveRestore'
 import {
   gardenRepository,
   inspectImportedState,
@@ -25,6 +26,25 @@ export function SafeMode({ error }: { error: Error }) {
   /** A protected backup chosen to restore, waiting for its passphrase. */
   const [sealedChoice, setSealedChoice] = useState<string>()
   const fileInput = useRef<HTMLInputElement>(null)
+  const arriveButton = useRef<HTMLButtonElement>(null)
+  const [Arrive, setArrive] = useState<typeof ArriveRestore>()
+  const [arriving, setArriving] = useState(false)
+  const live = useRef(true)
+  useEffect(() => {
+    live.current = true
+    return () => { live.current = false }
+  }, [])
+  const arrive = async () => {
+    setNote(undefined)
+    try {
+      const module = await import('./move/ArriveRestore')
+      if (!live.current) return
+      setArrive(() => module.ArriveRestore)
+      setArriving(true)
+    } catch {
+      if (live.current) setNote('Arriving could not start just now. Restore a backup still works; try Arrive again when connected.')
+    }
+  }
 
   const downloadStored = async () => {
     setNote(undefined)
@@ -151,7 +171,18 @@ export function SafeMode({ error }: { error: Error }) {
           >
             Try again
           </button>
+          <button ref={arriveButton} className="secondary-button" onClick={() => void arrive()}>
+            Arrive from another device
+          </button>
         </div>
+        {arriving && Arrive && (
+          <Arrive
+            next="replace"
+            returnFocus={() => arriveButton.current}
+            onOpened={(plain) => { setArriving(false); void restoreText(plain) }}
+            onClose={(message) => { setArriving(false); setNote(message) }}
+          />
+        )}
         {sealedChoice !== undefined && (
           <ProtectedRestore
             text={sealedChoice}

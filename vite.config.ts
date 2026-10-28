@@ -83,7 +83,7 @@ export default defineConfig(({ mode }) => {
             groups: [
               {
                 name: 'repository',
-                test: /[\\/]src[\\/]repository[\\/](?!sealedStores|gardenSwitch|setAside)|[\\/]node_modules[\\/]idb[\\/]/,
+                test: /[\\/]src[\\/]repository[\\/](?!sealedStores|gardenSwitch|setAside|dailyCopies)|[\\/]node_modules[\\/]idb[\\/]/,
               },
             ],
           },

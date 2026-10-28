@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ambientTrackDescriptions } from '../data/ambientTrackDescriptions'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
-import { previewBackup, type BackupPreview } from '../lib/backupPreview'
+import { previewBackup, previewGarden, type BackupPreview } from '../lib/backupPreview'
 import { backupReminder } from '../lib/backupReminder'
 import {
   formatHour,
@@ -53,6 +53,9 @@ import { LockSettings } from './lock/LockSettings'
 import { useLockState } from '../hooks/useLockState'
 import { letterQuotesOf, type LetterQuotes } from '../lib/letters'
 import { ProtectedRestore } from './backup/ProtectedRestore'
+import { ArriveRestore } from './move/ArriveRestore'
+import { EarlierCopies, type CopiesKept } from './backup/EarlierCopies'
+import type { EarlierCopy } from '../repository/dailyCopies'
 import './settings.css'
 
 // Making a protected backup loads its dialog, and the code that locks the
@@ -60,6 +63,19 @@ import './settings.css'
 const ProtectedBackupDialog = lazy(() =>
   import('./backup/ProtectedBackupDialog').then((m) => ({ default: m.ProtectedBackupDialog })),
 )
+// So does moving the garden to another device: the dialog, the words.
+const MoveDialog = lazy(() =>
+  import('./move/MoveDialog').then((m) => ({ default: m.MoveDialog })),
+)
+
+// A backup file kept up to date, only where the browser can keep a file:
+// never in the Android app, whose bundle leaves it out altogether.
+const AutoBackupSetting =
+  import.meta.env.VITE_PLATFORM === 'android'
+    ? undefined
+    : lazy(() =>
+        import('./backup/AutoBackupSetting').then((m) => ({ default: m.AutoBackupSetting })),
+      )
 
 /** The Garden Pass card's one-line answer, from Google Play's latest. */
 function passSummary(status: PassStatus): string {
@@ -253,6 +269,9 @@ export function SettingsView({
   reminderAt,
   onImportGarden,
   onUndoRestore,
+  onListEarlierCopies,
+  onReadCopy,
+  onPutBackCopy,
   onDownloadSetAside,
   onDiscardSetAside,
   onCountSetAside,
@@ -308,6 +327,12 @@ export function SettingsView({
   onUndoRestore?: (
     snapshotId: string,
   ) => Promise<{ ok: boolean; message: string }>
+  /** The daily copies kept on this device (repository/dailyCopies). */
+  onListEarlierCopies?: () => Promise<CopiesKept>
+  /** One daily copy, as putting it back would make the garden. */
+  onReadCopy?: (id: string) => Promise<AppState | undefined>
+  /** Put a daily copy back: a restore, with its undo. */
+  onPutBackCopy?: (id: string) => Promise<{ ok: boolean; message: string }>
   /** The newest set-aside copy of an unreadable garden, as file text. */
   onDownloadSetAside?: () => Promise<FileCopy | undefined>
   onDiscardSetAside?: () => Promise<void>
@@ -364,9 +389,12 @@ export function SettingsView({
   const [deleteError, setDeleteError] = useState<string>()
   const [backupNote, setBackupNote] = useState<string>()
   const [restoreStep, setRestoreStep] = useState(false)
-  /** A chosen backup, read and described, waiting for the gardener's yes. */
+  /**
+   * A chosen backup, read and described, waiting for the gardener's yes; or
+   * an earlier copy on this device (`copy`), described the same way.
+   */
   const [pendingRestore, setPendingRestore] = useState<
-    BackupPreview & { text: string; openedWith?: 'passphrase' | 'lock' }
+    BackupPreview & { text?: string; openedWith?: 'passphrase' | 'lock' | 'move'; copy?: EarlierCopy }
   >()
   /**
    * A protected backup chosen to restore, waiting for its passphrase, or a
@@ -375,6 +403,10 @@ export function SettingsView({
   const [sealedChoice, setSealedChoice] = useState<string>()
   /** Making a protected backup: to save or download it, or to share it. */
   const [protecting, setProtecting] = useState<'save' | 'share'>()
+  /** Moving this garden to another device, or arriving from one. */
+  const [moving, setMoving] = useState(false)
+  const [arriving, setArriving] = useState(false)
+  const arriveButton = useRef<HTMLButtonElement>(null)
   const previewHeading = useRef<HTMLHeadingElement>(null)
   const [restoring, setRestoring] = useState(false)
   /**
@@ -387,6 +419,15 @@ export function SettingsView({
   const [undoDismissed, setUndoDismissed] = useState<string>()
   const [setAsideCount, setSetAsideCount] = useState(0)
   const [storage, setStorage] = useState<StorageStatus>()
+  /** The room the earlier copies take, for the storage line. */
+  const [copiesBytes, setCopiesBytes] = useState(0)
+  /** Whether this browser can keep a file to write to (lib/autoBackupFile). */
+  const [canKeepFile] = useState(
+    () => typeof (window as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function',
+  )
+  const undoButton = useRef<HTMLButtonElement>(null)
+  /** Set as a copy is put back: the undo offer takes the focus once it shows. */
+  const focusUndo = useRef(false)
   // The field book's photos, which every backup carries: how many, and their size.
   const fieldBookPhotos = photosIn(state.sightings)
   // The moment the backup reminder is worked out for: the app's own (noon of
@@ -566,7 +607,7 @@ export function SettingsView({
   }
 
   /** Describe a backup's text; nothing is replaced yet. */
-  const describeBackup = (text: string, openedWith?: 'passphrase' | 'lock') => {
+  const describeBackup = (text: string, openedWith?: 'passphrase' | 'lock' | 'move') => {
     const preview = previewBackup(text)
     if (!preview.ok) {
       setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
@@ -596,18 +637,41 @@ export function SettingsView({
   }
 
   // A preview reached through the passphrase prompt takes focus as the
-  // prompt goes, so what the backup holds is what is read next.
+  // prompt goes, so what the backup holds is what is read next; so does an
+  // earlier copy's, which opens away from the button that asked for it.
   useEffect(() => {
-    if (pendingRestore?.openedWith) previewHeading.current?.focus()
+    if (pendingRestore?.openedWith || pendingRestore?.copy) previewHeading.current?.focus()
   }, [pendingRestore])
+
+  /** Describe an earlier copy kept on this device; nothing is replaced yet. */
+  const lookAtCopy = async (copy: EarlierCopy) => {
+    setBackupNote(undefined)
+    setRestoreStep(false)
+    const garden = await onReadCopy?.(copy.id).catch(() => undefined)
+    if (!garden) {
+      setBackupNote('That copy could not be read.')
+      return
+    }
+    setPendingRestore({ ...previewGarden(garden), copy })
+  }
 
   const confirmRestore = async () => {
     if (!pendingRestore) return
     setRestoring(true)
-    const result = await onImportGarden(pendingRestore.text)
+    const { copy, text = '' } = pendingRestore
+    const result = !copy
+      ? await onImportGarden(text)
+      : onPutBackCopy
+        ? await onPutBackCopy(copy.id)
+        : { ok: false, message: 'That copy could not be put back.' }
     setRestoring(false)
-    setBackupNote(result.message)
+    setBackupNote(
+      result.ok && copy
+        ? `Your garden is back to how it was before your changes on ${formatJournalDate(copy.day)}.`
+        : result.message,
+    )
     if (result.ok) {
+      focusUndo.current = Boolean(copy)
       setPendingRestore(undefined)
       setRestoreStep(false)
     }
@@ -630,6 +694,12 @@ export function SettingsView({
     persistence.lastRestoreSnapshotId !== undoDismissed
       ? persistence.lastRestoreSnapshotId
       : undefined
+  // The preview a copy was put back from has gone: its undo takes the focus.
+  useEffect(() => {
+    if (!focusUndo.current || !undoSnapshotId) return
+    focusUndo.current = false
+    undoButton.current?.focus()
+  }, [undoSnapshotId, pendingRestore])
   const profile = state.profile
   const recapHours = recapHoursOf(profile)
   const themeChoice = themeChoiceOf(profile)
@@ -1086,6 +1156,16 @@ export function SettingsView({
               Share protected backup…
             </button>
           )}
+          <button
+            className="secondary-button"
+            disabled={persistence.readOnly}
+            onClick={() => {
+              setBackupNote(undefined)
+              setMoving(true)
+            }}
+          >
+            Move my garden to another device…
+          </button>
           {!restoreStep ? (
             <button
               className="text-button"
@@ -1117,6 +1197,53 @@ export function SettingsView({
           A protected backup needs a passphrase to open, so nobody can read your
           garden from the file without it.
         </p>
+        <p className="subtle-copy">
+          Moving to a new phone or computer? Move my garden makes a locked file
+          and shows a one-time code to open it there.
+        </p>
+        {moving && (
+          <Suspense fallback={null}>
+            <MoveDialog
+              share={canShareBackup}
+              lockOn={locked}
+              onExportGarden={onExportGarden}
+              onClose={() => setMoving(false)}
+            />
+          </Suspense>
+        )}
+        {arriving && (
+          <ArriveRestore
+            next="preview"
+            returnFocus={() => arriveButton.current}
+            onOpened={(plain, from) => {
+              setArriving(false)
+              describeBackup(plain, from === 'plain' ? undefined : from)
+            }}
+            onClose={(note) => {
+              setArriving(false)
+              if (note) setBackupNote(note)
+            }}
+          />
+        )}
+        {AutoBackupSetting && canKeepFile && (
+          <Suspense fallback={null}>
+            <AutoBackupSetting
+              readOnly={persistence.readOnly}
+              onExportGarden={onExportGarden}
+              onBackupMade={backupMade}
+            />
+          </Suspense>
+        )}
+        {onListEarlierCopies && (
+          <EarlierCopies
+            onList={onListEarlierCopies}
+            onLook={(copy) => void lookAtCopy(copy)}
+            looking={pendingRestore?.copy?.id}
+            refresh={persistence.lastRestoreSnapshotId}
+            android={android}
+            onMeasured={setCopiesBytes}
+          />
+        )}
         {protecting && (
           <Suspense fallback={null}>
             <ProtectedBackupDialog
@@ -1166,19 +1293,39 @@ export function SettingsView({
             />
           </div>
         )}
+        {restoreStep && (
+          <div className="form-actions">
+            <button
+              ref={arriveButton}
+              className="secondary-button"
+              onClick={() => {
+                setBackupNote(undefined)
+                setPendingRestore(undefined)
+                setArriving(true)
+              }}
+            >
+              Arrive from another device…
+            </button>
+          </div>
+        )}
         {pendingRestore && (
           <div className="restore-preview" aria-labelledby="restore-preview-title">
             <h3 id="restore-preview-title" ref={previewHeading} tabIndex={-1}>
-              {pendingRestore.gardenName
-                ? `This backup holds ${pendingRestore.gardenName}`
-                : 'This backup holds a garden'}
+              {`${pendingRestore.copy ? 'This copy' : 'This backup'} holds ${pendingRestore.gardenName ?? 'a garden'}`}
             </h3>
             <ul>
+              {pendingRestore.openedWith === 'move' && (<li>A move file, opened with its one-time code</li>)}
               {pendingRestore.openedWith === 'passphrase' && (
                 <li>A protected backup, opened with its passphrase</li>
               )}
               {pendingRestore.openedWith === 'lock' && (
                 <li>A sealed copy of a locked garden, opened with its lock</li>
+              )}
+              {pendingRestore.copy && (
+                <li>
+                  {pendingRestore.copy.reason === 'restore' ? 'Kept before a restore on ' : 'Kept on this device before your changes on '}
+                  {formatJournalDate(pendingRestore.copy.day)}
+                </li>
               )}
               {pendingRestore.counts && (
                 <>
@@ -1236,13 +1383,13 @@ export function SettingsView({
                 disabled={restoring}
                 onClick={() => void confirmRestore()}
               >
-                Restore this backup
+                {pendingRestore.copy ? 'Put this copy back' : 'Restore this backup'}
               </button>
               <button
                 className="text-button"
                 onClick={() => setPendingRestore(undefined)}
               >
-                Choose another file
+                {pendingRestore.copy ? 'Keep the garden as it is' : 'Choose another file'}
               </button>
             </div>
           </div>
@@ -1250,6 +1397,7 @@ export function SettingsView({
         {undoSnapshotId && onUndoRestore && (
           <div className="form-actions undo-restore">
             <button
+              ref={undoButton}
               className="secondary-button"
               onClick={() => void undoRestore(undoSnapshotId)}
             >
@@ -1321,7 +1469,9 @@ export function SettingsView({
                   : 'This browser may clear your garden if it runs short of space.'}
               </strong>{' '}
               {storage.usage !== undefined &&
-                `The garden and the app use about ${formatBytes(storage.usage)} here.`}
+                `The garden and the app use about ${formatBytes(storage.usage)} here${
+                  copiesBytes > 0 ? `, about ${formatBytes(copiesBytes)} of it for earlier copies` : ''
+                }.`}
             </p>
             {storage.protection === 'best-effort' && (
               <button

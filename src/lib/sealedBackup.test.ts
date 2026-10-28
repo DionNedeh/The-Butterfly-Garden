@@ -2,7 +2,6 @@ import { Blob as NodeBlob } from 'node:buffer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { inspectImportedState, readImportedState } from '../repository/gardenRepository'
 import { migrateState } from '../repository/validateGarden'
-import { ArrayBufferFileReader } from '../test/fileReader'
 import type { AppState, Sighting } from '../types'
 import { SEALED_BACKUP_FORMAT, sealedKind } from './backupFile'
 import { previewBackup } from './backupPreview'
@@ -17,6 +16,7 @@ import {
 } from './sealedBackup'
 import { deriveKey, fromBase64, seal, toBase64 } from './sealing'
 import { withPhotosAsText } from './sightingPhotos'
+import { ArrayBufferFileReader } from '../test/fileReader'
 
 // Fast for every case but the one that checks the real count.
 const FAST = 1_000

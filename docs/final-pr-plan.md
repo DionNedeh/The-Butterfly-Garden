@@ -32,7 +32,7 @@ To find it, every item of the Voyager plan and every PR log was swept, along wit
 - **Stored data.** Builds 3.0 to 3.4 will open what a newer build writes.
   - A new stored field must be optional, and checked in `validateGarden`.
   - Raising `DATABASE_VERSION` or `CURRENT_STATE_VERSION` makes older builds refuse the garden as "written by a newer version". Both are 8 now. Raise one only when it is needed, and say why in the log.
-- **Patches.** Parts 1 and 2 build on three patches in [`docs/final-pr-plan/patches/`](final-pr-plan/patches/).
+- **Patches.** The original plan used three patches. The seasons patch remains in [`docs/final-pr-plan/patches/`](final-pr-plan/patches/); the move and keep patches are replaced by their section 2 implementation in this change. The builders' notes remain as provenance.
   - Each applies cleanly at commit 48ad0f1, which is in `main`'s history through the C3 merge.
   - On `main`, `git am -3` stops on the conflicts each step lists.
   - The builders' own notes are kept beside them, in `builders-notes.txt`: what each built, what they left open, suggested ARCHITECTURE rows and budget figures.
@@ -329,6 +329,18 @@ Every image or drawing the art PR makes. Sizes match the existing assets; “whe
 
 
 ## 2. Moving to a new device, and keeping copies (c.6)
+
+**Section 2 implementation record (28 October 2026, release 3.6 candidate).**
+Steps 2.1, 2.3, 2.4 and 2.5 are integrated on the implementation branch;
+verification and acceptance are recorded in [section-2-verification.md](section-2-verification.md).
+The owner explicitly deferred **all QR scanning** on 28 October: step 2.2 is
+out of this release. Moving uses twelve typed words on every platform; the
+unused QR display/encoder and camera code are omitted too. The damaged-snapshot
+prerequisite from 3.1 is included: a specific error and download/discard actions
+let a lock change proceed after an explicit discard. No other section 3 work is included.
+
+The paragraphs below describe the original baseline and remain as provenance;
+use the implementation record for current completion and verification evidence.
 
 Both parts are built and kept as patches in `docs/final-pr-plan/patches/`. Neither has been reviewed, run end to end or checked on Android. Apply each on a branch from `main` with `git am -3`, resolve the conflicts listed, review it as every earlier PR was reviewed, and run every check in CLAUDE.md. Each one is a release of its own, with release notes, an ARCHITECTURE row (the builders' suggested rows are in `builders-notes.txt` beside the patches) and a Voyager log entry. Remove its patch file once it is merged.
 

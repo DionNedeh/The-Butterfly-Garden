@@ -8,6 +8,7 @@ import { balancedSuggestions } from '../lib/goalSuggestions'
 import { isAndroidApp } from '../lib/platform'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
 import { ProtectedRestore } from './backup/ProtectedRestore'
+import { ArriveRestore } from './move/ArriveRestore'
 import './goals/goals.css'
 
 /** The most starter goals a new garden begins with: a few, never a list. */
@@ -49,6 +50,9 @@ export function Onboarding({
   /** A protected backup chosen to restore, waiting for its passphrase. */
   const [sealedChoice, setSealedChoice] = useState<string>()
   const restoreInput = useRef<HTMLInputElement>(null)
+  /** Arriving from another device with a move file and its code. */
+  const [arrivingFrom, setArrivingFrom] = useState(false)
+  const arriveButton = useRef<HTMLButtonElement>(null)
   const [starters, setStarters] = useState<GoalSuggestion[]>([])
   const startersFull = starters.length >= MAX_STARTER_GOALS
   // Each step replaces the one before, button and all, so focus is taken to
@@ -176,6 +180,35 @@ export function Onboarding({
                   I have a backup
                 </button>
               ))}
+            {onRestore && (
+              <button
+                ref={arriveButton}
+                className="text-button arrive-button"
+                onClick={() => {
+                  setRestoreNote(undefined)
+                  setArrivingFrom(true)
+                }}
+              >
+                Arrive from another device
+              </button>
+            )}
+            {arrivingFrom && (
+              <ArriveRestore
+                returnFocus={() => arriveButton.current}
+                onOpened={(plain) => {
+                  setArrivingFrom(false)
+                  // Anything a refusal says is said where restores speak.
+                  setRestoreOpen(true)
+                  void restoreText(plain)
+                }}
+                onClose={(message) => {
+                  setArrivingFrom(false)
+                  if (!message) return
+                  setRestoreOpen(true)
+                  setRestoreNote(message)
+                }}
+              />
+            )}
           </>
         ) : step === 1 ? (
           <form

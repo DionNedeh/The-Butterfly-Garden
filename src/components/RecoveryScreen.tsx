@@ -5,6 +5,7 @@ import { datedFileName, saveTextFile } from '../lib/download'
 import { reloadApp } from '../lib/reload'
 import type { FileCopy } from '../lib/sightingPhotos'
 import { ProtectedRestore } from './backup/ProtectedRestore'
+import { ArriveRestore } from './move/ArriveRestore'
 
 /**
  * Shown instead of onboarding when a garden is stored but could not be read.
@@ -29,6 +30,9 @@ export function RecoveryScreen({
   /** A protected backup chosen to restore, waiting for its passphrase. */
   const [sealedChoice, setSealedChoice] = useState<string>()
   const fileInput = useRef<HTMLInputElement>(null)
+  /** Bringing the garden from another device, with a move file and its code. */
+  const [arriving, setArriving] = useState(false)
+  const arriveButton = useRef<HTMLButtonElement>(null)
   const unavailable = reason === 'unavailable'
 
   // The platform is checked inline, so each build carries only its own words.
@@ -117,7 +121,31 @@ export function RecoveryScreen({
               }}
             />
           </label>
+          <button
+            ref={arriveButton}
+            className="secondary-button"
+            onClick={() => {
+              setNote(undefined)
+              setArriving(true)
+            }}
+          >
+            Arrive from another device
+          </button>
         </div>
+        {arriving && (
+          <ArriveRestore
+            next="replace"
+            returnFocus={() => arriveButton.current}
+            onOpened={(plain) => {
+              setArriving(false)
+              void restoreText(plain)
+            }}
+            onClose={(message) => {
+              setArriving(false)
+              setNote(message)
+            }}
+          />
+        )}
         {sealedChoice !== undefined && (
           <ProtectedRestore
             text={sealedChoice}

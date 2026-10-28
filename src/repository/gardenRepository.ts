@@ -1,7 +1,11 @@
 import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from 'idb'
+import type { BackupFileRecord } from '../lib/autoBackup'
+import { toLocalDate } from '../lib/date'
 import type { LockRecord } from '../lib/gardenLock'
 import { createEmptyState } from '../lib/progression'
+import { isQuietWrite } from '../lib/quietWrites'
 import type { AppState } from '../types'
+import type { PreparedDaily } from './dailyCopies'
 import type { SealedValue } from './sealedStores'
 import {
   CURRENT_STATE_VERSION,
@@ -26,13 +30,36 @@ export interface QuarantineRecord {
  * A restore replaces the document outright; this is what makes it undoable.
  * The garden is stored raw, exactly as it was read, so taking a snapshot can
  * never be the thing that fails.
+ *
+ * A daily copy (repository/dailyCopies) is the garden as it stood before a
+ * day's first change, kept for a week to put a mistake right. Each reason is
+ * kept and pruned apart, so neither pushes the other out; a build from before
+ * daily copies prunes only its own, and lists them without using them.
  */
 export interface SnapshotRecord {
   id: string
-  reason: 'restore'
+  reason: 'restore' | 'daily'
   takenAt: string
   garden: unknown
+  /** A daily copy's local day (YYYY-MM-DD), which its id also names. */
+  day?: string
+  /** About how much room a daily copy takes, measured as it was made. */
+  bytes?: number
+  /** Restore order, independent of equal or reset wall-clock timestamps. */
+  revision?: number
 }
+
+/** The start of a daily copy's id, followed by its day: one a day, in order. */
+export const DAILY_PREFIX = 'daily-'
+
+/**
+ * The drafts store's other record: the backup file kept up to date
+ * (lib/autoBackupFile). A file handle cannot be written to a file, so it is
+ * nowhere in a backup, and it goes with the database when the garden is
+ * deleted. Under the lock it is left as it is: it names a file, and holds
+ * nothing of the journal.
+ */
+export const BACKUP_FILE_KEY = 'backup-file'
 
 /**
  * Text the gardener has typed but not yet saved, by field.
@@ -168,6 +195,8 @@ const gardenSwitch = () => import('./gardenSwitch')
 
 /** Set-aside copies of a garden this build cannot read: loaded only for them. */
 const setAside = () => import('./setAside')
+/** Daily copies: made, kept and described there, loaded once a day at most. */
+const dailyCopies = () => import('./dailyCopies')
 
 /**
  * Whether a stored value is sealed under the garden lock. The one thing about
@@ -378,8 +407,8 @@ export interface GardenDatabase extends DBSchema {
     value: SnapshotRecord
   }
   drafts: {
-    key: 'current'
-    value: Drafts
+    key: 'current' | typeof BACKUP_FILE_KEY
+    value: Drafts | BackupFileRecord
   }
   /**
    * The garden lock, while it is on (lib/gardenLock). Absent otherwise; a
@@ -948,6 +977,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     db: IDBPDatabase<GardenDatabase>,
     state: AppState,
     snapshot?: SnapshotRecord['reason'],
+    daily?: PreparedDaily,
   ): Promise<number> {
     // Sealed first: a transaction left waiting on anything but its own
     // requests commits early, so nothing slow may happen inside it.
@@ -977,12 +1007,13 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         ),
       )
       const takenAt = new Date().toISOString()
-      const id = `${snapshot}-${takenAt}`
+      const revision = revisionOf(stored) + 1
+      const id = `${snapshot}-${takenAt}-${revision}`
       const snapshots = tx.objectStore('snapshots')
-      await snapshots.put({ id, reason: snapshot, takenAt, garden: assembleGarden(stored, collections) }, id)
+      await snapshots.put({ id, reason: snapshot, takenAt, revision, garden: assembleGarden(stored, collections) }, id)
       const stale = (await snapshots.getAll())
         .filter((kept) => kept.reason === snapshot)
-        .sort((a, b) => b.takenAt.localeCompare(a.takenAt))
+        .sort((a, b) => (b.revision ?? -1) - (a.revision ?? -1) || b.takenAt.localeCompare(a.takenAt))
         .slice(SNAPSHOT_LIMIT)
       for (const kept of stale) await snapshots.delete(kept.id)
     }
@@ -996,8 +1027,64 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       }
       writes.push(store.put(values.get(collection), 'current'))
     }
+    if (daily) writes.push(daily.keepIn(tx.objectStore('snapshots')))
     await Promise.all([...writes, tx.done])
     return revision
+  }
+
+  /** The store a write adds when it keeps the day's copy too. */
+  function withDaily(daily: PreparedDaily | undefined): Array<'snapshots'> {
+    return daily ? ['snapshots'] : []
+  }
+
+  /** The day whose copy is known to be kept, so most writes need not ask. */
+  let dailyKeptOn: string | undefined
+
+  /**
+   * The garden as it stood before the day's first change of the gardener's
+   * own (a visit noted is not one: lib/quietWrites), to keep as that day's
+   * copy (repository/dailyCopies); undefined when today's is kept already or
+   * nothing is known to be stored. It goes in with the change itself, in the
+   * same transaction, so the lock switch in another tab sees it like any
+   * write. Never throws: a copy that cannot be made must not cost a change.
+   */
+  async function copyBeforeToday(
+    db: IDBPDatabase<GardenDatabase>,
+    state: AppState,
+    lock: Unlocked | undefined,
+  ): Promise<PreparedDaily | undefined> {
+    const before = persisted
+    const day = toLocalDate()
+    if (!before || dailyKeptOn === day || isQuietWrite(state)) return undefined
+    try {
+      if ((await db.getKey('snapshots', `${DAILY_PREFIX}${day}`)) === undefined)
+        return await (await dailyCopies()).prepareDaily(before, day, lock?.key)
+    } catch {
+      // Best effort, like a set-aside copy.
+    }
+    dailyKeptOn = day
+    return undefined
+  }
+
+  /**
+   * Make a write with the day's copy in it; should that fail (a disk too full
+   * for both aborts the transaction), make it again without. A refusal
+   * (another tab, the lock) is the write's own answer.
+   */
+  async function writeWithDaily<T>(
+    daily: PreparedDaily | undefined,
+    write: (daily?: PreparedDaily) => Promise<T>,
+  ): Promise<T> {
+    if (!daily) return write()
+    let written: T
+    try {
+      written = await write(daily)
+    } catch (error) {
+      if (error instanceof GardenConflictError || error instanceof GardenLockedError) throw error
+      written = await write()
+    }
+    dailyKeptOn = daily.day
+    return written
   }
 
   /**
@@ -1256,32 +1343,36 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         // another tab must not write under its old idea of it.
         const lock = unlocked
         const values = await storedValues(dirty, state, lock)
-        const tx = db.transaction([...dirty.map(storeFor), 'lock'], 'readwrite')
-        const metaStore = tx.objectStore('meta')
-        const [stored, record] = await Promise.all([
-          metaStore.get('current'),
-          tx.objectStore('lock').get('current'),
-        ])
-        if (revisionOf(stored) !== base || !lockIs(record, lock)) {
-          tx.abort()
-          await tx.done.catch(() => undefined)
-          throw new GardenConflictError()
-        }
+        const daily = await copyBeforeToday(db, state, lock)
         const revision = base + 1
-        const writes: Promise<unknown>[] = [
-          metaStore.put({ ...(values.get('meta') as GardenMeta), revision }, 'current'),
-        ]
-        for (const part of dirty) {
-          if (part === 'meta') continue
-          // The store and the field it holds are paired by COLLECTION_STORES,
-          // but that correspondence is beyond what the index signature can
-          // express.
-          const store = tx.objectStore(COLLECTION_STORES[part]) as {
-            put: (value: unknown, key: 'current') => Promise<unknown>
+        await writeWithDaily(daily, async (daily) => {
+          const tx = db.transaction([...dirty.map(storeFor), 'lock', ...withDaily(daily)], 'readwrite')
+          const metaStore = tx.objectStore('meta')
+          const [stored, record] = await Promise.all([
+            metaStore.get('current'),
+            tx.objectStore('lock').get('current'),
+          ])
+          if (revisionOf(stored) !== base || !lockIs(record, lock)) {
+            tx.abort()
+            await tx.done.catch(() => undefined)
+            throw new GardenConflictError()
           }
-          writes.push(store.put(values.get(part), 'current'))
-        }
-        await Promise.all([...writes, tx.done])
+          const writes: Promise<unknown>[] = [
+            metaStore.put({ ...(values.get('meta') as GardenMeta), revision }, 'current'),
+          ]
+          for (const part of dirty) {
+            if (part === 'meta') continue
+            // The store and the field it holds are paired by COLLECTION_STORES,
+            // but that correspondence is beyond what the index signature can
+            // express.
+            const store = tx.objectStore(COLLECTION_STORES[part]) as {
+              put: (value: unknown, key: 'current') => Promise<unknown>
+            }
+            writes.push(store.put(values.get(part), 'current'))
+          }
+          if (daily) writes.push(daily.keepIn(tx.objectStore('snapshots')))
+          await Promise.all([...writes, tx.done])
+        })
         persisted = state
         persistedRevision = revision
         return dirty
@@ -1320,7 +1411,8 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     ): Promise<GardenPart[]> {
       return enqueue(async () => {
         const db = await database()
-        persistedRevision = await writeAllParts(db, state, options.snapshot ? 'restore' : undefined)
+        const daily = await copyBeforeToday(db, state, unlocked)
+        persistedRevision = await writeWithDaily(daily, (daily) => writeAllParts(db, state, options.snapshot ? 'restore' : undefined, daily))
         persisted = state
         deletedElsewhere = false
         withheld = false
@@ -1402,7 +1494,8 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       try {
         const all = await (await database()).getAll('snapshots')
         return all
-          .sort((a, b) => b.takenAt.localeCompare(a.takenAt))
+          .filter((record) => record.reason === 'restore')
+          .sort((a, b) => (b.revision ?? -1) - (a.revision ?? -1) || b.takenAt.localeCompare(a.takenAt))
           .map(({ id, reason, takenAt }) => ({ id, reason, takenAt }))
       } catch {
         return []
@@ -1423,6 +1516,81 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
                 .catch(() => undefined))
           : record.garden,
       )
+    },
+
+    /**
+     * The daily copies, newest first, each with what it held where it can be
+     * opened here, and the room every copy kept takes (repository/dailyCopies).
+     */
+    async earlierCopies() {
+      const records = await (await database()).getAll('snapshots')
+      return (await dailyCopies()).describeCopies(records, unlocked?.key)
+    },
+
+    /** The original stored copy, still sealed when the garden is locked. */
+    async rawSnapshot(id: string): Promise<SnapshotRecord | undefined> {
+      return (await database()).get('snapshots', id)
+    },
+
+    /** Read the sealed copy and its matching key wraps together, before any lock switch. */
+    async snapshotForDownload(id: string) {
+      const tx = (await database()).transaction(['snapshots', 'lock'], 'readonly')
+      const [snapshot, lock] = await Promise.all([
+        tx.objectStore('snapshots').get(id), tx.objectStore('lock').get('current'),
+      ])
+      await tx.done
+      return { snapshot, lock: lockOf(lock) }
+    },
+
+    /** Discard a copy only while this tab still owns the loaded lock and revision. */
+    discardSnapshot(id: string): Promise<void> {
+      return enqueue(async () => {
+        const db = await database()
+        const tx = db.transaction(['snapshots', 'lock', 'meta'], 'readwrite', STRICT)
+        const [lock, meta] = await Promise.all([
+          tx.objectStore('lock').get('current'), tx.objectStore('meta').get('current'),
+        ])
+        if (!lockIs(lock, unlocked) || revisionOf(meta) !== persistedRevision || withheld) {
+          tx.abort()
+          await tx.done.catch(() => undefined)
+          throw new GardenConflictError()
+        }
+        await Promise.all([tx.objectStore('snapshots').delete(id), tx.done])
+        dailyKeptOn = undefined
+      })
+    },
+
+    /**
+     * A daily copy's garden, validated, to put back over `now`: the field
+     * book's photos, which a daily copy leaves out, are the ones `now` has.
+     */
+    async dailyCopy(id: string, now: AppState | undefined): Promise<AppState | undefined> {
+      const copy = await repository.snapshot(id)
+      const record = await repository.rawSnapshot(id)
+      return copy && (record?.reason === 'daily' ? (await dailyCopies()).withPhotosOf(copy, now) : copy)
+    },
+
+    /** The backup file kept up to date, as stored (lib/autoBackupFile checks it). */
+    async readBackupFile(): Promise<unknown> {
+      return (await database()).get('drafts', BACKUP_FILE_KEY)
+    },
+
+    /** Keep the backup file's record, or forget it (undefined). */
+    async writeBackupFile(record: BackupFileRecord | undefined): Promise<void> {
+      if (deletedElsewhere) throw new GardenDeletedElsewhereError()
+      const db = await database()
+      const tx = db.transaction(['drafts', 'lock'], 'readwrite', STRICT)
+      if (!lockIs(await tx.objectStore('lock').get('current'), unlocked)) {
+        tx.abort()
+        await tx.done.catch(() => undefined)
+        throw new GardenLockedError()
+      }
+      await Promise.all([
+        record
+          ? tx.objectStore('drafts').put({ ...record, stamp: crypto.randomUUID() }, BACKUP_FILE_KEY)
+          : tx.objectStore('drafts').delete(BACKUP_FILE_KEY),
+        tx.done,
+      ])
     },
 
     async readDrafts(): Promise<Drafts> {
@@ -1527,6 +1695,8 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       persistedRevision = 0
       deletedElsewhere = false
       withheld = false
+      // The day's copy went with the garden.
+      dailyKeptOn = undefined
       // The deleted garden's lock went with it.
       unlocked = undefined
       setLockState('none')
@@ -1653,6 +1823,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       // A change of the lock's copy goes first: a garden deleted must never
       // come back from it.
       await (await gardenSwitch()).removeStaging(databaseName)
+      dailyKeptOn = undefined
       await new Promise<void>((resolve, reject) => {
         const request = indexedDB.deleteDatabase(databaseName)
         request.onsuccess = () => {

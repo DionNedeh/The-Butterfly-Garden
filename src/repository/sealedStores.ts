@@ -418,6 +418,14 @@ export class SetAsideSealedError extends Error {
   }
 }
 
+/** Refuse to abandon the only key for a damaged copy. It can be kept or removed in Settings. */
+export class SnapshotSealedError extends Error {
+  constructor(id: string) {
+    super(`An earlier copy (${id}) could not be opened, so the lock was not changed. Close this dialog and use Earlier copies under Backup and restore to download it as it is or discard it, then try again.`)
+    this.name = 'SnapshotSealedError'
+  }
+}
+
 /**
  * One stored value as a switch stores it again: opened with the key the
  * garden is under now (`from`, if it is sealed), and sealed with the new one
@@ -461,7 +469,10 @@ export async function restoreValue(
   if (store === 'snapshots') {
     const record = value as Record<string, unknown>
     let garden = record.garden
-    if (from && isSealed(garden)) garden = await openGarden(from, garden)
+    if (from && isSealed(garden)) {
+      try { garden = await openGarden(from, garden) }
+      catch { throw new SnapshotSealedError(String(record.id)) }
+    }
     return { ...record, garden: to ? await sealGarden(to, garden) : garden }
   }
   // The pre-split record and the drafts: one value each, sealed by name.

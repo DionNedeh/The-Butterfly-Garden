@@ -13,12 +13,19 @@ import { makePasskey } from '../../lib/passkey'
 import { newRecoveryCode } from '../../lib/recoveryCode'
 import { LockDialog } from './LockDialog'
 import { ConfirmWords, RecoverySheet } from './RecoverySheet'
+import { EarlierCopies } from '../backup/EarlierCopies'
+import { gardenRepository } from '../../repository/gardenRepository'
 import './lock.css'
 
 /** What can be changed about the lock while the garden is open. */
 export type LockChangeKind = 'passcode' | 'recovery' | 'off' | 'passkey'
 
 const WRONG_PASSCODE = 'That isn’t your current passcode.'
+
+async function unreadableCopies() {
+  const found = await gardenRepository.earlierCopies()
+  return { ...found, copies: found.copies.filter((copy) => !copy.held) }
+}
 
 function problemOf(error: unknown, otherwise: string): string {
   return error instanceof WrongSecretError ? WRONG_PASSCODE : changeProblem(error, otherwise)
@@ -73,6 +80,13 @@ function Feedback({
         <p className="settings-note error" role="alert">
           {problem}
         </p>
+      )}
+      {problem?.includes('An earlier copy (') && (
+        <EarlierCopies
+          onList={unreadableCopies}
+          onLook={() => undefined}
+          android={import.meta.env.VITE_PLATFORM === 'android'}
+        />
       )}
     </>
   )
