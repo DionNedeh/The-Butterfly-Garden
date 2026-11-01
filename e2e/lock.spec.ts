@@ -488,7 +488,7 @@ test.describe('3.2 Lock now in another tab, part-way through', () => {
     await other.getByLabel('Add a goal').fill('Water the fern')
     await goTo(other, 'Guide')
     const card = other.getByRole('heading', { level: 3, name: 'Monarch' }).locator('xpath=ancestor::article')
-    await card.getByRole('button', { name: 'Log a sighting of Monarch' }).click()
+    await card.getByRole('button', { name: 'Log a Monarch sighting' }).click()
     const form = other.getByRole('dialog', { name: 'Log a sighting' })
     await form.getByLabel('A few words, if you like').fill('Over the allotments')
 

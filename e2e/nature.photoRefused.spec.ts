@@ -94,7 +94,7 @@ test('a photo this browser will not keep is let go, and the garden goes on savin
   const card = page.locator('.species-directory article.species-card').filter({
     has: page.getByRole('heading', { level: 3, name: 'Monarch', exact: true }),
   })
-  await card.getByRole('button', { name: 'Log a sighting of Monarch' }).click()
+  await card.getByRole('button', { name: 'Log a Monarch sighting' }).click()
   const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
   await dialog.getByLabel('A few words, if you like').fill('One, on the buddleia')
   await dialog.getByLabel('Add a photo, if you like').setInputFiles('src/assets/thumb-cottage-bloom.webp')

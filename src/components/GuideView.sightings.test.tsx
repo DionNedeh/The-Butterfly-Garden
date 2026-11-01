@@ -59,7 +59,7 @@ describe('logging a sighting from the Guide', LAZY_TEST, () => {
   it('opens the form on a species, saves to the field book, and hands focus back', async () => {
     const user = userEvent.setup()
     render(<Harness sightings={[]} region="north-america" />)
-    const log = within(speciesCard('Monarch')).getByRole('button', { name: 'Log a sighting of Monarch' })
+    const log = within(speciesCard('Monarch')).getByRole('button', { name: 'Log a Monarch sighting' })
     await user.click(log)
     const dialog = await screen.findByRole('dialog', { name: 'Log a sighting' }, LAZY)
     expect(within(dialog).getByRole('radio', { name: /^Monarch/ })).toBeChecked()
@@ -78,7 +78,7 @@ describe('logging a sighting from the Guide', LAZY_TEST, () => {
   it('opens the form on a host plant', async () => {
     const user = userEvent.setup()
     render(<Harness sightings={[]} />)
-    await user.click(within(speciesCard('Monarch')).getByRole('button', { name: 'Log a sighting of Milkweed' }))
+    await user.click(within(speciesCard('Monarch')).getByRole('button', { name: 'Log Milkweed' }))
     const dialog = await screen.findByRole('dialog', {}, LAZY)
     expect(within(dialog).getByRole('radio', { name: 'A plant' })).toBeChecked()
     expect(within(dialog).getByRole('radio', { name: 'Milkweed' })).toBeChecked()
@@ -88,7 +88,7 @@ describe('logging a sighting from the Guide', LAZY_TEST, () => {
 
   it('offers nothing to log where nothing can be written', () => {
     render(<GuideView state={createInitialState('Tester', 'Wild Garden')} onShowSeed={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: /^Log a sighting/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Log / })).toBeNull()
   })
 
   it('links to a nature project in the region’s own section', () => {
@@ -125,7 +125,7 @@ describe('logging a sighting with a photo from the Guide', LAZY_TEST, () => {
     vi.mocked(prepareSightingPhoto).mockResolvedValue(photo)
     render(<PhotoHarness stored={stored} />)
     const user = userEvent.setup()
-    await user.click(within(speciesCard('Monarch')).getByRole('button', { name: 'Log a sighting of Monarch' }))
+    await user.click(within(speciesCard('Monarch')).getByRole('button', { name: 'Log a Monarch sighting' }))
     const dialog = await screen.findByRole('dialog', { name: 'Log a sighting' }, LAZY)
     await user.upload(within(dialog).getByLabelText('Add a photo, if you like'), new File(['x'], 'a.jpg', { type: 'image/jpeg' }))
     await within(dialog).findByRole('img', { name: 'Your photo for this sighting' })

@@ -112,7 +112,7 @@ describe('3.2 Lock now in another tab, part-way through a form', { timeout: 40_0
   it('says a sighting being written was not kept', async () => {
     const user = await openUnlocked('#/guide', 'How the garden works')
     const card = screen.getByRole('heading', { level: 3, name: 'Monarch' }).closest('article')!
-    await user.click(within(card).getByRole('button', { name: 'Log a sighting of Monarch' }))
+    await user.click(within(card).getByRole('button', { name: 'Log a Monarch sighting' }))
     const dialog = await screen.findByRole('dialog', { name: 'Log a sighting' }, LAZY)
     await user.type(within(dialog).getByLabelText('A few words, if you like'), 'Over the allotments')
     await lockNowElsewhere()
