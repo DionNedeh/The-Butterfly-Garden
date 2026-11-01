@@ -35,6 +35,66 @@ So R3 and R4 run as one workflow of three clusters, started while R2 was still b
 - **The integrator** merges each pair and runs every check on the merge. It writes the records below, opens the round's PR and merges it once CI is green.
 - **The baseline.** Every check was run first on b3f7da1. Later runs are compared with that baseline by test name.
 
+## Progress at the end of the run
+
+Written on 1 November 2026, with 3.9.0 going out in #76. What waits on the owner is in [the decision plan](decision-plan.md); its parked items start the next plan.
+
+- **Sections.** 31 items were built: 24 done and 7 partial. Each partial one is partial for a reason outside this run:
+  - **3.2 (R1):** a time limit on the remaining auto-lock holds is the owner's.
+  - **3.3 (R1):** passkeys on real devices are for the owner's machine.
+  - **5.5:** only the frame-time guard was built; the caps and the per-build baseline are the owner's.
+  - **5.2:** the WebKit and Firefox fixes are in, but the photo's stored shape and the comfort plan's way back to Settings are open, and the job is paused.
+  - **5.1:** only the code-only part was built; the host and the move are the owner's.
+  - **5.7:** the Playwright bump is a package change, which the run ruled out.
+  - **7.2:** the device checklists are written; running them is the owner's.
+
+  29 items were parked unbuilt, each with its question and a recommendation.
+- **Releases.** All four went live on 1 November: 3.6 (#71), 3.7 (#72, then #73), 3.8 (#74, then #75), and 3.9 with #76.
+- **How it was done.**
+  - Rounds of clusters, each in its own worktree. The last round ran three clusters at once, at the owner's word to speed up.
+  - Each cluster was implemented, reviewed by an agent told to refute it, and fixed.
+  - The integrator squash-merged each cluster on the last release, checked that every shared file held its cluster's change exactly, ran the full checks on the merge, wrote these records, and opened, merged and saw each release go live.
+- **What the integrator fixed.**
+  - The baseline's e2e failures: an offline reload, a stand-in file handle that crashed Chromium 1243, and a count taken too soon.
+  - Three tests that failed on the date when the clocks went back on 1 November.
+  - Seven test races that a deploy run could hit, each shown red, then green (#75).
+  - A browser-Back test that Playwright scrolled before pressing.
+  - A style suite that changed between runs.
+  - Faster deploys while the app is being built.
+- **What a person would notice.**
+  - **3.7:** nothing typed is lost to the lock, and backups carry a check of what they hold.
+  - **3.8:**
+    - the browser's Back and Forward return to the same place;
+    - Journal days and Shop tabs have their own addresses;
+    - the Guide covers 3.2 to 3.6;
+    - a hemisphere for gardeners outside the named regions;
+    - night thumbnails, "Draft kept", a gentler gentle day, and the year's longest run.
+  - **3.9:**
+    - in Safari's Private Browsing, a photo that cannot be kept no longer holds the garden;
+    - the page asks for no Referer;
+    - the Android calendar opens its own new-event screen;
+    - the privacy policy is current.
+- **Hands-on checks.** 29 items carry a check for a person, in their records.
+- **Downloads and live calls.** None. The only network use was the GitHub API and the deploys, and reading the live site to confirm each release.
+- **The suites, from the baseline to the final tree.**
+  - Unit: 254 files and 3,005 tests (96.48% of lines covered) became 305 files and 3,237 tests (96.67%).
+  - e2e: 169 passed, 3 failed and 1 skipped became 208 passed and 2 skipped. The suites now include the computed-style, frame-time and photo-refusal specs.
+  - First load: web 159.8 kB to 159.9 kB; Android 160.5 kB to 160.5 kB, with 220 B to spare.
+- **What this run learned.**
+  - **A deploy that re-runs the whole suite mostly finds the suite's own races.** The same merged tree had passed on its pull request. Every deploy failure in this run was a test's, never the app's.
+  - **Races found:**
+    - a test that ends while a lazy import is still loading;
+    - a default 1 s wait for a lazy chunk;
+    - typing straight after an unlock, while the app moves focus;
+    - Playwright scrolling an unsteady element before it presses it;
+    - a React `useId` showing through an SVG id.
+  - **What finds them:** stress runs under load, CI's traces, and a red-first copy that forces the timing.
+  - **Dates.** Tests that make "tomorrow" by adding 24 hours, or step back one month for a day two months back, fail on the day the clocks change and on the first of a month.
+- **What stays open.**
+  - The decision plan's parked items, and the questions each round raised.
+  - The checks paused for the build phase: the Safari and Firefox job, and the full re-run on `main`. The decision plan says how to bring them back.
+  - The checks only the owner's machine can make.
+
 ## Where the last PRs left things
 
 - **#69, release 3.5:** the night paintings, moonlight, moths, seasonal petals, leaves, frost and snow, and the seasons patch they build on. It also added drawings of the keepsakes, the outfits and a jar heart, but none of them is in the app yet: the owner chose art only, with their rules pending. Its own record is [docs/art/night-season-art.md](../art/night-season-art.md).
