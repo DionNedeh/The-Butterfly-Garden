@@ -1,9 +1,12 @@
+import { forceCloseDatabase } from 'fake-indexeddb'
 import { openDB } from 'idb'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInitialState } from '../lib/progression'
 import {
   createGardenRepository,
+  COLLECTION_STORES,
   CURRENT_STATE_VERSION,
+  GARDEN_COLLECTIONS,
   GardenConflictError,
   GardenDeletedElsewhereError,
   GardenWithheldError,
@@ -274,5 +277,157 @@ describe('moving to a new address', () => {
     const after = await createGardenRepository(names[names.length - 1]).load()
     expect(after.status).toBe('loaded')
     expect(after.state).toEqual(before)
+  })
+})
+
+describe('4.2 a delete while another tab’s connection is dropped', () => {
+  /**
+   * The connections opened from now on: another tab's, once the deleting
+   * tab has its own open.
+   */
+  function connections(): IDBDatabase[] {
+    const opened: IDBDatabase[] = []
+    const open = indexedDB.open.bind(indexedDB)
+    vi.spyOn(indexedDB, 'open').mockImplementation((asked: string, version?: number) => {
+      const request = open(asked, version)
+      request.addEventListener('success', () => opened.push(request.result))
+      return request
+    })
+    return opened
+  }
+
+  /** How many records each part of the garden, and its drafts, hold as stored. */
+  async function partsStored(name: string): Promise<Record<string, number>> {
+    const db = await openDB(name)
+    try {
+      const counts: Record<string, number> = {}
+      for (const store of ['meta', 'state', 'snapshots', 'drafts', ...GARDEN_COLLECTIONS.map((c) => COLLECTION_STORES[c])]) {
+        counts[store] = db.objectStoreNames.contains(store) ? await db.count(store) : 0
+      }
+      return counts
+    } finally {
+      db.close()
+    }
+  }
+
+  function nothingStored(counts: Record<string, number>) {
+    expect(Object.entries(counts).filter(([, count]) => count > 0)).toEqual([])
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('refuses the save of a tab whose connection the browser dropped, and writes no part of it', async () => {
+    const name = freshName()
+    const deleter = createGardenRepository(name)
+    await deleter.save(garden(4))
+    const opened = connections()
+    const other = createGardenRepository(name)
+    const loaded = await other.load()
+    expect(loaded.status).toBe('loaded')
+
+    // The browser drops the other tab's connection (`terminated`), so it
+    // is not there to be told of the delete by `blocking`...
+    expect(opened).not.toHaveLength(0)
+    for (const db of opened) forceCloseDatabase(db as never)
+    await deleter.clear()
+
+    // ...and it saves before the broadcast that the garden is gone arrives.
+    const refused = await other.save({ ...loaded.state, seeds: 9 }).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    expect(
+      refused instanceof GardenConflictError || refused instanceof GardenDeletedElsewhereError,
+    ).toBe(true)
+    // The revision check is what refused it: it never heard of the delete.
+    expect(refused).toBeInstanceOf(GardenConflictError)
+    nothingStored(await partsStored(name))
+    expect((await createGardenRepository(name).load()).status).toBe('empty')
+  })
+
+  it('keeps none of its drafts either', async () => {
+    const name = freshName()
+    const deleter = createGardenRepository(name)
+    await deleter.save(garden(4))
+    const opened = connections()
+    const other = createGardenRepository(name)
+    expect((await other.load()).status).toBe('loaded')
+    for (const db of opened) forceCloseDatabase(db as never)
+    await deleter.clear()
+
+    // Words typed in the dropped tab about the garden just deleted.
+    await other.writeDrafts({ reflection: 'words about the deleted garden' })
+    nothingStored(await partsStored(name))
+    expect(await createGardenRepository(name).readDrafts()).toEqual({})
+
+    // Once it has heard, and forgotten that garden, its drafts are its own again.
+    other.forget()
+    await other.writeDrafts({ reflection: 'words for a new garden' })
+    expect(await createGardenRepository(name).readDrafts()).toEqual({
+      reflection: 'words for a new garden',
+    })
+  })
+
+  it('refuses it too for a garden stored before revisions, which its first read brings up to date', async () => {
+    const name = freshName()
+    const deleter = createGardenRepository(name)
+    await deleter.save(garden(4))
+    // As a build from before revisions left it: no revision, an older version.
+    const raw = await openDB(name)
+    const meta = (await raw.get('meta', 'current')) as Record<string, unknown>
+    delete meta.revision
+    await raw.put('meta', { ...meta, version: 7 }, 'current')
+    raw.close()
+
+    const opened = connections()
+    const other = createGardenRepository(name)
+    const loaded = await other.load()
+    expect(loaded.status).toBe('loaded')
+    for (const db of opened) forceCloseDatabase(db as never)
+    await deleter.clear()
+
+    await expect(other.save({ ...loaded.state, seeds: 9 })).rejects.toBeInstanceOf(
+      GardenConflictError,
+    )
+    nothingStored(await partsStored(name))
+  })
+
+  it('refuses it once the dropped tab has opened again before the delete', async () => {
+    const name = freshName()
+    const deleter = createGardenRepository(name)
+    await deleter.save(garden(4))
+    const opened = connections()
+    const other = createGardenRepository(name)
+    const loaded = await other.load()
+    for (const db of opened) forceCloseDatabase(db as never)
+    // Open again (its drafts read), so the delete reaches it by `blocking`.
+    await other.readDrafts()
+    await deleter.clear()
+
+    await expect(other.save({ ...loaded.state, seeds: 9 })).rejects.toBeInstanceOf(
+      GardenDeletedElsewhereError,
+    )
+    nothingStored(await partsStored(name))
+  })
+
+  it('leaves nothing of a save already under way when the delete came', async () => {
+    const name = freshName()
+    const deleter = createGardenRepository(name)
+    await deleter.save(garden(4))
+    const other = createGardenRepository(name)
+    const loaded = await other.load()
+
+    const saving = other.save({ ...loaded.state, seeds: 9 })
+    const deleting = deleter.clear()
+    await Promise.allSettled([saving, deleting])
+    await deleting.catch(() => undefined)
+
+    nothingStored(await partsStored(name))
+    await expect(other.save({ ...loaded.state, seeds: 10 })).rejects.toBeInstanceOf(
+      GardenDeletedElsewhereError,
+    )
+    nothingStored(await partsStored(name))
   })
 })

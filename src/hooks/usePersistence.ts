@@ -421,15 +421,23 @@ export function usePersistence(
       discardQuarantine: async (): Promise<void> => {
         await repository.clearQuarantine()
       },
-      /** Replace the garden with a previously exported backup. */
-      importGarden: async (text: string): Promise<{ ok: boolean; message: string }> => {
+      /**
+       * Replace the garden with a previously exported backup. `checked` is
+       * the backup as Settings' preview read it (lib/backupPreview), so a
+       * field book full of photos is not read a second time; without it,
+       * the text is read here.
+       */
+      importGarden: async (
+        text: string,
+        checked?: ReturnType<typeof inspectImportedState>,
+      ): Promise<{ ok: boolean; message: string }> => {
         let parsed: unknown
         try {
-          parsed = JSON.parse(text)
+          parsed = checked ? undefined : JSON.parse(text)
         } catch {
           return { ok: false, message: 'That file is not a garden backup.' }
         }
-        const inspection = inspectImportedState(parsed)
+        const inspection = checked ?? inspectImportedState(parsed)
         // The restored garden is exactly a file the gardener holds, so it
         // counts as a copy kept now. This also replaces the time the file
         // carries, which is from the copy before it (or hand-edited), and

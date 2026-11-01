@@ -29,7 +29,7 @@ repository/    gardenRepository: the only code that touches IndexedDB
    ▼
 IndexedDB      one store per collection, plus meta, quarantine, snapshots and
                drafts (layout: docs/handoff-p5-store-split.md §4)
-               ⇄ backup file: { format, exportedAt, appVersion, garden }
+               ⇄ backup file: { format, exportedAt, appVersion, revision, sha256, garden }
 ```
 
 A tap on "complete" calls `actions.completeGoal`. That runs
@@ -55,7 +55,7 @@ tells other tabs which parts it wrote.
 | Unsaved text that survives a reload | `lib/drafts.ts`, `hooks/useSyncedDraft.ts`, `lib/goalEditDraft.ts` (Today's goal editor, open and as typed) |
 | A check-in's feelings and energy, and the one next step offered after it | `data/feelings.ts`, `lib/feelings.ts` (what is stored, and in what words), `lib/nextStep.ts`, `components/checkin/` |
 | Ideas for goals, their two-minute versions, a balanced mix | `data/goalSuggestions.ts` (loaded with Today and onboarding only), `lib/goalSuggestions.ts` |
-| Restoring a chosen file | `lib/backupFile.ts` (size and read, and `sealedKind`: a protected backup or a locked garden's copy, each opened first in `components/backup/`), `lib/backupPreview.ts` (what it holds), `lib/lockedCopy.ts` (safe mode's copy of a locked garden, opened with the lock's own passcode or recovery code) |
+| Restoring a chosen file | `lib/backupFile.ts` (size and read, and `sealedKind`: a protected backup or a locked garden's copy, each opened first in `components/backup/`), `lib/backupPreview.ts` (what it holds, read once for the preview and the restore), `lib/backupIntegrity.ts` (a plain backup's revision and SHA-256 of its garden, written with every backup and read by the preview, which warns of a changed file and never refuses one), `lib/lockedCopy.ts` (safe mode's copy of a locked garden, opened with the lock's own passcode or recovery code) |
 | Suggesting a fresh backup | `lib/backupReminder.ts` (when, and in what words); `lib/shareFile.ts` (*Share backup…* in a browser that can) |
 | Moving a garden with a protected file and twelve words | `lib/moveCode.ts`, `lib/sealedBackup.ts`, `components/move/` (Settings, welcome, recovery and safe mode); `SealedBackupPrompt` routes a move file chosen through ordinary Restore. No QR generation, scanning or camera access. |
 | Daily and pre-restore copies, including after reload | `repository/dailyCopies.ts`, `gardenRepository.ts`, `components/backup/EarlierCopies.tsx`, `usePersistence` (preview, put back, Undo); daily copies omit sighting photos and retain current ones on put-back. Two pre-restore copies remain separate and keep their photos. Download reads raw bytes and matching lock wraps in one transaction. Discard checks the loaded revision and lock. |
@@ -111,16 +111,42 @@ journal. If a change makes one awkward, the change is wrong.
    would be read as "unchanged" and never saved.
 4. **Every change is written straight away.** Nothing is debounced: a closed
    tab must not lose the reflection just written. A failed write is reported
-   once, not retried in a loop.
+   once, not retried in a loop. The one exception is a connection the browser
+   closed under the garden: a write whose transaction will not open on it
+   (InvalidStateError) is made once more on a fresh one, in the same turn of
+   the queue (`writing` in `gardenRepository.ts`), unless this tab has
+   deleted or forgotten the garden since the write began.
 5. **A restore can be undone.** The garden it replaces is kept in
    `snapshots` first. Images in a backup are checked before anything is
    replaced.
 6. **The backup format does not change shape.** It is the gardener's only way
-   to a new device. Import accepts every older shape.
+   to a new device. Import accepts every older shape. The envelope only gains
+   optional fields that older builds read past (`appVersion`, `revision`,
+   `sha256`); the garden inside it is the same.
 7. **Paid access is decided in one place.** The PWA's free preview can never
    pass for a purchase, and a backup never carries paid access.
 8. **Nothing leaves the device** except Google Play Billing in the Android app.
    The CSP in `index.html` allows only `'self'`.
+9. **A deleted garden is not written back.** A delete warns the other tabs
+   first (`garden-clearing`), and a tab whose connection is told of it
+   (`blocking`, with no new version) never writes again
+   (`GardenDeletedElsewhereError`). A tab whose connection the browser had
+   already dropped (`terminated`) is not told: its next save opens the new,
+   empty database, and the revision check refuses it, because every garden a
+   tab holds was read or written at revision 1 or more (an older garden's
+   first read writes one) and an empty one reads as 0. Its drafts are refused
+   there too: a tab that held a garden writes none where no garden is stored.
+   A write the delete cut off, in the deleting tab or in one that has since
+   forgotten the deleted garden, is not made again on a fresh connection
+   (`writing`). A Web Lock around the delete would add nothing to these, so
+   none is taken; the orderings are pinned in `repository/twoTabs.test.ts`
+   ("4.2 a delete while another tab's connection is dropped") and
+   `repository/gardenRepository.reconnect.test.ts` ("4.1 a write the delete
+   cut off"). Two are not covered: a dropped tab that hears nothing until the
+   deleting tab has begun a new garden and saved it, at revision 1 again; and
+   in the deleting tab, a save still waiting behind one under way when the
+   delete began, which runs once the delete is done and writes its garden
+   into the new database.
 
 The garden scene's sprite layout has two invariants of its own; `CLAUDE.md`
 describes them.

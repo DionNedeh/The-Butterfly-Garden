@@ -1,4 +1,6 @@
 import { inspectImportedState } from '../repository/gardenRepository'
+import type { GardenValidation } from '../repository/validateGarden'
+import type { BackupIntegrity } from './backupIntegrity'
 import { photosIn } from './customBackdrops'
 import type { AppState } from '../types'
 
@@ -26,6 +28,16 @@ export interface BackupPreview {
   lastDay?: string
   /** Damaged but recoverable entries that a restore would repair. */
   repaired: number
+  /**
+   * Whether a backup is as it was saved, by its own check
+   * (lib/backupIntegrity): said, never a reason to refuse it.
+   */
+  integrity?: BackupIntegrity
+  /**
+   * The file as this preview read it, photos decoded and all, for the
+   * restore to take rather than read it all again (usePersistence).
+   */
+  inspection?: GardenValidation
 }
 
 function writtenDays(state: AppState): string[] {
@@ -43,19 +55,36 @@ function writtenDays(state: AppState): string[] {
  * the file -- whose garden, from when, how much -- before agreeing to it.
  */
 export function previewBackup(text: string): BackupPreview {
+  return read(text).preview
+}
+
+/**
+ * `previewBackup`, and what the backup's own check says of it. The check is
+ * loaded only here and where a backup is made, so neither carries it alone.
+ */
+export async function previewBackupFile(text: string): Promise<BackupPreview> {
+  const { preview, parsed } = read(text)
+  if (!preview.ok) return preview
+  const { integrityOf } = await import('./backupIntegrity')
+  return { ...preview, integrity: await integrityOf(parsed) }
+}
+
+function read(text: string): { preview: BackupPreview; parsed?: unknown } {
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch {
-    return { ok: false, problem: 'That file is not a garden backup.', repaired: 0 }
+    return { preview: { ok: false, problem: 'That file is not a garden backup.', repaired: 0 } }
   }
   const inspection = inspectImportedState(parsed)
   const state = inspection.state
   if (!state) {
     return {
-      ok: false,
-      problem: inspection.refused ?? 'That backup could not be read.',
-      repaired: 0,
+      preview: {
+        ok: false,
+        problem: inspection.refused ?? 'That backup could not be read.',
+        repaired: 0,
+      },
     }
   }
   const envelope =
@@ -63,11 +92,15 @@ export function previewBackup(text: string): BackupPreview {
       ? (parsed as Record<string, unknown>)
       : {}
   return {
-    ...previewGarden(state, inspection.repaired),
-    exportedAt:
-      typeof envelope.exportedAt === 'string' ? envelope.exportedAt : undefined,
-    appVersion:
-      typeof envelope.appVersion === 'string' ? envelope.appVersion : undefined,
+    parsed,
+    preview: {
+      ...previewGarden(state, inspection.repaired),
+      exportedAt:
+        typeof envelope.exportedAt === 'string' ? envelope.exportedAt : undefined,
+      appVersion:
+        typeof envelope.appVersion === 'string' ? envelope.appVersion : undefined,
+      inspection,
+    },
   }
 }
 
