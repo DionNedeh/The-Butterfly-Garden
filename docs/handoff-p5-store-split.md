@@ -3,7 +3,7 @@
 **Status:** done. Implemented across six commits, each with its own green gate.
 This was the last outstanding item from the security and performance audit.
 
-**Last checked against the code:** 2026-10-26. The layout, both version numbers
+**Last checked against the code:** 2026-11-01. The layout, the version numbers
 and the cross-tab sync below describe the code as it is now. Sections 1, 2 and
 5 to 9 record the split as it was done in September 2026, and still apply.
 
@@ -102,7 +102,7 @@ npx vitest run src/repository src/hooks
 ## 4. How storage is laid out now
 
 ```
-butterfly-garden (DATABASE_VERSION = 6)
+butterfly-garden (DATABASE_VERSION = 8)
 ├── meta            key 'current' → version, profile, seeds, nectar, stardust,
 │                                   inventory, ownedItemIds,
 │                                   ownedFlightPatternIds,
@@ -119,14 +119,36 @@ butterfly-garden (DATABASE_VERSION = 6)
 ├── sunlight        key 'current' → SunlightAward[]
 ├── jars            key 'current' → JarInstance[]
 ├── placements      key 'current' → JarPlacement[]
+├── sightings       key 'current' → Sighting[], photos as Blobs (since DB 7)
 ├── state           key 'current' → the pre-split whole garden (frozen; see §6)
-├── quarantine      key `${reason}-${iso}` → { id, reason, storedAt, raw }
+├── quarantine      key `${reason}-${fingerprint}` → { id, reason, storedAt, raw }
+│                                   a garden this build cannot read, set
+│                                   aside once however often it is loaded;
 │                                   newest three kept
-├── snapshots       key id → { id, reason: 'restore', takenAt, garden }
-│                                   the garden a restore replaced, newest
-│                                   two kept, so a restore can be undone (DB 6)
-└── drafts          key 'current' → unsaved text by field; never exported (DB 6)
+├── snapshots       key `restore-${iso}-${revision}` → { id, reason: 'restore',
+│                                   takenAt, revision, garden }: the garden a
+│                                   restore replaced, newest two kept, so a
+│                                   restore can be undone (DB 6)
+│                   key `daily-${day}` → { id, reason: 'daily', takenAt, day,
+│                                   bytes, garden }: the garden before a day's
+│                                   first change, without sighting photos,
+│                                   up to seven days (repository/dailyCopies)
+├── drafts          key 'current' → unsaved text by field; never exported (DB 6)
+│                   key 'backup-file' → the backup file kept up to date: its
+│                                   handle and when it was written
+│                                   (lib/autoBackupFile); never exported
+└── lock            key 'current' → the garden lock's record while it is on
+                                    (lib/gardenLock), or a switch mark while
+                                    it is being changed (DB 8)
 ```
+
+Under the garden lock every store that can hold the gardener's words is sealed
+(`repository/sealedStores.ts`): `meta`, every collection, `state` and the
+drafts hold a `SealedValue` in place of their plain value, and a snapshot or a
+set-aside copy keeps its record with the garden in it sealed. `lock` and the
+drafts store's 'backup-file' record stay as they are. A sealed `meta` shows
+`version: SEALED_META_VERSION` and its `revision` in the clear, and the
+garden's own version is inside the seal.
 
 The store list is derived, not written out: `OBJECT_STORES` in
 `gardenRepository.ts` is built from `COLLECTION_STORES`, and the checklist on
@@ -141,8 +163,9 @@ nothing: a completion is only ever read as part of the whole set.
 ### Two different version numbers — do not confuse them
 
 ```ts
-export const CURRENT_STATE_VERSION = 6   // the shape of AppState itself
-export const DATABASE_VERSION = 6        // which object stores exist
+export const CURRENT_STATE_VERSION = 8   // the shape of AppState itself (validateGarden.ts)
+export const DATABASE_VERSION = 8        // which object stores exist (gardenRepository.ts)
+export const SEALED_META_VERSION = CURRENT_STATE_VERSION + 1   // 9: a sealed meta, in the clear (sealedStores.ts)
 ```
 
 `AppState.version` describes the **document shape**, which the split did not
@@ -151,7 +174,7 @@ its own garden as the work of a newer build and refuse to write — exactly the
 disaster the quarantine logic exists to prevent. `DATABASE_VERSION` describes
 **which object stores exist**, which is what the split changed.
 
-That the two now read 6 is a coincidence of history, not a rule:
+That the two now read 8 is a coincidence of history, not a rule:
 
 | Change | DATABASE_VERSION | CURRENT_STATE_VERSION |
 | --- | --- | --- |
@@ -159,6 +182,16 @@ That the two now read 6 is a coincidence of history, not a rule:
 | Evening recaps and Moonlight: two stores, two fields | 4 | 5 |
 | A gardener's own backdrops: one store, one field | 5 | 6 |
 | Restore snapshots and drafts: two stores, no field | 6 | 6 |
+| Jars a version 6 build would drop: no store; a garden went to 7 only once it held one | 6 | 7 |
+| The field book's sightings (3.3): one store, one field; every garden is stored at 8 from then on | 7 | 8 |
+| The garden lock (3.4): one store, no field; a sealed `meta` shows `SEALED_META_VERSION` (9) | 8 | 8 |
+
+Each raise of `DATABASE_VERSION` shuts out every older build, for every
+garden, not only one that uses the new store: an older build's open fails with
+`VersionError`, and it withholds the garden rather than start a new one over
+it. Version 7 is why a build before 3.3 cannot write a garden back without its
+field book; version 8, why a build before 3.4 never meets a locked garden's
+ciphertext (see the comment on `DATABASE_VERSION`).
 
 `COLLECTION_SINCE_VERSION` records which state version brought each later
 collection, so a garden stored before it is not mistaken for a damaged one.

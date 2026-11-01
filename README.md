@@ -211,9 +211,21 @@ subscription, so a preview can never pass for a purchase; backups do not confer
 paid access. Purchases are checked on the device, against Google's signature,
 with no server.
 
-The garden is at schema 6, in IndexedDB version 6, and includes personal image
-data. Builds from before schema 6 cannot read it; keep an exported backup
-before updates.
+The garden is at schema 8 (`CURRENT_STATE_VERSION`), in IndexedDB version 8
+(`DATABASE_VERSION`), and includes personal images and the field book's
+photos. A raise of the database version shuts out every older build, for every
+garden, whether or not it uses what the raise brought: once 3.3 or later has
+opened a garden (version 7, the field book), a build before 3.3 cannot open
+it, and once 3.4 or later has (version 8, the garden lock), a build before 3.4
+cannot, because a locked garden is ciphertext no earlier build can read. Such a
+build withholds the garden, untouched, rather than start a new one over it (the
+comment on `DATABASE_VERSION` in `src/repository/gardenRepository.ts`). Files
+follow the same line: builds before 3.3 refuse a plain backup at schema 8,
+builds before 3.4 refuse a protected backup or a move file, and safe mode's
+copy of a locked garden shows version 9 (`SEALED_META_VERSION`), which a build
+from before the lock reads as a newer version's work. Keep an exported backup
+before updates. The store layout and every version number are in
+[`docs/handoff-p5-store-split.md`](docs/handoff-p5-store-split.md) §4.
 
 ## Deployment
 

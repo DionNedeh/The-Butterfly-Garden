@@ -57,13 +57,15 @@
   <body>
     <main aria-labelledby="policy-title">
       <h1 id="policy-title">Privacy policy</h1>
-      <p class="updated">The Butterfly Garden · Last updated 25 October 2026</p>
+      <p class="updated">The Butterfly Garden · Last updated 1 November 2026</p>
 
       <p class="summary">
         <strong>In short:</strong> everything you write in The Butterfly Garden
         stays on your own device. The app has no account, no analytics, no
         advertising and no tracking, and it never sends your entries to the
-        developer or to anyone else. The one exception to "nothing goes
+        developer or to anyone else. A file you save, a calendar visit you add
+        or a link you follow goes only where you choose, and carries nothing
+        you have not chosen to send. The one exception to "nothing goes
         online" is Google Play's own billing library in the Android app, used
         only for the optional Garden Pass; it is described below.
       </p>
@@ -88,10 +90,90 @@
       <h2>What the app keeps, and where</h2>
       <p>
         The app stores what you put into it: your name and garden name, goals,
-        mood check-ins, journal reflections, evening recaps, garden progress,
-        settings, and any personal images you choose as backdrops (as resized
-        copies; your original photo is not changed). All of it is kept in the
-        app's private storage on your device and nowhere else.
+        mood check-ins (with any feeling words and energy you add), journal
+        reflections and the lines you star, evening recaps, garden progress
+        and settings. That includes, if you choose them, the region and the
+        half of the world you garden in, and the time of the daily visit you
+        last added to your calendar. It also keeps:
+      </p>
+      <ul>
+        <li>
+          personal images you choose as backdrops, as resized copies; your
+          original photo is not changed;
+        </li>
+        <li>
+          your field book of butterflies and plants seen in the wild: what you
+          saw, the day, a few words and, if you add one, a photo. The photo is
+          redrawn on your device, which leaves behind everything the camera
+          wrote into the file, where it was taken included;
+        </li>
+        <li>
+          your comfort plan, in your own words, including the names and phone
+          numbers of people you might reach on a harder day. It is shown
+          nowhere else in the app;
+        </li>
+        <li>
+          the day you last opened the garden, and words you have typed but not
+          yet saved, so they survive a reload or a closed tab;
+        </li>
+        <li>
+          earlier copies of the garden, so a mistake can be put right: the
+          garden as it was before each day's first change, for up to the last
+          seven days it changed (without the field book's photos), and the two
+          gardens a restore last replaced;
+        </li>
+        <li>
+          a garden the app finds it cannot read, set aside untouched rather
+          than written over (at most three);
+        </li>
+        <li>the garden lock's record, while the lock is on (see below).</li>
+      </ul>
+      <p>
+        All of it is kept in the app's private storage on your device and
+        nowhere else. Marigold's weekly letters are written from it as you read
+        them and are not stored. When the garden is open in more than one tab,
+        the tabs keep each other up to date through the browser itself; nothing
+        leaves the device. In the web version, the page's address can name the
+        page you are on and, for the journal, a day (such as
+        <code>#/journal/2026-10-26</code>). Browsers never send that part of an
+        address to a server, though your browser's history keeps it, as it
+        keeps any address.
+      </p>
+
+      <h2>The garden lock</h2>
+      <p>
+        Settings → Lock my garden seals the garden on your device with strong
+        encryption (AES-256), under a passcode you choose and a 24-word
+        recovery code you keep. Either one opens it, and so can a passkey
+        where your browser offers one (not in the Android app). The lock can
+        also close by itself after the garden has been out of sight for a
+        while. What is sealed is everything that holds your words: the garden,
+        its earlier copies, unsaved drafts and anything set aside. What stays
+        readable is the lock's own record, which is useless without a
+        passcode, recovery code or passkey; the dates and sizes of earlier
+        copies, and a count of saves; how many photos the field book holds,
+        and roughly how large each one and each part of the garden is; and,
+        on a computer where you chose one, which backup file to keep up to
+        date and when it was last written (that file is not written while the
+        lock is on).
+      </p>
+      <p>
+        Your passcode and recovery code are never stored or sent anywhere. A
+        passkey is kept by your device or password manager, like any passkey,
+        which may sync it; it is named "My garden" and holds nothing you have
+        written, and the app only asks it, on your device, for the key that
+        opens the garden. If you forget your passcode and lose your recovery
+        code, and have no passkey that still opens it, nobody can open your
+        garden: not you, not anyone else, and not the developer.
+      </p>
+      <p>
+        In the web version, the browser treats every page at
+        dionnedeh.github.io as one site. Only the developer can publish pages
+        there, but any of them could read what the garden stores in your
+        browser, and the lock cannot protect the garden from code running at
+        that same address. That limit lasts as long as the web version is
+        served from there. The Android app's storage belongs to the app
+        alone.
       </p>
 
       <h2>What the developer collects</h2>
@@ -106,6 +188,35 @@
         with Google.
       </p>
       <p>
+        Some things you tap hand off to another app, which then takes over:
+      </p>
+      <ul>
+        <li>
+          the call and text buttons on the support page, and the numbers in
+          your comfort plan, open your phone's dialler or messages app with
+          that number, and the call or message is then between you and your
+          phone's own services;
+        </li>
+        <li>
+          links to a helpline's chat, to Find A Helpline and to nature counts
+          and projects open that site in your browser, where its own privacy
+          policy applies. The app tells it nothing: not your garden, and not
+          the page you came from;
+        </li>
+        <li>
+          a daily garden visit added in Settings goes to your own calendar. In
+          the Android app it opens your calendar's new-event screen, filled in
+          for you, and is added only if you save it there; without such a
+          screen it is a calendar file you save. In the web version it is a
+          calendar file you open. The event says only "Garden time 🦋", its
+          time, that it repeats every day, and how to open the garden or stop
+          the reminders: nothing from your journal. The app asks for no
+          calendar permission and keeps only the time you chose. Your calendar
+          keeps the event as it keeps any other, and may sync it to your
+          calendar account.
+        </li>
+      </ul>
+      <p>
         The web version is delivered by GitHub Pages, which, like any web host,
         may log technical details of each visit, such as an IP address, under
         <a
@@ -113,8 +224,12 @@
           target="_blank"
           rel="noopener noreferrer"
           >GitHub's privacy statement</a
-        >. The developer does not receive those logs. The Android app contains
-        all of its files and does not use GitHub at all.
+        >. That includes the app's own files it fetches later, such as a
+        garden scene when you choose it (or its night painting), the lettering
+        for accented letters the first time one appears, an update to the app,
+        or, on an iPhone or iPad, the calendar file for one of a few common
+        times. The developer does not receive those logs. The Android app
+        contains all of its files and does not use GitHub at all.
       </p>
 
       <h2>Garden Pass purchases</h2>
@@ -151,12 +266,32 @@
         written.
       </p>
 
-      <h2>Backups</h2>
+      <h2>Backups and moving</h2>
       <p>
         Settings lets you save a backup file of your garden to a place you
-        choose. That file contains everything you have written, is not
-        encrypted, and never reaches the developer. Keep it somewhere you would
-        keep a diary.
+        choose or, where your browser offers it, hand it to another app
+        through your device's share sheet. That file contains everything you
+        have written, is not encrypted, and never reaches the developer. Keep
+        it somewhere you would keep a diary. It carries a check of its own
+        contents, so a restore can tell you whether the file was changed after
+        it was saved; that check is not encryption.
+      </p>
+      <p>
+        A protected backup is the same file locked with a passphrase you
+        choose, on your device, so it can sit in your downloads or a cloud
+        folder and only someone with the passphrase can open it. What it does
+        not hide is that it is a garden backup, when it was made, by which
+        version of the app, and roughly how large the garden is. Moving your
+        garden to another device makes the same kind of file, locked with 12
+        words shown once on this device: you send the file however you like,
+        and type the words on the new one. The app stores neither the
+        passphrase nor the words, and sends neither anywhere.
+      </p>
+      <p>
+        On a computer whose browser allows it, you can choose one backup file
+        for the app to keep up to date as you go. That file is an ordinary
+        backup, written on your own computer, and it is not written while the
+        garden lock is on.
       </p>
       <p>
         Android's automatic cloud backup is switched off for this app, so your
@@ -168,10 +303,14 @@
       <h2>How long it is kept, and deleting it</h2>
       <p>
         Your garden stays on your device until you remove it. Settings → Delete
-        all local data erases it, as does clearing the app's storage or
-        uninstalling the app (or, for the web version, clearing the site's
-        data). Because the developer holds none of your data, there is nothing
-        for them to delete or hand over.
+        all local data erases it, with its earlier copies, drafts and lock, as
+        does clearing the app's storage or uninstalling the app (or, for the
+        web version, clearing the site's data). Files you saved elsewhere, such
+        as backups or the year's postcard, are yours and stay where you put
+        them, and a passkey stays with your device or password manager until
+        you remove it there; on its own it opens nothing. Because the
+        developer holds none of your data, there is nothing for them to delete
+        or hand over.
       </p>
 
       <h2>Children</h2>

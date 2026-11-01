@@ -27,8 +27,9 @@ hooks/         useGardenState: the facade every view uses
 repository/    gardenRepository: the only code that touches IndexedDB
    │           validateGarden: migrates and checks every garden read or imported
    ▼
-IndexedDB      one store per collection, plus meta, quarantine, snapshots and
-               drafts (layout: docs/handoff-p5-store-split.md §4)
+IndexedDB      one store per collection (sightings among them), plus meta,
+               state, quarantine, snapshots, drafts and lock; DATABASE_VERSION 8
+               (layout and versions: docs/handoff-p5-store-split.md §4)
                ⇄ backup file: { format, exportedAt, appVersion, revision, sha256, garden }
 ```
 

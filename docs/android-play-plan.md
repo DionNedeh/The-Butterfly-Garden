@@ -1,6 +1,8 @@
 # The Butterfly Garden on Google Play
 
-**Status:** in progress. Agreed with the owner on 28–29 September 2026.
+**Status:** phases 0 to 4 are built; phase 5, the release candidate, is under
+way (section 5). The app is not on Google Play yet. Agreed with the owner on
+28–29 September 2026; status last checked against the code on 1 November 2026.
 
 **Audience:** anyone continuing this work cold. It records what was decided,
 why, and what was checked, so the reasoning does not have to be re-derived.
@@ -62,7 +64,9 @@ Same React app, two builds
         Capacitor bridge
         ├── @capacitor/app   back button, pause/resume        (official plugin)
         ├── GardenBilling    in this repo → Play Billing Library → Play Store
-        └── GardenFiles      in this repo → Android "Save to…" for backups
+        └── GardenFiles      in this repo → Android "Save to…" for backups,
+                             the year's postcard and calendar files; the
+                             calendar's own new-event screen
 ```
 
 - `src/lib/platform.ts` is the only place that knows which build this is. It
@@ -119,18 +123,30 @@ images stop rendering and free defaults show, until access returns.
 Each phase is verified with the four checks in `CLAUDE.md`; from phase 1 on
 also Android lint, JVM unit tests and a debug build.
 
-0. **Groundwork.** Platform switch, `build:android`, base-relative icons, this
-   document. The web build output is byte-for-byte unchanged.
-1. **Android shell.** Capacitor at pinned versions, committed `android/`
-   project, manifest and WebView hardening, R8, icons and splash, SDK setup
-   script, `android.yml` workflow.
-2. **Native feel.** Back button, backups through Android's save dialog,
+0. **Groundwork.** Done. Platform switch, `build:android`, base-relative
+   icons, this document. The web build output is byte-for-byte unchanged.
+1. **Android shell.** Done. Capacitor at pinned versions, committed
+   `android/` project, manifest and WebView hardening, R8, icons and splash,
+   SDK setup script, `android.yml` workflow.
+2. **Native feel.** Done. Back button, backups through Android's save dialog,
    lifecycle pausing, edge-to-edge insets, Android wording, About section,
    release signing through a GitHub environment.
-3. **Garden Pass.** Section 4.
-4. **Store readiness.** Privacy policy page, listing drafts, screenshots,
-   form answers, third-party notices.
-5. **Release candidate.** Signed bundle, device-test fixes.
+3. **Garden Pass.** Built (section 4); it grants nothing until the licence key
+   is in place.
+4. **Store readiness.** Done, as drafts for the owner: privacy policy page
+   (`public/privacy.html`), listing text, screenshots, Play Console answers
+   and third-party notices (`docs/play-store/README.md`).
+5. **Release candidate.** Under way. Built: the signed bundle, made only on
+   request by `android.yml`'s `release` job from the `play-release`
+   environment's secrets. The features since 3.0 (breathing, the comfort
+   plan, calendar reminders, sightings, the postcard, the lock, protected
+   backups and the move file) are tested in the `android-webview` e2e project
+   (`e2e/android.spec.ts`), where Capacitor's plugins fall back to their web
+   versions; what only a phone can show is on the device checklist. Left,
+   all the owner's: the upload key in that environment, the Play Console app
+   and its licence key (section 7), approving the privacy policy's wording,
+   and running the device checklist in `docs/play-store/README.md` on a
+   recent and an older phone, each failure becoming its own fix.
 
 ## 6. Stripe (not scheduled)
 

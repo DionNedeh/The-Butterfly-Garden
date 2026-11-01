@@ -98,10 +98,30 @@ Medical group's "Mental and Behavioral Health": Play's account rules say
 health apps such as medical apps need an organisation account, and this app
 makes no medical claims. https://support.google.com/googleplay/android-developer/answer/14738291
 
-**Data safety:**
+**Data safety** (re-checked against the code on 1 November 2026):
 - The app's own code collects nothing: "collect" means sending data off the
-  device, and the journal, moods, goals, garden and images never leave it.
+  device, and the journal, moods, goals, garden and images never leave it,
+  nor do the field book's sightings and photos, the comfort plan's names and
+  phone numbers, the region and hemisphere, or the garden lock's record.
   https://support.google.com/googleplay/android-developer/answer/10787469
+- What the gardener sends on their own is not collected by the app: a
+  backup, a protected backup, a move file or the year's postcard goes only
+  where they choose on Android's save screen; a daily calendar visit opens
+  the calendar's own new-event screen with fixed text ("Garden time 🦋", the
+  time, a daily repeat, how to open the garden or stop the reminders) and is
+  added only if they save it there, or, without such a screen, is a calendar
+  file they save; the support page's and the comfort
+  plan's numbers open the dialler or the messages app; helpline and
+  nature-count links open the browser. None of it reaches the developer or
+  an SDK in the app.
+- Permissions: the app asks for none to reach the camera, photos, location,
+  contacts or calendar. Photos come through Android's own picker and the
+  calendar visit through the calendar app's own screen. Check the release
+  bundle's merged manifest before answering; builds made on 26 and 27
+  October 2026 listed only INTERNET, ACCESS_NETWORK_STATE and Play's
+  BILLING, plus AndroidX's own receiver permission.
+- The garden lock and protected backups encrypt on the device. They are not
+  "encryption in transit" and change no answer here.
 - Payment details are collected by Google Play directly and need not be
   declared.
 - **Google Play Billing Library is an SDK inside the app that reports to
@@ -113,7 +133,8 @@ makes no medical claims. https://support.google.com/googleplay/android-developer
   (https://play.google.com/sdks) and declare what it lists. If it lists
   nothing, "No data collected" is accurate.
 - Encrypted in transit: yes (Google's libraries use HTTPS). Deletion: data
-  lives only on the device; Settings → Delete all local data removes it.
+  lives only on the device; Settings → Delete all local data removes it, with
+  its earlier copies, drafts and lock.
 
 **EEA digital content or service:** the Garden Pass is continuing access to
 features, which reads as a digital *service*; confirm with Play's definitions:
@@ -221,3 +242,82 @@ real phone (ideally one recent and one older, Android 8–10):
       mode → Pass stays open (up to seven days)
 - [ ] Without ever opening the Garden Pass, Settings shows "Open the Garden
       Pass to check your subscription" (Play is not asked until then)
+
+Added for 3.1–3.4 and since:
+
+- [ ] Garden lock: Settings → Lock my garden, with a passcode and the
+      recovery code written down; "Lock now" shows the lock screen, with the
+      status-bar icons readable on it in sunlight and in night mode; the back
+      gesture on the lock screen leaves the app, and coming back shows the
+      lock screen, never the garden; with "After 1 minute out of sight", the
+      app in the background for over a minute opens to the lock screen; it
+      opens with the passcode, and with the recovery code
+- [ ] Protected backup: "Save a protected backup" opens Android's save screen
+      and says it was saved; Restore picks that file, asks for its
+      passphrase and restores it; a wrong passphrase says so and replaces
+      nothing
+- [ ] Calendar reminder, before reminders are announced (c.9 asked for a
+      real device): "Add a daily garden visit to my calendar" opens Google
+      Calendar's new-event screen filled in with "Garden time 🦋", the chosen
+      time and a daily repeat, and nothing from the journal; saved there, the
+      event comes back each day and Google Calendar reminds at that time.
+      Only where no calendar app on the phone takes a new event this way
+      (Google Calendar disabled and no other calendar app, for one), the same
+      button saves the reminder's .ics file through Android's save screen and
+      says "Calendar file saved"; opening it from Files is offered to
+      whatever calendar app the phone has, if any: note what that app does
+      with it, without counting it a failure if it does not import the file
+- [ ] Sighting photo: "Add a photo, if you like" in Log a sighting, once from
+      the camera and once from the gallery; each shows in the field book and
+      again after the app is reopened; a photo taken with location on carries
+      no location in a backup's copy of it
+- [ ] The year's postcard: "Make a postcard", then "Save image" opens
+      Android's save screen (GardenFilesPlugin.saveBinaryDocument); the saved
+      image appears in Files, or in Photos when saved to Pictures, and opens
+- [ ] Numbers: on the support page, a "Call" button opens the dialler with
+      the number and a "Text" button the messages app, neither calling nor
+      sending by itself; a number in the comfort plan opens the dialler with
+      it
+- [ ] Links out: a nature-count link in the field book, and "Chat online" or
+      "Find a helpline near you" on the support page, open in the phone's
+      browser; coming back, the app is as it was
+- [ ] Breathing: Breathe with a butterfly with "A soft tone at each turn" on:
+      the tone sounds through the speaker and through headphones at each
+      turn of the breath, in step with the count
+
+## iPhone PWA checklist
+
+The web version in Safari on an iPhone, added to the Home Screen. Playwright's
+WebKit in CI is not Safari on a phone, so these need a real one:
+
+- [ ] Home Screen guide: in Safari, the garden's card shows the three steps
+      (Share, then Add to Home Screen, then Add); following them puts the
+      garden on the Home Screen, and "Got it" puts the card away for good
+- [ ] Offline relaunch: with the garden on the Home Screen, opened once, then
+      closed, in airplane mode it opens from the Home Screen icon to the
+      garden as it was; with Calm motion off and iOS's Reduce Motion off, the
+      butterflies fly
+- [ ] Share backup with many photos: in a garden with a field book full of
+      photos, "Share backup…" opens the share sheet within the tap's time
+      limit, or, where getting it ready took too long, downloads it and says
+      so; the shared file restores
+- [ ] Calendar reminder: for the morning preset (8:00), or another time
+      with a file in `public/reminders/*.ics`, "Add a daily garden visit to
+      my calendar" is a plain link to that file, and it opens Calendar's
+      add-event sheet with "Garden time 🦋" at that time, every day; added,
+      the event reminds at that time
+- [ ] Passkey: with the garden lock on, Settings → "Add a passkey…",
+      confirmed with Face ID or Touch ID; "Lock now", then unlock with the
+      passkey; "Remove the passkey", and the passcode still opens the
+      garden
+- [ ] Photo sighting: "Add a photo, if you like", once from the camera and
+      once from the photo library; each shows in the field book and after the
+      garden is closed and opened again from the Home Screen
+
+## Recording a run
+
+Each run of either checklist, with what failed; each failure becomes its own
+fix.
+
+| Date | Device model | OS version | Build | Failures |
+| --- | --- | --- | --- | --- |
