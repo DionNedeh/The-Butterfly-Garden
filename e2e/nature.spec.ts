@@ -28,6 +28,46 @@ function monarchCard(page: Page) {
   })
 }
 
+/**
+ * Whether this browser keeps a Blob in IndexedDB. Safari's Private Browsing
+ * does not ("Error preparing Blob/File data to be stored in object store"),
+ * and nor do WebKit's test contexts, which are private alike: there a
+ * sighting's photo cannot be kept, and the field book has to say so.
+ */
+function keepsBlobs(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const name = 'blob-probe'
+        const done = (kept: boolean) => {
+          indexedDB.deleteDatabase(name)
+          resolve(kept)
+        }
+        const request = indexedDB.open(name, 1)
+        request.onupgradeneeded = () => request.result.createObjectStore('probe')
+        request.onerror = () => done(false)
+        request.onsuccess = () => {
+          const db = request.result
+          try {
+            const tx = db.transaction('probe', 'readwrite')
+            tx.objectStore('probe').put(new Blob(['probe'], { type: 'text/plain' }), 'probe')
+            tx.oncomplete = () => {
+              db.close()
+              done(true)
+            }
+            tx.onerror = tx.onabort = () => {
+              db.close()
+              done(false)
+            }
+          } catch {
+            db.close()
+            done(false)
+          }
+        }
+      }),
+  )
+}
+
 /** What the sightings store holds, read as a browser keeps it. */
 function storedSightings(page: Page) {
   return page.evaluate(
@@ -62,6 +102,7 @@ test('a sighting logged with a photo from the Guide waits in the Journal’s fie
   page,
 }) => {
   test.setTimeout(60_000)
+  const photosKept = await keepsBlobs(page)
   await enterGarden(page)
 
   // A region, so the form lists its natives first and says what to look for.
@@ -95,24 +136,36 @@ test('a sighting logged with a photo from the Guide waits in the Journal’s fie
   await expect(dialog).toHaveCount(0)
   // Focus goes back to the button that opened the form, and the card says so.
   await expect(log).toBeFocused()
-  await expect(page.getByText(/Saved to your field book/)).toBeVisible()
+  // Where no Blob can be stored, the photo is let go before it reaches the
+  // garden (lib/photoCheck), and the field book says so plainly; the
+  // sighting itself, words and all, is kept without it.
+  await expect(
+    page.getByText(
+      photosKept ? /Saved to your field book/ : 'The photo could not be stored on this device, so it was not kept.',
+    ),
+  ).toBeVisible()
   await expect(monarchCard(page).locator('.seen-in-wild')).toHaveText(/^Seen in the wild on /)
   await expect(monarchCard(page).locator('svg.pressed-flower')).toHaveCount(1)
+  // Either way the garden saves: no word of a change that could not be.
+  await expect(page.getByText('Your last change could not be saved.')).toHaveCount(0)
   expect(await seriousViolations(page, 'Guide, after logging a sighting')).toEqual([])
 
-  // Kept as a Blob, in a store of its own: no location, nothing earned.
+  // In a store of its own, the photo as a Blob where it was kept: no
+  // location, nothing earned.
   await expect
     .poll(() => storedSightings(page))
     .toEqual([
       expect.objectContaining({
         speciesId: 'monarch',
         note: 'Two of them, over the allotments',
-        photoIsBlob: true,
+        photoIsBlob: photosKept,
       }),
     ])
   const [stored] = await storedSightings(page)
-  expect(stored.photoSize).toBeGreaterThan(0)
-  expect(stored.photoSize).toBeLessThanOrEqual(400 * 1024)
+  if (photosKept) {
+    expect(stored.photoSize).toBeGreaterThan(0)
+    expect(stored.photoSize).toBeLessThanOrEqual(400 * 1024)
+  }
   await expect(page.locator('.header-sunlight')).toContainText('0 / 5')
 
   // In the Journal's field notes: the stamp on the Monarch, and the book itself.
@@ -127,13 +180,19 @@ test('a sighting logged with a photo from the Guide waits in the Journal’s fie
   await expect(book.getByRole('heading', { level: 3, name: 'Monarch' })).toBeVisible()
   await expect(book.getByText('Two of them, over the allotments')).toBeVisible()
   const photo = book.getByRole('img', { name: 'Your photo of Monarch' })
-  await expect(photo).toHaveAttribute('src', /^blob:/)
-  await expect(photo).not.toHaveJSProperty('naturalWidth', 0)
+  if (photosKept) {
+    await expect(photo).toHaveAttribute('src', /^blob:/)
+    await expect(photo).not.toHaveJSProperty('naturalWidth', 0)
+  } else {
+    await expect(photo).toHaveCount(0)
+  }
   await expect(book.getByRole('link', { name: 'NABA Butterfly Counts (opens in your browser)' })).toHaveAttribute(
     'target',
     '_blank',
   )
   expect(await seriousViolations(page, 'Journal field book')).toEqual([])
+  // A backup carries a photo only where one was kept.
+  if (!photosKept) return
 
   // A backup carries the photo as text, as it carries a personal image.
   await goTo(page, 'Settings')

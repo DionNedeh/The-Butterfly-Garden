@@ -11,22 +11,28 @@ import { defineConfig, devices, type Project } from '@playwright/test'
  * or so and then stopped painting altogether, which no real iPhone does. These
  * runs are for what Safari does differently with storage, layout and input;
  * the tests that are about motion turn it back on for themselves.
+ *
+ * The computed-style comparison (visual.spec.ts) and the layout count
+ * (perf.spec.ts) are Chromium's alone: they read Chromium's own APIs
+ * (computedStyleMap, the DevTools protocol), and their baselines are its.
  */
+const CHROMIUM_ONLY = /(android|visual|perf)\.spec\.ts/
+
 const otherBrowsers: Project[] = process.env.E2E_ALL_BROWSERS
   ? [
       {
         name: 'desktop-webkit',
-        testIgnore: /android\.spec\.ts/,
+        testIgnore: CHROMIUM_ONLY,
         use: { ...devices['Desktop Safari'], reducedMotion: 'reduce' },
       },
       {
         name: 'mobile-webkit',
-        testIgnore: /android\.spec\.ts/,
+        testIgnore: CHROMIUM_ONLY,
         use: { ...devices['iPhone 15'], reducedMotion: 'reduce' },
       },
       {
         name: 'desktop-firefox',
-        testIgnore: /android\.spec\.ts/,
+        testIgnore: CHROMIUM_ONLY,
         use: { ...devices['Desktop Firefox'] },
       },
     ]
@@ -36,7 +42,7 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   // In CI: failures annotated on the run, every test listed with what it
-  // printed (the moderate accessibility warnings among it), and an HTML
+  // printed (the minor accessibility warnings among it), and an HTML
   // report with traces for the artifact the workflow uploads on failure.
   reporter: process.env.CI
     ? [['github'], ['list'], ['html', { open: 'never' }]]
@@ -75,9 +81,10 @@ export default defineConfig({
     {
       // The Android build in a phone-sized Chromium. Capacitor falls back to
       // its web implementations here, so everything but the native plugins
-      // themselves runs exactly as it will on a device.
+      // themselves runs exactly as it will on a device. Also a short set of
+      // the computed-style comparison (visual.spec.ts), for the app's own CSS.
       name: 'android-webview',
-      testMatch: /android\.spec\.ts/,
+      testMatch: /(android|visual)\.spec\.ts/,
       use: { ...devices['Pixel 7'], baseURL: 'http://127.0.0.1:4174' },
     },
     ...otherBrowsers,

@@ -83,10 +83,13 @@ jobs:
 
   # The PWA in Safari (desktop and iPhone) and Firefox, where storage
   # eviction and IndexedDB quirks actually bite. Advisory for now: it reports
-  # on every run but does not block a merge or the deploy, because WebKit on
-  # a GPU-less runner still loses one shop test to rendering stalls that no
-  # real iPhone shows. The Android app is always Chromium, so its project is
-  # not run here.
+  # on every run but does not block a merge or the deploy until it has been
+  # green on main several runs in a row and is made a required check. Its
+  # last failures were WebKit's private storage, which keeps no Blob (a
+  # sighting's photo), a move code typed before its step had focus, and the
+  # comfort plan's way back to Settings at the largest text. The Android app
+  # is always Chromium, so its project is not run here, and nor are the
+  # Chromium-only computed-style and layout-count suites.
   browsers:
     # Off while the app is being built (the owner's call, 1 November 2026),
     # to come back at finalization: set the repository variable

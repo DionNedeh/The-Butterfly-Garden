@@ -227,7 +227,12 @@ test.describe('arrival when the app cannot draw', () => {
     const { path, words, dialog } = await makeMoveFile(page, 'for safe mode')
     await dialog.getByRole('button', { name: 'Done' }).click()
     const watch = /\/assets\/LockWatch-[\w-]+\.js$/
-    await page.route(watch, (route) => route.abort())
+    // The lock's watch cannot be fetched, so the app cannot draw. Answered
+    // with an error the browser must not keep: WebKit kept an aborted
+    // request's failure past the reload that follows the arrival.
+    await page.route(watch, (route) =>
+      route.fulfill({ status: 503, headers: { 'cache-control': 'no-store' }, body: '' }),
+    )
     await goTo(page, 'Settings')
     await page.getByRole('button', { name: 'Lock my garden…' }).click()
     const setup = page.getByRole('dialog', { name: 'Choose a passcode' })
@@ -248,7 +253,11 @@ test.describe('arrival when the app cannot draw', () => {
     await page.unroute(watch)
     await page.getByRole('button', { name: 'Arrive from another device' }).click()
     await page.getByLabel('Choose the move file').setInputFiles(path)
+    // The words come once the file is read and its step has taken focus,
+    // as a person's typing would: typed sooner, WebKit lost them to that move.
+    await expect(page.getByRole('heading', { name: 'Open the move file' })).toBeFocused()
     await page.getByLabel('The 12 words').fill(words.join(' '))
+    await expect(page.getByLabel('The 12 words')).toHaveValue(words.join(' '))
     await expect(page.getByRole('button', { name: 'Scan the QR code' })).toHaveCount(0)
     expect(await seriousViolations(page, 'Safe mode, arriving with words')).toEqual([])
     await page.getByRole('button', { name: 'Open the file' }).click()

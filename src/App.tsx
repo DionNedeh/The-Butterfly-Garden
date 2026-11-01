@@ -83,7 +83,9 @@ const ComfortPlanView = lazy(() =>
   import('./components/ComfortPlanView').then((m) => ({ default: m.ComfortPlanView })),
 )
 // Only ever shown on the address the garden moved from, never in the app.
-const MovedBanner = lazy(() =>
+// Pure, so a build that never shows it (VITE_MOVED_TO unset) drops it, and
+// its list of what to fetch with it, from the first load.
+const MovedBanner = /* @__PURE__ */ lazy(() =>
   import('./components/MovedBanner').then((m) => ({ default: m.MovedBanner })),
 )
 // The offer of a new version, and the hourly look for one, arrive once the
@@ -838,7 +840,11 @@ function App() {
 
       {newAddress && (
         <Suspense fallback={null}>
-          <MovedBanner target={newAddress} onExportGarden={garden.exportGarden} />
+          <MovedBanner
+            target={newAddress}
+            onExportGarden={garden.exportGarden}
+            persistence={garden.persistence}
+          />
         </Suspense>
       )}
 

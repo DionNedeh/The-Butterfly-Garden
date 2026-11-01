@@ -30,6 +30,14 @@ describe('release notes', () => {
     expect(currentRelease.version).toBe(__APP_VERSION__)
   })
 
+  it('keeps the 3.8 notes as they went out', () => {
+    // 3.8 went live on 1 November, after 3.6 and 3.7 that morning.
+    const eight = getRelease('release-3-8')
+    expect(eight?.version).toBe('3.8.0')
+    expect(eight?.releasedOn).toBe('2026-11-01')
+    expect(eight?.sections.flatMap((section) => section.items).join(' ')).not.toMatch(/Private Browsing|new-event screen|privacy policy/)
+  })
+
   it('keeps the 3.7 notes as they went out', () => {
     // 3.7 went live on 1 November, the same day as 3.6.
     const seven = getRelease('release-3-7')

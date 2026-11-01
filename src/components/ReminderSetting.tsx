@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from 'react'
+import { addDailyEventInCalendar } from '../lib/calendarEvent'
 import {
   calendarReminderText,
   eveningReminderTime,
@@ -35,9 +36,11 @@ const BUTTON_LABEL = 'Add a daily garden visit to my calendar'
  * notifications and keeps nothing about the reminder but the time last
  * chosen, offered again next time.
  *
- * How the file is handed over depends on where the garden runs:
- * - in the Android app, through Android's own "Save to…" screen, as a backup
- *   is saved (lib/download);
+ * How the visit is handed over depends on where the garden runs:
+ * - in the Android app, through the calendar's own new-event screen, filled
+ *   in (lib/calendarEvent); where no app on the phone has one, as a file
+ *   through Android's own "Save to…" screen, as a backup is saved
+ *   (lib/download);
  * - on an iPhone or iPad, for a time public/reminders/ has a file for, as a
  *   plain link to that file, which iOS opens best;
  * - anywhere else, and for any other time, as a download of a file made here.
@@ -83,11 +86,20 @@ export function ReminderSetting({
     },
   ]
 
-  /** Make the file here and hand it over: a download, or Android's save screen. */
+  /**
+   * Hand the visit over: in the Android app, to the calendar's own screen
+   * first; otherwise, or where that cannot open, as a file made here, a
+   * download or Android's save screen.
+   */
   const saveReminder = async () => {
     setNote('')
     if (!isReminderTime(time)) {
       setNote('Choose a time for the visit first.')
+      return
+    }
+    if (android && (await addDailyEventInCalendar(time))) {
+      onChooseTime?.(time)
+      setNote('Your calendar opened with the daily visit filled in. Save it there to add it.')
       return
     }
     const text = calendarReminderText({

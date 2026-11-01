@@ -1,8 +1,10 @@
 package io.github.dionnedeh.butterflygarden;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
+import android.provider.CalendarContract;
 import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSObject;
@@ -14,6 +16,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.TimeZone;
 
 /**
  * Saves a garden backup where the gardener chooses, through Android's own
@@ -25,6 +29,9 @@ import java.nio.charset.StandardCharsets;
  * storage permission: the gardener picks the file, and this app can write to
  * that one file only. Unlike a browser download, Android reports whether the
  * file was written, so the app can honestly say it was saved.
+ *
+ * It also hands the daily garden visit to the phone's calendar app, through
+ * that app's own new-event screen (addDailyEvent).
  */
 @CapacitorPlugin(name = "GardenFiles")
 public class GardenFilesPlugin extends Plugin {
@@ -80,6 +87,55 @@ public class GardenFilesPlugin extends Plugin {
         pendingText = null;
         call.getData().remove("base64");
         chooseDocument(call, fileName, mimeType);
+    }
+
+    /**
+     * Opens the calendar app's own new-event screen with the daily garden
+     * visit filled in (DailyEvent): the next hour:minute on the phone's
+     * clock, ten minutes, every day, with the title and notes the page sends.
+     *
+     * No calendar permission: this app never reads or writes a calendar. The
+     * calendar app shows the event, and keeps it only if the gardener saves
+     * it there. Android says nothing back about that, so the answer is only
+     * whether the screen opened; `opened: false`, when no app on the phone
+     * has one, tells the page to save the calendar file instead.
+     */
+    @PluginMethod
+    public void addDailyEvent(PluginCall call) {
+        String title = call.getString("title");
+        String description = call.getString("description");
+        Integer hour = call.getInt("hour");
+        Integer minute = call.getInt("minute");
+        if (title == null || description == null || hour == null || minute == null || !DailyEvent.isTimeOfDay(hour, minute)) {
+            call.reject("title, description and a time of day (hour and minute) are required.");
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI);
+        Map<String, Object> extras = DailyEvent.extras(
+            title,
+            description,
+            hour,
+            minute,
+            System.currentTimeMillis(),
+            TimeZone.getDefault()
+        );
+        for (Map.Entry<String, Object> extra : extras.entrySet()) {
+            Object value = extra.getValue();
+            if (value instanceof Long) intent.putExtra(extra.getKey(), (long) (Long) value);
+            else if (value instanceof Integer) intent.putExtra(extra.getKey(), (int) (Integer) value);
+            else intent.putExtra(extra.getKey(), (String) value);
+        }
+        boolean opened;
+        try {
+            getActivity().startActivity(intent);
+            opened = true;
+        } catch (ActivityNotFoundException | SecurityException error) {
+            // No calendar app on the phone takes a new event this way.
+            opened = false;
+        }
+        JSObject answer = new JSObject();
+        answer.put("opened", opened);
+        call.resolve(answer);
     }
 
     private void chooseDocument(PluginCall call, String fileName, String mimeType) {

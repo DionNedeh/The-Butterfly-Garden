@@ -17,6 +17,31 @@ updates:
         update-types:
           - minor
           - patch
+    # Major versions of the toolchain held on purpose (docs/ARCHITECTURE.md,
+    # Toolchain). Minor and patch updates still come. Review these holds in
+    # January 2027, then every quarter.
+    ignore:
+      # TypeScript 7 is the native compiler, which has no public API yet:
+      # typescript-eslint's type-aware lint cannot run on it.
+      # Review: January 2027.
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
+      # Vitest 5, with the @vitest/* packages that move with it (coverage-v8
+      # among them): its changelog is to be read first, against the coverage
+      # floors and the jsdom and fake-indexeddb setup. Review: January 2027.
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "@vitest/*"
+        update-types:
+          - version-update:semver-major
+      # vite-plugin-pwa 2 writes the service worker and the web manifest, so
+      # a change there decides what every installed copy updates to: its
+      # changelog is to be read first. Review: January 2027.
+      - dependency-name: vite-plugin-pwa
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
