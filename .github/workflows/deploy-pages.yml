@@ -22,6 +22,14 @@ jobs:
   # deploy rather than only being noticed later.
   verify:
     runs-on: ubuntu-latest
+    env:
+      # While the app is being built (the owner's call, 1 November 2026), a
+      # push to main skips the unit and end-to-end tests and the budgets: the
+      # pull request ran them on this same merged tree (pull_request checks
+      # run on refs/pull/N/merge), and one pull request is merged at a time.
+      # The quick checks below still run. Set the repository variable
+      # FULL_MAIN_CHECKS to 'true' to run everything on main again.
+      CHECKED_ON_PULL_REQUEST: ${{ github.event_name == 'push' && vars.FULL_MAIN_CHECKS != 'true' }}
     steps:
       - name: Checkout
         # Actions are pinned by commit SHA: a mutable tag like @v4 lets an
@@ -51,15 +59,19 @@ jobs:
         # code does not quietly come back (knip.json says what counts).
         run: npm run knip
       - name: Unit tests
+        if: env.CHECKED_ON_PULL_REQUEST != 'true'
         run: npm test
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: Install Playwright browser
+        if: env.CHECKED_ON_PULL_REQUEST != 'true'
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests
+        if: env.CHECKED_ON_PULL_REQUEST != 'true'
         run: npm run test:e2e
       - name: Bundle budgets
         # The e2e servers have just built dist/, so this only measures it.
+        if: env.CHECKED_ON_PULL_REQUEST != 'true'
         run: npm run budgets
       - name: Upload Playwright report
         if: failure()
@@ -76,6 +88,10 @@ jobs:
   # real iPhone shows. The Android app is always Chromium, so its project is
   # not run here.
   browsers:
+    # Off while the app is being built (the owner's call, 1 November 2026),
+    # to come back at finalization: set the repository variable
+    # RUN_BROWSER_TESTS to 'true' to run it again.
+    if: vars.RUN_BROWSER_TESTS == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     continue-on-error: true
