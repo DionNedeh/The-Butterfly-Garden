@@ -110,7 +110,7 @@ test('a sighting logged with a photo from the Guide waits in the Journal’s fie
   await page.getByLabel('My region').selectOption('north-america')
 
   await goTo(page, 'Guide')
-  const log = monarchCard(page).getByRole('button', { name: 'Log a sighting of Monarch' })
+  const log = monarchCard(page).getByRole('button', { name: 'Log a Monarch sighting' })
   await log.click()
   const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
   await expect(dialog).toBeVisible()
@@ -247,7 +247,7 @@ test('the sighting form opened on a plant far down its list shows it on screen a
   await goTo(page, 'Settings')
   await page.getByLabel('My region').selectOption('europe')
   await goTo(page, 'Guide')
-  await monarchCard(page).getByRole('button', { name: 'Log a sighting of Milkweed' }).click()
+  await monarchCard(page).getByRole('button', { name: 'Log Milkweed' }).click()
   const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
   await expect(dialog.getByRole('heading', { name: 'Log a sighting' })).toBeFocused()
   const milkweed = dialog.getByRole('radio', { name: /^Milkweed/ })
@@ -268,7 +268,7 @@ test('the sighting form opened on a plant far down its list shows it chosen, a d
   await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
 
   await goTo(page, 'Guide')
-  await monarchCard(page).getByRole('button', { name: 'Log a sighting of Milkweed' }).click()
+  await monarchCard(page).getByRole('button', { name: 'Log Milkweed' }).click()
   const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
   const heading = dialog.getByRole('heading', { name: 'Log a sighting' })
   await expect(heading).toBeFocused()

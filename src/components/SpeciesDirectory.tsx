@@ -172,12 +172,11 @@ export function SpeciesDirectory({
                       {onLogSighting && (
                         <button
                           className="secondary-button compact sighting-log"
-                          aria-label={`Log a sighting of ${item.hostPlantNames[index]}`}
                           onClick={(event) =>
                             onLogSighting({ kind: 'plant', plantId: id }, event.currentTarget)
                           }
                         >
-                          Log a sighting
+                          Log {item.hostPlantNames[index]}
                         </button>
                       )}
                     </div>
@@ -188,7 +187,6 @@ export function SpeciesDirectory({
               {onLogSighting && (
                 <button
                   className="secondary-button sighting-log"
-                  aria-label={`Log a sighting of ${item.speciesName}`}
                   onClick={(event) =>
                     onLogSighting(
                       { kind: 'butterfly', speciesId: item.speciesId },
@@ -196,7 +194,9 @@ export function SpeciesDirectory({
                     )
                   }
                 >
-                  Log a sighting
+                  {/* Each says what it logs: beside a seed, that host plant;
+                      here, the card's butterfly. */}
+                  Log {/^[AEIOU]/.test(item.speciesName) ? 'an' : 'a'} {item.speciesName} sighting
                 </button>
               )}
             </div>

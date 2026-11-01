@@ -38,7 +38,7 @@ describe('6.10 a sighting logged from the Guide, lost to another tab’s change'
     render(<Harness />)
     const user = userEvent.setup()
     const card = screen.getByRole('heading', { level: 3, name: 'Monarch' }).closest('article')!
-    await user.click(within(card).getByRole('button', { name: 'Log a sighting of Monarch' }))
+    await user.click(within(card).getByRole('button', { name: 'Log a Monarch sighting' }))
     const dialog = await screen.findByRole('dialog', { name: 'Log a sighting' }, LAZY)
     await user.upload(within(dialog).getByLabelText('Add a photo, if you like'), new File(['x'], 'a.jpg', { type: 'image/jpeg' }))
     await within(dialog).findByRole('img', { name: 'Your photo for this sighting' })

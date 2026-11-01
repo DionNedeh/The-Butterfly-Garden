@@ -414,7 +414,7 @@ test('a sighting is logged with a photo in the app, and the back gesture puts it
 }) => {
   await enterGarden(page)
   await goTo(page, 'Guide')
-  const log = page.getByRole('button', { name: 'Log a sighting of Monarch' })
+  const log = page.getByRole('button', { name: 'Log a Monarch sighting' })
   await log.click()
   const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
   await expect(dialog).toBeVisible()
@@ -597,7 +597,7 @@ test('the auto-lock waits while a sighting is written and its photo chosen, and 
   // A sighting begun, and a photo chosen: the picker sends the app to the
   // background for longer than the auto-lock allows.
   await goTo(page, 'Guide')
-  await page.getByRole('button', { name: 'Log a sighting of Monarch' }).click()
+  await page.getByRole('button', { name: 'Log a Monarch sighting' }).click()
   const dialog = page.getByRole('dialog', { name: 'Log a sighting' })
   await dialog.getByLabel('A few words, if you like').fill(note)
   const chooser = page.waitForEvent('filechooser')
