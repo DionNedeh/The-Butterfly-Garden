@@ -159,6 +159,8 @@ export const MonthPlanner = memo(function MonthPlanner({
   const listed = showRoutines ? selected.planned : plannedOnce
   const selectedLabel = dayLabelFormat.format(localDateToNoon(selectedDate))
   const isFutureOrToday = selectedDate >= today
+  // A gentle day shows no counts on Today, this calendar's included.
+  const gentle = state.profile?.gentleDay === today
 
   return (
     <section
@@ -314,7 +316,8 @@ export const MonthPlanner = memo(function MonthPlanner({
               )}
               {selected.sunlight > 0 && (
                 <p className="calendar-sunlight-note">
-                  <Icon name="sun" size={16} /> {selected.sunlight} Sunlight gathered.
+                  <Icon name="sun" size={16} />{' '}
+                  {gentle ? 'Sunlight gathered.' : `${selected.sunlight} Sunlight gathered.`}
                 </p>
               )}
               {isFutureOrToday ? (

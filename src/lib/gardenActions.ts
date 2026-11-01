@@ -31,6 +31,7 @@ import { careFromGoal, releaseGoal } from './lifecycle'
 import { moodFields } from './mood'
 import type { MotionPreference } from './motion'
 import type { ThemeChoice } from './theme'
+import type { Hemisphere } from './seasons'
 import {
   awardMoonlight,
   awardSunlight,
@@ -713,13 +714,20 @@ export function setGardenPace(state: AppState, pace: GardenPace | undefined): Ap
 
 /**
  * The region the gardener gardens in, or none again (undefined), which is how
- * every garden began: the Guide then marks nothing.
+ * every garden began: the Guide then marks nothing. With it, the half of the
+ * world they chose where the region does not say it (Settings asks only for
+ * Elsewhere, or no region: components/RegionSetting), or none again.
  */
-export function setRegion(state: AppState, region: RegionId | undefined): AppState {
-  if (!state.profile || state.profile.region === region) return state
-  const profile = { ...state.profile }
+export function setRegion(
+  state: AppState,
+  region: RegionId | undefined,
+  hemisphere?: Hemisphere,
+): AppState {
+  if (!state.profile || (state.profile.region === region && state.profile.hemisphere === hemisphere))
+    return state
+  const profile = { ...state.profile, region, hemisphere }
   if (region === undefined) delete profile.region
-  else profile.region = region
+  if (hemisphere === undefined) delete profile.hemisphere
   return { ...state, profile }
 }
 

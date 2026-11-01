@@ -12,27 +12,21 @@ import cottageNight from '../assets/garden-cottage-bloom-night.webp'
 import pondNight from '../assets/garden-rain-kissed-pond-night.webp'
 import orchardNight from '../assets/garden-twilight-orchard-night.webp'
 import cloudNight from '../assets/garden-cloud-garden-night.webp'
-import meadowThumb from '../assets/thumb-sunlit-meadow.webp'
-import woodlandThumb from '../assets/thumb-woodland-brook.webp'
-import conservatoryThumb from '../assets/thumb-secret-conservatory.webp'
-import cottageThumb from '../assets/thumb-cottage-bloom.webp'
-import pondThumb from '../assets/thumb-rain-kissed-pond.webp'
-import orchardThumb from '../assets/thumb-twilight-orchard.webp'
-import cloudThumb from '../assets/thumb-cloud-garden.webp'
 import type { GardenBackdropId } from '../types'
 import { isAndroidApp } from '../lib/platform'
 
-export const backdropAssets: Record<
-  GardenBackdropId,
-  { image: string; night: string; thumbnail: string }
-> = {
-  'sunlit-meadow': { image: meadow, night: meadowNight, thumbnail: meadowThumb },
-  'woodland-brook': { image: woodland, night: woodlandNight, thumbnail: woodlandThumb },
-  'secret-conservatory': { image: conservatory, night: conservatoryNight, thumbnail: conservatoryThumb },
-  'cottage-bloom': { image: cottage, night: cottageNight, thumbnail: cottageThumb },
-  'rain-kissed-pond': { image: pond, night: pondNight, thumbnail: pondThumb },
-  'twilight-orchard': { image: orchard, night: orchardNight, thumbnail: orchardThumb },
-  'cloud-garden': { image: cloud, night: cloudNight, thumbnail: cloudThumb },
+/**
+ * Each scene's painting by day and by night. Their thumbnails are only the
+ * scene gallery's, so they come with it (data/backdropThumbnails).
+ */
+export const backdropAssets: Record<GardenBackdropId, { image: string; night: string }> = {
+  'sunlit-meadow': { image: meadow, night: meadowNight },
+  'woodland-brook': { image: woodland, night: woodlandNight },
+  'secret-conservatory': { image: conservatory, night: conservatoryNight },
+  'cottage-bloom': { image: cottage, night: cottageNight },
+  'rain-kissed-pond': { image: pond, night: pondNight },
+  'twilight-orchard': { image: orchard, night: orchardNight },
+  'cloud-garden': { image: cloud, night: cloudNight },
 }
 
 /** How long a scene may take before the gallery stops waiting for it. */

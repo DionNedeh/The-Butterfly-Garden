@@ -3,6 +3,15 @@
    the theme's tokens, which the night theme already redefines; the one rule
    that names a colour has its .theme-night twin beside it. */
 
+/* On a phone the balances sit in a row, and "What does this do?" goes under
+   them rather than past the edge of a narrow screen. */
+@media (max-width: 600px) {
+  .wallet-stack {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+}
+
 /* A phone's single Filter button, with the results line beside it. */
 .shop-filter-bar {
   display: flex;

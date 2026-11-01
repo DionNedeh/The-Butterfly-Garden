@@ -20,6 +20,22 @@ export interface CareRhythm {
   longestRun: number
 }
 
+/**
+ * The most days in a row among `days` (local dates), for the rhythm and for
+ * the year looked back on (lib/gardenYear). Only the first day of each run
+ * walks forward, so this stays linear.
+ */
+export function longestRunIn(days: ReadonlySet<string>): number {
+  let longest = 0
+  for (const day of days) {
+    if (days.has(addDaysToLocalDate(day, -1))) continue
+    let run = 1
+    while (days.has(addDaysToLocalDate(day, run))) run += 1
+    longest = Math.max(longest, run)
+  }
+  return longest
+}
+
 export function careRhythm(
   awards: readonly Pick<SunlightAward, 'localDate'>[],
   today: string,
@@ -31,15 +47,9 @@ export function careRhythm(
   const month = today.slice(0, 7)
   let lastSeven = 0
   let thisMonth = 0
-  let longestRun = 0
   for (const day of days) {
     if (day >= weekStart) lastSeven += 1
     if (day.startsWith(month)) thisMonth += 1
-    // Only the first day of each run walks forward, so this stays linear.
-    if (days.has(addDaysToLocalDate(day, -1))) continue
-    let run = 1
-    while (days.has(addDaysToLocalDate(day, run))) run += 1
-    longestRun = Math.max(longestRun, run)
   }
-  return { lastSeven, thisMonth, longestRun }
+  return { lastSeven, thisMonth, longestRun: longestRunIn(days) }
 }

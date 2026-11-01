@@ -3969,17 +3969,6 @@
   max-width: 16rem;
 }
 
-/* How far a scene that grows with the garden has come. */
-.unlock-ring {
-  display: inline-block;
-  width: 1.1rem;
-  height: 1.1rem;
-  margin-right: 0.45rem;
-  border-radius: 50%;
-  background: conic-gradient(currentColor var(--ripeness, 0%), rgba(0, 0, 0, 0.12) 0);
-  vertical-align: -0.2rem;
-}
-
 /* The header keeps Sunlight on phones too, so the narrowest ones tighten it
    rather than letting the pills slide over the garden's icon. */
 @media (max-width: 400px) {

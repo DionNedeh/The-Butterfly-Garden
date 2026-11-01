@@ -35,6 +35,7 @@ import * as looks from '../lib/outfitPresets'
 import { removePlant } from '../lib/plantManagement'
 import { createInitialState, plantSeed, type RecapDraft } from '../lib/progression'
 import type { PurchaseOutcome, PurchaseResult } from '../lib/purchase'
+import type { Hemisphere } from '../lib/seasons'
 import { setSoundFollowsTheme, setSoundInBackground, setSoundVolume } from '../lib/sound'
 import { setReminderTime } from '../lib/reminderTime'
 import { requestPersistentStorage } from '../lib/storage'
@@ -518,9 +519,12 @@ export function useGardenState() {
       /** Keep giving, or Classic again (undefined): see lib/gardenPace. */
       setGardenPace: (pace: GardenPace | undefined) =>
         update((current) => act.setGardenPace(current, pace)),
-      /** Where the gardener gardens, for the Guide's native marks, or none. */
-      setRegion: (region: RegionId | undefined) =>
-        update((current) => act.setRegion(current, region)),
+      /**
+       * Where the gardener gardens, for the Guide's native marks, or none;
+       * and, where that does not say it, the half of the world they chose.
+       */
+      setRegion: (region: RegionId | undefined, hemisphere?: Hemisphere) =>
+        update((current) => act.setRegion(current, region, hemisphere)),
       /** The time of the daily visit just added to the calendar (lib/reminderTime). */
       setReminderTime: (time: string) =>
         update((current) => setReminderTime(current, time)),

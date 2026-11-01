@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { clearDraft, useDraft } from '../lib/drafts'
+import { useDraftKept } from '../lib/draftKept'
 import { moodLevels } from '../data/content'
 import { addDaysToLocalDate, formatWeekday } from '../lib/date'
 import {
@@ -11,6 +12,7 @@ import { describeDay } from '../lib/daySummary'
 import { pacerFor } from '../lib/breathing'
 import { TOMORROW_NOTE_LENGTH, TOMORROW_NOTES, type TomorrowNote } from '../lib/gardenActions'
 import type { AppState, MoodEntry } from '../types'
+import { DraftKept } from './DraftKept'
 import { GuideLink } from './GuideLink'
 import { Icon } from './Icons'
 import './recap.css'
@@ -116,6 +118,12 @@ export function MoonlightRecap({
     `recap:${targetDate}:forTomorrow`,
     '',
   )
+  // "Draft kept" under the answer on screen once it has reached storage (6.2).
+  const kept = [
+    useDraftKept(`recap:${targetDate}:wentWell`),
+    useDraftKept(`recap:${targetDate}:settingDown`),
+    useDraftKept(`recap:${targetDate}:forTomorrow`),
+  ][step - 2]
   // The notes are one draft, a line each, so they survive a reload together.
   const notes = notesOf(forTomorrow)
   const [planned, setPlanned] = useState<boolean[]>([])
@@ -142,6 +150,9 @@ export function MoonlightRecap({
 
   const closingAnotherDay = targetDate !== today
   const sunlight = sunlightForDate(state, targetDate)
+  // A gentle day is not counted, as on Today, even rounded out past midnight.
+  const gentleDay = state.profile?.gentleDay
+  const gentle = gentleDay === today || gentleDay === targetDate
   const dayInWords = useMemo(() => describeDay(state, targetDate), [state, targetDate])
 
   const last = steps.length - 1
@@ -223,9 +234,9 @@ export function MoonlightRecap({
                 <Icon name="sun" size={20} />
                 <span>
                   <strong>
-                    {sunlight} / {DAILY_SUNLIGHT_CAP}
+                    {gentle ? 'Rest counts too' : `${sunlight} / ${DAILY_SUNLIGHT_CAP}`}
                   </strong>
-                  Sunlight earned
+                  {gentle ? 'Sunlight' : 'Sunlight earned'}
                 </span>
               </li>
             </ul>
@@ -263,6 +274,7 @@ export function MoonlightRecap({
             // The step heading is the question; labelling the field with a
             // hidden copy of it would just read the same sentence twice.
             aria-labelledby="recap-step-title"
+            aria-describedby={kept ? 'recap-kept' : undefined}
             value={wentWell}
             onChange={(event) => setWentWell(event.target.value)}
             placeholder="A few words are plenty"
@@ -277,6 +289,7 @@ export function MoonlightRecap({
             // The step heading is the question; labelling the field with a
             // hidden copy of it would just read the same sentence twice.
             aria-labelledby="recap-step-title"
+            aria-describedby={kept ? 'recap-kept' : undefined}
             value={settingDown}
             onChange={(event) => setSettingDown(event.target.value)}
             placeholder="You can leave it here"
@@ -284,6 +297,7 @@ export function MoonlightRecap({
             maxLength={400}
           />
         )}
+        {kept && step < 4 && <DraftKept id="recap-kept" />}
 
         {step === 4 && (
           <>
@@ -293,6 +307,7 @@ export function MoonlightRecap({
                   <input
                     className="recap-field"
                     aria-label={`Note ${index + 1} for tomorrow`}
+                    aria-describedby={kept ? 'recap-kept' : undefined}
                     value={note}
                     onChange={(event) => setNote(index, event.target.value)}
                     placeholder={index === 0 ? 'A note to yourself' : 'Another, if you like'}
@@ -322,6 +337,7 @@ export function MoonlightRecap({
                 </div>
               ))}
             </div>
+            {kept && <DraftKept id="recap-kept" />}
             {notes.length < TOMORROW_NOTES && notes[notes.length - 1]?.trim() && (
               <button
                 className="text-button tomorrow-add"

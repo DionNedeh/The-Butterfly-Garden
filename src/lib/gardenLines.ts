@@ -4,7 +4,7 @@ import { marigoldLines, seasonLines } from '../data/seasons'
 import type { RegionId } from '../types'
 import { daysBetweenLocalDates, getDailyPromptIndex } from './date'
 import type { MarkedRegion } from './regionMarks'
-import { currentSeason, hemisphereOf } from './seasons'
+import { currentSeason, hemisphereOf, type Hemisphere } from './seasons'
 
 /*
  * The garden's line under its name: the day's own (data/observations), the
@@ -46,11 +46,16 @@ export function nightLine(speciesId: string | undefined, localDate: string): str
 /**
  * Marigold in her season, by the gardener's half of the world: getting
  * ready to travel in autumn, back in spring. Words only; she never leaves.
- * With no region known she follows the north, where her kind's long flight
- * is, and says nothing of the gardener's own season.
+ * With no region known she follows the half of the world the gardener chose
+ * (`chosen`), or else the north, where her kind's long flight is, and says
+ * nothing of the gardener's own season.
  */
-export function marigoldLine(region: RegionId | undefined, localDate: string): string | undefined {
-  const hemisphere = hemisphereOf(region)
+export function marigoldLine(
+  region: RegionId | undefined,
+  localDate: string,
+  chosen?: Hemisphere,
+): string | undefined {
+  const hemisphere = hemisphereOf(region, chosen)
   return marigoldLines[hemisphere][currentSeason(localDate, hemisphere)]
 }
 
@@ -60,7 +65,11 @@ export function marigoldLine(region: RegionId | undefined, localDate: string): s
  * every region in each one's own season: each names its place, so each is
  * true wherever the gardener is, and none guesses their season.
  */
-export function seasonLinesFor(region: RegionId | undefined, localDate: string): string[] {
+export function seasonLinesFor(
+  region: RegionId | undefined,
+  localDate: string,
+  hemisphere?: Hemisphere,
+): string[] {
   const places = region === undefined || region === 'elsewhere' ? MARKED_REGIONS : [region]
   const lines = seasonLines
     .filter(
@@ -69,7 +78,7 @@ export function seasonLinesFor(region: RegionId | undefined, localDate: string):
         line.season === currentSeason(localDate, hemisphereOf(line.region)),
     )
     .map((line) => line.text)
-  const marigold = marigoldLine(region, localDate)
+  const marigold = marigoldLine(region, localDate, hemisphere)
   return marigold ? [...lines, marigold] : lines
 }
 
@@ -78,8 +87,12 @@ export function seasonLinesFor(region: RegionId | undefined, localDate: string):
  * counted in threes: each one moves on to the next line, rather than landing
  * on the same few as the day count would.
  */
-export function seasonLine(region: RegionId | undefined, localDate: string): string {
-  const choices = seasonLinesFor(region, localDate)
+export function seasonLine(
+  region: RegionId | undefined,
+  localDate: string,
+  hemisphere?: Hemisphere,
+): string {
+  const choices = seasonLinesFor(region, localDate, hemisphere)
   const turn = Math.floor(daysBetweenLocalDates('1970-01-01', localDate) / 3)
   return choices[turn % choices.length]
 }
@@ -93,6 +106,7 @@ export function gardenLine({
   speciesId,
   night,
   region,
+  hemisphere,
 }: {
   localDate: string
   /** The active butterfly's species, if one is flying. */
@@ -100,7 +114,9 @@ export function gardenLine({
   /** Whether the theme on screen is night. */
   night: boolean
   region?: RegionId
+  /** The half of the world chosen where the region does not say it. */
+  hemisphere?: Hemisphere
 }): string {
-  if (isSeasonDay(localDate)) return seasonLine(region, localDate)
+  if (isSeasonDay(localDate)) return seasonLine(region, localDate, hemisphere)
   return night ? nightLine(speciesId, localDate) : dayLine(speciesId, localDate)
 }

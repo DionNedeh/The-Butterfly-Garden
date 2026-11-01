@@ -1,6 +1,7 @@
-/* A gardener's own images: turning and brightness in the editor, and the
-   choice of image by night in the gallery. Both import this file, so it
-   arrives with them rather than in the stylesheet every page waits for.
+/* The scene gallery's cards, by day and by night, and a gardener's own
+   images: turning and brightness in the editor, and the choice of image by
+   night in the gallery. Both import this file, so it arrives with them
+   rather than in the stylesheet every page waits for.
    Colours are the theme's tokens, which the night theme redefines, or the
    garden heading's own, each with its .theme-night twin beside it. Nothing
    here moves. */
@@ -55,4 +56,118 @@
 }
 .night-backdrop-choice .subtle-copy {
   margin: 0 0 0.25rem;
+}
+
+/* The scene gallery's cards, here rather than in the stylesheet every page
+   waits for, since only the gallery draws them. */
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.scene-card {
+  border: 1px solid var(--edge);
+  background: var(--surface);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.scene-card.selected {
+  outline: 2px solid var(--sage);
+  outline-offset: 3px;
+}
+.scene-card > img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+}
+.scene-card-copy {
+  padding: 1.2rem;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: start;
+}
+.scene-card-copy h3 {
+  font-size: 1.3rem;
+}
+.scene-card-copy p:not(.eyebrow) {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+.scene-card-copy > button {
+  margin-top: auto;
+}
+.scene-card .eyebrow {
+  font-size: 0.58rem;
+}
+.personal-scenes-heading {
+  margin-top: 3rem;
+}
+.scene-upload-card {
+  border: 1px dashed var(--sage);
+  background: var(--surface-soft);
+  border-radius: 20px;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+.scene-upload-card > span {
+  font-size: 2rem;
+  color: var(--sage);
+}
+.scene-upload-card strong {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+}
+.scene-upload-card small {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+.custom-scene-thumb {
+  position: relative;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .scene-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .scene-grid {
+    grid-template-columns: 1fr;
+  }
+  .scene-card > img {
+    max-height: 220px;
+  }
+}
+
+/* How far a scene that grows with the garden has come. */
+.unlock-ring {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: conic-gradient(currentColor var(--ripeness, 0%), rgba(0, 0, 0, 0.12) 0);
+  vertical-align: -0.2rem;
+}
+
+/* Each scene in the gallery by the theme on screen (ART-8): the app shell
+   says it (.theme-night), which follows a theme chosen by hand as well as
+   the device's. The thumbnail not shown is lazy, so it is never fetched. */
+.scene-card > .scene-thumb-night,
+.theme-night .scene-card > .scene-thumb-day {
+  display: none;
+}
+.theme-night .scene-card > .scene-thumb-night {
+  display: block;
 }

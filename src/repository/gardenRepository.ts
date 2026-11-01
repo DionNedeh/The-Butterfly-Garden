@@ -1658,10 +1658,13 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       }
     },
 
-    /** Best effort: a draft that fails to save is still on screen. */
-    async writeDrafts(drafts: Drafts): Promise<void> {
+    /**
+     * Best effort: a draft that fails to save is still on screen. Resolves
+     * true once the drafts are stored, and never rejects (lib/drafts).
+     */
+    async writeDrafts(drafts: Drafts): Promise<true | void> {
       try {
-        await writing(async (db) => {
+        return await writing(async (db) => {
           if (deletedElsewhere) return
           // Under the lock, drafts are sealed like the garden; a tab holding
           // no key for the stored lock writes none at all, rather than leave
@@ -1684,6 +1687,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
             return
           }
           await Promise.all([tx.objectStore('drafts').put(value as Drafts, 'current'), tx.done])
+          return true
         })
       } catch {
         // Drafts are a convenience; the entry itself is saved separately.

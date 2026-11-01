@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { moodLevels } from '../../data/content'
 import { addDaysToLocalDate, formatJournalDate, toLocalDate } from '../../lib/date'
 import { clearDraft, useDraft } from '../../lib/drafts'
+import { useDraftKept } from '../../lib/draftKept'
 import {
   earlierDayProblem,
   gardenStartDate,
@@ -10,6 +11,7 @@ import {
 } from '../../lib/earlierDay'
 import { UNSURE_MOOD_NAME } from '../../lib/mood'
 import type { AppState, MoodChoice } from '../../types'
+import { DraftKept } from '../DraftKept'
 
 /**
  * Drafts, so a reflection half-written for a missed day survives a reload
@@ -64,6 +66,10 @@ export function EarlierEntry({
   const [date, setDate] = useDraft(DATE_KEY, '')
   const [note, setNote] = useDraft(NOTE_KEY, '')
   const [body, setBody] = useDraft(BODY_KEY, '')
+  // "Draft kept" under the words once they have reached storage (6.2).
+  const noteKept = useDraftKept(NOTE_KEY)
+  const bodyKept = useDraftKept(BODY_KEY)
+  const keptId = useId()
   const [kind, setKind] = useState<EarlierEntryKind>(() =>
     body !== '' && note === '' ? 'reflection' : 'check-in',
   )
@@ -282,20 +288,30 @@ export function EarlierEntry({
           </label>
           <label>
             A note about that day, if you want
-            <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={280} />
+            <input
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              maxLength={280}
+              aria-describedby={noteKept ? keptId : undefined}
+            />
           </label>
+          {noteKept && <DraftKept id={keptId} />}
         </>
       ) : (
-        <label>
-          What would you like to remember about that day?
-          <textarea
-            ref={bodyField}
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            maxLength={4000}
-            rows={4}
-          />
-        </label>
+        <>
+          <label>
+            What would you like to remember about that day?
+            <textarea
+              ref={bodyField}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              maxLength={4000}
+              rows={4}
+              aria-describedby={bodyKept ? keptId : undefined}
+            />
+          </label>
+          {bodyKept && <DraftKept id={keptId} />}
+        </>
       )}
       <div className="form-actions">
         <button

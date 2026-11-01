@@ -146,15 +146,15 @@ test('the back gesture closes, returns, and only then leaves', async ({
   await expect(
     page.getByRole('button', { name: 'Filter 1 active' }),
   ).toBeFocused()
-  // Still the shop, whose tab on a phone is More.
-  await expect(page).toHaveURL(/#\/shop$/)
+  // Still the shop, on its tab, whose tab on a phone is More.
+  await expect(page).toHaveURL(/#\/shop\/boutique$/)
   await expect(currentPage(page)).toHaveText('More')
   await expect(page.locator('.boutique-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Preview Daisy Bonnet' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await pressBack(page)
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page).toHaveURL(/#\/shop$/)
+  await expect(page).toHaveURL(/#\/shop\/boutique$/)
 
   // A goal's menu, and then the goal editor, are put away before Today is left.
   await goTo(page, 'Today')
@@ -751,4 +751,58 @@ test('a move file goes to the app’s own save screen, and arriving offers no ca
   await expect(dialog).toHaveCount(0)
   await expect(make).toBeFocused()
   expect(errors).toEqual([])
+})
+
+test.describe('1.4 the half of the world, in the app', () => {
+  test('Settings asks it for Elsewhere, and the south makes July winter in the garden', async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date('2026-07-14T21:00:00.000Z'))
+    await page.goto('/')
+    await enterGarden(page)
+    await goTo(page, 'Settings')
+    await page.getByLabel('My region').selectOption('elsewhere')
+    const half = page.getByRole('group', { name: 'Which half of the world are you in?' })
+    await half.getByRole('radio', { name: 'South' }).check()
+    expect(await seriousViolations(page, 'Android Settings asking which half of the world')).toEqual([])
+    await goTo(page, 'Garden')
+    await expect(page.locator('.garden-hero')).toHaveAttribute('data-season', 'winter')
+  })
+})
+
+test.describe('6.4 and 6.7 the back gesture and the shop’s tabs', () => {
+  test('returns the Guide to the tab its link was on, and leaves a tab or a day for the garden', async ({
+    page,
+  }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await enterGarden(page)
+    await goTo(page, 'Shop')
+    const tabs = page.getByRole('navigation', { name: 'Shop sections' })
+    await tabs.getByRole('button', { name: 'Jars' }).click()
+    await expect(page).toHaveURL(/#\/shop\/jars$/)
+    const wallet = page.getByRole('link', { name: /^What does this do\? Nectar and Stardust/ })
+    await wallet.click()
+    await expect(page.getByRole('heading', { level: 2, name: 'Nectar and Stardust' })).toBeFocused()
+    await pressBack(page)
+    await expect(page).toHaveURL(/#\/shop\/jars$/)
+    await expect(tabs.getByRole('button', { name: 'Jars' })).toHaveAttribute('aria-current', 'page')
+    await expect(wallet).toBeFocused()
+
+    // A tab of the shop is the shop's page: back goes to the garden.
+    await pressBack(page)
+    await expect(currentPage(page)).toHaveText('Garden')
+    await page.goto('/#/shop/jars')
+    await expect(tabs.getByRole('button', { name: 'Jars' })).toHaveAttribute('aria-current', 'page')
+    await pressBack(page)
+    await expect(currentPage(page)).toHaveText('Garden')
+    await expect(page).toHaveURL(/\/$/)
+
+    // So is a day in the Journal.
+    await page.goto('/#/journal/2026-10-26')
+    await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+    await pressBack(page)
+    await expect(currentPage(page)).toHaveText('Garden')
+    expect(errors).toEqual([])
+  })
 })

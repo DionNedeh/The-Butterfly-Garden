@@ -80,7 +80,8 @@ export function putBackAt(place: LinkPlace, root: ParentNode = document): void {
 
 /**
  * The link a place names on its page, or what stands in for one that goes
- * once used. A Guide link is named by the section it opens. Of the ways into
+ * once used. A Guide link is named by the section it opens, and a plant's by
+ * its panel too. Of the ways into
  * breathing, a goal's "Breathe now" is found in its goal's row, whose ⋯ menu
  * stands in once the goal is done; the support page has one link. The step
  * offered under Today's check-in is put away once taken, so the check-in it
@@ -90,9 +91,11 @@ export function putBackAt(place: LinkPlace, root: ParentNode = document): void {
  * the plan one line to the support page.
  */
 function linkAt(place: LinkPlace, root: ParentNode): HTMLElement | null {
+  // In the garden, the open plant's panel has its own link to the section
+  // the seeds' link opens.
   if (place.section !== undefined)
     return root.querySelector<HTMLElement>(
-      `a.guide-link[href="${hashForRoute({ view: 'guide', section: place.section })}"]`,
+      `${place.plantId ? '.plant-detail ' : ''}a.guide-link[href="${hashForRoute({ view: 'guide', section: place.section })}"]`,
     )
   if (place.comfort) return root.querySelector<HTMLElement>('a.comfort-link')
   if (place.support) return root.querySelector<HTMLElement>('.comfort-support a')

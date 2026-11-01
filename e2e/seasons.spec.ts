@@ -129,3 +129,70 @@ test('one day in three, the garden says what the season is doing where the garde
   await expect(gardenLine(page)).toHaveText(/^In the UK, .*\.$/)
   expect(await seriousViolations(page, 'Garden on a season day')).toEqual([])
 })
+
+test.describe('1.4 a half of the world chosen where the region does not say', () => {
+  test.use({ reducedMotion: 'no-preference' })
+
+  test('Elsewhere and the south make July winter: no fireflies at night', async ({ page }) => {
+    test.slow()
+    await page.clock.setFixedTime(ORDINARY_EVENING)
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await page.getByRole('button', { name: 'Switch to night mode' }).click()
+    await expect(fireflies(page)).toHaveCount(5)
+
+    await goTo(page, 'Settings')
+    await page.getByLabel('My region').selectOption('elsewhere')
+    const half = page.getByRole('group', { name: 'Which half of the world are you in?' })
+    await expect(half.getByRole('radio', { name: 'Rather not say' })).toBeChecked()
+    await half.getByRole('radio', { name: 'South' }).check()
+    expect(await seriousViolations(page, 'Settings asking which half of the world')).toEqual([])
+
+    await goTo(page, 'Garden')
+    await expect(scene(page)).toHaveAttribute('data-season', 'winter')
+    await expect(fireflies(page)).toHaveCount(0)
+
+    // Kept across a reload, as the rest of the profile is.
+    await page.reload()
+    await expect(scene(page)).toHaveAttribute('data-season', 'winter')
+    await goTo(page, 'Settings')
+    await expect(
+      page
+        .getByRole('group', { name: 'Which half of the world are you in?' })
+        .getByRole('radio', { name: 'South' }),
+    ).toBeChecked()
+  })
+})
+
+test.describe('ART-8 the scene gallery by night', () => {
+  test('shows each scene as it looks at night only while the night theme is on screen', async ({
+    page,
+  }) => {
+    test.slow()
+    const asked: string[] = []
+    page.on('request', (request) => asked.push(request.url()))
+    await page.clock.setFixedTime(ORDINARY_EVENING)
+    await page.goto('/The-Butterfly-Garden/')
+    await enterGarden(page)
+    await goTo(page, 'Settings')
+    const meadow = page
+      .locator('.scene-card')
+      .filter({ has: page.getByRole('heading', { name: 'Sunlit Meadow', exact: true }) })
+    await meadow.scrollIntoViewIfNeeded()
+    const shown = meadow.locator('img:visible')
+    await expect(shown).toHaveCount(1)
+    await expect(shown).toHaveAttribute('src', /thumb-sunlit-meadow-(?!night)/)
+    // By day the night thumbnails stay where they are.
+    expect(asked.filter((url) => /thumb-[a-z-]+-night/.test(url))).toEqual([])
+
+    // The theme chosen by hand, on a device that never asked for dark.
+    await page.getByRole('button', { name: 'Switch to night mode' }).click()
+    await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
+    await expect(shown).toHaveCount(1)
+    await expect(shown).toHaveAttribute('src', /thumb-sunlit-meadow-night/)
+    await expect
+      .poll(() => shown.evaluate((image) => (image as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0)
+    expect(await seriousViolations(page, 'Scene gallery by night')).toEqual([])
+  })
+})

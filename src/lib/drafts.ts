@@ -16,6 +16,13 @@ import { addDaysToLocalDate, toLocalDate } from './date'
  */
 
 let drafts: Drafts = {}
+/**
+ * The drafts as storage holds them, as far as this tab knows: read at load,
+ * or written since, and nothing once another tab has written them. A draft
+ * on screen is kept (isDraftKept, lib/draftKept) only when it is the same
+ * here, never because a write was merely asked for.
+ */
+let inStorage: Drafts = {}
 const listeners = new Set<() => void>()
 let writeTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -26,11 +33,42 @@ function emit() {
   for (const listener of listeners) listener()
 }
 
+/**
+ * Every tab writes all of its drafts over the one stored record, so a tab
+ * that has written says so here. The others may have just lost theirs from
+ * storage, and call none kept until they have written them again.
+ */
+const channel =
+  typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('butterfly-garden-drafts')
+/** How many writes by other tabs this tab has heard of. */
+let heard = 0
+if (channel)
+  channel.onmessage = () => {
+    heard += 1
+    inStorage = {}
+    emit()
+  }
+
+/** Write the drafts as they are now, noting them as stored once they are. */
+function write(): Promise<void> {
+  const writing = drafts
+  const since = heard
+  return gardenRepository.writeDrafts(writing).then((written) => {
+    if (!written) return
+    channel?.postMessage(null)
+    // Not if another tab wrote meanwhile: its write may have come after.
+    if (since === heard) {
+      inStorage = writing
+      emit()
+    }
+  })
+}
+
 function scheduleWrite() {
   if (writeTimer !== undefined) clearTimeout(writeTimer)
   writeTimer = setTimeout(() => {
     writeTimer = undefined
-    void gardenRepository.writeDrafts(drafts)
+    void write()
   }, WRITE_DELAY_MS)
 }
 
@@ -42,7 +80,7 @@ export function flushDrafts(): Promise<void> {
   if (writeTimer === undefined) return Promise.resolve()
   clearTimeout(writeTimer)
   writeTimer = undefined
-  return gardenRepository.writeDrafts(drafts)
+  return write()
 }
 
 /** A day named in a draft's key, as in `reflection:2026-10-26:…`. */
@@ -72,8 +110,9 @@ function withoutOldDays(stored: Drafts, today: string): { kept: Drafts; dropped:
 
 /** Read stored drafts once, after the garden itself has loaded. */
 export async function loadDrafts(): Promise<void> {
-  const stored = await gardenRepository.readDrafts()
-  const { kept, dropped } = withoutOldDays(stored, toLocalDate())
+  const since = heard
+  const { kept, dropped } = withoutOldDays(await gardenRepository.readDrafts(), toLocalDate())
+  if (since === heard) inStorage = kept
   // Anything typed while the read was in flight wins over what was stored.
   drafts = { ...kept, ...drafts }
   emit()
@@ -105,10 +144,12 @@ export function resetDrafts() {
   if (writeTimer !== undefined) clearTimeout(writeTimer)
   writeTimer = undefined
   drafts = {}
+  inStorage = {}
   emit()
 }
 
-function subscribe(listener: () => void) {
+/** Hear of every change to the drafts, or to what storage holds of them. */
+export function subscribe(listener: () => void) {
   listeners.add(listener)
   return () => {
     listeners.delete(listener)
@@ -146,4 +187,12 @@ export function useDraft(
     [key, fallback],
   )
   return [draft ?? fallback, set]
+}
+
+/**
+ * Whether the draft for `key` has reached storage as it stands, for the
+ * "Draft kept" hint (lib/draftKept, which follows it as drafts change).
+ */
+export function isDraftKept(key: string): boolean {
+  return drafts[key] !== undefined && inStorage[key] === drafts[key]
 }

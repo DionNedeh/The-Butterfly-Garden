@@ -116,7 +116,7 @@ describe('the Guide as a reference', () => {
     await user.type(search, 'Danaus')
     // By scientific name, and the sections say nothing of it.
     expect(document.querySelectorAll('.species-card')).toHaveLength(2)
-    expect(screen.getByText('No section matches. The butterflies below may.')).toBeInTheDocument()
+    expect(screen.getByText('No section matches; 2 butterflies below do.')).toBeInTheDocument()
     expect(search).toHaveFocus()
 
     await user.clear(search)
@@ -224,5 +224,59 @@ describe('the Guide and the gardener’s region', () => {
       .closest('section')!
     expect(within(section).getByText('Leave out insecticides')).toBeInTheDocument()
     expect(within(section).getByText(/marks native butterflies and plants for North America/)).toBeInTheDocument()
+  })
+})
+
+describe('6.5 the Guide search says when nothing matches', () => {
+  /** The one line that says what the search found. */
+  function searchLine() {
+    return within(screen.getByRole('navigation', { name: 'In this guide' })).getByRole('status')
+  }
+
+  it('counts the sections that match', async () => {
+    const user = userEvent.setup()
+    renderGuideWith()
+    await user.type(screen.getByRole('searchbox', { name: 'Search the guide' }), 'stardust')
+    expect(searchLine()).toHaveTextContent(/^\d+ sections match\.$/)
+  })
+
+  it('says so when only butterflies match, with how many', async () => {
+    const user = userEvent.setup()
+    renderGuideWith()
+    const search = screen.getByRole('searchbox', { name: 'Search the guide' })
+    await user.type(search, 'Danaus')
+    expect(searchLine()).toHaveTextContent('No section matches; 2 butterflies below do.')
+    await user.clear(search)
+    await user.type(search, 'Plexippus')
+    expect(searchLine()).toHaveTextContent('No section matches; 1 butterfly below does.')
+  })
+
+  it('says nothing in the Guide matches, rather than that the butterflies may', async () => {
+    const user = userEvent.setup()
+    renderGuideWith()
+    await user.type(screen.getByRole('searchbox', { name: 'Search the guide' }), 'zeppelin')
+    expect(document.querySelectorAll('.species-card')).toHaveLength(0)
+    expect(searchLine()).toHaveTextContent('Nothing in the Guide matches.')
+  })
+
+  it('counts only the butterflies the collection’s filter leaves showing', async () => {
+    const user = userEvent.setup()
+    renderGuideWith()
+    await user.type(screen.getByRole('searchbox', { name: 'Search the guide' }), 'Danaus')
+    expect(searchLine()).toHaveTextContent('No section matches; 2 butterflies below do.')
+    // Nothing raised yet, so none of the two is shown.
+    await user.selectOptions(screen.getByLabelText('Your collection'), 'raised')
+    expect(document.querySelectorAll('.species-card')).toHaveLength(0)
+    expect(searchLine()).toHaveTextContent('Nothing in the Guide matches.')
+  })
+
+  it('keeps to one polite line, empty until there is a search', async () => {
+    const user = userEvent.setup()
+    renderGuideWith()
+    const contents = within(screen.getByRole('navigation', { name: 'In this guide' }))
+    expect(contents.getAllByRole('status')).toHaveLength(1)
+    expect(searchLine()).toHaveTextContent(/^$/)
+    await user.type(screen.getByRole('searchbox', { name: 'Search the guide' }), 'zeppelin')
+    expect(contents.getAllByRole('status')).toHaveLength(1)
   })
 })

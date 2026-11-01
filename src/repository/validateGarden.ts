@@ -1010,6 +1010,10 @@ function checkProfile(
   if (value.region !== undefined && !isRegionId(value.region)) {
     delete profile.region
   }
+  // Likewise a half of the world that is neither: the north's seasons show.
+  if (value.hemisphere !== undefined && value.hemisphere !== 'north' && value.hemisphere !== 'south') {
+    delete profile.hemisphere
+  }
   // Only ever a suggestion for the time field, so anything that is not a
   // time of day is dropped and Settings offers the morning's again.
   if (value.reminderTime !== undefined && !isReminderTime(value.reminderTime)) {

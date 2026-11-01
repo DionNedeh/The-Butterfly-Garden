@@ -27,6 +27,7 @@ import {
   PLANT_SEED_COST,
 } from '../lib/progression'
 import type { AppState, AppearanceTheme, OutfitSlot } from '../types'
+import type { OpenGuide } from '../lib/routes'
 import { PLANT_CAPACITY, plantingBlocker } from '../lib/plantManagement'
 import {
   careDaysCompleted,
@@ -67,6 +68,8 @@ const SeedTray = lazy(() =>
 const PlantPanel = lazy(() =>
   import('./garden/PlantPanel').then((m) => ({ default: m.PlantPanel })),
 )
+/** "What does this do?" under the seeds, which the first load leaves out. */
+const GuideLink = lazy(() => import('./GuideLink').then((m) => ({ default: m.GuideLink })))
 const Moth = lazy(() => import('./garden/Moth').then((m) => ({ default: m.Moth })))
 const SeasonArt = lazy(() => import('./garden/SeasonArt').then((m) => ({ default: m.SeasonArt })))
 /** At night, with full motion, in place of the day's petals. */
@@ -120,6 +123,8 @@ export function GardenView({
   onCareFor,
   seedFocus,
   onOpenGuide,
+  onOpenGuideAt,
+  openPlant,
   onPutAwayWelcomeBack,
   onOpenLetter,
   onReadLetter,
@@ -137,6 +142,10 @@ export function GardenView({
   onCareFor?: (creatureId: string) => void
   seedFocus?: string
   onOpenGuide?: () => void
+  /** A "What does this do?" link, under the seeds and in a plant's panel. */
+  onOpenGuideAt?: OpenGuide
+  /** The plant whose panel is open on arrival: back from the Guide its link opened. */
+  openPlant?: string
   /** Put away the welcome back after a few days away (lib/visits). */
   onPutAwayWelcomeBack?: () => void
   /** Open Marigold's newest letter in the Journal (lib/letters). */
@@ -147,7 +156,7 @@ export function GardenView({
   theme?: AppearanceTheme
 }) {
   const [showSeedTray, setShowSeedTray] = useState(Boolean(seedFocus))
-  const [selectedPlantId, setSelectedPlantId] = useState<string>()
+  const [selectedPlantId, setSelectedPlantId] = useState(openPlant)
   const [confirmPlantRemoval, setConfirmPlantRemoval] = useState(false)
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
   /**
@@ -252,10 +261,11 @@ export function GardenView({
   const today = toLocalDate()
   const night = theme === 'night'
   const region = state.profile?.region
+  const hemisphere = state.profile?.hemisphere
   // By the gardener's half of the world, or the north's when that is not
   // known: only the scene reads it (its art's season, and fireflies), never
   // words about the gardener's own season.
-  const season = currentSeason(today, hemisphereOf(region))
+  const season = currentSeason(today, hemisphereOf(region, hemisphere))
   const selectedPlant = state.plants.find(
     (plant) => plant.id === selectedPlantId,
   )
@@ -377,6 +387,7 @@ export function GardenView({
                 speciesId={active?.speciesId}
                 night={night}
                 region={region}
+                hemisphere={hemisphere}
               />
             </Suspense>
           </p>
@@ -472,6 +483,7 @@ export function GardenView({
             creature={meetingCreature}
             outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
             region={region}
+            hemisphere={hemisphere}
             onCareFor={
               meetingCreature && onCareFor
                 ? () => onCareFor(meetingCreature.id)
@@ -590,6 +602,12 @@ export function GardenView({
         Earn {DAILY_SEED_REWARD} seed with your first Sunlight each day and{' '}
         {EMERGENCE_SEED_REWARD} when a butterfly emerges. Each new plant costs{' '}
         {PLANT_SEED_COST} seed.
+        {onOpenGuideAt && (
+          <Suspense fallback={null}>
+            {' '}
+            <GuideLink section="seeds" topic="Seeds and plants" onOpen={onOpenGuideAt} />
+          </Suspense>
+        )}
       </p>
 
       <section
@@ -650,6 +668,7 @@ export function GardenView({
               }}
               onPlaceJar={onPlaceJar}
               onRemoveJarPlacement={onRemoveJarPlacement}
+              onOpenGuide={onOpenGuideAt}
             />
           </Suspense>
         ) : (

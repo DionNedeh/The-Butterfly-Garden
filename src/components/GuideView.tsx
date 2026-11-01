@@ -9,7 +9,7 @@ import {
   type MouseEvent,
 } from 'react'
 import type { AppState, AppView, SightingSubject } from '../types'
-import { SpeciesDirectory } from './SpeciesDirectory'
+import { SpeciesDirectory, type SpeciesShown } from './SpeciesDirectory'
 import { RegionGuide } from './guide/RegionGuide'
 import { STAGE_CARE_DAYS } from '../lib/lifecycle'
 import { PLANT_CAPACITY } from '../lib/plantManagement'
@@ -35,6 +35,7 @@ import {
   seenInTheWild,
   type ChangeSightings,
 } from '../lib/sightings'
+import { MAX_SIGHTING_PHOTOS, MAX_SIGHTINGS } from '../lib/customBackdrops'
 import { useLocalDate } from '../hooks/useLocalDate'
 // Only the Guide draws these, so they arrive with it.
 import './guide/guide.css'
@@ -54,6 +55,7 @@ interface GuideSection {
 }
 
 function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[] {
+  const android = isAndroidApp()
   return [
     {
       icon: 'sun',
@@ -195,12 +197,57 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
     },
     {
       icon: 'journal',
+      eyebrow: 'Looking back',
+      id: 'letters-and-year',
+      short: 'Letters and your year',
+      title: 'Letters from Marigold, and your garden’s year',
+      paragraphs: [
+        'Each Sunday evening a letter from Marigold waits in the garden: a few lines about your week, kept in your journal. No scores and no advice, only what happened.',
+        'A letter quotes only lines you star in the Journal, a check-in note or a reflection, and nothing else you wrote. Choose Never in Settings, under Letters from Marigold, and letters say what happened without quoting you at all.',
+        'Your garden’s year, opened from the Journal, looks back at what you wrote, the weather of your days, who arrived and the lines you starred. Nothing on it is a score. It ends with a postcard made on your device from your garden’s scene, your butterflies, its name and the year. Nothing from your journal is on it, and it goes nowhere unless you tap to share or save it.',
+      ],
+    },
+    {
+      icon: 'eye',
+      eyebrow: 'Noticed in nature',
+      id: 'field-book',
+      short: 'Field book',
+      title: 'Your field book',
+      paragraphs: [
+        'The field book keeps the real butterflies and plants you notice out in the world, with a few words and a photo if you like. Log one in the Journal, under Seen in the wild, or from a butterfly’s or a plant’s card here in the Guide. Sightings earn nothing: noticing is the point.',
+        `A photo is kept as a smaller copy on this device and in your backups, and nothing about where it was taken is kept; the garden never asks where you are. The field book keeps up to ${MAX_SIGHTINGS.toLocaleString()} sightings and ${MAX_SIGHTING_PHOTOS} photos.`,
+      ],
+    },
+    {
+      icon: 'journal',
       eyebrow: 'Seeing the month',
       id: 'calendar',
       short: 'Calendar',
       title: 'The calendar planner',
       paragraphs: [
         "The calendar on the Today page shows your whole month: dots for the goals landing on each day, suns for days you gathered Sunlight, and your mood's weather. Tap any upcoming day to plan a one-time goal for it — future you will find it waiting on the right morning.",
+      ],
+    },
+    {
+      icon: 'today',
+      eyebrow: 'A nudge you choose',
+      id: 'reminders',
+      short: 'Calendar reminders',
+      title: 'Reminders in your calendar',
+      paragraphs: [
+        `A daily garden visit, in Settings, puts a reminder in your own calendar: a morning check-in, your evening’s Moonlight, or any time you choose. ${android ? 'The app saves a calendar file for you to open' : 'The garden gives you a calendar file to open'}, and the event names only the garden, with nothing from your journal.`,
+        'Your calendar does the reminding; the garden never sends notifications. To stop, delete the event in your calendar.',
+      ],
+    },
+    {
+      icon: 'flower',
+      eyebrow: 'For harder days',
+      id: 'comfort-plan',
+      short: 'Comfort plan',
+      title: 'Your comfort plan',
+      paragraphs: [
+        'My comfort plan is a page in your own words for a day that feels hard: what helps, people you can reach, places that feel calm, kind words for yourself, and what matters to you. Open it from the support page, from Settings, or from Today on a gentle day.',
+        'Only you see it. It stays on this device and in the backups you save, and the garden never quotes it or shows it anywhere else. It is a personal page, not a medical or crisis plan, and not a stand-in for help: If you need support now lists people who can talk with you.',
       ],
     },
     {
@@ -222,6 +269,17 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       title: 'Flight patterns',
       paragraphs: [
         'Flight patterns change how your butterflies move through the garden scene — drifting, petal-hopping, figure eights, spirals. Buy them in the Shop, choose the active one on the Flight page.',
+      ],
+    },
+    {
+      icon: 'moon',
+      eyebrow: 'After dark, and through the year',
+      id: 'night-and-seasons',
+      short: 'Night and seasons',
+      title: 'The night garden and the seasons',
+      paragraphs: [
+        'When the garden turns to night, by the moon button in the header or by following your device or your evening, each scene shows its own painted night. An image of your own still comes first, and one can be chosen just for the night.',
+        'The scene follows the seasons where you garden, as you set it in Settings: seasonal petals, autumn leaves and a quiet frost in winter. With Full garden motion, nights outside winter bring out fireflies, and a few moths visit the flowers in bloom.',
       ],
     },
     {
@@ -247,17 +305,43 @@ function guideSections({ opensHour, graceEndsHour }: RecapHours): GuideSection[]
       ],
     },
     {
+      icon: 'leaf',
+      eyebrow: 'Keep a copy',
+      id: 'backups',
+      short: 'Backups and moving',
+      title: 'Backups, earlier copies, and moving to a new device',
+      paragraphs: [
+        android
+          ? 'A backup file is a copy of your whole garden that you keep. Save one from Settings, under Backup and restore, and restore it there or on the welcome screen.'
+          : 'A backup file is a copy of your whole garden that you keep. Download one from Settings, under Backup and restore, and restore it there or on the welcome screen. On supported desktop browsers you can also choose a backup file once, and the garden writes a fresh copy to it after each day’s changes and as you leave; it pauses while your garden is locked.',
+        `Before the first change you make on a day, the garden also keeps a copy of how it was, up to seven, and the two from before a restore. Settings lists them, so you can look at one, put it back or discard it. ${android ? 'They live in this app with your garden, so they cannot help if the app is uninstalled or its storage cleared' : 'They live in this browser with your garden, so they cannot help if the site’s storage is cleared'}; a backup file can.`,
+        `Moving to a new device? Move my garden makes a move file, locked with a one-time code shown as 12 words. ${android ? 'Save the file somewhere your new device can reach, such as a cloud drive' : 'Send the file to your new device any way you like'}, then choose Arrive from another device there, on the welcome screen or in Settings, and type the 12 words in order. The words are shown once and kept nowhere, and whoever has both can open your garden, so send them apart from the file, or not at all. A garden lock stays behind: turn it on again on the new device if you want it.`,
+      ],
+    },
+    {
       icon: 'moon',
       eyebrow: 'Yours alone',
       id: 'privacy',
       short: 'Privacy',
       title: 'Privacy, backdrops, and starting over',
       paragraphs: [
-        'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether, and Text size makes every word larger.',
+        'Everything lives on this device — moods, reflections, goals, and garden. There are no accounts, no analytics, and nothing is uploaded. Lock my garden, in Settings, can seal it with a passcode too. Garden motion in Settings offers a calmer pace, or pauses decorative animation altogether, and Text size makes every word larger.',
         'New garden backdrops unlock as your garden ages: the Woodland Brook after 30 days and the Secret Conservatory after 60. Switch them in Settings — and the moon button in the header turns the whole app into a starry night theme. Settings can also follow your device’s dark setting, or bring the night in with your evening.',
         isAndroidApp()
           ? 'Delete all local data in Settings permanently removes this garden from this phone; clearing the app\'s storage or uninstalling it does the same. There is no undo, so treat it kindly.'
           : 'Delete all local data in Settings permanently removes this garden from the current browser; clearing site storage does the same. There is no undo, so treat it kindly.',
+      ],
+    },
+    {
+      icon: 'lock',
+      eyebrow: 'Only for you',
+      id: 'lock',
+      short: 'Lock and protected backups',
+      title: 'Locking your garden, and protected backups',
+      paragraphs: [
+        `Lock my garden, in Settings, keeps what the garden stores ${android ? 'on this phone' : 'in this browser'} sealed with a passcode you choose, and gives you a 24-word recovery code that opens it if the passcode is forgotten.${android ? '' : ' Where your device offers one, a passkey can open it too.'} It can lock by itself after a while out of sight. If you forget your passcode and lose your recovery code, nobody can open your garden, not even the people who made this app.`,
+        `The lock cannot protect the garden while it is open, from someone using the ${android ? 'phone' : 'device'} then, or from ${android ? 'software that already controls the phone' : 'other code running at the same web address'}. Backups you ${android ? 'save' : 'download'} are not locked, and a garden moved to a new device is not locked there until you turn the lock on.`,
+        `A protected backup is the usual backup file, locked with a passphrase you choose, so it can sit in your ${android ? 'files' : 'downloads'} or a cloud folder and opens only with that passphrase. The passphrase is never stored, here or in the file, so keep it somewhere safe, apart from the file: without it, nobody can open the backup, not this app and not you.`,
       ],
     },
   ]
@@ -269,6 +353,8 @@ const RETURN_LABELS: Partial<Record<AppView, string>> = {
   care: 'Back to Care',
   settings: 'Back to Settings',
   recap: 'Back to Moonlight',
+  shop: 'Back to the Shop',
+  garden: 'Back to the garden',
 }
 
 /** The heading a section's link takes focus to. */
@@ -342,6 +428,10 @@ export function GuideView({
     : sections
   const regionShown = region !== undefined && (!searching || hasEveryWord(regionWords, words))
   const sectionsMatching = shown.length + (regionShown ? 1 : 0)
+  // How many butterflies the directory below shows, once it has drawn them
+  // for these same words: until then the line waits rather than miscount.
+  const [speciesFound, setSpeciesFound] = useState<SpeciesShown>()
+  const speciesMatching = speciesFound?.words === words ? speciesFound.count : undefined
 
   // A section named by the address takes focus once it is drawn: on arrival,
   // when Back or Forward changes it, and when its link is followed again.
@@ -425,11 +515,15 @@ export function GuideView({
           ))}
         </ul>
         <p className="subtle-copy guide-search-status" role="status">
-          {searching
-            ? sectionsMatching > 0
+          {!searching
+            ? ''
+            : sectionsMatching > 0
               ? `${counted(sectionsMatching, 'section matches', 'sections match')}.`
-              : 'No section matches. The butterflies below may.'
-            : ''}
+              : speciesMatching === undefined
+                ? ''
+                : speciesMatching > 0
+                  ? `No section matches; ${counted(speciesMatching, 'butterfly below does', 'butterflies below do')}.`
+                  : 'Nothing in the Guide matches.'}
         </p>
       </nav>
       <p className="subtle-copy guide-sighting-status" role="status">
@@ -441,6 +535,7 @@ export function GuideView({
         words={words}
         region={region}
         seen={seen}
+        onShown={setSpeciesFound}
         onLogSighting={
           onChangeSightings
             ? (subject, opener) => {

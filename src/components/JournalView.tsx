@@ -78,6 +78,8 @@ export function JournalView({
   onChangeSightings,
   onOpenYear,
   returnedFromYear,
+  openDay: dayAsked,
+  onOpenDay,
 }: {
   state: AppState
   onUpdateMood: (entry: MoodEntry) => void
@@ -102,6 +104,15 @@ export function JournalView({
   onOpenYear?: (year?: number) => void
   /** Back from the year's page: focus returns to the link that opened it. */
   returnedFromYear?: boolean
+  /**
+   * The day the address names (`#/journal/2026-10-26`), opened in the
+   * timeline on arrival, or when another is named while the Journal is open.
+   * A day with nothing written opens the Journal at its top, and says so
+   * through onOpenDay.
+   */
+  openDay?: string
+  /** A day opened in the timeline, or none, for the address to follow. */
+  onOpenDay?: (localDate?: string) => void
 }) {
   const [editingRecap, setEditingRecap] = useState<RecapEntry>()
   const [editingReflection, setEditingReflection] = useState<ReflectionEntry>()
@@ -198,7 +209,22 @@ export function JournalView({
     if (!entry) return
     answeredRequest.current = openRequest.serial
     entry.querySelector<HTMLElement>('time')?.focus()
-  }, [openRequest, visibleDates])
+    onOpenDay?.(openRequest.day)
+  }, [openRequest, visibleDates, onOpenDay])
+  // The day the address names: on arrival, and again whenever another is
+  // named while the Journal is open (Back, Forward, an address typed), as the
+  // shop shows another tab, adjusting state while rendering, as React advises.
+  const [dayNamed, setDayNamed] = useState<string>()
+  if (dayAsked !== dayNamed) {
+    setDayNamed(dayAsked)
+    if (dayAsked !== undefined) openDay(dayAsked)
+  }
+  // A day named with nothing written opens the Journal at its top, and the
+  // address stops naming it.
+  const dayMissing = dayAsked !== undefined && !dates.includes(dayAsked)
+  useEffect(() => {
+    if (dayMissing) onOpenDay?.()
+  }, [dayMissing, onOpenDay])
   // Counted by species, not by creature (a.4 A4), with the companions said
   // alongside; each card names the first of its species to arrive.
   const fieldNotes = useMemo(() => fieldNotesBySpecies(state.creatures), [state.creatures])

@@ -129,20 +129,45 @@ export function restoreComfortItem(
 export function phoneProblem(text: string): string | undefined {
   if (!text.trim()) return undefined
   if (/[^\d+\s().-]/.test(text)) {
-    return 'A phone number can hold digits, a plus sign, spaces and dashes.'
+    return 'A phone number can hold digits, a plus sign, spaces, dashes, brackets and dots.'
   }
   if ((text.match(/\d/g)?.length ?? 0) < 3) return 'That number looks too short to call.'
   return undefined
 }
 
 /**
+ * Country codes whose numbers are written with a home 0 that is never dialled
+ * after the code: the UK's "(020)" is +44 20. Italy is not one of them, nor
+ * San Marino or the Vatican, whose 0 is dialled after the code (+39 06), and
+ * a code not listed keeps its digits as written.
+ */
+const HOME_ZERO_CODES = new Set([
+  '20', '27', '31', '32', '33', '41', '43', '44', '46', '49', '54', '60', '61', '62', '63',
+  '64', '66', '81', '82', '86', '90', '91', '92', '234', '254', '353', '358', '380', '972',
+])
+
+/**
+ * A country code, written after a plus sign or after 00 (the way out of the
+ * country from most of the world), then a bracket opening on a 0.
+ */
+const BRACKETED_ZERO = /^\s*(?:\+|00)\s*(\d{1,3})[\s.-]*\(\s*0([\d\s.-]*)\)/
+
+/**
  * The address that hands a number to the phone's dialler: its digits, and
  * any plus sign. A 0 in brackets straight after a country code, as in
- * "+44 (0)7700 900123", is the 0 dialled only from inside the country, never
- * after its code, so it is left out (+447700900123). Any other brackets, such
- * as round an area code in "+1 (555) 010-0199", hold digits that are dialled.
+ * "+44 (0)7700 900123" or "0044 (0)7700 900123", is the 0 dialled only from
+ * inside the country, never after its code, so it is left out
+ * (+447700900123); so is the 0 opening a bracketed area code, as in
+ * "+44 (020) 7946 0018", for a country that writes one (HOME_ZERO_CODES),
+ * while Italy's "+39 (06)" keeps it. A number in either form is dialled
+ * with a plus sign, which works from anywhere. Any other brackets, such as
+ * round an area code in "+1 (555) 010-0199", hold digits that are dialled.
  */
 export function telHref(phone: string): string {
-  const dialled = phone.replace(/^(\s*\+\s*\d{1,3})[\s.-]*\(\s*0\s*\)/, '$1')
-  return `tel:${dialled.replace(/[^\d+]/g, '')}`
+  const digits = (text: string) => text.replace(/\D/g, '')
+  const match = BRACKETED_ZERO.exec(phone)
+  if (!match) return `tel:${phone.replace(/[^\d+]/g, '')}`
+  const [written, code, rest] = match
+  const area = digits(rest) === '' || HOME_ZERO_CODES.has(code) ? digits(rest) : `0${digits(rest)}`
+  return `tel:+${code}${area}${digits(phone.slice(written.length))}`
 }

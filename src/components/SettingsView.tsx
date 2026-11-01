@@ -43,6 +43,7 @@ import { counted } from '../lib/plural'
 import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { releaseName } from '../data/currentRelease'
 import { soundVolumeOf } from '../lib/sound'
+import type { Hemisphere } from '../lib/seasons'
 import { SoundSwitches, SoundVolume } from './SoundControls'
 import { GuideLink } from './GuideLink'
 import { RegionSetting } from './RegionSetting'
@@ -377,8 +378,11 @@ export function SettingsView({
   onSaveCustomBackdrop?: BackdropActions['onSaveCustomBackdrop']
   onDeleteCustomBackdrop?: BackdropActions['onDeleteCustomBackdrop']
   onSelectCustomBackdrop?: BackdropActions['onSelectCustomBackdrop']
-  /** Where the gardener gardens, for the Guide's native marks, or none. */
-  onSetRegion?: (region: RegionId | undefined) => void
+  /**
+   * Where the gardener gardens, for the Guide's native marks, or none; and,
+   * where that does not say it, the half of the world they chose.
+   */
+  onSetRegion?: (region: RegionId | undefined, hemisphere?: Hemisphere) => void
   /** Open the Guide at a section, from a "What does this do?" link. */
   onOpenGuide?: (section: string) => void
   onChooseNightBackdrop?: BackdropActions['onChooseNightBackdrop']
@@ -1054,6 +1058,7 @@ export function SettingsView({
       {onSetRegion && (
         <RegionSetting
           region={profile?.region}
+          hemisphere={profile?.hemisphere}
           onChoose={onSetRegion}
           onOpenGuide={onOpenGuide}
         />

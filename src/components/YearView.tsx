@@ -130,6 +130,7 @@ export function YearView({
         <h2 id={journalId}>What you wrote</h2>
         <p className="year-words">{words.journal}</p>
         {words.care && <p className="year-words">{words.care}</p>}
+        {words.run && <p className="year-words">{words.run}</p>}
       </section>
 
       {anyDayWritten && (

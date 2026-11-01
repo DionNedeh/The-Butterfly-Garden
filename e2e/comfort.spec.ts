@@ -117,7 +117,7 @@ test('a comfort plan is written in the gardener’s own words and kept through a
   await phone.fill('call me')
   await people.getByRole('button', { name: 'Save changes' }).click()
   await expect(people.getByRole('alert')).toHaveText(
-    'A phone number can hold digits, a plus sign, spaces and dashes.',
+    'A phone number can hold digits, a plus sign, spaces, dashes, brackets and dots.',
   )
   await expect(phone).toBeFocused()
   expect(await seriousViolations(page, 'Comfort plan, a number refused, at night')).toEqual([])
@@ -181,4 +181,26 @@ test('a gentle day offers the comfort plan, and the plan offers support first', 
   await page.getByRole('button', { name: 'Back to Today' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Your comfort plan' })).toBeFocused()
+})
+
+test.describe('6.9 from a plan the support page opened', () => {
+  test('“If you need support now” goes back to that support page, at its link to the plan', async ({
+    page,
+  }) => {
+    await enterGarden(page)
+    await goTo(page, 'Settings')
+    await page.getByRole('button', { name: 'If you need support now' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'If you need support now' })).toBeVisible()
+    const toPlan = page.getByRole('link', { name: 'Write a comfort plan' })
+    await toPlan.click()
+    await expect(page.getByRole('heading', { level: 1, name: 'My comfort plan' })).toBeVisible()
+    await page.getByRole('link', { name: 'If you need support now' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'If you need support now' })).toBeVisible()
+    await expect(page).toHaveURL(/#\/support$/)
+    await expect(toPlan).toBeFocused()
+    await expect(toPlan).toBeInViewport()
+    // That support page still goes back to the page that opened it.
+    await page.getByRole('button', { name: 'Back to Settings' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  })
 })
