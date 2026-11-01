@@ -59,6 +59,7 @@ The checks on b3f7da1, run on 1 November 2026:
   - **The kept backup file, on desktop and mobile** (`keep.spec.ts:161`). Chromium 1243, the build this Playwright pins and CI installs, closes the whole browser when a handle from the origin's private file system is put into IndexedDB. A probe showed that every other step works. A real save screen hands over a file on disk, which IndexedDB keeps, so the test's stand-in handle now stays in the page, with a token in IndexedDB.
 - **After the fixes:** both tests pass three times each in both projects, 24 runs in all.
 - **The comfort-plan failure 3.6 noted** (`comfort.spec.ts:132`) passed in the baseline.
+- **CI's first run of 3.6's tests** (on the R0 PR) found one more race, in `keep.spec.ts:36`: it counted the "Before a restore" rows before Settings had listed them. It now waits for the first row; the spec then passed three times in both projects.
 
 The parked items, in the decision plan: 1.3, 1.5, ART-6, ART-7, ART-10, 2.2, 3.5, 3.6, 5.1 (the move), 5.2 (required job), 5.5 (baseline and caps), 5.6, 5.7 (Playwright bump), 5.12, 6.1, 6.12, 6.13, 6.14, 7.1, 7.3, 7.4, 7.5, 7.6, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6.
 

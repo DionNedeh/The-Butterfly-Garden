@@ -113,6 +113,8 @@ test('a day’s copy is kept before its first change, and one is put back and un
   await expect(page.getByText('Written after undo')).toHaveCount(0)
   await goTo(page, 'Settings')
   const restoreRow = page.getByRole('listitem').filter({ hasText: 'Before a restore' }).first()
+  // The earlier copies are read after Settings opens; count them once listed.
+  await expect(restoreRow).toBeVisible()
   const beforeCount = await page.getByRole('listitem').filter({ hasText: 'Before a restore' }).count()
   await restoreRow.getByRole('button', { name: /^Discard copy,/ }).click()
   await restoreRow.getByRole('button', { name: 'Discard this copy' }).click()
