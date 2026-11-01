@@ -293,6 +293,26 @@ export async function settle(page: Page) {
   await page.evaluate(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
   )
+  // And the page quiet for 300 ms (5 s at most): a lazy part with no
+  // fallback, such as the garden's seeds link, draws a moment after its page.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let quiet = window.setTimeout(done, 300)
+        const cap = window.setTimeout(done, 5000)
+        const watch = new MutationObserver(() => {
+          window.clearTimeout(quiet)
+          quiet = window.setTimeout(done, 300)
+        })
+        watch.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true })
+        function done() {
+          watch.disconnect()
+          window.clearTimeout(quiet)
+          window.clearTimeout(cap)
+          resolve()
+        }
+      }),
+  )
 }
 
 /** The lines describing the page as it is drawn now. */

@@ -31,7 +31,7 @@ export const JarSprite = memo(function JarSprite({
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id={`glass${id}`} x1="0" x2="1" y2="0.2">
+        <linearGradient id={`glass-${id}`} x1="0" x2="1" y2="0.2">
           <stop stopColor={color.highlight} stopOpacity=".8" />
           <stop offset=".22" stopColor={color.fill} stopOpacity=".64" />
           <stop offset=".62" stopColor={color.highlight} stopOpacity=".45" />
@@ -41,7 +41,7 @@ export const JarSprite = memo(function JarSprite({
       <ellipse cx="40" cy="81" rx="28" ry="4" fill="#243c30" opacity=".15" />
       <path
         d="M22 16v10C22 31 12 32 12 41v29q0 10 28 10t28-10V41c0-9-10-10-10-15V16Z"
-        fill={`url(#glass${id})`}
+        fill={`url(#glass-${id})`}
         stroke={color.border}
         strokeWidth="1.6"
       />
