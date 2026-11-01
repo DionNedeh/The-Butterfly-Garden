@@ -8,6 +8,7 @@ import { newMoveCode } from '../lib/moveCode'
 import { createInitialState } from '../lib/progression'
 import { sealBackup } from '../lib/sealedBackup'
 import type { LockState } from '../repository/gardenRepository'
+import { LAZY_PAGE_MS } from '../test/lazyPage'
 import { SettingsView } from './SettingsView'
 
 /** Text entered all at once, as a paste: twelve words key by key are slow on a busy machine. */
@@ -132,6 +133,10 @@ describe('moving the garden from Settings', { timeout: 20_000 }, () => {
         'Your garden lock stays on this device. The garden on your new device will not be locked until you turn the lock on there, in Settings.',
       ),
     ).toBeInTheDocument()
+    // The lock's section, open beside it, loads the lock's actions and the
+    // passkey module: wait for both, or the file can end while they load.
+    await screen.findByRole('combobox', { name: 'Lock by itself' }, { timeout: LAZY_PAGE_MS })
+    await import('../lib/passkey')
   })
 })
 
