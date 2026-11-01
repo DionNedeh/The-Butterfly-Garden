@@ -40,8 +40,36 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-8',
+    version: '3.8.0',
+    title: 'Back where you were',
+    sections: [
+      {
+        title: 'Finding your way',
+        items: [
+          'The browser’s Back and Forward take you back to where you were: the same companion, the same place on the page, and the link you pressed.',
+          'A day in the Journal and a tab in the Shop have addresses of their own, so they open again after a reload.',
+          'The Shop’s Nectar and Stardust, the garden’s seeds and each plant’s growth have a “What does this do?” link, and Back returns you to the same tab or plant.',
+          'The Guide has new sections on letters and your year, the field book, calendar reminders, the comfort plan, night and seasons, backups and moving, and the lock. Its search says when nothing matches.',
+        ],
+      },
+      {
+        title: 'Through the day and the seasons',
+        items: [
+          'If your region is Elsewhere or not chosen, Settings asks which half of the world you garden in, and the garden’s seasons follow your answer.',
+          'At night, the scene gallery shows each scene as it looks by night.',
+          'A small “Draft kept” note shows under your writing once your unsaved words are safely stored.',
+          'A gentle day shows no Sunlight count in the header, the evening recap or Today’s calendar, and the backup reminder waits until the next day.',
+          'Your garden’s year names your longest run of days cared for, unless you have chosen to hide day counts.',
+          'In the comfort plan, numbers written with brackets, such as +44 (020) or 0044 (0), dial correctly.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'release-3-7',
     version: '3.7.0',
+    releasedOn: '2026-11-01',
     title: 'Nothing lost along the way',
     sections: [{
       title: 'Kept safe',
