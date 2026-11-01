@@ -30,6 +30,14 @@ describe('release notes', () => {
     expect(currentRelease.version).toBe(__APP_VERSION__)
   })
 
+  it('keeps the 3.6 notes as they went out', () => {
+    // 3.6 was integrated as source on 28 October and went live on 1 November.
+    const six = getRelease('release-3-6')
+    expect(six?.version).toBe('3.6.0')
+    expect(six?.releasedOn).toBe('2026-11-01')
+    expect(six?.sections.flatMap((section) => section.items).join(' ')).not.toMatch(/lock screen|checksum|check of what/)
+  })
+
   it('keeps the 3.3 notes as they went out', () => {
     const three = getRelease('release-3-3')
     expect(three?.version).toBe('3.3.0')
