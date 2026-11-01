@@ -216,3 +216,57 @@ describe('the way back from the comfort plan', () => {
     expect(returnFrom({ view: 'comfort', from: 'comfort' })).toBeUndefined()
   })
 })
+
+describe('6.7 deeper addresses: a journal day and a shop tab', () => {
+  it('reads back a day in the Journal it writes', () => {
+    expect(hashForRoute({ view: 'journal', journalDay: '2026-10-26' })).toBe('#/journal/2026-10-26')
+    expect(routeFromHash('#/journal/2026-10-26')).toEqual({ view: 'journal', journalDay: '2026-10-26' })
+    expect(routeFromHash('#/journal/2026-10-26/')).toEqual({ view: 'journal', journalDay: '2026-10-26' })
+    // Only the Journal has days in its address.
+    expect(hashForRoute({ view: 'today', journalDay: '2026-10-26' })).toBe('#/today')
+  })
+
+  it('names no page for a day that is not on the calendar, or not written as one', () => {
+    expect(routeFromHash('#/journal/2026-02-30')).toBeUndefined()
+    expect(routeFromHash('#/journal/2026-13-01')).toBeUndefined()
+    expect(routeFromHash('#/journal/26-10-2026')).toBeUndefined()
+    expect(routeFromHash('#/journal/2026-10-26/x')).toBeUndefined()
+    expect(routeFromHash('#/journal/today')).toBeUndefined()
+  })
+
+  it('reads back every shop tab it writes, and keeps #/shop/pass as it was', () => {
+    for (const shopTab of ['supplies', 'boutique', 'jars', 'flight', 'backdrops'] as const) {
+      expect(hashForRoute({ view: 'shop', shopTab })).toBe(`#/shop/${shopTab}`)
+      expect(routeFromHash(hashForRoute({ view: 'shop', shopTab }))).toEqual({ view: 'shop', shopTab })
+    }
+    // The Pass's old address, for its links and the Settings button.
+    expect(hashForRoute({ view: 'shop', shopTab: 'pass' })).toBe('#/shop/pass')
+    expect(routeFromHash('#/shop/pass')).toEqual({ view: 'shop', onPass: true })
+    // Only the shop has tabs in its address.
+    expect(hashForRoute({ view: 'journal', shopTab: 'jars' })).toBe('#/journal')
+  })
+
+  it('names no page for a tab the shop does not have', () => {
+    expect(routeFromHash('#/shop/hats')).toBeUndefined()
+    expect(routeFromHash('#/shop/Jars')).toBeUndefined()
+    expect(routeFromHash('#/shop/jars/2')).toBeUndefined()
+  })
+})
+
+describe('6.4 the way back to a shop tab or an open plant', () => {
+  it('returns to the shop on the tab its link was on', () => {
+    const fromPlace = { section: 'nectar-and-stardust', scrollY: 120, shopTab: 'jars' as const }
+    expect(returnFrom({ view: 'guide', section: 'nectar-and-stardust', from: 'shop', fromPlace })).toEqual({
+      view: 'shop',
+      shopTab: 'jars',
+      restore: fromPlace,
+    })
+  })
+
+  it('returns to the garden with the plant whose panel it was, in place but not in the address', () => {
+    const fromPlace = { section: 'seeds', scrollY: 900, plantId: 'plant-2' }
+    const back = returnFrom({ view: 'guide', section: 'seeds', from: 'garden', fromPlace })
+    expect(back).toEqual({ view: 'garden', restore: fromPlace })
+    expect(hashForRoute(back!)).toBe('')
+  })
+})

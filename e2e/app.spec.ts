@@ -2315,3 +2315,138 @@ test.describe('6.3 a gentle day in the header', () => {
     await expect(page.getByText('You have not saved a copy yet.', { exact: false })).toBeVisible()
   })
 })
+
+test.describe('6.4 “What does this do?” from the shop and the garden', () => {
+  test('the Guide’s Back returns to the shop’s tab and to the open plant, with focus on the link', async ({
+    page,
+  }) => {
+    await enterGarden(page)
+    await goTo(page, 'Shop')
+    await page.getByRole('navigation', { name: 'Shop sections' }).getByRole('button', { name: 'Jars' }).click()
+    await expect(page).toHaveURL(/#\/shop\/jars$/)
+    const wallet = page.getByRole('link', { name: /^What does this do\? Nectar and Stardust/ })
+    await wallet.click()
+    await expect(page).toHaveURL(/#\/guide\/nectar-and-stardust$/)
+    await expect(page.getByRole('heading', { level: 2, name: 'Nectar and Stardust' })).toBeFocused()
+    await page.getByRole('button', { name: 'Back to the Shop' }).click()
+    await expect(page).toHaveURL(/#\/shop\/jars$/)
+    await expect(
+      page.getByRole('navigation', { name: 'Shop sections' }).getByRole('button', { name: 'Jars' }),
+    ).toHaveAttribute('aria-current', 'page')
+    await expect(wallet).toBeFocused()
+    expect(await seriousViolations(page, 'Shop with its wallet’s Guide link')).toEqual([])
+
+    await goTo(page, 'Garden')
+    await page.getByLabel('All garden plants').getByRole('button', { name: /^Aster/ }).click()
+    const growth = page.locator('.plant-detail').getByRole('link', { name: /^What does this do\? How plants grow/ })
+    await growth.click()
+    await expect(page.getByRole('heading', { level: 2, name: 'Seeds, plants, and butterfly eggs' })).toBeFocused()
+    await page.getByRole('button', { name: 'Back to the garden' }).click()
+    await expect(page.getByLabel('All garden plants').getByRole('button', { name: /^Aster/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(growth).toBeFocused()
+  })
+})
+
+test.describe('6.6 the browser’s own Back returns to the same place', () => {
+  test('back from the Guide opened on Care, the same companion, scrolled where it was, focus on the link', async ({
+    page,
+  }) => {
+    await enterGarden(page)
+    await editGardenRecord(page, (state) => {
+      state.creatures.push({ ...state.creatures[0], id: 'juniper', name: 'Juniper', stage: 'butterfly' })
+    })
+    await page.reload()
+    await goTo(page, 'Care')
+    await page.getByRole('tab', { name: /Juniper/ }).click()
+    const bond = page.getByRole('link', { name: /^What does this do\? Bond levels/ })
+    // Well inside the screen, so that focusing it on the way back has no need
+    // to bring it into view; and how far down the page was as it was pressed,
+    // which is what the app keeps.
+    await bond.evaluate((link) => link.scrollIntoView({ block: 'center' }))
+    await page.evaluate(() =>
+      document.addEventListener(
+        'click',
+        () => document.documentElement.setAttribute('data-pressed-at', String(window.scrollY)),
+        { capture: true, once: true },
+      ),
+    )
+    await bond.click()
+    const scrolled = Number(await page.locator('html').getAttribute('data-pressed-at'))
+    await expect(page).toHaveURL(/#\/guide\/bond$/)
+    await expect(page.getByRole('heading', { level: 2, name: 'Bond levels' })).toBeFocused()
+
+    await page.goBack()
+    await expect(page).toHaveURL(/#\/care$/)
+    await expect(page.getByRole('tab', { name: /Juniper/ })).toHaveAttribute('aria-selected', 'true')
+    await expect(bond).toBeFocused()
+    expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrolled)).toBeLessThanOrEqual(2)
+
+    // Forward is the Guide again, still with its way back.
+    await page.goForward()
+    await expect(page.getByRole('heading', { level: 2, name: 'Bond levels' })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'Back to Care' })).toBeVisible()
+  })
+
+  test.describe('in the evening', () => {
+    test.use({ timezoneId: 'America/New_York' })
+
+    test('back from the Guide opened in the recap, the recap for that evening', async ({ page }) => {
+      await page.clock.setFixedTime(new Date('2026-09-09T01:00:00.000Z'))
+      await page.goto('/The-Butterfly-Garden/')
+      await enterGarden(page)
+      await goTo(page, 'Today')
+      await page.getByRole('button', { name: 'Begin' }).click()
+      await expect(page.getByRole('heading', { name: 'Here is your day.' })).toBeVisible()
+      await page.getByRole('link', { name: /^What does this do\? Moonlight/ }).click()
+      await expect(page.getByRole('heading', { level: 2, name: 'Moonlight — round out the evening' })).toBeFocused()
+      // The Guide reloaded, so only the browser's history remembers the evening.
+      await page.reload()
+      await expect(page.getByRole('heading', { level: 1, name: 'How the garden works' })).toBeVisible()
+      await page.goBack()
+      await expect(page).toHaveURL(/#\/recap$/)
+      await expect(page.getByRole('heading', { name: 'Here is your day.' })).toBeVisible()
+      await expect(page.getByRole('link', { name: /^What does this do\? Moonlight/ })).toBeFocused()
+    })
+  })
+})
+
+test.describe('6.7 deeper addresses: a journal day and a shop tab', () => {
+  test('open that day or tab, survive a reload, and changing tabs adds no history', async ({ page }) => {
+    await enterGarden(page)
+    await goTo(page, 'Today')
+    await page.getByRole('button', { name: /bright/i }).click()
+    await page.getByRole('button', { name: /save check-in/i }).click()
+    const today = await page.evaluate(() => {
+      const now = new Date()
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    })
+    await page.waitForTimeout(250)
+
+    await page.goto(`/The-Butterfly-Garden/#/journal/${today}`)
+    const date = page.locator(`#day-${today} time`)
+    await expect(date).toBeFocused()
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+    await expect(date).toBeFocused()
+    await expect(page).toHaveURL(new RegExp(`#/journal/${today}$`))
+
+    await page.goto('/The-Butterfly-Garden/#/shop/jars')
+    const tabs = page.getByRole('navigation', { name: 'Shop sections' })
+    await expect(tabs.getByRole('button', { name: 'Jars' })).toHaveAttribute('aria-current', 'page')
+    await page.reload()
+    await expect(tabs.getByRole('button', { name: 'Jars' })).toHaveAttribute('aria-current', 'page')
+    await tabs.getByRole('button', { name: 'Boutique' }).click()
+    await expect(page).toHaveURL(/#\/shop\/boutique$/)
+    // Back walks pages, not tabs.
+    await page.goBack()
+    await expect(page.getByRole('heading', { level: 1, name: 'Journal' })).toBeVisible()
+
+    // A day that is not on the calendar opens the garden, and leaves the address.
+    await page.goto('/The-Butterfly-Garden/#/journal/2026-02-30')
+    await expect(page.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible()
+    await expect(page).toHaveURL(/\/The-Butterfly-Garden\/$/)
+  })
+})

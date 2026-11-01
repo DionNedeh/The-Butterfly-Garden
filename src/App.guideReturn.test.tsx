@@ -145,3 +145,69 @@ describe('back from the Guide a "What does this do?" link opened', { timeout: 20
     expect(screen.getByRole('tab', { name: /Elm/ })).toHaveAttribute('aria-selected', 'true')
   })
 })
+
+describe('6.4 back from the Guide to the Shop and the garden', { timeout: 20_000 }, () => {
+  const walletLink = () => screen.getByRole('link', { name: /^What does this do\? Nectar and Stardust/ })
+  const shopTabs = () => within(screen.getByRole('navigation', { name: 'Shop sections' }))
+
+  /** The shop on its Jars tab, and the Guide opened from its wallet. */
+  async function openGuideFromJars() {
+    const user = await openGarden(gardenOfThree())
+    await user.click(primaryNav().getByRole('button', { name: 'Shop' }))
+    await screen.findByRole('heading', { level: 1, name: 'Stock up & dress up' }, { timeout: LAZY_PAGE_MS })
+    await user.click(shopTabs().getByRole('button', { name: 'Jars' }))
+    await user.click(walletLink())
+    const heading = await screen.findByRole(
+      'heading',
+      { level: 2, name: 'Nectar and Stardust' },
+      { timeout: LAZY_PAGE_MS },
+    )
+    await waitFor(() => expect(heading).toHaveFocus())
+    return user
+  }
+
+  async function expectBackOnJars() {
+    await screen.findByRole('heading', { level: 1, name: 'Stock up & dress up' }, { timeout: LAZY_PAGE_MS })
+    expect(window.location.hash).toBe('#/shop/jars')
+    expect(shopTabs().getByRole('button', { name: 'Jars' })).toHaveAttribute('aria-current', 'page')
+    await waitFor(() => expect(walletLink()).toHaveFocus())
+  }
+
+  it('returns the Shop to the tab its wallet’s link was pressed on, with focus on that link', async () => {
+    const user = await openGuideFromJars()
+    await user.click(screen.getByRole('button', { name: 'Back to the Shop' }))
+    await expectBackOnJars()
+  })
+
+  it('does the same for Android’s back gesture', async () => {
+    await openGuideFromJars()
+    act(() => back.press?.())
+    await expectBackOnJars()
+  })
+
+  it('returns the garden with the same plant open, and focus on its panel’s link', async () => {
+    const user = await openGarden(gardenOfThree())
+    const plants = () => within(screen.getByLabelText('All garden plants'))
+    await user.click(plants().getByRole('button', { name: /^Aster/ }))
+    const inPanel = () =>
+      within(document.querySelector<HTMLElement>('.plant-detail')!).getByRole('link', {
+        name: /^What does this do\? How plants grow/,
+      })
+    await waitFor(() => expect(inPanel()).toBeInTheDocument(), { timeout: LAZY_PAGE_MS })
+    const scrolled = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(820)
+    await user.click(inPanel())
+    const heading = await screen.findByRole(
+      'heading',
+      { level: 2, name: 'Seeds, plants, and butterfly eggs' },
+      { timeout: LAZY_PAGE_MS },
+    )
+    await waitFor(() => expect(heading).toHaveFocus())
+    scrolled.mockReturnValue(0)
+    await user.click(screen.getByRole('button', { name: 'Back to the garden' }))
+    await screen.findByRole('heading', { level: 1, name: 'Quiet Corner' }, { timeout: LAZY_PAGE_MS })
+    expect(window.location.hash).toBe('')
+    expect(plants().getByRole('button', { name: /^Aster/ })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(inPanel()).toHaveFocus())
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 820, behavior: 'instant' })
+  })
+})

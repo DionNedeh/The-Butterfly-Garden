@@ -34,18 +34,14 @@ import { JarCharacterPicker } from './shop/JarCharacterPicker'
 import { JarShelf } from './shop/JarShelf'
 import { UndoToast, type UndoOffer } from './UndoToast'
 import { JarCharacter, Spoken } from './Spoken'
+import { GuideLink } from './GuideLink'
 import { motionPreference } from '../lib/motion'
+import type { OpenGuide, ShopTab } from '../lib/routes'
 // Only the shop draws these, so they arrive with it rather than with the
 // stylesheet every page waits for.
 import './shop/shop.css'
 
-export type ShopTab =
-  | 'supplies'
-  | 'boutique'
-  | 'jars'
-  | 'flight'
-  | 'backdrops'
-  | 'pass'
+export type { ShopTab }
 const tabs: { id: ShopTab; label: string }[] = [
   { id: 'supplies', label: 'Supplies' },
   { id: 'boutique', label: 'Boutique' },
@@ -66,6 +62,8 @@ export function ShopView({
   onOpenCare = () => {},
   onOpenFlight = () => {},
   initialTab = 'supplies',
+  onChangeTab,
+  onOpenGuide,
   ...backdrops
 }: {
   state: AppState
@@ -78,8 +76,16 @@ export function ShopView({
   onPurchaseItem: (id: string, quantity?: number) => PurchaseOutcome
   onOpenCare?: () => void
   onOpenFlight?: () => void
-  /** Where the shop opens; the garden's Pass notice opens it on the Pass. */
+  /**
+   * Where the shop opens, as its address names it (`#/shop/jars`); the
+   * garden's Pass notice opens it on the Pass. Another tab named while the
+   * shop is open (Back, Forward, an address typed) is shown at once.
+   */
   initialTab?: ShopTab
+  /** A tab chosen, for the address to follow. */
+  onChangeTab?: (tab: ShopTab) => void
+  /** "What does this do?" beside the wallet, remembering the tab it was on. */
+  onOpenGuide?: OpenGuide
 } & BackdropActions) {
   const [tab, setTab] = useState<ShopTab>(initialTab)
   const [query, setQuery] = useState('')
@@ -175,6 +181,22 @@ export function ShopView({
     setOwnership('all')
     setFitsId('all')
     setAffordableOnly(false)
+  }
+  /** A tab chosen here, which the address follows. */
+  const chooseTab = (next: ShopTab) => {
+    setTab(next)
+    onChangeTab?.(next)
+  }
+  // A tab named from outside while the shop is open, adjusting state while
+  // rendering, as React advises: shown as if its button had been pressed.
+  const [tabAsked, setTabAsked] = useState(initialTab)
+  if (initialTab !== tabAsked) {
+    setTabAsked(initialTab)
+    if (initialTab !== tab) {
+      setTab(initialTab)
+      reset()
+      setUndo(undefined)
+    }
   }
   const closeSheet = () => {
     setSheetOpen(false)
@@ -343,6 +365,13 @@ export function ShopView({
             <strong>{state.stardust}</strong>
             <span>Stardust</span>
           </div>
+          {onOpenGuide && (
+            <GuideLink
+              section="nectar-and-stardust"
+              topic="Nectar and Stardust"
+              onOpen={(section) => onOpenGuide(section, undefined, { shopTab: tab })}
+            />
+          )}
         </div>
       </header>
       <nav className="shop-tabs" aria-label="Shop sections">
@@ -352,7 +381,7 @@ export function ShopView({
             className={tab === item.id ? 'active' : ''}
             aria-current={tab === item.id ? 'page' : undefined}
             onClick={() => {
-              setTab(item.id)
+              chooseTab(item.id)
               reset()
               // A jar's undo belongs to the shelf it was offered beside.
               setUndo(undefined)
@@ -368,7 +397,7 @@ export function ShopView({
               inline check, which keeps the Play panel out of the PWA. */}
           {tab === 'pass' && import.meta.env.VITE_PLATFORM === 'android' ? (
             <GardenPassPanel
-              onExploreBackdrops={() => setTab('backdrops')}
+              onExploreBackdrops={() => chooseTab('backdrops')}
               onOpenCare={onOpenCare}
             />
           ) : tab === 'pass' ? (
@@ -380,7 +409,7 @@ export function ShopView({
                 <div className="form-actions">
                   <button
                     className="primary-button"
-                    onClick={() => setTab('backdrops')}
+                    onClick={() => chooseTab('backdrops')}
                   >
                     Explore backdrops
                   </button>

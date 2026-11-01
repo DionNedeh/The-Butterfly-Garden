@@ -7,6 +7,8 @@ import {
 } from '../../lib/plantManagement'
 import { MAX_PLANT_GROWTH } from '../../lib/progression'
 import type { AppState, PlantDefinition, PlantInstance } from '../../types'
+import type { OpenGuide } from '../../lib/routes'
+import { GuideLink } from '../GuideLink'
 import { JarManager } from './JarManager'
 
 const speciesById = new Map(species.map((item) => [item.id, item]))
@@ -31,6 +33,7 @@ export function PlantPanel({
   onRemove,
   onPlaceJar,
   onRemoveJarPlacement,
+  onOpenGuide,
 }: {
   state: AppState
   plant: PlantInstance
@@ -44,6 +47,11 @@ export function PlantPanel({
   onRemove: () => void
   onPlaceJar: (jarId: string, plantId: string) => void
   onRemoveJarPlacement: (plantId: string) => void
+  /**
+   * "What does this do?" beside how it grows, remembering this plant, whose
+   * panel is open again on the way back. Without it, none is offered.
+   */
+  onOpenGuide?: OpenGuide
 }) {
   const removalBlocker = plantRemovalBlocker(state, plant.id)
   const eggNote = plantEggNote(state, plant, MAX_PLANT_GROWTH)
@@ -72,7 +80,19 @@ export function PlantPanel({
         </div>
         <div>
           <dt>Care remaining</dt>
-          <dd>{remaining === 0 ? 'Fully grown' : `${remaining} eligible Sunlight`}</dd>
+          <dd>
+            {remaining === 0 ? 'Fully grown' : `${remaining} eligible Sunlight`}
+            {onOpenGuide && (
+              <>
+                {' '}
+                <GuideLink
+                  section="seeds"
+                  topic="How plants grow"
+                  onOpen={(section) => onOpenGuide(section, undefined, { plantId: plant.id })}
+                />
+              </>
+            )}
+          </dd>
         </div>
         <div>
           <dt>Supports</dt>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   speciesAcquisitionRecords,
   nextSpeciesForPlant,
@@ -18,6 +18,12 @@ import { PLANT_CAPACITY } from '../lib/plantManagement'
 import { STARTER_COMPANION_NAME } from '../lib/progression'
 import { keepsGiving, REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 
+/** How many species the directory shows, and for which search words. */
+export interface SpeciesShown {
+  words: readonly string[]
+  count: number
+}
+
 /**
  * Every species, what to plant for it, and what the garden would bring next.
  *
@@ -34,6 +40,7 @@ export function SpeciesDirectory({
   region,
   seen,
   onLogSighting,
+  onShown,
 }: {
   state: AppState
   onShowSeed: (id: string) => void
@@ -43,6 +50,11 @@ export function SpeciesDirectory({
   seen?: ReadonlyMap<string, WildRecord>
   /** Open the sighting form on this butterfly or plant; without it, none is offered. */
   onLogSighting?: (subject: SightingSubject, opener: HTMLElement) => void
+  /**
+   * How many species are shown for these words, said once they are drawn, so
+   * the Guide's one search line can count them too.
+   */
+  onShown?: (shown: SpeciesShown) => void
 }) {
   const [filter, setFilter] = useState('all')
   const all = useMemo(() => speciesAcquisitionRecords(state), [state])
@@ -69,6 +81,8 @@ export function SpeciesDirectory({
       hasEveryWord(searchable.get(item.speciesId) ?? '', words) &&
       (filter === 'all' || item.progress === filter),
   )
+  const count = records.length
+  useEffect(() => onShown?.({ words, count }), [onShown, words, count])
   return (
     <section className="species-directory" aria-labelledby="species-title">
       <div className="section-heading">

@@ -120,12 +120,6 @@ import { usePassStatus } from './hooks/usePassStatus'
 import { setPassStatus, trackPassStatus } from './lib/passEntitlement'
 import { dismissPassLapseNotice } from './lib/playBilling'
 import {
-  backAction,
-  putBackAt,
-  requestDialogClose,
-  requestDismiss,
-} from './lib/backNavigation'
-import {
   leaveApp,
   onAppActiveChange,
   onBackButton,
@@ -153,6 +147,7 @@ import {
   urlForRoute,
   type BreatheWay,
   type LinkPlace,
+  type OpenGuide,
   type Route,
 } from './lib/routes'
 import { Celebrations } from './components/Celebrations'
@@ -163,14 +158,28 @@ function currentUrl(): string {
 }
 
 /**
+ * The way back (lib/backNavigation): putting the gardener back at a link, and
+ * Android's back ladder. Neither is needed until the first way back is taken,
+ * so it is not in the first load.
+ */
+const backNavigation = () => import('./lib/backNavigation')
+
+/**
  * Puts the gardener back where they pressed a "What does this do?" link, a
  * way into breathing or into the comfort plan, or the plan's way to support,
  * once the page they return to is drawn. Rendered after the page, inside the
  * same Suspense, so it runs after the page's own first focus (Care's chip,
- * the plan's heading) and never before the page is there.
+ * the plan's heading) and never before the page is there; and not once the
+ * page has been left again.
  */
 function PutBack({ place }: { place: LinkPlace }) {
-  useEffect(() => putBackAt(place), [place])
+  useEffect(() => {
+    let here = true
+    void backNavigation().then(({ putBackAt }) => here && putBackAt(place))
+    return () => {
+      here = false
+    }
+  }, [place])
   return null
 }
 
@@ -267,17 +276,33 @@ function App() {
     () => routeFromHash(window.location.hash) ?? { view: 'garden' },
   )
   const view = route.view
-  /** Set only when something asks for the shop's Garden Pass tab. */
-  const shopOpensOnPass = route.view === 'shop' && route.onPass === true
-  const navigate = (next: Route, options: { replace?: boolean } = {}) => {
-    // A page opens at its top, except one being returned to, which PutBack
-    // scrolls back to where it was.
-    if (!next.restore) window.scrollTo({ top: 0, behavior: 'instant' })
+  /** The day the recap was actually opened for, so it is never re-entered. */
+  const [recapOpenedFor, setRecapOpenedFor] = useState<string>()
+  const navigate = (
+    next: Route,
+    options: { replace?: boolean; scroll?: boolean; wayBack?: boolean } = {},
+  ) => {
     const url = urlForRoute(next)
+    // Each entry in the browser's history keeps the whole route, with what
+    // the address leaves out, so its Back and Forward put back what the
+    // page's own Back does.
     if (url !== currentUrl()) {
-      if (options.replace) window.history.replaceState(null, '', url)
-      else window.history.pushState(null, '', url)
+      if (options.replace) window.history.replaceState(next, '', url)
+      else {
+        // The page a link leaves keeps, for the browser's Back, the way back
+        // to where the link was: the same companion, tab or plant, scrolled
+        // as it was, and the recap's evening. Only a link that leaves the
+        // page `from` names (wayBack): any other step keeps its own entry.
+        const back = options.wayBack && returnFrom(next)
+        if (back) window.history.replaceState({ ...back, recapFor: recapOpenedFor }, '')
+        window.history.pushState(next, '', url)
+      }
     }
+    // A page opens at its top, except one being returned to, which PutBack
+    // scrolls back to where it was, or a tab or a day chosen on the page.
+    // Only after the entry left has been written, so that the scroll the
+    // browser keeps with it, and puts back on its Back, is where it was.
+    if (!next.restore && options.scroll !== false) window.scrollTo({ top: 0, behavior: 'instant' })
     setRoute(next)
   }
   const setView = (next: AppView, options: { onPass?: boolean } = {}) =>
@@ -308,9 +333,13 @@ function App() {
     setView('support')
   }
   useEffect(() => {
-    const follow = () => {
-      window.scrollTo({ top: 0, behavior: 'instant' })
-      setRoute(routeFromHash(window.location.hash) ?? { view: 'garden' })
+    // An entry this app wrote has its route; one it did not (a hash typed by
+    // hand, or an older build's) is read from the address, at the page's top.
+    const follow = ({ state }: PopStateEvent) => {
+      const kept = (state as Route | null)?.view ? (state as Route) : undefined
+      if (!kept?.restore) window.scrollTo({ top: 0, behavior: 'instant' })
+      if (kept?.recapFor) setRecapOpenedFor(kept.recapFor)
+      setRoute(kept ?? routeFromHash(window.location.hash) ?? { view: 'garden' })
     }
     window.addEventListener('popstate', follow)
     return () => window.removeEventListener('popstate', follow)
@@ -322,7 +351,7 @@ function App() {
   useEffect(() => {
     if (!hasGarden) return
     const wanted = urlForRoute(route)
-    if (wanted !== currentUrl()) window.history.replaceState(null, '', wanted)
+    if (wanted !== currentUrl()) window.history.replaceState(route, '', wanted)
   }, [route, hasGarden])
   /** Read once: whether this visit arrived from the old address (lib/hosting). */
   const [arriving] = useState(isArrival)
@@ -335,8 +364,6 @@ function App() {
     garden.onboard(name, gardenName, starterGoals)
   }
   const [seedFocus, setSeedFocus] = useState<string>()
-  /** The day the recap was actually opened for, so it is never re-entered. */
-  const [recapOpenedFor, setRecapOpenedFor] = useState<string>()
   // Always true in the PWA. In the Android app, false while the app is in the
   // background, so the soundscape does not keep playing from a pocket.
   const [appActive, setAppActive] = useState(true)
@@ -385,7 +412,7 @@ function App() {
   }, [route])
   useEffect(
     () =>
-      onBackButton(() => {
+      onBackButton(() => void backNavigation().then(({ backAction, requestDialogClose, requestDismiss }) => {
         const current = routeRef.current
         const action = backAction(current.view, document, current.from)
         if (action.kind === 'close-dialog') requestDialogClose(action.dialog)
@@ -406,7 +433,7 @@ function App() {
           if (url !== currentUrl()) window.history.replaceState(null, '', url)
           setRoute(next)
         } else void leaveApp()
-      }),
+      })),
     [],
   )
 
@@ -594,15 +621,19 @@ function App() {
   const activeView: AppView = view === 'recap' && !inRecap ? 'today' : view
   /**
    * The Guide at one of its sections, remembering the page to return to and
-   * where on it the link was: how far down, and on Care, whose link it was.
+   * where on it the link was: how far down, on Care whose link it was, and
+   * the shop's tab or the garden's open plant.
    */
-  const openGuideAt = (section: string, companionId?: string) =>
-    navigate({
-      view: 'guide',
-      section,
-      from: activeView,
-      fromPlace: { section, scrollY: window.scrollY, companionId },
-    })
+  const openGuideAt: OpenGuide = (section, companionId, place) =>
+    navigate(
+      {
+        view: 'guide',
+        section,
+        from: activeView,
+        fromPlace: { section, scrollY: window.scrollY, companionId, ...place },
+      },
+      { wayBack: true },
+    )
   /**
    * Breathing with a butterfly, remembering the page that offered it and
    * where on it, as a Guide link does, so that leaving puts the gardener back
@@ -611,22 +642,28 @@ function App() {
    */
   const openBreathe = (way: BreatheWay, goalId?: string) => {
     const fromRecap = way === 'recap'
-    navigate({
-      view: 'breathe',
-      from: fromRecap ? 'today' : activeView,
-      fromPlace: { breathe: way, goalId, scrollY: fromRecap ? 0 : window.scrollY },
-    })
+    navigate(
+      {
+        view: 'breathe',
+        from: fromRecap ? 'today' : activeView,
+        fromPlace: { breathe: way, goalId, scrollY: fromRecap ? 0 : window.scrollY },
+      },
+      { wayBack: true },
+    )
   }
   /**
    * My comfort plan, remembering the page that offered it and where on it, as
    * breathing does, so that leaving puts the gardener back at its link.
    */
   const openComfort = () =>
-    navigate({
-      view: 'comfort',
-      from: activeView,
-      fromPlace: { comfort: true, scrollY: window.scrollY },
-    })
+    navigate(
+      {
+        view: 'comfort',
+        from: activeView,
+        fromPlace: { comfort: true, scrollY: window.scrollY },
+      },
+      { wayBack: true },
+    )
   // The header's switch says what pressing it does, following included: it
   // chooses the other theme by hand, which ends following. A night held by
   // the recap simply ends, and what was chosen or followed is back.
@@ -898,6 +935,8 @@ function App() {
               onCareFor={(companionId) => navigate({ view: 'care', companionId })}
               seedFocus={seedFocus}
               onOpenGuide={() => setView('guide')}
+              onOpenGuideAt={openGuideAt}
+              openPlant={route.restore?.plantId}
               onPutAwayWelcomeBack={garden.putAwayWelcomeBack}
               onOpenLetter={() => navigate({ view: 'journal', letter: true })}
               onReadLetter={garden.readLetter}
@@ -934,7 +973,9 @@ function App() {
               onPurchaseItem={garden.purchaseItem}
               onOpenCare={() => setView('care')}
               onOpenFlight={() => setView('flight-patterns')}
-              initialTab={shopOpensOnPass ? 'pass' : undefined}
+              initialTab={route.onPass ? 'pass' : route.shopTab}
+              onChangeTab={(shopTab) => navigate({ view: 'shop', shopTab }, { replace: true, scroll: false })}
+              onOpenGuide={openGuideAt}
               onSelectBackdrop={garden.selectBackdrop}
               onSaveCustomBackdrop={garden.saveCustomBackdrop}
               onDeleteCustomBackdrop={garden.deleteCustomBackdrop}
@@ -1065,6 +1106,10 @@ function App() {
               onChangeSightings={garden.changeSightings}
               onOpenYear={(year) => navigate({ view: 'year', year, from: 'journal' })}
               returnedFromYear={route.from === 'year'}
+              openDay={route.journalDay}
+              onOpenDay={(journalDay) =>
+                navigate({ view: 'journal', journalDay }, { replace: true, scroll: false })
+              }
             />
           )}
           {activeView === 'year' && (
