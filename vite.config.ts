@@ -6,10 +6,8 @@ import { loadEnv } from 'vite'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { buildBase } from './src/buildBase.ts'
 import { pwaManifest } from './src/pwaManifest.ts'
-
-/** Where the PWA is served on GitHub Pages. */
-const WEB_BASE = '/The-Butterfly-Garden/'
 
 /**
  * What the app is built from: its page, its code, what it ships as it is,
@@ -55,6 +53,9 @@ export default defineConfig(({ mode }) => {
   // through Google Play, so it has no service worker, no web manifest and no
   // precache -- the plugin is disabled but still answers its virtual modules.
   const android = mode === 'android'
+  // GitHub Pages' path unless VITE_BASE says otherwise; '/' for Android (src/buildBase).
+  const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_')
+  const base = buildBase(env, android)
   /** Where this build is written, once Vite has worked it out. */
   let outDir = ''
   const { version } = JSON.parse(
@@ -65,7 +66,7 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(version),
       __BUILD_ID__: JSON.stringify(buildId(mode)),
     },
-    base: android ? '/' : WEB_BASE,
+    base,
     build: {
       ...(android ? { outDir: 'dist-android' } : {}),
       rolldownOptions: {
@@ -135,7 +136,7 @@ export default defineConfig(({ mode }) => {
           'icons/apple-touch-icon.png',
           'icons/favicon-64.png',
         ],
-        manifest: pwaManifest(WEB_BASE),
+        manifest: pwaManifest(base),
         workbox: {
           globPatterns: ['**/*.{js,css,html,png,jpg,webp,svg,woff2}'],
           // Keep full optional scenes out of the install. Thumbnails are small

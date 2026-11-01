@@ -13,13 +13,25 @@
  * the two never drift. Run this after changing that code, and commit the
  * files it writes. Their CRLF line endings are part of the format; the
  * repository's .gitattributes keeps git from changing them.
+ *
+ * The address each file links back to is src/pwaAddress.json's, which the
+ * app reads too (REMINDER_FILES_ADDRESS). When the garden moves to an
+ * address of its own (docs/moving-the-garden.md), change it there and run
+ * this again.
  */
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import pwa from '../src/pwaAddress.json' with { type: 'json' }
 import {
   REMINDER_FILES,
+  REMINDER_FILES_ADDRESS,
   staticReminderName,
   staticReminderText,
 } from '../src/lib/calendarReminder.ts'
+
+// One address for both: a file that links anywhere else is never written.
+if (REMINDER_FILES_ADDRESS !== pwa.address) {
+  throw new Error(`The calendar files would link to ${REMINDER_FILES_ADDRESS}, not ${pwa.address}.`)
+}
 
 const OUT = new URL('../public/reminders/', import.meta.url)
 
@@ -34,3 +46,4 @@ for (const file of REMINDER_FILES) {
   await writeFile(new URL(name, OUT), staticReminderText(file))
   console.log(`public/reminders/${name}`)
 }
+console.log(`Each links back to ${pwa.address}`)

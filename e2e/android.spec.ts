@@ -806,3 +806,105 @@ test.describe('6.4 and 6.7 the back gesture and the shop’s tabs', () => {
     expect(errors).toEqual([])
   })
 })
+
+test.describe('6.11 the daily visit through the calendar’s own screen, in the app', () => {
+  /** What the page asked of GardenFiles, in order. */
+  type NativeCall = { method: string; options: Record<string, unknown> }
+
+  /**
+   * Android's side of the bridge for GardenFiles alone, as Capacitor's native
+   * bridge presents it to the page (its plugin headers and nativePromise):
+   * each method answers as `answers` says, and every call is kept. The other
+   * plugins keep their web implementations.
+   */
+  async function withGardenFiles(page: Page, answers: Record<string, unknown>) {
+    await page.addInitScript((answers) => {
+      const calls: NativeCall[] = []
+      Object.assign(window, {
+        gardenFilesCalls: calls,
+        Capacitor: {
+          PluginHeaders: [
+            {
+              name: 'GardenFiles',
+              methods: Object.keys(answers).map((name) => ({ name, rtype: 'promise' })),
+            },
+          ],
+          nativePromise: (_plugin: string, method: string, options: Record<string, unknown>) => {
+            calls.push({ method, options })
+            return Promise.resolve(answers[method])
+          },
+        },
+      })
+    }, answers)
+    await page.goto('/')
+    await enterGarden(page)
+    await goTo(page, 'Settings')
+    return page.locator('section', {
+      has: page.getByRole('heading', { name: 'A daily garden visit' }),
+    })
+  }
+
+  const callsOf = (page: Page) =>
+    page.evaluate(() => (window as unknown as { gardenFilesCalls: NativeCall[] }).gardenFilesCalls)
+
+  const VISIT = {
+    title: 'Garden time 🦋',
+    description:
+      'Open The Butterfly Garden.\nTo stop these reminders, delete the event from your calendar.',
+  }
+
+  test('with no calendar app to open, the visit is saved as a calendar file through the app’s save screen', async ({
+    page,
+  }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    let downloads = 0
+    page.on('download', () => (downloads += 1))
+    const card = await withGardenFiles(page, {
+      addDailyEvent: { opened: false },
+      saveDocument: { saved: true },
+    })
+    await card.getByRole('button', { name: 'Add a daily garden visit to my calendar' }).click()
+    await expect(card.getByRole('status')).toHaveText(
+      'Calendar file saved. Open it to add the visit to your calendar.',
+    )
+
+    const [asked, saved, ...rest] = await callsOf(page)
+    expect(rest).toEqual([])
+    // The calendar's own screen first, with the visit and nothing else.
+    expect(asked).toEqual({ method: 'addDailyEvent', options: { ...VISIT, hour: 8, minute: 0 } })
+    // Then the file, as before.
+    expect(saved.method).toBe('saveDocument')
+    expect(saved.options).toMatchObject({
+      fileName: 'butterfly-garden-reminder-0800.ics',
+      mimeType: 'text/calendar',
+    })
+    const text = String(saved.options.text).replace(/\r\n /g, '')
+    expect(text).toContain('SUMMARY:Garden time 🦋')
+    expect(text).toContain('RRULE:FREQ=DAILY')
+    expect(text).not.toContain('URL:')
+    expect(downloads).toBe(0)
+    expect(errors).toEqual([])
+  })
+
+  test('with a calendar app, its new-event screen opens filled in, and no file is saved', async ({
+    page,
+  }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    const card = await withGardenFiles(page, {
+      addDailyEvent: { opened: true },
+      saveDocument: { saved: true },
+    })
+    await card.getByLabel('Remind me at').fill('07:30')
+    await card.getByRole('button', { name: 'Add a daily garden visit to my calendar' }).click()
+    await expect(card.getByRole('status')).toHaveText(
+      'Your calendar opened with the daily visit filled in. Save it there to add it.',
+    )
+    expect(await callsOf(page)).toEqual([
+      { method: 'addDailyEvent', options: { ...VISIT, hour: 7, minute: 30 } },
+    ])
+    expect(await seriousViolations(page, 'Android reminders, the calendar opened')).toEqual([])
+    expect(errors).toEqual([])
+  })
+})

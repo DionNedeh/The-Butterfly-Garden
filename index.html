@@ -2,6 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Nothing the page fetches, and no site it links to, is told which page
+         asked: GitHub Pages sends no Referrer-Policy header, so it is said
+         here, before anything is asked for (docs/moving-the-garden.md). -->
+    <meta name="referrer" content="no-referrer" />
     <link rel="icon" type="image/png" sizes="64x64" href="%BASE_URL%icons/favicon-64.png" />
     <!-- iOS takes its home-screen icon from here, not from the manifest. -->
     <link rel="apple-touch-icon" href="%BASE_URL%icons/apple-touch-icon.png" />

@@ -1,5 +1,8 @@
 // With its extension, so Node can load this file as it is (see below).
 import { isReminderTime } from './reminderTime.ts'
+// As JSON, which Node reads only when told so, and which the script that
+// writes the static files reads too: the address is written down once.
+import pwa from '../pwaAddress.json' with { type: 'json' }
 
 /**
  * A daily garden visit, as a calendar file (docs/Voyager c.9).
@@ -12,8 +15,9 @@ import { isReminderTime } from './reminderTime.ts'
  * the journal.
  *
  * Pure, and loaded with Settings alone. It imports only lib/reminderTime,
- * which imports nothing at run time, so scripts/reminder-files.mjs can run
- * the same code in Node to write the static files in public/reminders/.
+ * which imports nothing at run time, and the PWA's address (pwaAddress.json),
+ * so scripts/reminder-files.mjs can run the same code in Node to write the
+ * static files in public/reminders/.
  */
 
 /** The morning check-in, offered first. */
@@ -96,8 +100,12 @@ export function calendarReminderText(reminder: CalendarReminder): string {
   return lines.map(foldLine).join('\r\n') + '\r\n'
 }
 
-/** The event's notes: the way back, and the way to stop. */
-function reminderDescription(address: string | undefined): string {
+/**
+ * The event's notes: the way back, and the way to stop. Without an address
+ * (the Android app has none), it says to open the app; the calendar's own
+ * new-event screen there is handed the same words (lib/calendarEvent).
+ */
+export function reminderDescription(address: string | undefined): string {
   return [
     address ? `Open The Butterfly Garden: ${address}` : 'Open The Butterfly Garden.',
     'To stop these reminders, delete the event from your calendar.',
@@ -172,8 +180,12 @@ export function reminderFileName(time: string): string {
  * Where the PWA is served, the address the static files link back to. The app
  * offers a static file only when it is served from here itself, so a copy
  * served anywhere else never hands out a link to somewhere it is not.
+ *
+ * Read from src/pwaAddress.json, the one place the address is written down
+ * in the code: moving the garden (docs/moving-the-garden.md) changes it there,
+ * then runs scripts/reminder-files.mjs, which reads it too.
  */
-export const REMINDER_FILES_ADDRESS = 'https://dionnedeh.github.io/The-Butterfly-Garden/'
+export const REMINDER_FILES_ADDRESS: string = pwa.address
 
 /**
  * public/reminders/: a calendar file for each of a few common times.

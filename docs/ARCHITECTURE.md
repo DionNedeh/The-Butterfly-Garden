@@ -64,7 +64,7 @@ tells other tabs which parts it wrote.
 | A gardener's own images, by day and by night | `lib/imageImport.ts` (the checks before decoding; resizing and quarter turns in one draw), `lib/customBackdrops.ts` (limits, crop, which image shows by day and which by night), `lib/backdropEdits.ts` (the editor's turns and brightness) |
 | The Garden Pass: who may use what | `lib/gardenPass.ts`, the only access boundary; `lib/passEntitlement.ts`, `lib/playBilling.ts` behind it |
 | Android: back gesture, files, billing | `lib/backNavigation.ts`, `lib/native.ts`, `android/app/src/main/java/…` |
-| Moving the PWA to another address | `lib/hosting.ts`, `docs/moving-the-garden.md` |
+| Moving the PWA to another address | `lib/hosting.ts`, `docs/moving-the-garden.md`; `components/MovedBanner.tsx` (the old address's final build: a plain backup, or with the lock on the garden's own stores sealed with it, in `lib/storedCopy.ts`'s form, opened at the new address with the passcode or recovery code, and refused while the latest change is not stored); the address in `pwaAddress.json` (read by `lib/calendarReminder.ts` and `scripts/reminder-files.mjs`); the base path in `buildBase.ts` (`VITE_BASE`, GitHub Pages' path when unset; `/` for Android); `no-referrer` in `index.html` |
 | The installed PWA: icons, shortcuts, screenshots | `pwaManifest.ts`; `scripts/pwa-assets.mjs` renders the shortcut icons and screenshots |
 | A new version of the PWA: the hourly look, *Update now* in every tab at once, *What's new* once after | `components/UpdatePrompt.tsx` (loaded after the garden), `hooks/useUpdateCheck.ts`, `lib/appUpdate.ts` (the tabs' own channel, whose message names the build it leaves, `__BUILD_ID__` from `vite.config.ts`, and a reload that puts drafts and writes on disk first), `hooks/useWhatsNewOnce.ts`; `data/currentRelease.ts` (which release this is, in the first load), `data/releases.ts` (its notes, read on *What's new* alone) |
 | Adding the garden to an iPhone's or iPad's Home Screen | `lib/install.ts` (who is advised, and in which words), `components/garden/HomeScreenGuide.tsx` (the garden's one-time card), put away in this browser's own storage by `lib/install.ts`, apart from the garden and its drafts, and a line in Settings' storage note |
@@ -81,7 +81,7 @@ tells other tabs which parts it wrote.
 | The soundscapes: what plays, how loud, and when it rests | `data/ambientTracks.ts` (the list), `lib/sound.ts` (volume, night's piano, the switches), `hooks/useAmbientSound.ts` (the audio context, its level, pauses and the fade-out), `lib/soundscapes.ts` (the synthesis, loaded when the sound first starts) |
 | Breathing with a butterfly at `#/breathe` | `data/breathing.ts` (the patterns, gentle bounds), `lib/breathPacer.ts` (the phase at a time, one Web Animations timeline on the wings), `lib/breathTone.ts` (the optional tone, its own small audio context), `lib/breathing.ts` (once-a-day Sunlight, source `breath:<date>`), `components/BreathingView.tsx` (loaded when opened), `components/BreatheLink.tsx` (offered on the support page, a breathing goal's row, the next step and the recap); leaving returns to the way in, as the Guide does (`openBreathe` in `App.tsx`, `returnFrom`, `putBackAt`) |
 | A companion grown alongside a goal | `lib/lifecycle.ts` (`careFromGoal`, `adoptGoal`, `releaseGoal`; the care day and stage rewards shared with care actions), `lib/companionDiary.ts` (`grownAlongside`), `lib/growAlongside.ts`, `components/care/GrowAlongside.tsx` |
-| Calendar reminders, with no server | `lib/calendarReminder.ts` (the .ics text), `lib/reminderTime.ts`, `components/ReminderSetting.tsx`; `public/reminders/` (written by `scripts/reminder-files.mjs`, linked on iPhone and iPad at the real address only, never precached); the Android app saves the file through `saveTextFile` in `lib/download.ts` |
+| Calendar reminders, with no server | `lib/calendarReminder.ts` (the .ics text), `lib/reminderTime.ts`, `components/ReminderSetting.tsx`; `public/reminders/` (written by `scripts/reminder-files.mjs`, linked on iPhone and iPad at the real address only, never precached); the Android app opens the calendar's own new-event screen, filled in, through `lib/calendarEvent.ts` and `GardenFilesPlugin.addDailyEvent` (extras in `DailyEvent.java`; no calendar permission), and where no app on the phone has one saves the file through `saveTextFile` in `lib/download.ts` |
 | Marigold's weekly letter, and the lines starred for it | `lib/letters.ts` (what is stored, first load), `lib/letterTiming.ts` (Sunday evening by the gardener's own hours), `lib/summaries.ts` (the week in words, never a score), `hooks/useLatestLetter.ts`, `components/garden/LetterCard.tsx`, `components/journal/Letters.tsx`, `components/journal/StarToggle.tsx`, `components/LetterSetting.tsx` |
 | Noticed in Nature: the field book of real sightings, their photos, the month's line and nature projects | `lib/sightings.ts` (the rules, `fieldBookActions`, applied through `changeSightings` in `useGardenState`; nothing is earned), `lib/customBackdrops.ts` (the limits a stored garden is checked against), `lib/sightingPhotos.ts` (Blobs in storage, text in every file), `lib/imageImport.ts` (`prepareSightingPhoto`, `verifyGardenImages`), `lib/sightingChoices.ts`, `data/whatToLookFor.ts` and `lib/whatToLookFor.ts`, `data/natureProjects.ts`, `components/sightings/` (loaded with the Journal's field notes and the Guide) |
 | "Your garden's year" at `#/year`, and its postcard | `lib/gardenYear.ts` (the year's facts and words, counted by the letter's rules in `lib/summaries.ts`; the longest run of days cared for by `longestRunIn` in `lib/rhythm.ts`, said only with day counts shown), `components/YearView.tsx` (loaded when opened; back returns to the Journal), `components/year/YearLink.tsx` (the Journal's link, and its 1 December to 31 January line), `YearCalendar` in `components/WeatherCalendar.tsx` with `components/weatherCalendar.css`, `lib/postcard.ts` (drawn on the device from the sprites and the day's backdrop; nothing from the journal), `components/year/Postcard.tsx`, `lib/saveImage.ts` (a download, or `GardenFilesPlugin.saveBinaryDocument` in the app) |
@@ -155,6 +155,28 @@ journal. If a change makes one awkward, the change is wrong.
 
 The garden scene's sprite layout has two invariants of its own; `CLAUDE.md`
 describes them.
+
+## Toolchain
+
+The dev toolchain moves within its current major versions; Dependabot
+proposes those updates weekly, grouped. Three majors are held on purpose,
+each recorded as an `ignore` entry in `.github/dependabot.yml` with its
+reason:
+
+| Held at | Not yet | Why |
+| --- | --- | --- |
+| TypeScript 6 (6.0.3) | TypeScript 7 | Its native compiler has no public API yet, so the type-aware lint (`typescript-eslint`) cannot run on it. |
+| Vitest 4 (4.1.12), with `@vitest/coverage-v8` | Vitest 5 and its `@vitest/*` packages | The changelog is to be read first, against the coverage floors in `vite.config.ts` and the jsdom and fake-indexeddb setup. |
+| vite-plugin-pwa 1 (1.3.0) | vite-plugin-pwa 2 | It writes the service worker and the web manifest, which decide what every installed copy updates to; the changelog is to be read first. |
+
+Vite is at 8.3.5, within its major. Playwright is at 1.63.0: the move to
+1.64.1, still within 1.x, changes packages, and waits for a run that allows
+that (`docs/final-run/decision-plan.md`, 5.7). The `android-webview` e2e
+project runs on the same Playwright, so a bump runs the whole e2e suite.
+
+**Next review: January 2027**, then every quarter: read each held major's
+changelog, lift its `ignore` entry or move its review date on, and update
+this table.
 
 ## Tests
 
