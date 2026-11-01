@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { prepareSightingPhoto } from '../../lib/imageImport'
+import { checkPhoto } from '../../lib/photoCheck'
 import { counted } from '../../lib/plural'
 import { searchWords } from '../../lib/searchText'
 import { matchingChoices, subjectChoices } from '../../lib/sightingChoices'
@@ -143,6 +144,8 @@ export default function SightingForm({
     setProblem('')
     try {
       const prepared = await prepareSightingPhoto(file)
+      // Tried first where a refusal cannot hold up the garden's own saving.
+      await checkPhoto(prepared)
       if (ticket === sequence.current) setPhoto(prepared)
     } catch (cause) {
       if (ticket === sequence.current)

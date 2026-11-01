@@ -2,6 +2,7 @@ import { plants, species } from '../data/content'
 import type { Sighting, SightingSubject } from '../types'
 import { isLocalDate, toLocalDate } from './date'
 import { createId } from './id'
+import { isRefusedPhoto } from './photoCheck'
 import {
   isSightingPhoto,
   MAX_SIGHTING_PHOTOS,
@@ -221,14 +222,36 @@ export function restoreSighting(
   return restored
 }
 
+/**
+ * The input as this browser can keep it: a new photo it refused
+ * (lib/photoCheck) left out, so it never reaches the garden's storage, and
+ * the photo the sighting `had`, if any, kept.
+ */
+function keepable(input: SightingInput, had?: Blob): SightingInput {
+  if (!input.photo || input.photo === had || !isRefusedPhoto(input.photo)) return input
+  return { ...input, photo: had }
+}
+
 /** The field book's actions, each made through the garden's `change`. */
 export function fieldBookActions(change: ChangeSightings): FieldBookActions {
   return {
     log: (input) => {
       const id = createId()
-      return change((sightings, now) => logSighting(sightings, input, now, id)) ? id : undefined
+      const kept = keepable(input)
+      return change((sightings, now) => logSighting(sightings, kept, now, id)) ? id : undefined
     },
-    edit: (id, input) => change((sightings, now) => editSighting(sightings, id, input, now)),
+    edit: (id, input) => {
+      // A new photo left out of a sighting still there is a change to answer
+      // for, even when it was the only one: photoSaved says it was not kept.
+      let leftOut = false
+      const changed = change((sightings, now) => {
+        const had = sightings.find((item) => item.id === id)
+        const kept = keepable(input, had?.photo)
+        leftOut = had !== undefined && kept !== input
+        return editSighting(sightings, id, kept, now)
+      })
+      return changed || leftOut
+    },
     remove: (id) => {
       // Taken from the list the change is first worked out on.
       let removed: RemovedSighting | undefined
@@ -241,6 +264,8 @@ export function fieldBookActions(change: ChangeSightings): FieldBookActions {
     },
     restore: (removed) => change((sightings) => restoreSighting(sightings, removed)),
     photoSaved: async (photo) => {
+      // Left out before it reached the garden: not kept, and nothing to wait for.
+      if (isRefusedPhoto(photo)) return false
       const result = await change.photoSaved?.(photo)
       if (!result || result.ok) return true
       return result.reason === 'conflict' ? 'conflict' : false

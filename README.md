@@ -139,9 +139,26 @@ npx playwright install chromium
 
 All of these run in CI on every push and pull request, and a failure blocks the
 deploy. Safari and Firefox run in a job of their own, which installs those
-engines. The axe sweeps fail on serious and critical violations and report
-moderate ones as warnings on the run. `npm run build` runs on pushes to `main`
-rather than on pull requests, since only a push can deploy.
+engines; it reports on every run but does not block a merge yet. The axe sweeps
+fail on moderate, serious and critical violations and report minor ones as
+warnings on the run. `npm run build` runs on pushes to `main` rather than on
+pull requests, since only a push can deploy.
+
+Two suites run in Chromium only. `e2e/visual.spec.ts` compares what every
+element of every page is drawn with (its computed style, in sunlight and at
+night, at desktop and phone size, the welcome too, and a short set in the
+Android bundle) with the baselines in `e2e/style-baselines/`. It compares which
+lines each page draws, not how many times, so more of the same (one more
+release on What's new) still matches, while any change to how something is
+drawn shows. After a change that is meant to look different, write them all
+again and read the diff before committing it:
+
+```bash
+UPDATE_STYLE_BASELINES=1 npx playwright test e2e/visual.spec.ts
+```
+
+`e2e/perf.spec.ts` fails if the garden's motion starts laying the page out
+every frame, as it did before each moving part had a layer of its own.
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) maps how the code fits together.
 
@@ -231,6 +248,11 @@ before updates. The store layout and every version number are in
 
 Merges to `main` run `.github/workflows/deploy-pages.yml`. In the repository
 settings, set **Pages > Build and deployment > Source** to **GitHub Actions**.
+
+Before each release, check every number on the support page
+(`src/data/support.ts`) on the service's own site, then update
+`SUPPORT_CHECKED_ON`: `npm test` fails once the newest release is dated more
+than 30 days after it.
 
 ## Licence
 

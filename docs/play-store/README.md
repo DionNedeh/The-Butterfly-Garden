@@ -161,6 +161,11 @@ https://support.google.com/googleplay/android-developer/answer/10463498
 
 ## Release steps
 
+Before each release, check every number on the support page
+(`src/data/support.ts`) on the service's own site, then set
+`SUPPORT_CHECKED_ON` to that day: `npm test` fails once a release is dated
+(`releasedOn`) more than 30 days after it.
+
 1. **Create the upload key** on your own computer (any Java install, or
    Android Studio's `jbr/bin/keytool`), and back up the file and password:
 
