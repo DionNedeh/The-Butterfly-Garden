@@ -8,7 +8,8 @@ import {
   effectiveBackdropId,
   gardenBackdrops,
 } from '../lib/appearance'
-import { backdropAssets, loadBackdrop } from '../data/backdropAssets'
+import { loadBackdrop } from '../data/backdropAssets'
+import { backdropThumbnails } from '../data/backdropThumbnails'
 import { hasGardenPassFeature } from '../lib/gardenPass'
 import { CUSTOM_BACKDROP_SLOTS } from '../lib/customBackdrops'
 import { CustomBackdropImage } from './CustomBackdropImage'
@@ -53,6 +54,8 @@ export function BackdropGallery({
   const [removing, setRemoving] = useState<string>()
   const [loading, setLoading] = useState<GardenBackdropId>()
   const [message, setMessage] = useState('')
+  // Night thumbnails that could not be had (offline before one was seen).
+  const [nightUnavailable, setNightUnavailable] = useState<ReadonlySet<GardenBackdropId>>(new Set())
   const available = state.profile ? availableBackdropIds(state.profile) : []
   const customAllowed = hasGardenPassFeature('custom-backdrops')
   const nightImage = state.customBackdrops.find(
@@ -95,12 +98,30 @@ export function BackdropGallery({
               className={`scene-card ${selected ? 'selected' : ''}`}
               key={scene.id}
             >
+              {/* The scene by day and by night: the stylesheet shows the one for
+                  the theme on screen (backdrops.css), and the other, lazy and
+                  never shown, is never fetched. */}
               <img
-                src={backdropAssets[scene.id].thumbnail}
+                className="scene-thumb-day"
+                src={backdropThumbnails[scene.id].day}
                 alt=""
                 loading="lazy"
                 width="400"
                 height="225"
+              />
+              <img
+                className="scene-thumb-night"
+                src={backdropThumbnails[scene.id][nightUnavailable.has(scene.id) ? 'day' : 'night']}
+                alt=""
+                loading="lazy"
+                width="400"
+                height="225"
+                // Not cached yet and offline: the day's, which is, stands in.
+                onError={() =>
+                  setNightUnavailable((current) =>
+                    current.has(scene.id) ? current : new Set(current).add(scene.id),
+                  )
+                }
               />
               <div className="scene-card-copy">
                 <span className="eyebrow">

@@ -249,14 +249,17 @@ function App() {
       reminderAt,
     ],
   )
+  // A gentle day holds the mark back until the next day, as it does the
+  // header's Sunlight count; Settings still says it in full.
+  const gentle = journalProfile?.gentleDay === today
   const navItems = useMemo(
     () =>
-      backupDue
+      backupDue && !gentle
         ? navigation.map((item) =>
             item.id === 'settings' ? { ...item, badge: 'time for a fresh copy' } : item,
           )
         : navigation,
-    [backupDue],
+    [backupDue, gentle],
   )
   // The page lives in the address (lib/routes), so Back and Forward work, a
   // reload stays put, and a link or shortcut can open a page directly.
@@ -678,8 +681,8 @@ function App() {
         <div className="header-actions">
           <span className="header-sunlight" title="Sunlight earned today">
             <Icon name="sun" size={19} />
-            {sunlight} / {DAILY_SUNLIGHT_CAP}
-            <span className="sr-only"> Sunlight today</span>
+            {!gentle && `${sunlight} / ${DAILY_SUNLIGHT_CAP}`}
+            <span className="sr-only">{gentle ? 'Sunlight' : ' Sunlight today'}</span>
           </span>
           <span className="nectar-wallet" title="Nectar balance">
             <Icon name="nectar" size={19} />

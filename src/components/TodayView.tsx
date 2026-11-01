@@ -21,6 +21,7 @@ import {
 } from '../lib/progression'
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
+import { useDraftKept } from '../lib/draftKept'
 import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
 import { GOAL_EDIT_DRAFT, goalEditFrom } from '../lib/goalEditDraft'
 import { companionsByGoal } from '../lib/growAlongside'
@@ -48,6 +49,7 @@ import type {
 import { CheckInExtras } from './checkin/CheckInExtras'
 import { NextStepOffer } from './checkin/NextStepOffer'
 import { Icon } from './Icons'
+import { DraftKept } from './DraftKept'
 import {
   GoalEditor,
   NO_DAYS_CHOSEN,
@@ -183,6 +185,8 @@ export function TodayView({
   const moodNoteKey = `mood-note:${today}`
   const reflectionKey = `reflection:${today}`
   const [moodNote, setMoodNote] = useDraft(moodNoteKey, existingMood?.note ?? '')
+  // "Draft kept" once the unsaved words have reached storage (6.2).
+  const moodNoteKept = useDraftKept(moodNoteKey) && moodNote !== (existingMood?.note ?? '')
   // Feelings and energy are drafted beside the note, so a reload keeps the
   // whole unsaved answer; until changed, they follow the saved check-in.
   const feelingsKey = `mood-feelings:${today}`
@@ -208,6 +212,8 @@ export function TodayView({
     reflectionKey,
     existingReflection?.body ?? '',
   )
+  const reflectionKept =
+    useDraftKept(reflectionKey) && reflection !== (existingReflection?.body ?? '')
   // The goal open in the editor, and what has been typed in it, as a draft:
   // the editor comes back as it was after a lock, a reload or another page.
   const [goalEditDraft, setGoalEditDraft] = useDraft(GOAL_EDIT_DRAFT, '')
@@ -227,8 +233,9 @@ export function TodayView({
   const reflectionPromptKey = `reflection-prompt:${today}`
   const [chosenPromptId, setChosenPromptId] = useDraft(reflectionPromptKey, '')
   const answered = existingReflection ? promptById(existingReflection.promptId) : undefined
-  // The season's own prompts join the rotation where the region says which it is.
-  const season = knownSeason(state.profile?.region, today)
+  // The season's own prompts join the rotation where the region, or the half
+  // of the world chosen beside it, says which it is.
+  const season = knownSeason(state.profile?.region, today, state.profile?.hemisphere)
   const prompt = promptById(chosenPromptId) ?? answered ?? promptForDay(today, 0, season)
   const writingFreely = prompt.id === freeWritingPrompt.id
   // Where focus goes once the page has redrawn: a goal's ⋯ button by its id,
@@ -531,8 +538,10 @@ export function TodayView({
             onChange={(event) => setMoodNote(event.target.value)}
             placeholder="A few words are plenty"
             maxLength={280}
+            aria-describedby={moodNoteKept ? 'mood-note-kept' : undefined}
           />
         </label>
+        {moodNoteKept && <DraftKept id="mood-note-kept" />}
         <button
           ref={saveCheckIn}
           className="primary-button check-in-save"
@@ -889,7 +898,7 @@ export function TodayView({
         <label className="sr-only" htmlFor="daily-reflection">Your reflection</label>
         <textarea
           ref={reflectionField}
-          aria-describedby="reflection-title"
+          aria-describedby={reflectionKept ? 'reflection-title reflection-kept' : 'reflection-title'}
           id="daily-reflection"
           value={reflection}
           onChange={(event) => setReflection(event.target.value)}
@@ -897,6 +906,7 @@ export function TodayView({
           maxLength={4000}
           rows={5}
         />
+        {reflectionKept && <DraftKept id="reflection-kept" />}
         <button
           className="primary-button"
           disabled={!reflection.trim()}

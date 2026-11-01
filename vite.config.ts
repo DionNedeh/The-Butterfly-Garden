@@ -142,7 +142,10 @@ export default defineConfig(({ mode }) => {
           // and precached; full scenes are fetched and cached when selected.
           // The two scenes every garden starts with, Sunlit Meadow and Cottage
           // Bloom, are precached, so choosing either works offline from day one.
+          // The night thumbnails, shown only in the gallery at night, are
+          // cached once seen; until then the day's stands in (BackdropGallery).
           globIgnores: [
+            '**/thumb-*-night-*',
             '**/garden-woodland-brook-*',
             '**/garden-secret-conservatory-*',
             '**/garden-rain-kissed-pond-*',
@@ -177,6 +180,15 @@ export default defineConfig(({ mode }) => {
               options: {
                 cacheName: 'garden-backdrops',
                 expiration: { maxEntries: 12 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              urlPattern: /\/assets\/thumb-[a-z-]+-night-[^/]+$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'garden-night-thumbnails',
+                expiration: { maxEntries: 10 },
                 cacheableResponse: { statuses: [0, 200] },
               },
             },

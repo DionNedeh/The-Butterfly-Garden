@@ -71,7 +71,8 @@ only for the optional Garden Pass (see [Privacy](#privacy)).
 - 25 real butterfly species with checked field notes (three facts each,
   opening up as your bond grows), seed guidance, and selectable companions
 - My region, which marks the butterflies and plants native where you garden
-  and suggests what to plant for them, with no location read
+  and suggests what to plant for them, with no location read; for Elsewhere,
+  a choice of north or south, which the garden's seasons follow
 - A field book of butterflies and plants seen in the wild, with a note and an
   optional photo (stripped of its location), a pressed-flower stamp in the
   field notes, a month's line of what to look for, and links to nature

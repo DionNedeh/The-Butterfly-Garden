@@ -1,0 +1,8 @@
+/* "Draft kept" under a field (DraftKept): quiet, in the muted text colour the
+   theme defines for both day and night, which keeps AA contrast on a card. */
+.draft-kept {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}

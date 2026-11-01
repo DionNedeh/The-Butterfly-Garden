@@ -1,4 +1,5 @@
 import { gardenLine } from '../../lib/gardenLines'
+import type { Hemisphere } from '../../lib/seasons'
 import type { RegionId } from '../../types'
 
 /**
@@ -13,6 +14,8 @@ export function GardenLine(day: {
   /** Whether the theme on screen is night. */
   night: boolean
   region?: RegionId
+  /** The half of the world chosen where the region does not say it. */
+  hemisphere?: Hemisphere
 }) {
   return gardenLine(day)
 }

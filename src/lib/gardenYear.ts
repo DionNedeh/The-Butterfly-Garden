@@ -3,6 +3,7 @@ import type { AppState } from '../types'
 import { companionStory } from './companionStory'
 import { letterQuotesOf, type LetterQuotes } from './letters'
 import { countedInWords, listed } from './plural'
+import { longestRunIn } from './rhythm'
 import {
   arrivalsIn,
   countsIn,
@@ -71,6 +72,11 @@ export interface GardenYear {
    * (lib/rhythm). An entry written later earns none, so it is not one.
    */
   daysCaredFor: number
+  /**
+   * The most days cared for in a row within the year (lib/rhythm), each run
+   * cut at the year's ends. Absent for a year with no two such days in a row.
+   */
+  longestRun?: number
   /** The species of the companions welcomed in the year, each once, first welcomed first. */
   speciesWelcomed: string[]
   /** Companions that emerged as butterflies in the year, first first. */
@@ -99,14 +105,17 @@ export function gardenYear(
   const welcomed = new Set(
     arrivals.filter((arrival) => arrival.kind === 'welcomed').map((arrival) => arrival.speciesName),
   )
+  const caredFor = new Set(
+    state.sunlight.map((award) => award.localDate).filter((date) => inRange(range, date)),
+  )
+  const longestRun = longestRunIn(caredFor)
   return {
     year,
     checkIns: counts.checkIns,
     reflections: counts.reflections,
     evenings: counts.evenings,
-    daysCaredFor: new Set(
-      state.sunlight.map((award) => award.localDate).filter((date) => inRange(range, date)),
-    ).size,
+    daysCaredFor: caredFor.size,
+    ...(longestRun > 1 ? { longestRun } : {}),
     speciesWelcomed: [...welcomed],
     emerged: arrivals
       .filter((arrival) => arrival.kind === 'emerged')
@@ -163,6 +172,11 @@ export interface YearWords {
    * Absent for a year with none, which the journal's line already speaks for.
    */
   care?: string
+  /**
+   * The year's longest run of days cared for, said only with day counts shown
+   * and a run of two days or more: never as a streak, so never as one broken.
+   */
+  run?: string
   /** The garden's new arrivals, or that there were none. */
   garden: string[]
 }
@@ -194,6 +208,11 @@ export function yearInWords(facts: GardenYear, numbers: boolean): YearWords {
       ? `Days you cared for yourself: ${facts.daysCaredFor}.`
       : undefined
 
+  const run =
+    numbers && facts.longestRun !== undefined && facts.longestRun > 1
+      ? `Your longest run of days cared for was ${countedInWords(facts.longestRun, 'day', 'days')}.`
+      : undefined
+
   const garden: string[] = []
   const named = facts.speciesWelcomed.slice(0, NAMED_SPECIES).map(withArticle)
   const moreSpecies = facts.speciesWelcomed.length - named.length
@@ -208,7 +227,7 @@ export function yearInWords(facts: GardenYear, numbers: boolean): YearWords {
     )
   if (garden.length === 0) garden.push('No new arrivals this year. Marigold kept the garden company.')
 
-  return { journal, ...(care ? { care } : {}), garden }
+  return { journal, ...(care ? { care } : {}), ...(run ? { run } : {}), garden }
 }
 
 /** One butterfly on a postcard: the species drawn, and who it is. */

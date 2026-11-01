@@ -262,6 +262,13 @@ export interface Profile {
    */
   region?: RegionId
   /**
+   * Which half of the world the gardener said they garden in, asked in
+   * Settings only where the region does not say it (Elsewhere, or none
+   * chosen), so the garden's seasons follow theirs (lib/seasons). Optional:
+   * without it they follow the north's. Kept only beside such a region.
+   */
+  hemisphere?: 'north' | 'south'
+  /**
    * The time of day ("HH:MM", 24-hour) of the daily garden visit last added
    * to the gardener's calendar (lib/reminderTime), so Settings offers it
    * again. Optional: without it, Settings offers 8:00. The calendar does the
@@ -299,7 +306,8 @@ export interface ComfortItem {
   /** The words, trimmed and at most COMFORT_TEXT_LENGTH; for a person, their name. */
   text: string
   /**
-   * For a person, a number to call: digits, plus signs, spaces and dashes.
+   * For a person, a number to call: digits, plus signs, spaces, dashes,
+   * brackets and dots, as it was written (lib/comfortPlan).
    * Optional, since someone to reach may be someone to visit.
    */
   phone?: string

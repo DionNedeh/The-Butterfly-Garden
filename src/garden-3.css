@@ -641,83 +641,8 @@ textarea:focus {
   margin: 0 1.25rem 1rem;
 }
 
-/* Scenery and personal image studio. */
-.scene-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1.25rem;
-}
-.scene-card {
-  border: 1px solid var(--edge);
-  background: var(--surface);
-  border-radius: 20px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.scene-card.selected {
-  outline: 2px solid var(--sage);
-  outline-offset: 3px;
-}
-.scene-card > img {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16/9;
-  object-fit: cover;
-}
-.scene-card-copy {
-  padding: 1.2rem;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: start;
-}
-.scene-card-copy h3 {
-  font-size: 1.3rem;
-}
-.scene-card-copy p:not(.eyebrow) {
-  font-size: 0.85rem;
-  color: var(--text-soft);
-  line-height: 1.65;
-}
-.scene-card-copy > button {
-  margin-top: auto;
-}
-.scene-card .eyebrow {
-  font-size: 0.58rem;
-}
-.personal-scenes-heading {
-  margin-top: 3rem;
-}
-.scene-upload-card {
-  border: 1px dashed var(--sage);
-  background: var(--surface-soft);
-  border-radius: 20px;
-  min-height: 260px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.5rem;
-}
-.scene-upload-card > span {
-  font-size: 2rem;
-  color: var(--sage);
-}
-.scene-upload-card strong {
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-}
-.scene-upload-card small {
-  color: var(--text-soft);
-  font-size: 0.78rem;
-}
-.custom-scene-thumb {
-  position: relative;
-  aspect-ratio: 16/9;
-  overflow: hidden;
-}
+/* The scene gallery and the personal image studio are styled in
+   components/backdrops/backdrops.css, which arrives with the gallery. */
 .garden-dialog {
   width: min(680px, calc(100% - 2rem));
   max-height: 90svh;
@@ -968,8 +893,7 @@ textarea:focus {
   main#main-content {
     padding: 1.6rem 1.25rem 8rem;
   }
-  .boutique-grid,
-  .scene-grid {
+  .boutique-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .species-grid {
@@ -1124,12 +1048,6 @@ textarea:focus {
   .preview-button {
     right: 8px;
     bottom: 8px;
-  }
-  .scene-grid {
-    grid-template-columns: 1fr;
-  }
-  .scene-card > img {
-    max-height: 220px;
   }
   .pass-hero {
     grid-template-columns: 1fr;

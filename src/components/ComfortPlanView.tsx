@@ -304,7 +304,9 @@ export function ComfortPlanView({
           className="comfort-link"
           href={hashForRoute({ view: 'support' })}
           onClick={(event) => {
-            if (followed(event)) onOpenSupport()
+            // A plan the support page opened goes back to it, at its link
+            // to the plan, the way the plan's own Back button does.
+            if (followed(event)) (from === 'support' ? onBack : onOpenSupport)()
           }}
         >
           If you need support now

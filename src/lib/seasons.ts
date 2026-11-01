@@ -30,25 +30,37 @@ export function currentSeason(localDate: string, hemisphere: Hemisphere): Season
   return seasonOf(Number(localDate.slice(5, 7)), hemisphere)
 }
 
+/** Whether a region leaves the gardener's half of the world unsaid. */
+function unnamed(region: RegionId | undefined): boolean {
+  return region === undefined || region === 'elsewhere'
+}
+
 /**
  * Which half of the world a gardener's seasons follow, from the region they
  * chose by hand (lib/region): Australia and New Zealand are southern. With
- * no region, or Elsewhere, the garden cannot know, so it takes the north's.
- * That guess decides only what the scene shows (GardenView's `data-season`
- * for the art, and whether fireflies come out) and when Marigold, a monarch,
- * travels; no words say it of the gardener's own season (see knownSeason).
+ * no region, or Elsewhere, it is the half they chose in Settings
+ * (Profile.hemisphere), and the north's when they chose none. That guess
+ * decides only what the scene shows (GardenView's `data-season` for the art,
+ * and whether fireflies come out) and when Marigold, a monarch, travels; no
+ * words say it of the gardener's own season (see knownSeason).
  */
-export function hemisphereOf(region: RegionId | undefined): Hemisphere {
-  return region === 'australasia' ? 'south' : 'north'
+export function hemisphereOf(
+  region: RegionId | undefined,
+  hemisphere: Hemisphere = 'north',
+): Hemisphere {
+  return region === 'australasia' ? 'south' : unnamed(region) ? hemisphere : 'north'
 }
 
 /**
  * The gardener's own season, for words that speak of it ("What is the first
- * sign of spring…?"), or nothing where the region does not say which half of
- * the world they garden in.
+ * sign of spring…?"), or nothing where neither the region nor a half of the
+ * world chosen in Settings says which half they garden in.
  */
-export function knownSeason(region: RegionId | undefined, localDate: string): Season | undefined {
-  return region === undefined || region === 'elsewhere'
-    ? undefined
-    : currentSeason(localDate, hemisphereOf(region))
+export function knownSeason(
+  region: RegionId | undefined,
+  localDate: string,
+  hemisphere?: Hemisphere,
+): Season | undefined {
+  const half = unnamed(region) ? hemisphere : hemisphereOf(region)
+  return half && currentSeason(localDate, half)
 }

@@ -2234,3 +2234,84 @@ test('a garden that cannot be read opens recovery, never onboarding', async ({
 
   expect(await seriousViolations(page, 'Recovery')).toEqual([])
 })
+
+test.describe('6.2 Draft kept', () => {
+  test('a reflection typed and paused over is kept as a draft, and still is after a reload', async ({
+    page,
+  }) => {
+    await enterGarden(page)
+    await goTo(page, 'Today')
+    const reflection = page.locator('#daily-reflection')
+    await reflection.fill('Half a thought about the rain')
+    await expect(page.getByText('Draft kept', { exact: true })).toBeVisible()
+    await expect(reflection).toHaveAccessibleDescription(/Draft kept$/)
+    expect(await seriousViolations(page, 'Today with a draft kept')).toEqual([])
+    await page.getByRole('button', { name: 'Switch to night mode' }).click()
+    await expect(page.locator('.app-shell')).toHaveClass(/theme-night/)
+    expect(await seriousViolations(page, 'Today with a draft kept, by night')).toEqual([])
+
+    await page.reload()
+    await expect(page.locator('#daily-reflection')).toHaveValue('Half a thought about the rain')
+    await expect(page.getByText('Draft kept', { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: /keep this reflection/i }).click()
+    await expect(page.getByText('Draft kept', { exact: true })).toHaveCount(0)
+  })
+
+  test('is no longer claimed once another tab writes its own drafts over it', async ({
+    page,
+    context,
+  }) => {
+    await enterGarden(page)
+    await goTo(page, 'Today')
+    const other = await context.newPage()
+    await other.goto('/The-Butterfly-Garden/')
+    await goTo(other, 'Today')
+
+    const hint = page.getByText('Draft kept', { exact: true })
+    const otherHint = other.getByText('Draft kept', { exact: true })
+    await page.locator('#daily-reflection').fill('Words this tab is keeping')
+    await expect(hint).toBeVisible()
+    // The other tab never saw those words, and writes its drafts over them.
+    await other.locator('#daily-reflection').fill('Words of the other tab')
+    await expect(otherHint).toBeVisible()
+    await expect(hint).toHaveCount(0)
+    // Written here again, they are kept again, and the other tab's are not.
+    await page.locator('#daily-reflection').fill('Words this tab is keeping, again')
+    await expect(hint).toBeVisible()
+    await expect(otherHint).toHaveCount(0)
+    await other.close()
+  })
+})
+
+test.describe('6.3 a gentle day in the header', () => {
+  test('holds back the Sunlight count and the backup mark, the header keeping its shape', async ({
+    page,
+  }) => {
+    await enterGarden(page)
+    await editGardenRecord(page, (state) => {
+      state.profile.createdAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
+    })
+    await page.reload()
+    const mark = mainNav(page).getByRole('button', { name: /^(Settings|More), time for a fresh copy/ })
+    await expect(mark).toBeVisible()
+    const pill = page.locator('.header-sunlight')
+    await expect(pill).toContainText('0 / 5')
+
+    await goTo(page, 'Today')
+    await page.getByRole('checkbox', { name: /gentle day/i }).check()
+    await expect(pill).toBeVisible()
+    await expect(pill).not.toContainText(/\d/)
+    await expect(mark).toHaveCount(0)
+    // The pills still sit after the garden's icon, inside the header.
+    const icon = (await page.locator('.brand img').boundingBox())!
+    const actions = (await page.locator('.header-actions').boundingBox())!
+    expect(actions.x).toBeGreaterThanOrEqual(icon.x + icon.width - 1)
+    expect(actions.x + actions.width).toBeLessThanOrEqual(page.viewportSize()!.width + 0.5)
+    expect(await seriousViolations(page, 'Today on a gentle day, header and all')).toEqual([])
+
+    // Settings still says it in full: the gardener chose to go there.
+    await goTo(page, 'Settings')
+    await expect(page.getByText('You have not saved a copy yet.', { exact: false })).toBeVisible()
+  })
+})

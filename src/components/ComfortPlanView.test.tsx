@@ -214,7 +214,7 @@ describe('my comfort plan', () => {
     await user.type(phone, 'call me')
     await user.click(list(PEOPLE).getByRole('button', { name: `Add to ${PEOPLE}` }))
     expect(list(PEOPLE).getByRole('alert')).toHaveTextContent(
-      'A phone number can hold digits, a plus sign, spaces and dashes.',
+      'A phone number can hold digits, a plus sign, spaces, dashes, brackets and dots.',
     )
     expect(phone).toHaveFocus()
     expect(phone).toHaveAttribute('aria-invalid', 'true')

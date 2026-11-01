@@ -252,10 +252,11 @@ export function GardenView({
   const today = toLocalDate()
   const night = theme === 'night'
   const region = state.profile?.region
+  const hemisphere = state.profile?.hemisphere
   // By the gardener's half of the world, or the north's when that is not
   // known: only the scene reads it (its art's season, and fireflies), never
   // words about the gardener's own season.
-  const season = currentSeason(today, hemisphereOf(region))
+  const season = currentSeason(today, hemisphereOf(region, hemisphere))
   const selectedPlant = state.plants.find(
     (plant) => plant.id === selectedPlantId,
   )
@@ -377,6 +378,7 @@ export function GardenView({
                 speciesId={active?.speciesId}
                 night={night}
                 region={region}
+                hemisphere={hemisphere}
               />
             </Suspense>
           </p>
@@ -472,6 +474,7 @@ export function GardenView({
             creature={meetingCreature}
             outfit={meetingCreature && outfitByCreature.get(meetingCreature.id)}
             region={region}
+            hemisphere={hemisphere}
             onCareFor={
               meetingCreature && onCareFor
                 ? () => onCareFor(meetingCreature.id)

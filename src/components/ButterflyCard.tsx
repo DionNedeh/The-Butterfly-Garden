@@ -3,6 +3,7 @@ import { species } from '../data/content'
 import { toLocalDate } from '../lib/date'
 import { marigoldLine } from '../lib/gardenLines'
 import { bondLevel, stageLabels } from '../lib/lifecycle'
+import type { Hemisphere } from '../lib/seasons'
 import type { CreatureInstance, OutfitSlot, RegionId } from '../types'
 import { ButterflySprite } from './sprites/ButterflySprite'
 import './butterflyCard.css'
@@ -24,6 +25,7 @@ export function ButterflyCard({
   creature,
   outfit,
   region,
+  hemisphere,
   onCareFor,
   onClose,
 }: {
@@ -32,6 +34,8 @@ export function ButterflyCard({
   outfit?: Partial<Record<OutfitSlot, string>>
   /** Where the gardener gardens, whose seasons Marigold's travels follow. */
   region?: RegionId
+  /** The half of the world chosen where the region does not say it. */
+  hemisphere?: Hemisphere
   /** Opens Care with this companion chosen. */
   onCareFor?: () => void
   /** Called once the dialog has closed, however it was closed. */
@@ -51,7 +55,7 @@ export function ButterflyCard({
   const speciesName =
     species.find((item) => item.id === speciesId)?.commonName ?? 'Butterfly'
   // Marigold's season, in autumn and spring: words only, she never leaves.
-  const travels = creature ? undefined : marigoldLine(region, toLocalDate())
+  const travels = creature ? undefined : marigoldLine(region, toLocalDate(), hemisphere)
 
   return (
     <dialog

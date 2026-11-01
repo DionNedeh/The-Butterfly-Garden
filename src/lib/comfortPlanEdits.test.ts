@@ -136,9 +136,9 @@ describe('a number to call', () => {
   })
 
   it('says why it cannot take one', () => {
-    expect(phoneProblem('call mum')).toBe('A phone number can hold digits, a plus sign, spaces and dashes.')
+    expect(phoneProblem('call mum')).toBe('A phone number can hold digits, a plus sign, spaces, dashes, brackets and dots.')
     expect(phoneProblem('0800 FLOWERS')).toBe(
-      'A phone number can hold digits, a plus sign, spaces and dashes.',
+      'A phone number can hold digits, a plus sign, spaces, dashes, brackets and dots.',
     )
     expect(phoneProblem('12')).toBe('That number looks too short to call.')
     expect(phoneProblem('+ -')).toBe('That number looks too short to call.')

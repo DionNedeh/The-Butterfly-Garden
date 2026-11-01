@@ -752,3 +752,20 @@ test('a move file goes to the app’s own save screen, and arriving offers no ca
   await expect(make).toBeFocused()
   expect(errors).toEqual([])
 })
+
+test.describe('1.4 the half of the world, in the app', () => {
+  test('Settings asks it for Elsewhere, and the south makes July winter in the garden', async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date('2026-07-14T21:00:00.000Z'))
+    await page.goto('/')
+    await enterGarden(page)
+    await goTo(page, 'Settings')
+    await page.getByLabel('My region').selectOption('elsewhere')
+    const half = page.getByRole('group', { name: 'Which half of the world are you in?' })
+    await half.getByRole('radio', { name: 'South' }).check()
+    expect(await seriousViolations(page, 'Android Settings asking which half of the world')).toEqual([])
+    await goTo(page, 'Garden')
+    await expect(page.locator('.garden-hero')).toHaveAttribute('data-season', 'winter')
+  })
+})
