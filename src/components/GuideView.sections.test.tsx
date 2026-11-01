@@ -25,7 +25,9 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('5.11 Guide sections for what the garden gained', () => {
+// The whole Guide drawn and clicked through: about 2.7 s on CI, and past
+// the default 5 s on a busy machine, like the Guide's other long tests.
+describe('5.11 Guide sections for what the garden gained', { timeout: 20_000 }, () => {
   const added: ReadonlyArray<readonly [string, string, string]> = [
     ['Letters and your year', 'letters-and-year', 'Letters from Marigold, and your garden’s year'],
     ['Field book', 'field-book', 'Your field book'],
