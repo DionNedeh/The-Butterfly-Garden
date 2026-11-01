@@ -20,8 +20,12 @@ const DIST = process.argv.includes('--dist')
 const BASELINE_FILE = new URL('./bundle-baseline.json', import.meta.url)
 
 const CAPS = {
-  /** The entry chunk alone, React DOM included. */
-  entryJs: 100_000,
+  /**
+   * The entry chunk alone, React DOM included. Raised from 100 kB by React
+   * 19.3's own growth (about 8.5 kB), at the owner's word on 1 November 2026,
+   * keeping the headroom the entry had before.
+   */
+  entryJs: 108_500,
   /** The one stylesheet. */
   css: 25_000,
 }
