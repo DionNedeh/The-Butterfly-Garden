@@ -2361,11 +2361,23 @@ test.describe('6.6 the browser’s own Back returns to the same place', () => {
     await page.reload()
     await goTo(page, 'Care')
     await page.getByRole('tab', { name: /Juniper/ }).click()
+    await expect(page.getByRole('heading', { name: 'Dress Juniper' })).toBeVisible()
     const bond = page.getByRole('link', { name: /^What does this do\? Bond levels/ })
     // Well inside the screen, so that focusing it on the way back has no need
     // to bring it into view; and how far down the page was as it was pressed,
-    // which is what the app keeps.
-    await bond.evaluate((link) => link.scrollIntoView({ block: 'center' }))
+    // which is what the app keeps. Centred only once Juniper's panel has
+    // stopped moving: on a slow machine it is still drawing, the link moves
+    // after it is centred, and the press then scrolls it to the screen's edge.
+    await expect
+      .poll(() =>
+        bond.evaluate(async (link) => {
+          link.scrollIntoView({ block: 'center' })
+          await new Promise((settled) => requestAnimationFrame(() => requestAnimationFrame(settled)))
+          const { top, bottom } = link.getBoundingClientRect()
+          return Math.abs((top + bottom) / 2 - innerHeight / 2) < 2
+        }),
+      )
+      .toBe(true)
     await page.evaluate(() =>
       document.addEventListener(
         'click',
