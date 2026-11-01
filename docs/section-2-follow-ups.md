@@ -5,6 +5,8 @@ The authoritative requirements and detailed acceptance criteria remain in
 [final-pr-plan.md](final-pr-plan.md). This index preserves unfinished work;
 it does not replace that plan or certify release readiness.
 
+From 1 November 2026, the open items here are carried by [the final run's execution plan](final-run/execution-plan.md) (round R0 finishes this acceptance) and [its decision plan](final-run/decision-plan.md).
+
 ## Merge and build boundary
 
 The owner requested source integration while retaining the deployed app and
