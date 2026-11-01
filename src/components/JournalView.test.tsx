@@ -583,7 +583,12 @@ describe('finding a day in the journal', () => {
     renderJournal(journal())
     const oldest = days[days.length - 1]
     expect(document.getElementById(`day-${oldest}`)).toBeNull()
-    if (oldest.slice(0, 7) !== today.slice(0, 7)) {
+    // 35 days back can be two months back, early in a month.
+    const monthsBack =
+      (Number(today.slice(0, 4)) - Number(oldest.slice(0, 4))) * 12 +
+      Number(today.slice(5, 7)) -
+      Number(oldest.slice(5, 7))
+    for (let step = 0; step < monthsBack; step += 1) {
       await user.click(screen.getByRole('button', { name: 'Previous month' }))
     }
     await user.click(
