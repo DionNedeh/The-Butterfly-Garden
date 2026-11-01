@@ -42,6 +42,22 @@ updates:
       - dependency-name: vite-plugin-pwa
         update-types:
           - version-update:semver-major
+      # The app, CI and the docs run Node 24, and @types/node follows the
+      # runtime: Node 26's types would allow calls Node 24 does not have.
+      # Move it with node-version in the workflows.
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
+      # Playwright 1.64 brings a newer browser build: held by the owner on
+      # 1 November 2026 (docs/final-run/decision-plan.md, 5.7), with
+      # @playwright/test and playwright kept on the same version.
+      # Review: January 2027.
+      - dependency-name: "@playwright/test"
+        versions:
+          - ">= 1.64.0"
+      - dependency-name: playwright
+        versions:
+          - ">= 1.64.0"
 
   - package-ecosystem: github-actions
     directory: /
@@ -59,3 +75,10 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
+    ignore:
+      # Gradle 9 cannot run the Android Gradle Plugin in use (8.13), which
+      # relies on an internal API that Gradle 9.6 removed. The wrapper moves
+      # to 9 with AGP 9, once Capacitor supports it. Review: January 2027.
+      - dependency-name: gradle-wrapper
+        update-types:
+          - version-update:semver-major

@@ -159,20 +159,21 @@ describes them.
 ## Toolchain
 
 The dev toolchain moves within its current major versions; Dependabot
-proposes those updates weekly, grouped. Three majors are held on purpose,
-each recorded as an `ignore` entry in `.github/dependabot.yml` with its
-reason:
+proposes those updates weekly, grouped. These are held on purpose, each
+recorded as an `ignore` entry in `.github/dependabot.yml` with its reason:
 
 | Held at | Not yet | Why |
 | --- | --- | --- |
 | TypeScript 6 (6.0.3) | TypeScript 7 | Its native compiler has no public API yet, so the type-aware lint (`typescript-eslint`) cannot run on it. |
 | Vitest 4 (4.1.12), with `@vitest/coverage-v8` | Vitest 5 and its `@vitest/*` packages | The changelog is to be read first, against the coverage floors in `vite.config.ts` and the jsdom and fake-indexeddb setup. |
 | vite-plugin-pwa 1 (1.3.0) | vite-plugin-pwa 2 | It writes the service worker and the web manifest, which decide what every installed copy updates to; the changelog is to be read first. |
+| `@types/node` 24 | `@types/node` 25 and later | The app, CI and the docs run Node 24, and the types follow the runtime: newer ones would allow calls Node 24 does not have. They move with `node-version` in the workflows. |
+| Playwright 1.63 (`@playwright/test` and `playwright`) | 1.64 and later | It brings a newer browser build; held by the owner on 1 November 2026 (`docs/final-run/decision-plan.md`, 5.7). The two packages move together. |
+| The Gradle wrapper 8 (8.14.6) | Gradle 9 | The Android Gradle Plugin in use (8.13) relies on an internal Gradle API that 9.6 removed. The wrapper moves to 9 with AGP 9, once Capacitor supports it. |
 
-Vite is at 8.3.5, within its major. Playwright is at 1.63.0: the move to
-1.64.1, still within 1.x, changes packages, and waits for a run that allows
-that (`docs/final-run/decision-plan.md`, 5.7). The `android-webview` e2e
-project runs on the same Playwright, so a bump runs the whole e2e suite.
+Vite is at 8.3.5, within its major. The `android-webview` e2e project
+runs on the same Playwright as the rest, so a Playwright bump runs the whole
+e2e suite.
 
 **Next review: January 2027**, then every quarter: read each held major's
 changelog, lift its `ignore` entry or move its review date on, and update
