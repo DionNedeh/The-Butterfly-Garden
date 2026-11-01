@@ -175,7 +175,8 @@ test('a garden is locked, opened by passcode and by recovery code, and unlocked 
   page.on('pageerror', (error) => errors.push(error.message))
   await enterGarden(page)
   await writeSomething(page)
-  expect(await everythingStored(page)).toContain(WORDS_OF_MINE)
+  // The plan shows the item before its save has landed.
+  await expect.poll(() => everythingStored(page)).toContain(WORDS_OF_MINE)
 
   const words = await lockFromSettings(page)
   // Locked at rest: none of the gardener's words in any store, and no
