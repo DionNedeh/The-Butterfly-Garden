@@ -467,3 +467,102 @@ test.describe('safe mode with the lock on', () => {
     await expect(lockScreen(page)).toHaveCount(0)
   })
 })
+
+test.describe('3.2 Lock now in another tab, part-way through', () => {
+  test('a goal being added comes back in its form, and a sighting being written is said not to be kept', async ({
+    page,
+    context,
+  }) => {
+    test.slow()
+    await enterGarden(page)
+    await lockFromSettings(page)
+    const other = await context.newPage()
+    await other.goto('/The-Butterfly-Garden/')
+    await other.getByLabel('Passcode', { exact: true }).fill(PASSCODE)
+    await other.getByRole('button', { name: 'Open my garden' }).click()
+    await expect(other.getByRole('heading', { level: 1, name: 'Sunlit Sanctuary' })).toBeVisible(DERIVING)
+
+    // In the other tab: a goal typed on Today, and then a sighting begun.
+    await goTo(other, 'Today')
+    await other.getByLabel('Add a goal').fill('Water the fern')
+    await goTo(other, 'Guide')
+    const card = other.getByRole('heading', { level: 3, name: 'Monarch' }).locator('xpath=ancestor::article')
+    await card.getByRole('button', { name: 'Log a sighting of Monarch' }).click()
+    const form = other.getByRole('dialog', { name: 'Log a sighting' })
+    await form.getByLabel('A few words, if you like').fill('Over the allotments')
+
+    await page.getByRole('region', { name: 'The garden lock' }).getByRole('button', { name: 'Lock now' }).click()
+    await expect(lockScreen(other)).toBeVisible()
+    const notKept = other.getByText('The sighting you were writing was not saved when the garden locked.')
+    await expect(notKept).toBeVisible()
+    await expect(other.getByLabel('Passcode', { exact: true })).toHaveAccessibleDescription(
+      'The sighting you were writing was not saved when the garden locked.',
+    )
+    expect(await seriousViolations(other, 'Lock screen, saying what was not kept')).toEqual([])
+
+    await other.getByLabel('Passcode', { exact: true }).fill(PASSCODE)
+    await other.getByRole('button', { name: 'Open my garden' }).click()
+    await expect(other.getByRole('heading', { level: 1, name: 'How the garden works' })).toBeVisible(DERIVING)
+    await goTo(other, 'Today')
+    await expect(other.getByLabel('Add a goal')).toHaveValue('Water the fern')
+  })
+})
+
+test.describe('3.3 a passkey, with a virtual authenticator', () => {
+  test('is added in Settings, opens the locked garden, and once removed leaves the passcode working', async ({
+    page,
+    context,
+    baseURL,
+  }, testInfo) => {
+    // A Chromium-only authenticator, driven through the DevTools protocol.
+    test.skip(testInfo.project.name !== 'desktop-chromium', 'A CDP virtual authenticator is Chromium’s, and one layout is enough')
+    test.slow()
+    // WebAuthn makes no passkey for a site at an IP address, and the garden
+    // offers none there (lib/passkey): the same server, by name.
+    const garden = new URL('/The-Butterfly-Garden/', baseURL)
+    garden.hostname = 'localhost'
+    const cdp = await context.newCDPSession(page)
+    await cdp.send('WebAuthn.enable')
+    await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        protocol: 'ctap2',
+        transport: 'internal',
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        hasPrf: true,
+      },
+    })
+    await page.goto(garden.href)
+    await enterGarden(page)
+    await lockFromSettings(page)
+
+    const lockSection = page.getByRole('region', { name: 'The garden lock' })
+    await lockSection.getByRole('button', { name: 'Add a passkey…' }).click()
+    const adding = page.getByRole('dialog', { name: 'Add a passkey' })
+    await adding.getByLabel('Your passcode').fill(PASSCODE)
+    await adding.getByRole('button', { name: 'Add a passkey' }).click()
+    const added = page.getByRole('dialog', { name: 'Your passkey can open the garden' })
+    await expect(added).toBeVisible(DERIVING)
+    await added.getByRole('button', { name: 'Done' }).click()
+    await expect(lockSection.getByRole('button', { name: 'Remove the passkey' })).toBeVisible()
+    await expect(lockSection.getByText(/your passcode, your recovery code or your passkey/)).toBeVisible()
+
+    // Locked, it opens with the passkey alone.
+    await lockSection.getByRole('button', { name: 'Lock now' }).click()
+    await expect(lockScreen(page)).toBeVisible()
+    await page.getByRole('button', { name: 'Unlock with a passkey' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused(DERIVING)
+
+    // Removed, it opens nothing, and the passcode still does.
+    await lockSection.getByRole('button', { name: 'Remove the passkey' }).click()
+    await expect(lockSection.getByText('The passkey no longer opens the garden.')).toBeVisible(DERIVING)
+    await expect(lockSection.getByRole('button', { name: 'Add a passkey…' })).toBeVisible()
+    await lockSection.getByRole('button', { name: 'Lock now' }).click()
+    await expect(lockScreen(page)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Unlock with a passkey' })).toHaveCount(0)
+    await page.getByLabel('Passcode', { exact: true }).fill(PASSCODE)
+    await page.getByRole('button', { name: 'Open my garden' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused(DERIVING)
+  })
+})

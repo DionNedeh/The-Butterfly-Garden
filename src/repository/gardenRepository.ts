@@ -822,6 +822,55 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     return run
   }
 
+  /** Errors met opening a write's transaction on a connection already closed. */
+  const closedOnOpen = new WeakSet<object>()
+
+  /**
+   * Open a write's transaction. The browser can close the connection kept
+   * here (storage cleared, Safari's "connection to IndexedDB server lost")
+   * before `terminated` says so, and opening one then throws
+   * InvalidStateError: marked, for `writing` to make the write again.
+   */
+  function begin<T>(open: () => T): T {
+    try {
+      return open()
+    } catch (error) {
+      if ((error as { name?: unknown } | null)?.name === 'InvalidStateError') closedOnOpen.add(error as object)
+      throw error
+    }
+  }
+
+  /**
+   * Moved on each time this instance lets go of the garden it knew: as it
+   * deletes it (`clear`, when the delete begins and once it is done), and
+   * when it forgets one deleted elsewhere (`forget`).
+   */
+  let generation = 0
+
+  /**
+   * Make a write on the connection kept here, and once more on a fresh one
+   * should that one prove closed (see `begin`): nothing was written, so
+   * nothing is written twice. Anything else, a refusal or a full disk
+   * included, is the write's own answer, and so is a second closed one.
+   * So is a closed one once this instance has let go of the garden since
+   * the write began (`generation`): the fresh connection would open the
+   * empty database that replaced it, and write the deleted garden back.
+   */
+  async function writing<T>(write: (db: IDBPDatabase<GardenDatabase>) => Promise<T>): Promise<T> {
+    const began = generation
+    const kept = database()
+    try {
+      return await write(await kept)
+    } catch (error) {
+      if (!closedOnOpen.has(error as object) || generation !== began) throw error
+      if (databasePromise === kept) databasePromise = undefined
+      const fresh = await database()
+      // A delete may finish while the fresh connection waits to open.
+      if (generation !== began) throw error
+      return await write(fresh)
+    }
+  }
+
   /**
    * Open the database, refusing to wait forever on another tab.
    *
@@ -983,7 +1032,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     // requests commits early, so nothing slow may happen inside it.
     const lock = unlocked
     const values = await storedValues(['meta', ...GARDEN_COLLECTIONS], state, lock)
-    const tx = db.transaction([...PART_STORES, 'lock', 'snapshots'], 'readwrite', STRICT)
+    const tx = begin(() => db.transaction([...PART_STORES, 'lock', 'snapshots'], 'readwrite', STRICT))
     const metaStore = tx.objectStore('meta')
     const [stored, record] = await Promise.all([
       metaStore.get('current'),
@@ -1046,7 +1095,8 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
    * copy (repository/dailyCopies); undefined when today's is kept already or
    * nothing is known to be stored. It goes in with the change itself, in the
    * same transaction, so the lock switch in another tab sees it like any
-   * write. Never throws: a copy that cannot be made must not cost a change.
+   * write. Never throws, but for a connection found closed (`writing`): a
+   * copy that cannot be made must not cost a change.
    */
   async function copyBeforeToday(
     db: IDBPDatabase<GardenDatabase>,
@@ -1057,10 +1107,12 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     const day = toLocalDate()
     if (!before || dailyKeptOn === day || isQuietWrite(state)) return undefined
     try {
-      if ((await db.getKey('snapshots', `${DAILY_PREFIX}${day}`)) === undefined)
+      if ((await begin(() => db.transaction('snapshots')).store.getKey(`${DAILY_PREFIX}${day}`)) === undefined)
         return await (await dailyCopies()).prepareDaily(before, day, lock?.key)
-    } catch {
-      // Best effort, like a set-aside copy.
+    } catch (error) {
+      // Best effort, like a set-aside copy; but a connection found closed
+      // goes to the write, which is made again with the day's copy in it.
+      if (closedOnOpen.has(error as object)) throw error
     }
     dailyKeptOn = day
     return undefined
@@ -1326,10 +1378,10 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
      * lives there. Rejects on failure so callers can tell the user.
      */
     save(state: AppState): Promise<GardenPart[]> {
-      return enqueue(async () => {
-        // Opened first: a database written again by a change of the lock in
-        // another tab is not a deletion (see database()).
-        const db = await database()
+      // Opened first: a database written again by a change of the lock in
+      // another tab is not a deletion (see database()). Made again from
+      // here on a fresh connection, should the one kept prove closed.
+      return enqueue(() => writing(async (db) => {
         if (deletedElsewhere) throw new GardenDeletedElsewhereError()
         if (withheld) throw new GardenWithheldError()
         const dirty = changedParts(persisted, state)
@@ -1346,7 +1398,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         const daily = await copyBeforeToday(db, state, lock)
         const revision = base + 1
         await writeWithDaily(daily, async (daily) => {
-          const tx = db.transaction([...dirty.map(storeFor), 'lock', ...withDaily(daily)], 'readwrite')
+          const tx = begin(() => db.transaction([...dirty.map(storeFor), 'lock', ...withDaily(daily)], 'readwrite'))
           const metaStore = tx.objectStore('meta')
           const [stored, record] = await Promise.all([
             metaStore.get('current'),
@@ -1376,7 +1428,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         persisted = state
         persistedRevision = revision
         return dirty
-      })
+      }))
     },
 
     /**
@@ -1409,15 +1461,14 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       state: AppState,
       options: { snapshot?: boolean } = {},
     ): Promise<GardenPart[]> {
-      return enqueue(async () => {
-        const db = await database()
+      return enqueue(() => writing(async (db) => {
         const daily = await copyBeforeToday(db, state, unlocked)
         persistedRevision = await writeWithDaily(daily, (daily) => writeAllParts(db, state, options.snapshot ? 'restore' : undefined, daily))
         persisted = state
         deletedElsewhere = false
         withheld = false
         return ['meta', ...GARDEN_COLLECTIONS] as GardenPart[]
-      })
+      }))
     },
 
     /**
@@ -1544,9 +1595,8 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
 
     /** Discard a copy only while this tab still owns the loaded lock and revision. */
     discardSnapshot(id: string): Promise<void> {
-      return enqueue(async () => {
-        const db = await database()
-        const tx = db.transaction(['snapshots', 'lock', 'meta'], 'readwrite', STRICT)
+      return enqueue(() => writing(async (db) => {
+        const tx = begin(() => db.transaction(['snapshots', 'lock', 'meta'], 'readwrite', STRICT))
         const [lock, meta] = await Promise.all([
           tx.objectStore('lock').get('current'), tx.objectStore('meta').get('current'),
         ])
@@ -1557,7 +1607,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
         }
         await Promise.all([tx.objectStore('snapshots').delete(id), tx.done])
         dailyKeptOn = undefined
-      })
+      }))
     },
 
     /**
@@ -1578,19 +1628,20 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     /** Keep the backup file's record, or forget it (undefined). */
     async writeBackupFile(record: BackupFileRecord | undefined): Promise<void> {
       if (deletedElsewhere) throw new GardenDeletedElsewhereError()
-      const db = await database()
-      const tx = db.transaction(['drafts', 'lock'], 'readwrite', STRICT)
-      if (!lockIs(await tx.objectStore('lock').get('current'), unlocked)) {
-        tx.abort()
-        await tx.done.catch(() => undefined)
-        throw new GardenLockedError()
-      }
-      await Promise.all([
-        record
-          ? tx.objectStore('drafts').put({ ...record, stamp: crypto.randomUUID() }, BACKUP_FILE_KEY)
-          : tx.objectStore('drafts').delete(BACKUP_FILE_KEY),
-        tx.done,
-      ])
+      await writing(async (db) => {
+        const tx = begin(() => db.transaction(['drafts', 'lock'], 'readwrite', STRICT))
+        if (!lockIs(await tx.objectStore('lock').get('current'), unlocked)) {
+          tx.abort()
+          await tx.done.catch(() => undefined)
+          throw new GardenLockedError()
+        }
+        await Promise.all([
+          record
+            ? tx.objectStore('drafts').put({ ...record, stamp: crypto.randomUUID() }, BACKUP_FILE_KEY)
+            : tx.objectStore('drafts').delete(BACKUP_FILE_KEY),
+          tx.done,
+        ])
+      })
     },
 
     async readDrafts(): Promise<Drafts> {
@@ -1610,22 +1661,30 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
     /** Best effort: a draft that fails to save is still on screen. */
     async writeDrafts(drafts: Drafts): Promise<void> {
       try {
-        const db = await database()
-        if (deletedElsewhere) return
-        // Under the lock, drafts are sealed like the garden; a tab holding
-        // no key for the stored lock writes none at all, rather than leave
-        // words in the clear.
-        const lock = unlocked
-        const value = lock
-          ? await (await sealedStores()).sealValue(lock.key, 'drafts', drafts)
-          : drafts
-        const tx = db.transaction(['drafts', 'lock'], 'readwrite')
-        if (!lockIs(await tx.objectStore('lock').get('current'), lock)) {
-          tx.abort()
-          await tx.done.catch(() => undefined)
-          return
-        }
-        await Promise.all([tx.objectStore('drafts').put(value as Drafts, 'current'), tx.done])
+        await writing(async (db) => {
+          if (deletedElsewhere) return
+          // Under the lock, drafts are sealed like the garden; a tab holding
+          // no key for the stored lock writes none at all, rather than leave
+          // words in the clear.
+          const lock = unlocked
+          const value = lock
+            ? await (await sealedStores()).sealValue(lock.key, 'drafts', drafts)
+            : drafts
+          const tx = begin(() => db.transaction(['drafts', 'lock', 'meta'], 'readwrite'))
+          const [record, meta] = await Promise.all([
+            tx.objectStore('lock').get('current'),
+            tx.objectStore('meta').get('current'),
+          ])
+          // Nor any into the empty database that replaced a garden this tab
+          // held, deleted by another tab it never heard from (its connection
+          // dropped): words about a deleted garden do not outlive it.
+          if (!lockIs(record, lock) || (persistedRevision > 0 && meta === undefined)) {
+            tx.abort()
+            await tx.done.catch(() => undefined)
+            return
+          }
+          await Promise.all([tx.objectStore('drafts').put(value as Drafts, 'current'), tx.done])
+        })
       } catch {
         // Drafts are a convenience; the entry itself is saved separately.
       }
@@ -1691,6 +1750,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
      * from scratch rather than diff against, or restore, the deleted one.
      */
     forget(): void {
+      generation += 1
       persisted = undefined
       persistedRevision = 0
       deletedElsewhere = false
@@ -1704,6 +1764,12 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
 
     /** What this tab knows of the garden lock (LockState). */
     lockState: (): LockState => lockState,
+
+    /**
+     * The revision of the stored garden this tab last read or wrote, which
+     * a backup file carries (lib/backupIntegrity); 0 before any.
+     */
+    revision: (): number => persistedRevision,
 
     /** Be told when the lock state changes. Returns the way to stop. */
     onLockChange: (listener: () => void): (() => void) => {
@@ -1818,6 +1884,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       const db = await database()
       db.close()
       databasePromise = undefined
+      generation += 1
       persisted = undefined
       persistedRevision = 0
       // A change of the lock's copy goes first: a garden deleted must never
@@ -1827,6 +1894,7 @@ export function createGardenRepository(databaseName = DATABASE_NAME) {
       await new Promise<void>((resolve, reject) => {
         const request = indexedDB.deleteDatabase(databaseName)
         request.onsuccess = () => {
+          generation += 1
           // This instance did the deleting; the versionchange its own
           // connection may have seen is not a deletion from elsewhere.
           deletedElsewhere = false

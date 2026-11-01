@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ambientTrackDescriptions } from '../data/ambientTrackDescriptions'
 import { ambientTracks, DEFAULT_AMBIENT_TRACK_ID } from '../data/ambientTracks'
 import type { PersistenceStatus } from '../hooks/useGardenState'
-import { previewBackup, previewGarden, type BackupPreview } from '../lib/backupPreview'
+import { previewBackupFile, previewGarden, type BackupPreview } from '../lib/backupPreview'
 import { backupReminder } from '../lib/backupReminder'
 import {
   formatHour,
@@ -323,7 +323,14 @@ export function SettingsView({
   onBackupMade?: (madeAt: Date) => void
   /** When the backup reminder is judged; the app passes noon of the day. */
   reminderAt?: Date
-  onImportGarden: (text: string) => Promise<{ ok: boolean; message: string }>
+  /**
+   * Restore a backup's text; with `inspection`, the backup as the preview
+   * already read it, so it is not read again.
+   */
+  onImportGarden: (
+    text: string,
+    inspection?: BackupPreview['inspection'],
+  ) => Promise<{ ok: boolean; message: string }>
   onUndoRestore?: (
     snapshotId: string,
   ) => Promise<{ ok: boolean; message: string }>
@@ -408,6 +415,8 @@ export function SettingsView({
   const [arriving, setArriving] = useState(false)
   const arriveButton = useRef<HTMLButtonElement>(null)
   const previewHeading = useRef<HTMLHeadingElement>(null)
+  /** The backup described last, so an earlier one still being read is dropped. */
+  const describing = useRef(0)
   const [restoring, setRestoring] = useState(false)
   /**
    * While a backup is being made: a field book full of photos takes a moment
@@ -606,9 +615,11 @@ export function SettingsView({
     }
   }
 
-  /** Describe a backup's text; nothing is replaced yet. */
-  const describeBackup = (text: string, openedWith?: 'passphrase' | 'lock' | 'move') => {
-    const preview = previewBackup(text)
+  /** Describe a backup's text, and what its own check says; nothing is replaced yet. */
+  const describeBackup = async (text: string, openedWith?: 'passphrase' | 'lock' | 'move') => {
+    const asked = (describing.current += 1)
+    const preview = await previewBackupFile(text)
+    if (asked !== describing.current) return
     if (!preview.ok) {
       setBackupNote(`That backup could not be restored. ${preview.problem ?? ''}`)
       return
@@ -633,7 +644,7 @@ export function SettingsView({
       setSealedChoice(chosen.text)
       return
     }
-    describeBackup(chosen.text)
+    await describeBackup(chosen.text)
   }
 
   // A preview reached through the passphrase prompt takes focus as the
@@ -658,9 +669,9 @@ export function SettingsView({
   const confirmRestore = async () => {
     if (!pendingRestore) return
     setRestoring(true)
-    const { copy, text = '' } = pendingRestore
+    const { copy, text = '', inspection } = pendingRestore
     const result = !copy
-      ? await onImportGarden(text)
+      ? await onImportGarden(text, inspection)
       : onPutBackCopy
         ? await onPutBackCopy(copy.id)
         : { ok: false, message: 'That copy could not be put back.' }
@@ -710,6 +721,10 @@ export function SettingsView({
   // Availability rather than earned unlocks: a Garden Pass scene is choosable
   // while access holds, and is never recorded as permanently earned.
   const nameNote = noteForName(name)
+  // A name Save settings would change, which a lock would lose: no draft
+  // keeps it, so the lock screen says so (lib/gardenLockActions).
+  const changes = (typed: string, stored?: string) => typed.trim() !== '' && typed.trim() !== stored
+  const renaming = changes(name, state.profile?.name) || changes(gardenName, state.profile?.gardenName)
 
   return (
     <div className="view settings-view">
@@ -727,6 +742,7 @@ export function SettingsView({
         <p className="eyebrow">Garden details</p>
         <h2 id="garden-settings-title">Make the space yours</h2>
         <form
+          data-lock-loses={renaming ? 'the new name you were typing' : undefined}
           onSubmit={(event) => {
             event.preventDefault()
             onUpdateProfile(name, gardenName, motion)
@@ -1217,7 +1233,7 @@ export function SettingsView({
             returnFocus={() => arriveButton.current}
             onOpened={(plain, from) => {
               setArriving(false)
-              describeBackup(plain, from === 'plain' ? undefined : from)
+              void describeBackup(plain, from === 'plain' ? undefined : from)
             }}
             onClose={(note) => {
               setArriving(false)
@@ -1265,7 +1281,7 @@ export function SettingsView({
             returnFocus={() => fileInputRef.current}
             onOpened={(plain, openedWith) => {
               setSealedChoice(undefined)
-              describeBackup(plain, openedWith)
+              void describeBackup(plain, openedWith)
             }}
             onClose={(note) => {
               setSealedChoice(undefined)
@@ -1363,6 +1379,13 @@ export function SettingsView({
                   {pendingRestore.appVersion
                     ? ` by version ${pendingRestore.appVersion}`
                     : ''}
+                </li>
+              )}
+              {pendingRestore.integrity === 'ok' && <li>Unchanged since it was saved</li>}
+              {pendingRestore.integrity === 'changed' && (
+                <li>
+                  Changed since it was saved, by hand or by damage. It can
+                  still be restored: look over what it holds first.
                 </li>
               )}
               {pendingRestore.repaired > 0 && (

@@ -40,8 +40,24 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-7',
+    version: '3.7.0',
+    title: 'Nothing lost along the way',
+    sections: [{
+      title: 'Kept safe',
+      items: [
+        'If your garden locks while you are adding or changing a goal, your words are back when you open it. Anything a lock could not keep, such as a sighting you were writing, is named on the lock screen.',
+        'Backing out of the photo picker keeps the sighting form or the backdrop editor open, with what you had typed.',
+        'A sighting dated ahead of today can have its words changed, and a change lost to another tab says so plainly.',
+        'Backups carry a check of what they hold: the restore preview says whether a file has been changed since it was saved.',
+        'A change is still saved if the browser drops its link to the garden’s storage, and restoring many field-book photos is quicker.',
+      ],
+    }],
+  },
+  {
     id: 'release-3-6',
     version: '3.6.0',
+    releasedOn: '2026-11-01',
     title: 'Bring your garden, keep a way back',
     sections: [{
       title: 'Moving and keeping copies',

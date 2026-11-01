@@ -155,7 +155,11 @@ describe('arriving from another device in Settings', { timeout: 20_000 }, () => 
     expect(onImportGarden).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Restore this backup' }))
-    expect(onImportGarden).toHaveBeenCalledWith(PLAIN)
+    // The opened text, and the preview's own reading of it (4.5).
+    expect(onImportGarden).toHaveBeenCalledWith(
+      PLAIN,
+      expect.objectContaining({ state: expect.objectContaining({ profile: expect.objectContaining({ gardenName: 'Wild Garden' }) }) }),
+    )
     expect(await screen.findByText('Restored.')).toBeInTheDocument()
   })
 

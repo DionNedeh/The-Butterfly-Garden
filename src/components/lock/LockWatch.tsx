@@ -31,9 +31,12 @@ const WAITING_CHECK_MS = 60_000
  * gardener is in the middle of something it would throw away: a photo or
  * file being chosen from the garden (whose chooser, or the camera, takes
  * the Android app to the background), or a form whose contents are not kept
- * as a draft -- the sighting form, a goal being edited, a garden image being
- * framed -- which marks itself `data-auto-lock-waits`. Settings says so
- * beside the choice. A new time chosen in another tab is taken at once.
+ * as a draft -- the sighting form, a garden image being framed -- which
+ * marks itself `data-auto-lock-waits`. Settings says so beside the choice.
+ * Today's goals, added or edited, are drafts and do not hold the clock; nor
+ * do a goal being planned on the month or a new name in Settings, which the
+ * lock screen says were not kept (`data-lock-loses`, lib/gardenLockActions).
+ * A new time chosen in another tab is taken at once.
  */
 export function LockWatch() {
   // Opened from the lock screen, which is gone: focus lands on the page's

@@ -22,6 +22,7 @@ import {
 import { useSyncedDraft } from '../hooks/useSyncedDraft'
 import { clearDraft, useDraft } from '../lib/drafts'
 import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
+import { GOAL_EDIT_DRAFT, goalEditFrom } from '../lib/goalEditDraft'
 import { companionsByGoal } from '../lib/growAlongside'
 import {
   checkInDetails,
@@ -196,8 +197,10 @@ export function TodayView({
   // Said once a check-in has been saved on this visit, never on arrival.
   // Counted, so each save puts the line back and an update is heard too.
   const [saves, setSaves] = useState(0)
-  const [goalTitle, setGoalTitle] = useState('')
-  const [goalTinyTitle, setGoalTinyTitle] = useState('')
+  // A goal being added is a draft too, so a lock, a reload or another page
+  // loses none of what is typed.
+  const [goalTitle, setGoalTitle] = useDraft('goal-new:title', '')
+  const [goalTinyTitle, setGoalTinyTitle] = useDraft('goal-new:tiny-title', '')
   const goalTitleField = useRef<HTMLInputElement>(null)
   const [schedule, setSchedule] = useState<GoalSchedule>('daily')
   const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
@@ -205,7 +208,15 @@ export function TodayView({
     reflectionKey,
     existingReflection?.body ?? '',
   )
-  const [editingId, setEditingId] = useState<string>()
+  // The goal open in the editor, and what has been typed in it, as a draft:
+  // the editor comes back as it was after a lock, a reload or another page.
+  const [goalEditDraft, setGoalEditDraft] = useDraft(GOAL_EDIT_DRAFT, '')
+  const goalEdit = goalEditFrom(goalEditDraft)
+  const editingId = goalEdit?.id
+  const setEditingId = (id?: string) => {
+    // Edit chosen again for the goal already open keeps what is typed.
+    if (id !== editingId) setGoalEditDraft(id ? JSON.stringify({ id }) : '')
+  }
   const [undoOffer, setUndoOffer] = useState<UndoOffer>()
   // UndoToast keeps the latest callback itself, so this need not be stable.
   const dismissUndo = () => setUndoOffer(undefined)
@@ -320,7 +331,9 @@ export function TodayView({
     : undefined
   // One archived or deleted from its row, or in another tab, closes the
   // editor for good, so restoring the goal later does not reopen it.
-  if (editingId && !editing) setEditingId(undefined)
+  useEffect(() => {
+    if (editingId && !editing) setGoalEditDraft('')
+  }, [editingId, editing, setGoalEditDraft])
   // Bumped by every Edit, so choosing Edit again for the goal already open
   // still takes focus to the editor.
   const [editRequest, setEditRequest] = useState(0)
@@ -729,6 +742,8 @@ export function TodayView({
             key={editing.id}
             goal={editing}
             focusRequest={editRequest}
+            kept={goalEdit}
+            onEdit={(changed) => setGoalEditDraft(JSON.stringify({ ...changed, id: editing.id }))}
             today={today}
             completedBefore={retired.has(editing.id) || completedBefore(editing.id)}
             completedToday={isComplete(editing.id)}

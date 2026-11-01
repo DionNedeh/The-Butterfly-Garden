@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isLocalDate, LATEST_LOCAL_DATE } from '../lib/date'
 import { GOAL_TITLE_LENGTH } from '../lib/gardenActions'
+import type { GoalEditFields } from '../lib/goalEditDraft'
 import type { Goal, GoalSchedule } from '../types'
 import './goals/goals.css'
 
@@ -67,6 +68,8 @@ export function GoalEditor({
   completedBefore,
   completedToday,
   focusRequest = 0,
+  kept,
+  onEdit,
   onSave,
   onArchive,
   onDelete,
@@ -76,28 +79,50 @@ export function GoalEditor({
   today: string
   completedBefore: boolean
   completedToday: boolean
-  /** Changed by the page to take focus to the editor again. */
+  /**
+   * Changed by the page to take focus to the editor again. An editor kept
+   * as a draft (`kept`) takes focus only once this is above 0, so one put
+   * back after a lock, a reload or another page leaves focus where it is.
+   */
   focusRequest?: number
+  /** What was typed in it before, kept as a draft: it opens on these. */
+  kept?: Partial<GoalEditFields>
+  /**
+   * Told of every field changed, with each changed so far, for the draft.
+   * Given, the auto-lock need not wait while the editor is open.
+   */
+  onEdit?: (changed: Partial<GoalEditFields>) => void
   onSave: (edit: GoalEdit) => void
   onArchive: () => void
   onDelete: () => void
   onCancel: () => void
 }) {
-  const [title, setTitle] = useState(goal.title)
-  const [tinyTitle, setTinyTitle] = useState(goal.tinyTitle ?? '')
-  const [schedule, setSchedule] = useState<GoalSchedule>(goal.schedule)
+  const [title, setTitle] = useState(kept?.title ?? goal.title)
+  const [tinyTitle, setTinyTitle] = useState(kept?.tinyTitle ?? goal.tinyTitle ?? '')
+  const [schedule, setSchedule] = useState<GoalSchedule>(kept?.schedule ?? goal.schedule)
   const [weekdays, setWeekdays] = useState<number[]>(
-    goal.weekdays.length ? goal.weekdays : [1, 2, 3, 4, 5],
+    kept?.weekdays ?? (goal.weekdays.length ? goal.weekdays : [1, 2, 3, 4, 5]),
   )
-  const [plannedFor, setPlannedFor] = useState(goal.scheduledDate ?? '')
+  const [plannedFor, setPlannedFor] = useState(kept?.plannedFor ?? goal.scheduledDate ?? '')
+  // Only what the gardener changed goes into the draft, then and before: a
+  // field left alone opens on the goal as it is then, so a date moved from
+  // its row meanwhile is kept, as it is while the editor stays open.
+  const changed = useRef<Partial<GoalEditFields>>(kept ?? {})
+  const edit = (change: Partial<GoalEditFields>) => {
+    changed.current = { ...changed.current, ...change }
+    onEdit?.(changed.current)
+  }
   // The date as the editor opened with it: unchanged here, the goal's own
   // date is saved, so a snooze made from its row meanwhile is kept.
   const [openedWith] = useState(goal.scheduledDate ?? '')
   // The editor opens below the list, away from the row that asked for it,
-  // so focus (and a screen reader) is taken to it.
+  // so focus (and a screen reader) is taken to it: when Edit is chosen, not
+  // as a draft puts it back, which would pull focus, and the page, down to
+  // it, from wherever the gardener (or the unlock) left them.
   const titleField = useRef<HTMLInputElement>(null)
+  const drafted = useRef(kept !== undefined)
   useEffect(() => {
-    titleField.current?.focus()
+    if (focusRequest > 0 || !drafted.current) titleField.current?.focus()
   }, [focusRequest])
   const noDays = schedule === 'weekdays' && weekdays.length === 0
   const onceRefused = schedule === 'once' && goal.schedule !== 'once' && completedBefore
@@ -115,9 +140,10 @@ export function GoalEditor({
       className="goal-form edit-form"
       // Android's back gesture, like Escape, puts the editor away unsaved.
       data-dismiss-on-back=""
-      // Nothing here is a draft: the auto-lock waits while it is open
-      // (components/lock/LockWatch).
-      data-auto-lock-waits=""
+      // The auto-lock waits while it is open (components/lock/LockWatch),
+      // unless its words are a draft (onEdit), as they are on Today: then
+      // no lock loses them, so none need wait.
+      data-auto-lock-waits={onEdit ? undefined : ''}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
@@ -146,7 +172,10 @@ export function GoalEditor({
         <input
           ref={titleField}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value)
+            edit({ title: event.target.value })
+          }}
           maxLength={GOAL_TITLE_LENGTH}
           required
         />
@@ -155,20 +184,37 @@ export function GoalEditor({
         {TINY_TITLE_LABEL}
         <input
           value={tinyTitle}
-          onChange={(event) => setTinyTitle(event.target.value)}
+          onChange={(event) => {
+            setTinyTitle(event.target.value)
+            edit({ tinyTitle: event.target.value })
+          }}
           placeholder="For days that ask for less"
           maxLength={GOAL_TITLE_LENGTH}
         />
       </label>
       <label>
         Repeat
-        <select value={schedule} onChange={(event) => setSchedule(event.target.value as GoalSchedule)}>
+        <select
+          value={schedule}
+          onChange={(event) => {
+            setSchedule(event.target.value as GoalSchedule)
+            edit({ schedule: event.target.value as GoalSchedule })
+          }}
+        >
           <option value="once">Just once</option>
           <option value="daily">Every day</option>
           <option value="weekdays">Selected days</option>
         </select>
       </label>
-      {schedule === 'weekdays' && <WeekdayPicker weekdays={weekdays} onChange={setWeekdays} />}
+      {schedule === 'weekdays' && (
+        <WeekdayPicker
+          weekdays={weekdays}
+          onChange={(days) => {
+            setWeekdays(days)
+            edit({ weekdays: days })
+          }}
+        />
+      )}
       {schedule === 'once' && !onceRefused && (
         <label>
           Planned for
@@ -177,7 +223,10 @@ export function GoalEditor({
             value={plannedFor}
             min={earliest}
             max={LATEST_LOCAL_DATE}
-            onChange={(event) => setPlannedFor(event.target.value)}
+            onChange={(event) => {
+              setPlannedFor(event.target.value)
+              edit({ plannedFor: event.target.value })
+            }}
           />
         </label>
       )}

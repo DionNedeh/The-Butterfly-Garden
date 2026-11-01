@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { SYNC_CHANNEL } from '../../hooks/usePersistence'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import {
+  forgetNotKept,
+  notKeptOnLock,
   openWithKey,
   passkeyOf,
   replaceForgottenPasscode,
@@ -18,6 +20,15 @@ type Step = 'passcode' | 'recovery' | 'new-passcode'
 
 /** Said while a key is being derived, which takes a moment on purpose. */
 const OPENING = 'Opening your garden… this takes a moment.'
+
+/** What the lock could not keep, as one sentence: "The sighting you were writing was not saved…". */
+function notKeptSentence(things: readonly string[]): string {
+  const named =
+    things.length === 1 ? things[0] : `${things.slice(0, -1).join(', ')} and ${things[things.length - 1]}`
+  return `${named.charAt(0).toUpperCase()}${named.slice(1)} ${
+    things.length === 1 ? 'was' : 'were'
+  } not saved when the garden locked.`
+}
 
 /**
  * The lock screen: the garden is resting, and opens with the passcode, the
@@ -54,6 +65,15 @@ export function LockScreen() {
   const [passkey, setPasskey] = useState<LockRecord['passkey']>()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteNote, setDeleteNote] = useState<string>()
+  // What was open, and not a draft, as another tab's "Lock now" took the
+  // garden down (lib/gardenLockActions): said once, beside the passcode.
+  const [notKept] = useState(() => {
+    const things = notKeptOnLock()
+    return things.length ? notKeptSentence(things) : undefined
+  })
+  // Only for this lock: gone with the lock screen, however the garden opens
+  // (or the lock is turned off in another tab).
+  useEffect(() => forgetNotKept, [])
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
   const deleteButton = useRef<HTMLButtonElement>(null)
   const keepButton = useRef<HTMLButtonElement>(null)
@@ -259,6 +279,11 @@ export function LockScreen() {
         />
         <p className="eyebrow">Your garden is locked</p>
         <h1 id={`${ids}-title`}>Your garden is resting</h1>
+        {notKept && (
+          <p className="settings-note" id={`${ids}-not-kept`}>
+            {notKept}
+          </p>
+        )}
 
         {step === 'passcode' && (
           <form className="lock-form" onSubmit={(event) => void openWithPasscode(event)} noValidate>
@@ -272,7 +297,10 @@ export function LockScreen() {
                 value={passcode}
                 readOnly={busy}
                 aria-invalid={problem ? true : undefined}
-                aria-describedby={problem ? `${ids}-problem` : undefined}
+                aria-describedby={
+                  [problem && `${ids}-problem`, notKept && `${ids}-not-kept`].filter(Boolean).join(' ') ||
+                  undefined
+                }
                 onChange={(event) => setPasscode(event.target.value)}
               />
             </label>

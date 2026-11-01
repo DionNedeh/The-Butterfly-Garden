@@ -36,7 +36,13 @@ The art brief's remaining open questions are in [the final-PR plan](../final-pr-
 
 ## Questions raised during the run
 
-None yet. Questions an agent or the integrator meets during the run are written here, under the round that raised them, for the owner to answer afterwards.
+Questions an agent or the integrator meets during the run are written here, under the round that raised them, for the owner to answer afterwards.
+
+### Round R1
+
+- **3.2: a time limit on the remaining auto-lock holds?** An open sighting form, the garden-image editor and an open file chooser still hold the auto-lock with no limit, as in C3. So a garden left with a sighting form open never locks by itself. After a time limit the garden would lock anyway, and the lock screen already says what a lock lost ("The sighting you were writing was not saved when the garden locked."). Recommendation: yes, at twice the chosen auto-lock time.
+- **4.1 and 4.2: a save queued behind "Delete everything".** In the tab that deletes, a save still queued behind one under way when the delete began runs once the delete is done. It then writes its garden into the new, empty database. This is pre-existing: it is the same on b9db1e6. Closing it means refusing writes asked for before the delete, and choosing what the page says when that happens. Recommendation: refuse them, and say nothing more than the delete already says.
+- **4.2: a stale tab and a brand-new garden.** A tab whose connection was dropped, and which hears nothing until the deleting tab has started a new garden and saved it at revision 1, passes the revision check, and writes its old garden over the new one. Closing this needs a garden identity in the check, for example the stored profile's `createdAt`. It is recorded as uncovered in ARCHITECTURE invariant 9. Recommendation: add the identity check; it is a small change to the save check, with no new stored field.
 
 ## Notes for the owner's machine
 
@@ -53,7 +59,17 @@ Checks a container cannot make: it has no WebKit or Firefox, no real phone, no P
 - **The real-device checklist (7.2).** This run writes its entries; running it on a recent and an older Android phone, and on an iPhone, is the owner's.
 - **Art presentation (ART-9).** The refreshed screenshots on devices, and heading contrast over every night painting on a real screen.
 - **WebKit and Firefox.** These run only in CI's advisory `browsers` job.
+- **The `browsers` job on the R0 PR (#71)** passed 220 tests and failed 6:
+  - the photo sighting (`nature.spec.ts:61`), in WebKit;
+  - safe mode opening a move file (`move.spec.ts:223`), in WebKit;
+  - the comfort-plan link at the largest text (`comfort.spec.ts:132`), in mobile WebKit and in Firefox.
+
+  Step 5.2 in round R3 is widened to all three.
+- **Passkeys on an IP address.** The installed Chromium refuses WebAuthn on an IP-address origin and allows it on `localhost`, so 3.3's e2e reaches the preview server as `localhost`. The garden's real address is a domain name, so this matters only to tests.
 
 ## Ideas
 
 Finds outside the run's scope are written here, never dropped.
+
+- **R1, the kept-up-to-date backup file after a delete.** With the backup file on (3.6), a dropped tab whose saves are refused after another tab's delete may still write its garden to the chosen file on disk, through `lib/autoBackupFile.ts`. Not verified. Check it with the 4.2 tests' two-tab setup.
+- **R1, undated goal drafts.** Today's new-goal text and an open goal editor (3.2) are kept under draft keys that the 7-day pruning never drops. They are cleared on add, Save, Cancel, Archive and Delete, and when their goal goes away. An editor left open therefore comes back on each visit to Today, though it no longer holds the auto-lock or takes focus. Consider dating them like the other drafts.

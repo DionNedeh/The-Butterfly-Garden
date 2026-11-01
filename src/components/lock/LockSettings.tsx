@@ -193,8 +193,8 @@ export function LockSettings() {
               </label>
               {/* What it waits for: components/lock/LockWatch. */}
               <p className="field-hint" id={`${ids}-auto-lock`}>
-                It waits while you are choosing a photo or a file, or have a sighting, a goal or a
-                garden image open to edit, so nothing you are part-way through is lost.
+                It waits while you are choosing a photo or a file, or have a sighting or a garden
+                image open to edit, so nothing you are part-way through is lost.
               </p>
             </>
           )}

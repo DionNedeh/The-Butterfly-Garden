@@ -102,6 +102,7 @@ export function usePersistence(
         ok: false,
         message:
           'The garden changed in another tab. Please try saving your image again.',
+        reason: 'conflict',
       })
       persistedRef.current = result.state
       readOnlyRef.current = result.status === 'withheld'
@@ -284,7 +285,7 @@ export function usePersistence(
           // held nothing of the gardener's (lib/quietWrites), when there is
           // nothing to say.
           const quiet = isQuietWrite(next)
-          if (!quiet) settleAll({ ok: false, message: error.message })
+          if (!quiet) settleAll({ ok: false, message: error.message, reason: 'conflict' })
           const result = await repository.load()
           if (result.status === 'loaded') applyLoadResult(result)
           else pauseSaving(result.reason)
@@ -420,15 +421,23 @@ export function usePersistence(
       discardQuarantine: async (): Promise<void> => {
         await repository.clearQuarantine()
       },
-      /** Replace the garden with a previously exported backup. */
-      importGarden: async (text: string): Promise<{ ok: boolean; message: string }> => {
+      /**
+       * Replace the garden with a previously exported backup. `checked` is
+       * the backup as Settings' preview read it (lib/backupPreview), so a
+       * field book full of photos is not read a second time; without it,
+       * the text is read here.
+       */
+      importGarden: async (
+        text: string,
+        checked?: ReturnType<typeof inspectImportedState>,
+      ): Promise<{ ok: boolean; message: string }> => {
         let parsed: unknown
         try {
-          parsed = JSON.parse(text)
+          parsed = checked ? undefined : JSON.parse(text)
         } catch {
           return { ok: false, message: 'That file is not a garden backup.' }
         }
-        const inspection = inspectImportedState(parsed)
+        const inspection = checked ?? inspectImportedState(parsed)
         // The restored garden is exactly a file the gardener holds, so it
         // counts as a copy kept now. This also replaces the time the file
         // carries, which is from the copy before it (or hand-edited), and

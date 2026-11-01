@@ -175,9 +175,16 @@ export default function SightingForm({
       className="garden-dialog sighting-form"
       aria-labelledby={`${ids}-title`}
       // Nothing here is a draft: the auto-lock waits while it is open
-      // (components/lock/LockWatch).
+      // (components/lock/LockWatch), and a lock that does not wait says it
+      // was not kept (lib/gardenLockActions).
       data-auto-lock-waits=""
+      data-lock-loses={
+        editing ? 'the change you were making to a sighting' : 'the sighting you were writing'
+      }
       onCancel={(event) => {
+        // A photo chooser put away without a photo sends its own cancel,
+        // which bubbles here: only the dialog's own (Escape, Back) closes it.
+        if (event.target !== event.currentTarget) return
         event.preventDefault()
         close()
       }}

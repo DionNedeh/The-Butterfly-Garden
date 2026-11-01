@@ -55,6 +55,7 @@ import {
   type WearLookResult,
 } from '../lib/wardrobe'
 import type { ChangeSightings } from '../lib/sightings'
+import type { PlainBackup } from '../lib/backupIntegrity'
 import type { FileCopy } from '../lib/sightingPhotos'
 import { gardenRepository } from '../repository/gardenRepository'
 import { storedVersionOf } from '../repository/validateGarden'
@@ -570,18 +571,16 @@ export function useGardenState() {
           ...stateRef.current,
           version: storedVersionOf(),
         }
-        const file = {
+        const file: PlainBackup = {
           format: 'the-butterfly-garden',
           exportedAt: new Date().toISOString(),
           appVersion: __APP_VERSION__,
+          revision: gardenRepository.revision(),
           garden,
         }
-        // A sighting's photo is a Blob, which goes into the file as text, as
-        // a personal image always has (lib/sightingPhotos); one that cannot
-        // be read is left out, and said so, rather than fail the backup.
-        return garden?.sightings.some((sighting) => sighting.photo)
-          ? (await import('../lib/sightingPhotos')).fileCopy(file)
-          : { text: JSON.stringify(file, null, 2) }
+        // Written with its photos as text and a check of its garden, which
+        // a restore's preview reads (lib/backupIntegrity).
+        return (await import('../lib/backupIntegrity')).backupCopy(file)
       },
       /**
        * A copy from `exportGarden` reached the gardener: saved, downloaded or

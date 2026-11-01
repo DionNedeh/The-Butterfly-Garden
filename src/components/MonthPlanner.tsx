@@ -161,7 +161,13 @@ export const MonthPlanner = memo(function MonthPlanner({
   const isFutureOrToday = selectedDate >= today
 
   return (
-    <section className="card month-planner" aria-labelledby="planner-title">
+    <section
+      className="card month-planner"
+      aria-labelledby="planner-title"
+      // A goal being planned is no draft (nor is its day), so a lock that
+      // takes it says so (lib/gardenLockActions), folded away or not.
+      data-lock-loses={planTitle.trim() ? 'the goal you were planning' : undefined}
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Plan the month</p>
