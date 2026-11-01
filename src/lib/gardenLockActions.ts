@@ -154,13 +154,38 @@ export async function unlockWithPasskey(prfOutput: Uint8Array): Promise<void> {
 }
 
 /**
+ * What was open as the garden last locked here that no draft keeps, as each
+ * form names itself (`data-lock-loses`): the lock screen says it was not
+ * saved. The auto-lock waits while a sighting or a garden image is open
+ * (components/lock/LockWatch), but not on a short line of text, and "Lock
+ * now", here or in another tab, waits on nothing.
+ */
+let notKept: string[] = []
+
+/** What the last lock here could not keep, in the words each form gave. */
+export function notKeptOnLock(): readonly string[] {
+  return notKept
+}
+
+/** Said, and done with: the lock screen has gone, however the garden opened. */
+export function forgetNotKept(): void {
+  notKept = []
+}
+
+/**
  * Lock the garden here: unsaved words are written first, sealed while the
  * key is still here, then the key and the garden read with it are forgotten
  * and the drafts held in memory are let go. `everywhere` locks the other
  * tabs too, as "Lock now" should; auto-lock is this tab's alone.
  */
 export async function lockGarden(everywhere: boolean): Promise<void> {
+  // Read while the app is still on the page, before it goes.
+  const open = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-lock-loses]'),
+    (form) => form.dataset.lockLoses ?? '',
+  )
   await flushDrafts()
+  notKept = [...new Set(open.filter(Boolean))]
   await gardenRepository.lockNow()
   resetDrafts()
   if (everywhere) tellOtherTabs({ type: 'garden-lock', now: true })

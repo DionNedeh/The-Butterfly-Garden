@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import type { CustomBackdropRejection } from '../lib/customBackdrops'
 import type { AppState, CustomBackdrop } from '../types'
 
-export type MediaResult = { ok: boolean; message?: string }
+/**
+ * How a save went. Not kept, `reason` may say why: `conflict` when the
+ * garden changed in another tab first and the change carrying it was let
+ * go, or why an image was refused before it was written (lib/customBackdrops).
+ */
+export type MediaResult = {
+  ok: boolean
+  message?: string
+  reason?: 'conflict' | CustomBackdropRejection
+}
 
 /** What a save can wait for: one of the gardener's images, or a sighting's photo. */
 export type MediaRecord = CustomBackdrop | Blob

@@ -203,6 +203,10 @@ real phone (ideally one recent and one older, Android 8–10):
 - [ ] Restore: the picker can select that backup (Downloads and Drive) and
       restores it; a backup made by the web version restores too
 - [ ] Personal backdrop: pick a photo, crop, save, reopen the app
+- [ ] A chooser put away: in Log a sighting, type a few words, tap "Add a
+      photo" and back out of the picker without choosing one; the form stays
+      open with the words in it. The same for "Choose a garden image" in
+      Add your own backdrop
 - [ ] Soundscape stops when the app goes to the background, resumes on return
 - [ ] Airplane mode: everything except the Garden Pass works
 - [ ] Settings → Open-source notices: both sections open, including

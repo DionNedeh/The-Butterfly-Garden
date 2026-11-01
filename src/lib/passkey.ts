@@ -31,10 +31,15 @@ interface PasskeyCapabilities {
  * supports PRF, its answer decides. Where it cannot, a passkey is offered if
  * the device can make one, and adding it then shows whether PRF came back:
  * if not, nothing is stored and the gardener is told.
+ *
+ * Never on a garden served from an IP address (127.0.0.1, a home server's
+ * 192.168.…): WebAuthn will not make a passkey for such a site, though
+ * Chromium still says it supports PRF there.
  */
 export async function passkeysOffered(): Promise<boolean> {
   if (import.meta.env.VITE_PLATFORM === 'android') return false
   if (typeof PublicKeyCredential === 'undefined' || !navigator.credentials) return false
+  if (/^[\d.]+$|^\[/.test(location.hostname)) return false
   const credential = PublicKeyCredential as unknown as PasskeyCapabilities
   try {
     const capabilities = await credential.getClientCapabilities?.()

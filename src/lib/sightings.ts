@@ -47,13 +47,37 @@ export interface ChangeSightings {
    * Once a photo the last change brought is stored: ok, or not, when it
    * would not go in, and the garden has taken it back out (usePersistence),
    * so the rest of the garden still saves. Where it is missing (a stand-in
-   * garden), a change is taken as kept as soon as it is made.
+   * garden), a change is taken as kept as soon as it is made. Not kept with
+   * the `reason` 'conflict', the garden changed in another tab first and the
+   * change was let go with everything in it; otherwise the photo would not
+   * go in.
    */
-  photoSaved?: (photo: Blob) => Promise<{ ok: boolean; message?: string }>
+  photoSaved?: (photo: Blob) => Promise<{ ok: boolean; message?: string; reason?: string }>
 }
 
 /** What the field book says of a new photo that could not be stored. */
 export const PHOTO_NOT_KEPT = 'The photo could not be stored on this device, so it was not kept.'
+
+/**
+ * What it says when the garden changed in another tab first, and the change
+ * that brought a new photo was let go, the whole sighting with it.
+ */
+export const SIGHTING_NOT_SAVED = 'The garden changed in another tab, so this sighting was not saved.'
+
+/**
+ * The same, for a change to a sighting already there: the sighting stays,
+ * as it was before, and only the change was let go.
+ */
+const CHANGES_NOT_SAVED = 'The garden changed in another tab, so your changes were not saved.'
+
+/**
+ * What to say of a new photo's change that was not kept
+ * (FieldBookActions.photoSaved): a new sighting's, or one `edited`.
+ */
+export function photoNotSaved(kept: false | 'conflict', edited = false): string {
+  if (kept !== 'conflict') return PHOTO_NOT_KEPT
+  return edited ? CHANGES_NOT_SAVED : SIGHTING_NOT_SAVED
+}
 
 /** What the Journal and the Guide can do with the field book. */
 export interface FieldBookActions {
@@ -63,8 +87,13 @@ export interface FieldBookActions {
   /** Cross one out: what Undo needs, or undefined when it was not there. */
   remove: (id: string) => RemovedSighting | undefined
   restore: (removed: RemovedSighting) => boolean
-  /** Whether a new photo just logged or added reached storage (ChangeSightings). */
-  photoSaved: (photo: Blob) => Promise<boolean>
+  /**
+   * Whether a new photo just logged or added reached storage
+   * (ChangeSightings): true, false when the photo would not go in, or
+   * 'conflict' when another tab's change came first and this one, photo and
+   * all, was let go.
+   */
+  photoSaved: (photo: Blob) => Promise<boolean | 'conflict'>
 }
 
 const SPECIES_NAMES = new Map(species.map((item) => [item.id, item.commonName]))
@@ -104,10 +133,14 @@ export function sightingProblem(
 ): string | undefined {
   if (!subjectName(input)) return 'Choose a butterfly or a plant from the list.'
   if (!isLocalDate(input.date)) return 'Choose the day you saw it.'
-  if (input.date > today) return 'Choose today or an earlier day: the field book keeps what has been seen.'
+  const existing = editing ? sightings.find((item) => item.id === editing) : undefined
+  // A day ahead of the clock is refused, except the one a sighting being
+  // changed already has: written down while the device's clock ran ahead,
+  // its words can still be changed, and its day stays as it is.
+  if (input.date > today && input.date !== existing?.date)
+    return 'Choose today or an earlier day: the field book keeps what has been seen.'
   if (input.photo !== undefined && !isSightingPhoto(input.photo))
     return 'That photo could not be kept. Try choosing it again.'
-  const existing = editing ? sightings.find((item) => item.id === editing) : undefined
   if (editing && !existing) return 'That sighting is no longer in your field book.'
   if (!existing && sightings.length >= MAX_SIGHTINGS)
     return `Your field book is full: it keeps ${MAX_SIGHTINGS.toLocaleString()} sightings. Delete one to make room for another.`
@@ -207,7 +240,11 @@ export function fieldBookActions(change: ChangeSightings): FieldBookActions {
       return crossedOut ? removed : undefined
     },
     restore: (removed) => change((sightings) => restoreSighting(sightings, removed)),
-    photoSaved: async (photo) => (await change.photoSaved?.(photo))?.ok ?? true,
+    photoSaved: async (photo) => {
+      const result = await change.photoSaved?.(photo)
+      if (!result || result.ok) return true
+      return result.reason === 'conflict' ? 'conflict' : false
+    },
   }
 }
 

@@ -710,6 +710,10 @@ export function SettingsView({
   // Availability rather than earned unlocks: a Garden Pass scene is choosable
   // while access holds, and is never recorded as permanently earned.
   const nameNote = noteForName(name)
+  // A name Save settings would change, which a lock would lose: no draft
+  // keeps it, so the lock screen says so (lib/gardenLockActions).
+  const changes = (typed: string, stored?: string) => typed.trim() !== '' && typed.trim() !== stored
+  const renaming = changes(name, state.profile?.name) || changes(gardenName, state.profile?.gardenName)
 
   return (
     <div className="view settings-view">
@@ -727,6 +731,7 @@ export function SettingsView({
         <p className="eyebrow">Garden details</p>
         <h2 id="garden-settings-title">Make the space yours</h2>
         <form
+          data-lock-loses={renaming ? 'the new name you were typing' : undefined}
           onSubmit={(event) => {
             event.preventDefault()
             onUpdateProfile(name, gardenName, motion)

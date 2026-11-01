@@ -102,6 +102,7 @@ export function usePersistence(
         ok: false,
         message:
           'The garden changed in another tab. Please try saving your image again.',
+        reason: 'conflict',
       })
       persistedRef.current = result.state
       readOnlyRef.current = result.status === 'withheld'
@@ -284,7 +285,7 @@ export function usePersistence(
           // held nothing of the gardener's (lib/quietWrites), when there is
           // nothing to say.
           const quiet = isQuietWrite(next)
-          if (!quiet) settleAll({ ok: false, message: error.message })
+          if (!quiet) settleAll({ ok: false, message: error.message, reason: 'conflict' })
           const result = await repository.load()
           if (result.status === 'loaded') applyLoadResult(result)
           else pauseSaving(result.reason)

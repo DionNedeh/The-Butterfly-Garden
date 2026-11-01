@@ -132,9 +132,14 @@ export default function CustomBackdropEditor({
       className="garden-dialog backdrop-editor"
       aria-labelledby="editor-title"
       // The image being framed is no draft: the auto-lock waits while it is
-      // open (components/lock/LockWatch).
+      // open (components/lock/LockWatch), and a lock that does not wait says
+      // it was not kept (lib/gardenLockActions).
       data-auto-lock-waits=""
+      data-lock-loses="the garden image you were framing"
       onCancel={(event) => {
+        // An image chooser put away without an image sends its own cancel,
+        // which bubbles here: only the dialog's own (Escape, Back) closes it.
+        if (event.target !== event.currentTarget) return
         event.preventDefault()
         close()
       }}

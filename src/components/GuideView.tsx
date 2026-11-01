@@ -31,7 +31,7 @@ import { regionGuideWords } from '../lib/regionGuide'
 import { hasEveryWord, normaliseForSearch, searchWords } from '../lib/searchText'
 import {
   fieldBookActions,
-  PHOTO_NOT_KEPT,
+  photoNotSaved,
   seenInTheWild,
   type ChangeSightings,
 } from '../lib/sightings'
@@ -308,7 +308,7 @@ export function GuideView({
   const [logging, setLogging] = useState<SightingSubject>()
   const loggedFrom = useRef<HTMLElement | null>(null)
   /** Whether the photo of the sighting just logged was stored, while that is not yet known. */
-  const photoSaved = useRef<Promise<boolean>>(undefined)
+  const photoSaved = useRef<Promise<boolean | 'conflict'>>(undefined)
   const [logged, setLogged] = useState('')
   // Rebuilt only when the gardener's evening moves, not on every garden change.
   const sections = useMemo(
@@ -473,7 +473,7 @@ export function GuideView({
               const waiting = photoSaved.current
               photoSaved.current = undefined
               if (!waiting) setLogged(words)
-              else void waiting.then((kept) => setLogged(kept ? words : PHOTO_NOT_KEPT))
+              else void waiting.then((kept) => setLogged(kept === true ? words : photoNotSaved(kept)))
             }}
           />
         </Suspense>
