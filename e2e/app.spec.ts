@@ -2366,18 +2366,28 @@ test.describe('6.6 the browser’s own Back returns to the same place', () => {
     // Well inside the screen, so that focusing it on the way back has no need
     // to bring it into view; and how far down the page was as it was pressed,
     // which is what the app keeps. Centred only once Juniper's panel has
-    // stopped moving: on a slow machine it is still drawing, the link moves
-    // after it is centred, and the press then scrolls it to the screen's edge.
+    // stopped moving: on a slow machine it is still drawing, and a link that
+    // moves after it is centred is not where the press finds it. So it is
+    // centred again until two looks 300 ms apart agree, and then pressed from
+    // the keyboard, which never scrolls the page first as a pointer press may.
+    let last = ''
     await expect
-      .poll(() =>
-        bond.evaluate(async (link) => {
-          link.scrollIntoView({ block: 'center' })
-          await new Promise((settled) => requestAnimationFrame(() => requestAnimationFrame(settled)))
-          const { top, bottom } = link.getBoundingClientRect()
-          return Math.abs((top + bottom) / 2 - innerHeight / 2) < 2
-        }),
+      .poll(
+        async () => {
+          const now = await bond.evaluate(async (link) => {
+            link.scrollIntoView({ block: 'center' })
+            await new Promise((settled) => setTimeout(settled, 300))
+            const { top } = link.getBoundingClientRect()
+            return `${Math.round(top)} ${window.scrollY} ${document.documentElement.scrollHeight}`
+          })
+          const still = now === last
+          last = now
+          return still
+        },
+        { timeout: 15_000 },
       )
       .toBe(true)
+    const centred = await page.evaluate(() => window.scrollY)
     await page.evaluate(() =>
       document.addEventListener(
         'click',
@@ -2385,8 +2395,10 @@ test.describe('6.6 the browser’s own Back returns to the same place', () => {
         { capture: true, once: true },
       ),
     )
-    await bond.click()
+    await bond.focus()
+    await page.keyboard.press('Enter')
     const scrolled = Number(await page.locator('html').getAttribute('data-pressed-at'))
+    expect(scrolled, 'pressed where it was centred').toBe(centred)
     await expect(page).toHaveURL(/#\/guide\/bond$/)
     await expect(page.getByRole('heading', { level: 2, name: 'Bond levels' })).toBeFocused()
 
