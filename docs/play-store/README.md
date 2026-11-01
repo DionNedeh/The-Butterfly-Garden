@@ -70,7 +70,7 @@ https://support.google.com/googleplay/android-developer/answer/16679511
 see the Health apps declaration below.
 
 **Privacy policy URL:** https://dionnedeh.github.io/The-Butterfly-Garden/privacy.html
-(live once this branch is merged and Pages deploys). The same page is inside
+(live, and redeployed with each release). The same page is inside
 the app under Settings → About → Privacy policy, which Play also requires:
 https://support.google.com/googleplay/android-developer/answer/10144311
 

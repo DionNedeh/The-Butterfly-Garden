@@ -40,8 +40,30 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    id: 'release-3-9',
+    version: '3.9.0',
+    title: 'Steadier underneath',
+    sections: [
+      {
+        title: 'Privacy and safety',
+        items: [
+          'In Safari’s Private Browsing, a sighting photo that cannot be stored on this device is let go at once with a plain note, and the rest of your garden keeps saving.',
+          'The garden asks your browser never to tell other sites which page you came from.',
+          'The privacy policy in Settings is brought up to date for everything added since 3.0, including the field book, the comfort plan, the garden lock and protected backups.',
+        ],
+      },
+      {
+        title: 'In the Android app',
+        items: [
+          'Adding a daily garden visit opens your calendar’s own new-event screen with the visit filled in, and still saves a calendar file on phones without a calendar app.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'release-3-8',
     version: '3.8.0',
+    releasedOn: '2026-11-01',
     title: 'Back where you were',
     sections: [
       {

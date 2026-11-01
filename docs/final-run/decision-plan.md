@@ -50,6 +50,26 @@ Questions an agent or the integrator meets during the run are written here, unde
 - **6.3: two counts left on a gentle day.** A plant's panel still says "Care remaining: N eligible Sunlight", which describes the plant's growth. The calendar's day buttons still name their goal counts to screen readers ("N goals, M completed"). Neither is the day's Sunlight, so both were left. Recommendation: leave both.
 - **6.7: Shop in the navigation.** Each shop tab now has an address. So pressing Shop in the navigation while on another tab opens Supplies and adds a history entry; before, it did nothing. Recommendation: keep it. The address and the page now agree.
 
+### Rounds R3 and R4
+
+- **5.2: keeping a sighting photo where the browser stores no Blobs.**
+  - Safari's Private Browsing, and WebKit's ephemeral storage, refuse to store a photo. 3.9 tries each chosen photo in a throwaway database first. When the photo is refused, it is let go with the honest "not kept" note, and the garden keeps saving.
+  - Keeping the photo there would need a stored shape without a Blob, which is a new persisted format:
+    - Bytes plus a type would make builds 3.3 to 3.6 refuse the whole garden.
+    - The backup file's shape (a type and base64 data) is read by 3.3 to 3.6, but it is about a third larger.
+  - Recommendation: keep the honest note, and add no new format.
+- **5.3: the loading placeholder's missing heading.** While a lazy page opens, the app shows "Opening…" with no level-one heading. That is a moderate accessibility issue every gardener meets for a moment. The e2e helper now waits for the placeholder to go before a sweep.
+  - Either keep that wait, or give the placeholder a visually hidden heading once the first load has about 30 B to spare, then drop the wait.
+  - Recommendation: the heading, when there is room.
+- **5.9: the privacy policy's wording.** Approve it before any Play submission, in particular these four passages:
+  1. The policy itself now states the web same-address limit: other pages at that address could read what the garden stores, and the lock cannot protect against them.
+  2. The new summary sentence about files, calendar visits and links.
+  3. The policy keeps its own address until the move.
+  4. The no-way-back sentence now allows for a passkey.
+
+  Recommendation: approve as written.
+- **7.2: the device checklists.** The Android and iPhone lists are written and unchecked. Running them is yours: a recent and an older Android phone, and an iPhone. Record each run, with device models and OS versions.
+
 ## Notes for the owner's machine
 
 Checks a container cannot make: it has no WebKit or Firefox, no real phone, no Play Console and no hardware authenticator.
@@ -73,6 +93,13 @@ Checks a container cannot make: it has no WebKit or Firefox, no real phone, no P
   Step 5.2 in round R3 is widened to all three.
 - **Passkeys on an IP address.** The installed Chromium refuses WebAuthn on an IP-address origin and allows it on `localhost`, so 3.3's e2e reaches the preview server as `localhost`. The garden's real address is a domain name, so this matters only to tests.
 
+- **The checks paused while the app is being built.** On 1 November the owner asked for faster deploys until finalization. Two repository variables bring the paused checks back (GitHub: Settings, Secrets and variables, Actions, Variables):
+  - `RUN_BROWSER_TESTS` set to `true` runs the Safari and Firefox job again.
+  - `FULL_MAIN_CHECKS` set to `true` makes a push to `main` re-run the unit and end-to-end tests and the budgets before deploying.
+
+  Pull requests run everything else as before. Step 5.2's "three green runs, then required" starts counting once the browsers job is back.
+- **Play's Data safety form.** Read the release bundle's merged manifest again before answering it, since 3.9 adds the Android calendar intent. It asks for no permission.
+
 ## Ideas
 
 Finds outside the run's scope are written here, never dropped.
@@ -84,3 +111,7 @@ Finds outside the run's scope are written here, never dropped.
 - **R2, an unused branch in `openSupport`.** In App.tsx, `openSupport`'s branch for a comfort plan opened from the support page is no longer reached, since 6.9 returns through the plan's own Back. It can go in a later tidy.
 - **R2, night thumbnails offline.** The night thumbnails are kept out of the precache. A gardener who is offline at night, and has never opened the gallery at night, sees the day thumbnails. This is by design, but no real service worker tested it.
 - **R2, release dates for 3.4 and 3.5.** What's new shows no date for 3.4 or 3.5, which both went live (#69 merged 3.5 on 27 October). Dating them is a small edit to `src/data/releases.ts`.
+- **R3, the comfort plan's way back to Settings at the largest text.** Back on Settings from a comfort plan just written, the focused "Your comfort plan" link can end up out of sight. The page puts back its scroll and focuses the link, and then Settings content above the link draws and pushes it down. Chromium passes `e2e/comfort.spec.ts:132`, which checks it; mobile WebKit and Firefox fail it. A centring attempt broke `breathe.spec.ts:149` and was reverted. One fix: `putBackAt` keeps the link in view while the page settles.
+- **R3, a restore with photos where Blobs are refused.** Restoring a backup that holds sighting photos still writes them as Blobs. In a browser that refuses Blobs, that may hold up later saves the way a chosen photo did. Check the photos with `lib/photoCheck` before a restore, or leave them out with a note.
+- **R3, the lock's no-way-back sentence.** `NO_WAY_BACK` in `src/lib/gardenLock.ts`, shown when the lock is set up or changed, says nobody can open the garden once the passcode and recovery code are lost. A passkey still in the lock also opens it. The policy and SECURITY.md now say so; the app's own sentence does not.
+- **R3, the moved-address banner's chunk.** In ordinary builds the banner no longer reaches the first load, but its chunk is still built and may be precached. A build-time switch could leave it out entirely.
