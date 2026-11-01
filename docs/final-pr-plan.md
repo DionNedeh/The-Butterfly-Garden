@@ -2,6 +2,8 @@
 
 *Written on 27 October 2026, after release 3.4.0 ([#66](https://github.com/DionNedeh/The-Butterfly-Garden/pull/66)). It replaces the shorter future-work note merged in [#67](https://github.com/DionNedeh/The-Butterfly-Garden/pull/67).*
 
+**Final run, from 1 November 2026.** What this plan leaves after #69 and 3.6 is being built under [the execution plan](final-run/execution-plan.md). Items that wait on the owner are in [the decision plan](final-run/decision-plan.md). This plan stays as written; each item's record is kept in the execution plan.
+
 The [Voyager plan](Voyager-2026-10-26_18-48-37-UTC.md) was carried out in fourteen PRs: A1 to A4, B1 to B7, and C1 to C3, which shipped releases 3.0 to 3.4. This plan holds everything it set out that is not done on `main`, plus the art that was always meant to come last.
 
 To find it, every item of the Voyager plan and every PR log was swept, along with the review notes and the code itself, and each candidate was checked against `main` at 5d0a7ce. A second pass then looked for anything missed and for claims that were wrong. What was checked and found done is listed in the appendix, so the reader can see what the sweep covered.
@@ -32,7 +34,7 @@ To find it, every item of the Voyager plan and every PR log was swept, along wit
 - **Stored data.** Builds 3.0 to 3.4 will open what a newer build writes.
   - A new stored field must be optional, and checked in `validateGarden`.
   - Raising `DATABASE_VERSION` or `CURRENT_STATE_VERSION` makes older builds refuse the garden as "written by a newer version". Both are 8 now. Raise one only when it is needed, and say why in the log.
-- **Patches.** The original plan used three patches. The seasons patch remains in [`docs/final-pr-plan/patches/`](final-pr-plan/patches/); the move and keep patches are replaced by their section 2 implementation in this change. The builders' notes remain as provenance.
+- **Patches.** The original plan used three patches. The seasons patch remains in [`docs/final-pr-plan/patches/`](final-pr-plan/patches/); the move and keep patches are replaced by their section 2 implementation in this change. (1 November 2026: the seasons patch was removed as well, since #69 applied it.) The builders' notes remain as provenance.
   - Each applies cleanly at commit 48ad0f1, which is in `main`'s history through the C3 merge.
   - On `main`, `git am -3` stops on the conflicts each step lists.
   - The builders' own notes are kept beside them, in `builders-notes.txt`: what each built, what they left open, suggested ARCHITECTURE rows and budget figures.

@@ -113,6 +113,8 @@ test('a day’s copy is kept before its first change, and one is put back and un
   await expect(page.getByText('Written after undo')).toHaveCount(0)
   await goTo(page, 'Settings')
   const restoreRow = page.getByRole('listitem').filter({ hasText: 'Before a restore' }).first()
+  // The earlier copies are read after Settings opens; count them once listed.
+  await expect(restoreRow).toBeVisible()
   const beforeCount = await page.getByRole('listitem').filter({ hasText: 'Before a restore' }).count()
   await restoreRow.getByRole('button', { name: /^Discard copy,/ }).click()
   await restoreRow.getByRole('button', { name: 'Discard this copy' }).click()
@@ -171,6 +173,34 @@ test('a backup file is chosen once, written then and as the page is hidden, and 
       configurable: true,
       value: async () =>
         (await navigator.storage.getDirectory()).getFileHandle('garden-backup.json', { create: true }),
+    })
+    // Chromium 1243, the build this Playwright pins, closes the whole
+    // browser when a handle from the private file system is put into
+    // IndexedDB. A save screen's real handle is a file on disk, which it
+    // keeps without trouble. So this stand-in handle stays in the page, and
+    // IndexedDB keeps a token for it, swapped back on every read.
+    const kept = new Map<string, FileSystemHandle>()
+    const token = (value: unknown) => {
+      if (!value || typeof value !== 'object' || !('handle' in value)) return value
+      const { handle } = value as { handle: unknown }
+      if (!(handle instanceof FileSystemHandle)) return value
+      const id = `stand-in-handle:${handle.name}`
+      kept.set(id, handle)
+      return { ...value, handle: id }
+    }
+    const put = IDBObjectStore.prototype.put
+    IDBObjectStore.prototype.put = function (value: unknown, key?: IDBValidKey) {
+      return put.call(this, token(value), key)
+    }
+    const result = Object.getOwnPropertyDescriptor(IDBRequest.prototype, 'result')!
+    Object.defineProperty(IDBRequest.prototype, 'result', {
+      configurable: true,
+      get(this: IDBRequest) {
+        const value: unknown = result.get!.call(this)
+        if (!value || typeof value !== 'object' || !('handle' in value)) return value
+        const { handle } = value as { handle: unknown }
+        return typeof handle === 'string' && kept.has(handle) ? { ...value, handle: kept.get(handle) } : value
+      },
     })
   })
   await page.clock.setFixedTime(new Date('2026-10-27T10:00:00.000Z'))

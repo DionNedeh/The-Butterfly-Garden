@@ -1385,11 +1385,19 @@ test('has no serious accessibility violations and relaunches offline', async ({
   await page.waitForTimeout(450)
   expect(await seriousViolations(page, 'Garden')).toEqual([])
 
+  // The service worker installs the whole precache before it can serve the
+  // page. On a slow machine that outlasts the reload below, which then
+  // leaves the page unclaimed, and an offline reload found no network and
+  // no cache. Wait for it, and for it to control the reloaded page.
+  await page.evaluate(() => navigator.serviceWorker.ready)
   await page.reload()
   await expect(
     page.getByRole('heading', { name: 'Sunlit Sanctuary' }),
   ).toBeVisible()
   if (!canReloadOffline(browserName)) return
+  await expect
+    .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+    .toBe(true)
   await context.setOffline(true)
   try {
     await page.reload()
