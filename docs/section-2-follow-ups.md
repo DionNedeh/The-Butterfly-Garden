@@ -27,11 +27,11 @@ database version numbers stayed unchanged.
 
 ## Section 2 and prerequisite 3.1
 
-- [ ] Complete final-source browser acceptance. The interrupted run logged 86
+- [x] Complete final-source browser acceptance. *Done in the final run's round R0, 1 November 2026: the whole Chromium suite and the Android bundle pass; see [its record](final-run/execution-plan.md#round-r0-record).* The interrupted run logged 86
   passes, two failures and one skip out of 173 scheduled cases. Investigate
   `e2e/comfort.spec.ts:132` (link outside viewport) and `e2e/app.spec.ts:1379`
   (offline reload disconnected). Their relationship to this change is unknown.
-- [ ] Re-run the final static unused-code check when testing resumes. Its last
+- [x] Re-run the final static unused-code check when testing resumes. *Clean on b3f7da1 (round R0).* Its last
   complaint was the temporary Playwright config, removed afterward without rerun.
 - [ ] Complete Firefox/WebKit, native sync/Gradle, APK/AAB and physical-device
   acceptance. Exercise real file-picker permission/cancellation, retained-file

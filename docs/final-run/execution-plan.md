@@ -46,6 +46,20 @@ The answers to the run's four opening questions:
 | R3 | 3.9.0 | K6 hosting-and-android | 5.1, 6.11, 5.7 |
 | R4 | as needed | K7 docs | 5.9, 5.10, 7.2 |
 
+## Round R0 record
+
+The checks on b3f7da1, run on 1 November 2026:
+
+- **Static:** typecheck and lint pass. knip passes too: its one complaint in the first run was this run's own temporary Playwright config, and a rerun without it is clean. That settles the unused-code check 3.6 left unrun.
+- **Unit:** 254 files and 3,005 tests pass, with 96.48% of lines and 91.86% of branches covered.
+- **Budgets:** the web first load is 159.8 kB, entry 98.7 kB; the Android first load is 160.5 kB of 160.7, entry 98.2 kB.
+- **Android:** `build:android`, `cap sync` and `lintRelease testReleaseUnitTest assembleDebug bundleRelease` pass.
+- **e2e:** 169 tests pass and 1 is skipped. Three fail, and fail again when each is rerun alone three times:
+  - **The offline relaunch** (`app.spec.ts:1379`). It fails on mobile already at #69's merge here, though #69's CI passed it. The test went offline before the service worker had installed the whole precache and taken the page. #69's larger precache made that likely on a slower machine, and 3.6 made desktop fail too. The test now waits for the worker to be ready and to control the page.
+  - **The kept backup file, on desktop and mobile** (`keep.spec.ts:161`). Chromium 1243, the build this Playwright pins and CI installs, closes the whole browser when a handle from the origin's private file system is put into IndexedDB. A probe showed that every other step works. A real save screen hands over a file on disk, which IndexedDB keeps, so the test's stand-in handle now stays in the page, with a token in IndexedDB.
+- **After the fixes:** both tests pass three times each in both projects, 24 runs in all.
+- **The comfort-plan failure 3.6 noted** (`comfort.spec.ts:132`) passed in the baseline.
+
 The parked items, in the decision plan: 1.3, 1.5, ART-6, ART-7, ART-10, 2.2, 3.5, 3.6, 5.1 (the move), 5.2 (required job), 5.5 (baseline and caps), 5.6, 5.7 (Playwright bump), 5.12, 6.1, 6.12, 6.13, 6.14, 7.1, 7.3, 7.4, 7.5, 7.6, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6.
 
 ## Done before this run
