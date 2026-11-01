@@ -6,7 +6,7 @@ import {
   MAX_OUTFITS_WORN,
   PRESET_NAME_LENGTH,
 } from '../lib/companionDiary'
-import { formatJournalDate, isGoalDue, isLocalDate, toLocalDate } from '../lib/date'
+import { addDaysToLocalDate, formatJournalDate, isGoalDue, isLocalDate, toLocalDate } from '../lib/date'
 import { REBLOOM_CARE_DAYS } from '../lib/gardenPace'
 import { jarCharacters } from '../data/jars'
 import { validateGarden } from './validateGarden'
@@ -949,7 +949,8 @@ describe('the days the garden was visited', () => {
   })
 
   it('drops anything that is not a real day, or is a day still to come', () => {
-    const tomorrow = toLocalDate(new Date(Date.now() + 86_400_000))
+    // The next calendar day, not 24 hours on: a day a clock goes back has 25.
+    const tomorrow = addDaysToLocalDate(toLocalDate(), 1)
     for (const value of ['2026-02-30', 'yesterday', 20260101, null, tomorrow, '99999-01-01']) {
       const profile = withVisits({ lastVisitOn: value, welcomeBackOn: value })
       expect(profile).not.toHaveProperty('lastVisitOn')
