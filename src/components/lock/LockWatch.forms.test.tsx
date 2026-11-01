@@ -208,6 +208,11 @@ describe('3.2 what a lock could not keep, from the forms that are no draft', { t
     ).toBeInTheDocument()
 
     await act(() => unlockGarden({ slot: 'passcode', passcode: PASSCODE }))
+    // Opened from the lock screen, focus lands on the page's heading
+    // (LockWatch). Type only once it has: a late landing takes the keys.
+    await waitFor(() => expect(document.querySelector('#main-content h1')).toHaveFocus(), {
+      timeout: LAZY_PAGE_MS,
+    })
     await user.type(await screen.findByRole('textbox', { name: 'Plan a goal for this day' }), 'Sow the poppies')
     await user.click(screen.getByRole('button', { name: /^Add to / }))
     expect(planned).toHaveBeenCalledWith('Sow the poppies', TODAY)
@@ -249,6 +254,11 @@ describe('3.2 what a lock could not keep, from the forms that are no draft', { t
     ).toBeInTheDocument()
 
     await act(() => unlockGarden({ slot: 'passcode', passcode: PASSCODE }))
+    // Opened from the lock screen, focus lands on the page's heading
+    // (LockWatch). Type only once it has: a late landing takes the keys.
+    await waitFor(() => expect(document.querySelector('#main-content h1')).toHaveFocus(), {
+      timeout: LAZY_PAGE_MS,
+    })
     const yourName = await screen.findByRole('textbox', { name: 'Your name' })
     await user.type(yourName, 'n')
     expect(document.querySelector('[data-lock-loses]')).not.toBeNull()

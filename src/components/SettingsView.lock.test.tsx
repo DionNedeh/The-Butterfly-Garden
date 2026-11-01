@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInitialState } from '../lib/progression'
 import type { LockState } from '../repository/gardenRepository'
+import { LAZY_PAGE_MS } from '../test/lazyPage'
 import { SettingsView } from './SettingsView'
 
 const lock = vi.hoisted((): { state: LockState } => ({ state: 'none' }))
@@ -38,7 +39,7 @@ describe('Settings: the garden lock', () => {
     ).toBeInTheDocument()
   })
 
-  it('says beside the backup button, while the lock is on, that a backup is not locked', () => {
+  it('says beside the backup button, while the lock is on, that a backup is not locked', async () => {
     renderSettings()
     const note = 'This copy is not locked; keep it somewhere private, or use a protected backup.'
     expect(screen.queryByText(note)).toBeNull()
@@ -47,5 +48,10 @@ describe('Settings: the garden lock', () => {
     renderSettings()
     const backup = within(screen.getByRole('region', { name: 'Backup and restore' }))
     expect(backup.getByText(note)).toBeInTheDocument()
+    // With the lock on, its section loads the lock's actions and the passkey
+    // module as it opens. Wait for both, or the file can end while they are
+    // still loading, and Vitest reports a module loaded after teardown.
+    await screen.findByRole('combobox', { name: 'Lock by itself' }, { timeout: LAZY_PAGE_MS })
+    await import('../lib/passkey')
   })
 })

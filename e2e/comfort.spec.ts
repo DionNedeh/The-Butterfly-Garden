@@ -49,6 +49,9 @@ function overflowsSideways(page: Page) {
 test('a comfort plan is written in the gardener’s own words and kept through a reload', async ({
   page,
 }) => {
+  // Four accessibility sweeps and a reload: about 16 s on CI, more on a
+  // busy machine, like the other long journeys that are marked slow.
+  test.slow()
   await enterGarden(page)
   await goTo(page, 'Settings')
   await page.getByRole('link', { name: 'Write a comfort plan' }).click()
