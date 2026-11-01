@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInitialState } from '../lib/progression'
+import { LAZY_PAGE_MS } from '../test/lazyPage'
 import type { AppState } from '../types'
 import { GardenView } from './GardenView'
 
@@ -40,7 +41,12 @@ describe('a letter waiting in the garden', () => {
   it('opens the letter in the Journal', async () => {
     const user = userEvent.setup()
     const { onOpenLetter, onReadLetter } = renderGarden()
-    const card = await screen.findByRole('region', { name: 'A letter from Marigold is waiting' })
+    // The card is a lazy chunk, which a busy machine can take seconds to load.
+    const card = await screen.findByRole(
+      'region',
+      { name: 'A letter from Marigold is waiting' },
+      { timeout: LAZY_PAGE_MS },
+    )
     await user.click(screen.getByRole('button', { name: 'Read the letter' }))
     expect(onOpenLetter).toHaveBeenCalledTimes(1)
     // Reading is noted by the Journal, where the letter is shown.
@@ -51,7 +57,7 @@ describe('a letter waiting in the garden', () => {
   it('is put away for this week without losing focus', async () => {
     const user = userEvent.setup()
     const { onReadLetter } = renderGarden()
-    await screen.findByRole('region', { name: 'A letter from Marigold is waiting' })
+    await screen.findByRole('region', { name: 'A letter from Marigold is waiting' }, { timeout: LAZY_PAGE_MS })
     await user.click(screen.getByRole('button', { name: 'Put away' }))
     expect(onReadLetter).toHaveBeenCalledWith('2026-10-25')
     // The card goes with its button, so focus moves to the garden's name.
