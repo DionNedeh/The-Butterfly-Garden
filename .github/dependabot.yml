@@ -58,6 +58,19 @@ updates:
       - dependency-name: playwright
         versions:
           - ">= 1.64.0"
+      # @axe-core/playwright 4.14 enforces label-content-name-mismatch, which
+      # finds controls named apart from their visible words across the app
+      # (the header's pills among them). Fix those first, then lift this.
+      # Review: January 2027.
+      - dependency-name: "@axe-core/playwright"
+        versions:
+          - ">= 4.14.0"
+      # jsdom 30.1 fires <details> toggle itself and computes some
+      # backgrounds differently, which nine unit tests were written around.
+      # Adapt them, then lift this. Review: January 2027.
+      - dependency-name: jsdom
+        versions:
+          - ">= 30.1.0"
 
   - package-ecosystem: github-actions
     directory: /
