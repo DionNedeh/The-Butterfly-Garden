@@ -5,9 +5,9 @@ Written on 2 November 2026, when the final run ended with 3.9.0 live. On that da
 - **[The 4.0 plan](4.0-android-packaging.md)** holds the work toward 4.0, the first release of the Android app on Google Play. That is the packaging and release, and the remaining part of each item the run left partial.
 - **This plan** holds every decision that waits on the owner, numbered D-1 onwards, and the future work that is not about packaging.
 
-Part 1 lists the decisions. Its first group is the one the 4.0 plan waits on. Part 2 is the later work that needs no decision, and Part 3 the checks only the owner's own computer can make. A recommendation is a suggestion only: nothing here is built until the owner answers. "None was recorded" means the question was asked without one.
+Part 1 lists the decisions. Its first group is the one the 4.0 plan waits on. Part 2 is the later work: all of it but W-14 needs no decision. Part 3 is the checks only the owner's own computer can make. A recommendation is a suggestion only: nothing here is built until the owner answers. "None was recorded" means the question was asked without one.
 
-The full text of each numbered item is its step in [the final-PR plan](../final-pr-plan.md). The art questions are in that plan's "Questions for the owner about the art". Of its sixteen, #69 settled two: one night painting per scene, and precaching the two free scenes' night paintings. Four more were answered by what shipped rather than by the owner, so they are here to confirm (D-42 to D-45). The other ten are D-12 to D-20. The run's own record is [its execution plan](../final-run/execution-plan.md). [The run's decision plan](../final-run/decision-plan.md), which first held these questions, is kept as that record.
+The full text of each numbered item is its step in [the final-PR plan](../final-pr-plan.md). The art questions are in that plan's "Questions for the owner about the art". Of its sixteen, #69 settled two: one night painting per scene, and precaching the two free scenes' night paintings. Four more were answered by what shipped rather than by the owner, so they are here to confirm (D-42 to D-45). The other ten are in D-12 to D-14 (D-14 holds three of them) and D-16 to D-20. The run's own record is [its execution plan](../final-run/execution-plan.md). [The run's decision plan](../final-run/decision-plan.md), which first held these questions, is kept as that record.
 
 ## Part 1: decisions
 
@@ -49,7 +49,7 @@ The full text of each numbered item is its step in [the final-PR plan](../final-
 | D-22 | 3.5 | Should new recovery codes carry check bits, so a mistyped word is caught before the slow unlock? | Yes, for new codes only, flagged in the lock record. Existing codes open as they do now. | Check bits in `lib/recoveryCode.ts` |
 | D-23 | 3.6 | Keep PBKDF2 at 600,000 iterations, or ship Argon2id? Argon2id needs a WebAssembly module, a new dependency. | Keep PBKDF2, and record the decision. | Argon2id key derivation |
 | D-24 | 6.1 | A day boundary at the gardener's evening hours: forward-only, with no migration, or re-date what is stored? | Forward-only: stored rows keep their dates. | One day boundary for Sunlight, goals and check-ins |
-| D-25 | 6.12 | Which of journal search, readable exports, the weekly letter and the year should include sightings? | Search and exports: yes. The letter and the year: one descriptive line each. | Sightings beyond the field book |
+| D-25 | 6.12 | Which of journal search, readable exports, the weekly letter and the year should include sightings? And should a logged nectar plant get a Guide card that carries the "Seen in the wild" stamp, as host plants do? | Search and exports: yes. The letter and the year: one descriptive line each. For the nectar-plant card, none was recorded. | Sightings beyond the field book, and a nectar-plant card |
 | D-26 | 6.13 | Is the reflection-prompt rotation enough, or should there be an optional once-a-day nature prompt? | The rotation is enough. | A daily nature prompt |
 | D-27 | 6.14 | Should the gardener choose who paces the breath: their companion or Marigold? | Yes: a small choice on the breathing page. | The pacer choice |
 | D-28 | 8.6 | Add other languages after all, and which first? | Keep skipping, unless the owner wants them. | c.10 |
@@ -79,13 +79,13 @@ The art brief asked these of the owner, and #69 and 3.8's ART-8 answered them in
 | Id | Item | The question | What shipped | Recommendation |
 |---|---|---|---|---|
 | D-42 | Art | Keep the navy wash and dot stars over the night paintings, keep only the stars, or drop both? | Over a built-in night painting, a lighter wash replaces both, with no dot stars. A personal photo, or a scene whose night painting has not loaded, keeps the navy wash and the stars. | Keep what shipped. |
-| D-43 | Art | With Calm or reduced motion, do the seasonal petals still fall, and does the still winter frost show? | No new seasonal particle shows with Calm or reduced motion, the device setting included. The still frost stays, except on a personal photo. | Keep what shipped. |
+| D-43 | Art | With Calm or reduced motion, do the seasonal petals still fall, and does the still winter frost show? | No petal falls with Calm or reduced motion, the device setting included: the three that Calm used to keep are hidden too. The still frost stays, except on a personal photo. | Keep what shipped. |
 | D-44 | Art | Moths: none in winter, as with the fireflies? With Calm motion, none or a still resting moth? | At most three, on fully grown nectar plants, at night, with full motion only, and none in winter. | Keep what shipped. |
-| D-45 | Art | Are night thumbnails in the gallery worth about 160 kB of extra precache? | They are left out of the precache, cached once seen, and a day thumbnail stands in until then. | Keep what shipped. |
+| D-45 | Art | Are night thumbnails in the gallery worth about 160 kB of extra precache? | They are left out of the precache and cached once seen. One that cannot load, for example offline before it was first seen, shows the day thumbnail instead. | Keep what shipped. |
 
 ## Part 2: later work
 
-Most of these were found during the run, outside its scope. W-1 and W-2 were found just after it, while clearing Dependabot's pull requests, and W-3 is what 5.7 left. W-14 comes from #69's art record and waits on D-13 and D-14; the rest need no decision. None blocks 4.0. The comfort plan's way back to Settings at the largest text is not here: it is the 4.0 plan's P-16 (a).
+Most of these were found during the run, outside its scope. W-1 and W-2 were found just after it, while clearing Dependabot's pull requests, and W-3 is the review 5.7 recorded. W-14 comes from #69's art record and waits on D-13 and D-14; the rest need no decision. None blocks 4.0. The comfort plan's way back to Settings at the largest text is not here: it is the 4.0 plan's P-16 (a).
 
 | Id | Work | What to do |
 |---|---|---|
@@ -107,7 +107,7 @@ Most of these were found during the run, outside its scope. W-1 and W-2 were fou
 
 ## Part 3: checks for the owner's computer
 
-These are checks a container cannot make. Those for the Android app, the iPhone and passkeys are in the 4.0 plan (P-14, P-20, P-21), including section 2's acceptance on the phones.
+These are checks a container cannot make. Those for the Android app, the iPhone and passkeys are in the 4.0 plan (P-14, P-16 (e), P-20, P-21), including section 2's acceptance on the phones.
 
 - **3.6's acceptance in a desktop browser**, from [section-2-follow-ups.md](../section-2-follow-ups.md):
   - real file-picker permission and cancellation;

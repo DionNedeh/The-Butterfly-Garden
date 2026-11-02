@@ -39,7 +39,7 @@ So R3 and R4 run as one workflow of three clusters, started while R2 was still b
 
 ## Progress at the end of the run
 
-Written on 1 November 2026, with 3.9.0 going out in #76. What waited on the owner was parked in [the decision plan](decision-plan.md); from 2 November it is in [the future update plan](../plans/future-update.md).
+Written on 1 November 2026, with 3.9.0 going out in #76. What waited on the owner was parked in [the decision plan](decision-plan.md). From 2 November its decisions are in [the future update plan](../plans/future-update.md), and the owner's Play Console steps and device checks are in [the 4.0 plan](../plans/4.0-android-packaging.md).
 
 - **Sections.** 31 items were built: 24 done and 7 partial. Each partial one is partial for a reason outside this run:
   - **3.2 (R1):** a time limit on the remaining auto-lock holds is the owner's.
