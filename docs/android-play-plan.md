@@ -3,6 +3,10 @@
 **Status:** phases 0 to 4 are built; phase 5, the release candidate, is under
 way (section 5). The app is not on Google Play yet. Agreed with the owner on
 28–29 September 2026; status last checked against the code on 1 November 2026.
+What is left for the first release, 4.0, is in
+[plans/4.0-android-packaging.md](plans/4.0-android-packaging.md); the owner's
+decisions in section 7 are D-1 to D-3 of
+[plans/future-update.md](plans/future-update.md).
 
 **Audience:** anyone continuing this work cold. It records what was decided,
 why, and what was checked, so the reasoning does not have to be re-derived.

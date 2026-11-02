@@ -2,7 +2,7 @@
 
 *Written on 27 October 2026, after release 3.4.0 ([#66](https://github.com/DionNedeh/The-Butterfly-Garden/pull/66)). It replaces the shorter future-work note merged in [#67](https://github.com/DionNedeh/The-Butterfly-Garden/pull/67).*
 
-**Final run, from 1 November 2026.** What this plan leaves after #69 and 3.6 is being built under [the execution plan](final-run/execution-plan.md). Items that wait on the owner are in [the decision plan](final-run/decision-plan.md). This plan stays as written; each item's record is kept in the execution plan.
+**Final run, from 1 November 2026.** What this plan leaves after #69 and 3.6 is being built under [the execution plan](final-run/execution-plan.md). Items that wait on the owner were parked in [its decision plan](final-run/decision-plan.md). From 2 November 2026, what the run left is in [the 4.0 plan](plans/4.0-android-packaging.md) (the Android app's packaging and the partial items) and [the future update plan](plans/future-update.md) (every decision, and the later work). This plan stays as written; each item's record is kept in the execution plan.
 
 The [Voyager plan](Voyager-2026-10-26_18-48-37-UTC.md) was carried out in fourteen PRs: A1 to A4, B1 to B7, and C1 to C3, which shipped releases 3.0 to 3.4. This plan holds everything it set out that is not done on `main`, plus the art that was always meant to come last.
 

@@ -1,5 +1,7 @@
 # Final run: decision plan
 
+> **From 2 November 2026, what the run left is in two plans.** [The 4.0 plan](../plans/4.0-android-packaging.md) holds the packaging of the first Android app and the rest of each partial item. [The future update plan](../plans/future-update.md) holds every decision that waits on the owner, numbered D-1 onwards, and the later work. This file is kept as the run's record and is no longer kept up to date. Each row and note below now lives in one of those plans.
+
 Started on 1 November 2026, beside the [execution plan](execution-plan.md). The owner asked for items that carry a decision to be parked rather than guessed. Each item below waits on an answer. The full text of each is its numbered step in [the final-PR plan](../final-pr-plan.md). The recommendation is a suggestion only: nothing here is built until the owner answers.
 
 ## Parked items

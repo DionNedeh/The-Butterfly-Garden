@@ -5,7 +5,7 @@ The authoritative requirements and detailed acceptance criteria remain in
 [final-pr-plan.md](final-pr-plan.md). This index preserves unfinished work;
 it does not replace that plan or certify release readiness.
 
-From 1 November 2026, the open items here are carried by [the final run's execution plan](final-run/execution-plan.md) (round R0 finishes this acceptance) and [its decision plan](final-run/decision-plan.md).
+From 1 November 2026, the open items here are carried by [the final run's execution plan](final-run/execution-plan.md) (round R0 finishes this acceptance) and [its decision plan](final-run/decision-plan.md). From 2 November, what is still open is in [the future update plan](plans/future-update.md): 3.6's acceptance is in its Part 3, and Argon2id is its D-23.
 
 ## Merge and build boundary
 
