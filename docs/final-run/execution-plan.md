@@ -39,7 +39,7 @@ So R3 and R4 run as one workflow of three clusters, started while R2 was still b
 
 ## Progress at the end of the run
 
-Written on 1 November 2026, with 3.9.0 going out in #76. What waits on the owner is in [the decision plan](decision-plan.md); its parked items start the next plan.
+Written on 1 November 2026, with 3.9.0 going out in #76. What waited on the owner was parked in [the decision plan](decision-plan.md); from 2 November it is in [the future update plan](../plans/future-update.md).
 
 - **Sections.** 31 items were built: 24 done and 7 partial. Each partial one is partial for a reason outside this run:
   - **3.2 (R1):** a time limit on the remaining auto-lock holds is the owner's.

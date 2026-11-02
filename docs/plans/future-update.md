@@ -7,7 +7,7 @@ Written on 2 November 2026, when the final run ended with 3.9.0 live. On that da
 
 Part 1 lists the decisions. Its first group is the one the 4.0 plan waits on. Part 2 is the later work that needs no decision, and Part 3 the checks only the owner's own computer can make. A recommendation is a suggestion only: nothing here is built until the owner answers. "None was recorded" means the question was asked without one.
 
-The full text of each numbered item is its step in [the final-PR plan](../final-pr-plan.md). The art questions are in that plan's "Questions for the owner about the art". The run's own record is [its execution plan](../final-run/execution-plan.md). [The run's decision plan](../final-run/decision-plan.md), which first held these questions, is kept as that record.
+The full text of each numbered item is its step in [the final-PR plan](../final-pr-plan.md). The art questions are in that plan's "Questions for the owner about the art". Of its sixteen, #69 settled two: one night painting per scene, and precaching the two free scenes' night paintings. Four more were answered by what shipped rather than by the owner, so they are here to confirm (D-42 to D-45). The other ten are D-12 to D-20. The run's own record is [its execution plan](../final-run/execution-plan.md). [The run's decision plan](../final-run/decision-plan.md), which first held these questions, is kept as that record.
 
 ## Part 1: decisions
 
@@ -18,13 +18,13 @@ The full text of each numbered item is its step in [the final-PR plan](../final-
 | D-1 | 7.1 | The Garden Pass's price, its plans and any free trial. | Monthly and yearly base plans on the `garden_pass` subscription, as P-3 sets them up. The price and any trial are the owner's; none was recorded. | P-3, the subscription in Play Console |
 | D-2 | 7.1 | Does the web PWA keep its free Pass preview once the app is on Google Play? | Turn it off ([android-play-plan.md](../android-play-plan.md), section 7). | P-6, the preview flag |
 | D-3 | 7.1 | The app's target audience. | 13 and over, to stay outside Play's Families policy. | P-4, Play's declarations |
-| D-4 | 7.3–7.6 | The final-PR plan parked these as Android-only (a.9). Which go into 4.0? | All four. 7.5 (the minimum WebView and an error page) and 7.6 (the Gradle syntax) are low-risk and can go first. 7.3 (a suspended Pass) and 7.4 (the Pass at launch) go with the Play release. | P-7 to P-10 |
+| D-4 | 7.3–7.6 | The Voyager plan parked these as Android-only (a.9), and the final-PR plan kept them parked. Which go into 4.0? | All four. 7.5 (the minimum WebView and an error page) and 7.6 (the Gradle syntax) are low-risk and can go first. 7.3 (a suspended Pass) and 7.4 (the Pass at launch) go with the Play release. | P-7 to P-10 |
 | D-5 | 3.2 | A time limit on the remaining auto-lock holds? An open sighting form, the garden-image editor and an open file chooser hold the auto-lock with no limit, so a garden left with a sighting form open never locks by itself. After a limit it would lock anyway, and the lock screen already says what a lock lost. | Yes, at twice the chosen auto-lock time. | P-13 |
 | D-6 | 5.9 | Approve the privacy policy's wording before any Play submission. Four passages in particular: (1) the web same-address limit (other pages at that address could read what the garden stores, and the lock cannot protect against them); (2) the summary sentence about files, calendar visits and links; (3) the policy keeping its own address until the move; (4) the no-way-back sentence allowing for a passkey. | Approve as written. | Submitting 4.0 (P-22) |
-| D-7 | 5.1 | Which domain and host for the PWA's own origin (one that can send security headers), and when to move? | Cloudflare Pages or Netlify, with a domain of the garden's own, moved once 3.9 has settled. | P-15 |
+| D-7 | 5.1 | Which domain and host for the PWA's own origin (one that can send security headers), and when to move? And at the new address: the PWA's id and scope, so installed copies are not silently re-pointed to an empty origin, and whether to set an explicit `rp.id` in `src/lib/passkey.ts`. Passkeys are bound to the address they were made at, so they must be added again after the move. | Cloudflare Pages or Netlify, with a domain of the garden's own, moved once 3.9 has settled. For the id, the scope and the `rp.id`, none was recorded. | P-15 |
 | D-8 | 5.2 | Make the Safari and Firefox `browsers` job required, once it has been green three runs in a row? | Yes, after three green runs. | P-16 (c): removing `continue-on-error`, and the required check on `main` |
 | D-9 | 5.2 | Keeping a sighting photo where the browser stores no Blobs (Safari's Private Browsing, WebKit's ephemeral storage). Today the photo is let go with an honest "not kept" note and the garden keeps saving. Keeping it would need a stored shape without a Blob, a new persisted format. Bytes plus a type would make builds 3.3 to 3.6 refuse the whole garden. The backup file's shape (a type and base64 data) is read by 3.3 to 3.6, but is about a third larger. | Keep the honest note, and add no new format. | P-16 (d) |
-| D-10 | 5.5 | A bundle baseline for each build, set at today's size? That re-baselines and so loosens the growth room. And lower the entry cap to 95 kB, and set the CSS cap after the CSS work? | A baseline per build, set on purpose when a feature needs the room. Keep the caps until 5.6. (After the run, at the owner's word, React 19.3 moved the baseline from 146,103 to 153,859 B and the entry cap from 100 to 108.5 kB, by its own growth.) | P-18: `scripts/check-budgets.mjs` and `scripts/bundle-baseline.json` |
+| D-10 | 5.5 | A bundle baseline for each build, set at today's size? That re-baselines and so loosens the growth room. And lower the entry cap to 95 kB, and set the CSS cap after the CSS work? And add the budgets and knip to CLAUDE.md's list of checks? | A baseline per build, set on purpose when a feature needs the room. Keep the caps until 5.6. For CLAUDE.md's list, none was recorded. (After the run, at the owner's word, React 19.3 moved the baseline from 146,103 to 153,859 B and the entry cap from 100 to 108.5 kB, by its own growth.) | P-18: `scripts/check-budgets.mjs` and `scripts/bundle-baseline.json` |
 | D-11 | 5.7 | Bump Playwright to 1.64? It brings a newer browser build. | **The owner, 1 November 2026: hold.** Dependabot ignores 1.64 and later until the hold is lifted; it is next reviewed in January 2027. | P-19 |
 | D-12 | Art | Should a night screenshot join the PWA's install screenshots (`src/pwaManifest.ts`) now that the night art exists? | None was recorded. | P-5, when it regenerates the screenshots |
 
@@ -34,7 +34,7 @@ The full text of each numbered item is its step in [the final-PR plan](../final-
 |---|---|---|---|---|
 | D-13 | 1.3, ART-6 | What is a seasonal keepsake: a free cosmetic, a garden decoration or a shelf item? Where does it live (a shelf beside the jars, a plant spot like a jar, or a Journal or Year page)? How is it given, and is it kept after its season? Does it need a new `ShopItemKind`? The answer decides whether the drawing must fit the jar's 80×88 box. | Free, and given once, on the first visit in each season. Kept for good, on a small shelf beside the jars. | Putting the drawn keepsakes in `docs/art/seasonal/` into the app (W-14) |
 | D-14 | 1.3, ART-7 | Seasonal Pass outfits: (a) on offer all year once added, or only in their season? (b) The autumn outfit needs a new name, since "Leaf Scarf" is already a Nectar item. (c) Which life stages does each outfit fit? (d) Builds 3.1 to 3.4 drop cosmetic ids they do not know from saved looks and the companion story, so a seasonal outfit in a saved look is lost if an older build rewrites the profile. Is that acceptable? | (a) All year once added. (b) "Russet Leaf Scarf". (c) Draw each for the butterfly stage first. (d) None was recorded. | Putting the drawn outfits into the app (W-14) |
-| D-15 | 1.5 | May a jar carry ♥? A garden holding one would be stored at state version 9, so older builds set it aside instead of silently dropping the jar. | Yes, with B7's conditional version rule: version 9 only when a garden holds a symbol. | Jar symbols drawn as shapes. The heart is drawn in `docs/art/seasonal/jar-heart.svg`. |
+| D-15 | 1.5 | May a jar carry ♥? A garden holding one would be stored at state version 9, so older builds set it aside instead of silently dropping the jar. And should ★ ☀ ☾ ✿ follow, or ♥ alone? The step adds them only if the owner wants them. | Yes to ♥, with B7's conditional version rule: version 9 only when a garden holds a symbol. For the other four symbols, none was recorded. | Jar symbols drawn as shapes. The heart is drawn in `docs/art/seasonal/jar-heart.svg`. |
 | D-16 | ART-10 | How were Sunlit Meadow, Woodland Brook and Secret Conservatory made (added 5 September 2026)? THIRD-PARTY-NOTICES.md has no provenance for them. | The owner says how they were made, or the notice records that their provenance was not recorded. | A complete notice |
 | D-17 | Art | Butterflies keep flying in the night scene, while the night lines say butterflies rest at night. Should they settle at night, as in Calm's settled state? That is a code change, not art. | None was recorded. | Butterflies at rest by night |
 | D-18 | Art | Should the season overlays show over a gardener's own backdrop image? Until this is answered, `season-art.css` keeps the still frost off a personal photo. | None was recorded. | Seasonal art over personal photos |
@@ -72,9 +72,20 @@ The full text of each numbered item is its step in [the final-PR plan](../final-
 | D-40 | 8.4 | Leave old multi-line tomorrow notes as they show, or mark new recaps so the two can be told apart? | Leave them. | — |
 | D-41 | 8.5 | When has the store split been in use long enough to delete the frozen legacy record? | After the Play release has been out for a while. | Deleting the legacy record |
 
-## Part 2: later work that needs no decision
+### Art answered by what shipped, for the owner to confirm
 
-Each was found during the run, outside its scope. None blocks 4.0. The comfort plan's way back to Settings at the largest text is not here: it is the 4.0 plan's P-16 (a).
+The art brief asked these of the owner, and #69 and 3.8's ART-8 answered them in code. No record shows the owner choosing, so each is here to confirm or change.
+
+| Id | Item | The question | What shipped | Recommendation |
+|---|---|---|---|---|
+| D-42 | Art | Keep the navy wash and dot stars over the night paintings, keep only the stars, or drop both? | Over a built-in night painting, a lighter wash replaces both, with no dot stars. A personal photo, or a scene whose night painting has not loaded, keeps the navy wash and the stars. | Keep what shipped. |
+| D-43 | Art | With Calm or reduced motion, do the seasonal petals still fall, and does the still winter frost show? | No new seasonal particle shows with Calm or reduced motion, the device setting included. The still frost stays, except on a personal photo. | Keep what shipped. |
+| D-44 | Art | Moths: none in winter, as with the fireflies? With Calm motion, none or a still resting moth? | At most three, on fully grown nectar plants, at night, with full motion only, and none in winter. | Keep what shipped. |
+| D-45 | Art | Are night thumbnails in the gallery worth about 160 kB of extra precache? | They are left out of the precache, cached once seen, and a day thumbnail stands in until then. | Keep what shipped. |
+
+## Part 2: later work
+
+Most of these were found during the run, outside its scope. W-1 and W-2 were found just after it, while clearing Dependabot's pull requests, and W-3 is what 5.7 left. W-14 comes from #69's art record and waits on D-13 and D-14; the rest need no decision. None blocks 4.0. The comfort plan's way back to Settings at the largest text is not here: it is the 4.0 plan's P-16 (a).
 
 | Id | Work | What to do |
 |---|---|---|
@@ -96,14 +107,15 @@ Each was found during the run, outside its scope. None blocks 4.0. The comfort p
 
 ## Part 3: checks for the owner's computer
 
-These are checks a container cannot make. Those for the Android app, the iPhone and passkeys are in the 4.0 plan (P-14, P-20, P-21).
+These are checks a container cannot make. Those for the Android app, the iPhone and passkeys are in the 4.0 plan (P-14, P-20, P-21), including section 2's acceptance on the phones.
 
-- **3.6's acceptance**, from [section-2-follow-ups.md](../section-2-follow-ups.md):
+- **3.6's acceptance in a desktop browser**, from [section-2-follow-ups.md](../section-2-follow-ups.md):
   - real file-picker permission and cancellation;
   - writes to a retained file;
   - storage pressure;
   - locked recovery, reload and Undo;
   - opening a protected copy in an older build;
-  - the Windows pinned-Chromium file-handle crash.
+  - the Windows pinned-Chromium file-handle crash;
+  - 3.1's damaged-snapshot download, discard and retry before a lock change.
 - **Passkeys on an IP address.** The installed Chromium refuses WebAuthn on an IP-address origin and allows it on `localhost`, so 3.3's e2e reaches the preview server as `localhost`. The garden's real address is a domain name, so this matters only to tests.
 - **Safari and Firefox** run in CI's `browsers` job, paused until the 4.0 plan's P-17 brings it back.
