@@ -1,5 +1,7 @@
 # Final run: execution plan
 
+> **From 2 November 2026, what the run left is in two plans.** [The 4.0 plan](../plans/4.0-android-packaging.md) holds the packaging of the first Android app and the rest of each partial item. [The future update plan](../plans/future-update.md) holds every decision that waits on the owner, numbered D-1 onwards, and the later work. This file stays as the run's record.
+
 Started on 1 November 2026, on `main` at b3f7da1. That commit has 3.6 integrated as source only; the live app is 3.5.
 
 This run finishes what [the final-PR plan](../final-pr-plan.md) left. Each item's full text is that plan's numbered step: this file says what the run builds, in what order, and records what each item did. The [decision plan](decision-plan.md) holds every item that waits on the owner, the questions raised during the run, and the checks only the owner's machine can make.
@@ -37,7 +39,7 @@ So R3 and R4 run as one workflow of three clusters, started while R2 was still b
 
 ## Progress at the end of the run
 
-Written on 1 November 2026, with 3.9.0 going out in #76. What waits on the owner is in [the decision plan](decision-plan.md); its parked items start the next plan.
+Written on 1 November 2026, with 3.9.0 going out in #76. What waited on the owner was parked in [the decision plan](decision-plan.md). From 2 November its decisions are in [the future update plan](../plans/future-update.md), and the owner's Play Console steps and device checks are in [the 4.0 plan](../plans/4.0-android-packaging.md).
 
 - **Sections.** 31 items were built: 24 done and 7 partial. Each partial one is partial for a reason outside this run:
   - **3.2 (R1):** a time limit on the remaining auto-lock holds is the owner's.
@@ -90,10 +92,9 @@ Written on 1 November 2026, with 3.9.0 going out in #76. What waits on the owner
     - a React `useId` showing through an SVG id.
   - **What finds them:** stress runs under load, CI's traces, and a red-first copy that forces the timing.
   - **Dates.** Tests that make "tomorrow" by adding 24 hours, or step back one month for a day two months back, fail on the day the clocks change and on the first of a month.
-- **What stays open.**
-  - The decision plan's parked items, and the questions each round raised.
-  - The checks paused for the build phase: the Safari and Firefox job, and the full re-run on `main`. The decision plan says how to bring them back.
-  - The checks only the owner's machine can make.
+- **What stays open.** On 2 November it moved into two plans.
+  - [The 4.0 plan](../plans/4.0-android-packaging.md): the Android app's packaging and release, the rest of the seven partial items, bringing back the checks paused for the build phase (its P-17), and the checks on the owner's phones.
+  - [The future update plan](../plans/future-update.md): every parked item's and every raised question's decision, the ideas, and the checks on the owner's computer.
 
 ## Where the last PRs left things
 
