@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",
-    "@capacitor/app": "8.1.1",
+    "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.5.3",
     "idb": "^8.0.4",
     "react": "^19.3.1",
