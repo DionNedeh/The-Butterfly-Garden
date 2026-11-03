@@ -6,7 +6,7 @@ way (section 5). The app is not on Google Play yet. Agreed with the owner on
 What is left for the first release, 4.0, is in
 [plans/4.0-android-packaging.md](plans/4.0-android-packaging.md); the owner's
 decisions in section 7 are D-1 to D-3 of
-[plans/future-update.md](plans/future-update.md).
+[plans/future-update.md](plans/future-update.md), answered on 3 November 2026.
 
 **Audience:** anyone continuing this work cold. It records what was decided,
 why, and what was checked, so the reasoning does not have to be re-derived.
@@ -168,8 +168,10 @@ needs a Play policy check before it is built.
   that Play displays publicly for monetised apps.
 - Upload key, created locally with `keytool`, stored as GitHub environment
   secrets — never in the repository or a chat.
-- Subscription price, plans and any free trial.
+- Subscription price, plans and any free trial. *Answered 3 November 2026
+  (D-1): 4.99 a month and 49.99 a year, with no free trial; one-time content
+  packs come in later updates, and 4.0 makes room for them.*
 - Whether the web PWA keeps the free Pass preview after launch
-  (recommendation: turn it off).
+  (recommendation: turn it off). *Answered 3 November 2026 (D-2): off.*
 - Target audience age (recommendation: 13 and over, to stay outside the
-  Families policy).
+  Families policy). *Answered 3 November 2026 (D-3): 13 and over.*
