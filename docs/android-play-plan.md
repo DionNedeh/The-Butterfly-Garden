@@ -148,9 +148,10 @@ also Android lint, JVM unit tests and a debug build.
    (`e2e/android.spec.ts`), where Capacitor's plugins fall back to their web
    versions; what only a phone can show is on the device checklist. Left,
    all the owner's: the upload key in that environment, the Play Console app
-   and its licence key (section 7), approving the privacy policy's wording,
-   and running the device checklist in `docs/play-store/README.md` on a
-   recent and an older phone, each failure becoming its own fix.
+   and its licence key (section 7), and running the device checklist in
+   `docs/play-store/README.md` on a recent and an older phone, each failure
+   becoming its own fix. The privacy policy's wording was approved as written
+   on 3 November 2026 (D-6 of [plans/future-update.md](plans/future-update.md)).
 
 ## 6. Stripe (not scheduled)
 
