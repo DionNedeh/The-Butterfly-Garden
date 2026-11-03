@@ -32,6 +32,9 @@ function heldWrites() {
 
 beforeEach(() => {
   vi.useFakeTimers()
+  // The keys name 26 October, and drafts more than a week old are dropped,
+  // so the clock is held on a day those keys are still kept.
+  vi.setSystemTime(new Date(2026, 9, 27, 12))
 })
 
 afterEach(() => {
