@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeBroadcastChannel } from '../test/fakeBroadcastChannel'
 import { LAZY_PAGE_MS } from '../test/lazyPage'
 import { getDraft, loadDrafts, resetDrafts, setDraft } from '../lib/drafts'
+import { toLocalDate } from '../lib/date'
 import {
   autoLockMinutes,
   chooseAutoLock,
@@ -100,9 +101,11 @@ describe('the lock gate', { timeout: 30_000 }, () => {
 
 describe('locking by itself', { timeout: 30_000 }, () => {
   it('locks after the minutes chosen out of sight, keeping unsaved words sealed', async () => {
+    // Today's key: loadDrafts drops a dated draft more than a week old.
+    const key = `reflection:${toLocalDate()}`
     await lockedAndOpen()
     await chooseAutoLock(5)
-    setDraft('reflection:2026-10-27', 'Half a thought')
+    setDraft(key, 'Half a thought')
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     render(<LockWatch />)
     setVisibility('hidden')
@@ -112,10 +115,10 @@ describe('locking by itself', { timeout: 30_000 }, () => {
     vi.useRealTimers()
     await waitFor(() => expect(gardenRepository.lockState()).toBe('locked'))
     // Let go of in memory, and kept on disk, sealed, for the next unlock.
-    expect(getDraft('reflection:2026-10-27')).toBeUndefined()
+    expect(getDraft(key)).toBeUndefined()
     await unlockGarden({ slot: 'passcode', passcode: PASSCODE })
     await loadDrafts()
-    expect(getDraft('reflection:2026-10-27')).toBe('Half a thought')
+    expect(getDraft(key)).toBe('Half a thought')
   })
 
   it('does not lock when the garden is back in sight in time', async () => {
