@@ -121,6 +121,18 @@
   box-shadow: 0 0 0 2px var(--forest) inset;
 }
 
+/* What the Pass brings next (VeeBeesTeaser), last on its tab: nothing to
+   press, so it sits quieter than the pieces beside it. */
+.coming-soon-card {
+  border-style: dashed;
+  box-shadow: none;
+}
+.coming-soon-note {
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
 /* A purchase that cannot go through stays pressable, so it keeps focus and
    can say why (ShopView), but it looks as unavailable as it is. */
 .shop-view [aria-disabled='true'] {

@@ -424,6 +424,50 @@ describe('the Garden Pass in the PWA', () => {
   })
 })
 
+describe('the Vee Bees sneak peek', () => {
+  const passPieces = shopItems.filter((item) => item.premium).length
+  const teaser = () => screen.queryByRole('heading', { name: 'Vee Bees' })
+
+  it('is the last card on the Pass tab, with nothing to press', () => {
+    renderShop(garden(), 'pass')
+    const cards = Array.from(document.querySelectorAll('.boutique-grid > article'))
+    expect(cards).toHaveLength(passPieces + 1)
+    expect(cards.at(-1)).toBe(card('Vee Bees'))
+    const bees = within(card('Vee Bees'))
+    expect(bees.getByText('Coming soon')).toBeInTheDocument()
+    expect(bees.getByText(/a new Companions tab here in the shop/)).toBeInTheDocument()
+    // Honest about a subscription: it is not something the Pass holds today.
+    expect(bees.getByText(/not part of the Pass yet/)).toBeInTheDocument()
+    // Not a cosmetic: no try-on, no wardrobe, nothing to buy.
+    expect(bees.queryByRole('button')).toBeNull()
+    // And not a piece, so the count is the Pass's pieces alone.
+    expect(count()).toBe(`${passPieces} pieces to explore`)
+  })
+
+  it('steps aside while a search or a filter narrows the pieces', async () => {
+    const { user } = renderShop(garden(), 'pass')
+    const search = screen.getByRole('searchbox', { name: 'Find something lovely' })
+    await user.type(search, 'bee')
+    expect(teaser()).toBeNull()
+    await user.clear(search)
+    expect(teaser()).toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: /^Type/ }), 'aura')
+    expect(teaser()).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(teaser()).toBeInTheDocument()
+  })
+
+  it('is on the Pass tab alone', async () => {
+    const { user } = renderShop(garden(), 'pass')
+    for (const name of ['Supplies', 'Boutique', 'Jars', 'Flight', 'Backdrops']) {
+      await user.click(tabs().getByRole('button', { name }))
+      expect(teaser()).toBeNull()
+    }
+    await user.click(tabs().getByRole('button', { name: 'Garden Pass' }))
+    expect(teaser()).toBeInTheDocument()
+  })
+})
+
 describe('dressing a particular companion', () => {
   /** Sol, the starter caterpillar, and Fern, a butterfly, sharing one closet. */
   function companions(overrides: Partial<AppState> = {}): AppState {

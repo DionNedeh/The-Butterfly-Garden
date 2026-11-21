@@ -27,6 +27,7 @@ import { ShopItemCard } from './shop/ShopItemCard'
 import { ItemPreview } from './shop/ItemPreview'
 import { BackdropGallery, type BackdropActions } from './BackdropGallery'
 import { GardenPassPanel } from './shop/GardenPassPanel'
+import { VeeBeesTeaser } from './shop/VeeBeesTeaser'
 import { FilterSheet } from './shop/FilterSheet'
 import { PurchaseToast, type PurchaseNote } from './shop/PurchaseToast'
 import { purchaseWords, type PurchaseSubject } from './shop/purchaseMessage'
@@ -489,6 +490,9 @@ export function ShopView({
                 wornBy={wearers.get(item.id)}
               />
             ))}
+            {/* Last on the Pass tab, and only while nothing narrows it: a
+                filter asks for pieces, and this is not one. */}
+            {tab === 'pass' && activeFilters === 0 && <VeeBeesTeaser />}
           </div>
           {!items.length && (
             <div className="empty-collection">
