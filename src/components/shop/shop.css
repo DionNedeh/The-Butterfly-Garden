@@ -127,6 +127,14 @@
   border-style: dashed;
   box-shadow: none;
 }
+/* The bee's own soft shadow, in place of the ground mark the pieces stand
+   on: it is in the air. */
+.vee-bee {
+  filter: drop-shadow(0 7px 5px #00000040);
+}
+.coming-soon-card .item-art::after {
+  content: none;
+}
 .coming-soon-note {
   color: var(--text-soft);
   font-size: 0.74rem;
