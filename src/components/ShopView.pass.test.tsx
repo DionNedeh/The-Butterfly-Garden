@@ -56,3 +56,22 @@ describe('the Owned filter on the Pass tab in the Android app', () => {
     expect(count()).toBe(`${passPieces} pieces to explore`)
   })
 })
+
+describe('the Vee Bees sneak peek in the Android app', () => {
+  afterEach(() => {
+    act(() => setPassStatus({ state: 'checking', fromCache: false, lapsed: false }))
+    vi.unstubAllEnvs()
+  })
+
+  it('says it is not part of the paid Pass yet, and offers nothing to press', () => {
+    vi.stubEnv('VITE_PLATFORM', 'android')
+    act(() => setPassStatus({ state: 'inactive', fromCache: false, lapsed: false }))
+    render(<ShopView state={createInitialState('Tester', 'Shop')} initialTab="pass" {...handlers} />)
+    const bees = screen.getByRole('heading', { name: 'Vee Bees' }).closest('article')!
+    expect(bees).toHaveTextContent('Coming soon')
+    expect(bees).toHaveTextContent('not part of the Pass yet')
+    expect(bees.querySelector('button')).toBeNull()
+    // The Pass's own list of what it includes names only what it holds today.
+    expect(document.querySelector('.pass-includes')).not.toHaveTextContent(/bee/i)
+  })
+})
